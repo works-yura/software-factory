@@ -7,7 +7,8 @@ import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/to
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '@factory/core';
+import { createBoardRegistry, defineBoard, toBoardSource } from '@factory/core';
+import { requeueUsageLimitedDecisions } from './usage-limit-sweep.ts';
 import { createTestBoard } from '@factory/core/testing';
 import { BUILD_OBJECTIVE, workBoard } from '@factory/pipelines';
 // Work as most projects store it, with Triage (upstream #29901 dropped it only from new projects).
@@ -8676,5 +8677,350 @@ describe('phase goals', () => {
     expect(await agent.getObjective({ threadId: 'thread-1' })).toBeUndefined();
     expect(sentIds(session)).toEqual([decision!.id]);
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.metadata?.[PHASE_GOAL_METADATA_KEY]).toBeUndefined();
+  });
+});
+
+describe('a run that every model account is out of usage for', () => {
+  const HOUR = 60 * 60_000;
+  const START = Date.parse('2030-01-01T00:00:00Z');
+  const limitError = (resetsAt?: Date) =>
+    Object.assign(
+      new Error(
+        resetsAt
+          ? `Every Claude account this run may use is out of usage; the first comes back at ${resetsAt.toISOString()}.`
+          : 'Every Claude account this run may use is out of usage.',
+      ),
+      { name: 'ClaudeCodeError', kind: 'rate_limit', ...(resetsAt ? { resetsAt } : {}) },
+    );
+
+  async function limitedSkillRun(resetsAt?: Date) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-usage-limited',
+    });
+    await bindWorkRun(storage, item.id);
+    const runError = limitError(resetsAt);
+    const sessionOptions: { agentEndReason: 'error' | 'complete'; runError: Error } = {
+      agentEndReason: 'error',
+      runError,
+    };
+    const created = createSession(undefined, sessionOptions);
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: created.controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      boards: autoStartingBoards(),
+      staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+    });
+    return { storage, item, dispatcher, sessionOptions, runError, ...created };
+  }
+
+  it('waits for the reset without spending an attempt, then resumes the same session with a new delivery', async () => {
+    const resetsAt = new Date(START + 5 * HOUR);
+    const { storage, dispatcher, session, sessionOptions } = await limitedSkillRun(resetsAt);
+
+    await dispatcher.runOnce(new Date(START));
+
+    const [waiting] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(waiting).toMatchObject({
+      status: 'retry',
+      attempts: 0,
+      failureCode: 'run_usage_limited',
+      usageWaits: 1,
+      lastError: expect.stringContaining('out of usage'),
+    });
+    expect(waiting!.availableAt.getTime()).toBeGreaterThanOrEqual(resetsAt.getTime() + 60_000);
+    expect(waiting!.availableAt.getTime()).toBeLessThanOrEqual(resetsAt.getTime() + 3 * 60_000);
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+
+    // Hours of ticks before the reset neither run it nor spend attempts on it.
+    for (let tick = 1; tick <= 4; tick += 1) await dispatcher.runOnce(new Date(START + tick * HOUR));
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry', attempts: 0 });
+
+    // The limit reset: the run goes through.
+    sessionOptions.agentEndReason = 'complete';
+    await dispatcher.runOnce(new Date(waiting!.availableAt.getTime()));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'succeeded',
+      attempts: 1,
+    });
+    // The first kickoff landed before the limit hit, so the replay guard let a new delivery through.
+    const ids = session.sendSignal.mock.calls.map(([input]) => input.id);
+    expect(ids).toEqual([waiting!.id, `${waiting!.id}:retry:1`]);
+  });
+
+  it('waits a growing while when nobody said when the limit resets', async () => {
+    const { storage, dispatcher } = await limitedSkillRun();
+
+    await dispatcher.runOnce(new Date(START));
+    const [first] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    await dispatcher.runOnce(new Date(first!.availableAt.getTime()));
+    const [second] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+
+    expect(first).toMatchObject({ status: 'retry', attempts: 0, usageWaits: 1 });
+    expect(second).toMatchObject({ status: 'retry', attempts: 0, usageWaits: 2 });
+    const firstWait = first!.availableAt.getTime() - START;
+    const secondWait = second!.availableAt.getTime() - first!.availableAt.getTime();
+    expect(firstWait).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(secondWait).toBeGreaterThanOrEqual(10 * 60_000);
+  });
+
+  it('gives up a week after the first limit with a retryable run_usage_limited failure', async () => {
+    const { storage, dispatcher, runError } = await limitedSkillRun(new Date(START + 3 * 24 * HOUR));
+
+    await dispatcher.runOnce(new Date(START));
+    const [first] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(first).toMatchObject({ status: 'retry', usageWaits: 1 });
+
+    Object.assign(runError, { resetsAt: new Date(START + 6 * 24 * HOUR) });
+    await dispatcher.runOnce(new Date(first!.availableAt.getTime()));
+    const [second] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(second).toMatchObject({ status: 'retry', usageWaits: 2 });
+
+    Object.assign(runError, { resetsAt: new Date(START + 9 * 24 * HOUR) });
+    await dispatcher.runOnce(new Date(second!.availableAt.getTime()));
+
+    const [failed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(failed).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_usage_limited',
+      lastError: expect.stringContaining('out of usage'),
+    });
+    expect(await storage.retryDeferredDecision('org-1', PROJECT_ID, failed!.id, new Date(START + 10 * 24 * HOUR))).toMatchObject({
+      status: 'retry',
+      usageLimitedSince: null,
+    });
+  });
+
+  it('waits on a Mastra provider 429 as well, from its Retry-After', async () => {
+    // Retry-After counts from when the run failed.
+    vi.useFakeTimers({ toFake: ['Date'], now: START });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-provider-429',
+    });
+    await bindWorkRun(storage, item.id);
+    const runError = Object.assign(new Error('Stream failed'), {
+      cause: Object.assign(new Error('Too Many Requests'), {
+        name: 'AI_APICallError',
+        statusCode: 429,
+        responseHeaders: { 'retry-after': '600' },
+      }),
+    });
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      boards: autoStartingBoards(),
+    });
+
+    await dispatcher.runOnce(new Date(START));
+
+    const [waiting] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(waiting).toMatchObject({ status: 'retry', attempts: 0, failureCode: 'run_usage_limited' });
+    expect(waiting!.availableAt.getTime()).toBeGreaterThanOrEqual(START + 11 * 60_000);
+    expect(waiting!.availableAt.getTime()).toBeLessThanOrEqual(START + 13 * 60_000);
+  });
+
+  it('waits out the limit on a pending start too, and resumes it as a new delivery', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueRunKickoff(storage);
+    const resetsAt = new Date(START + 2 * HOUR);
+    const sessionOptions: { agentEndReason: 'error' | 'complete'; runError: Error } = {
+      agentEndReason: 'error',
+      runError: limitError(resetsAt),
+    };
+    const { controller, sendNotificationSignal } = createSession(undefined, sessionOptions);
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+    });
+
+    await dispatcher.runOnce(new Date(START));
+
+    const [waiting] = await storage.listPendingStarts('org-1', PROJECT_ID);
+    expect(waiting).toMatchObject({ status: 'retry', attempts: 0, failureCode: 'run_usage_limited', usageWaits: 1 });
+    expect(waiting!.availableAt.getTime()).toBeGreaterThan(resetsAt.getTime());
+
+    sessionOptions.agentEndReason = 'complete';
+    await dispatcher.runOnce(new Date(waiting!.availableAt.getTime()));
+
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
+    const keys = sendNotificationSignal.mock.calls.map(([input]) => input.dedupeKey);
+    expect(keys).toEqual([`factory-kickoff:${waiting!.kickoffKey}`, `factory-kickoff:${waiting!.kickoffKey}:usage:1`]);
+    expect(sendNotificationSignal.mock.calls.map(([input]) => (input as { coalesceKey?: string }).coalesceKey)).toEqual([
+      `factory-kickoff:${waiting!.kickoffKey}`,
+      `factory-kickoff:${waiting!.kickoffKey}`,
+    ]);
+  });
+
+  it('leaves any other run error to the usual retries', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-other-error',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError: 'Model overloaded (529)' });
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      boards: autoStartingBoards(),
+    });
+
+    await dispatcher.runOnce(new Date(START));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      attempts: 1,
+      failureCode: 'run_failed',
+      usageWaits: 0,
+    });
+  });
+});
+
+describe('requeueing decisions that failed on a usage limit before runs waited for it', () => {
+  const HOUR = 60 * 60_000;
+  const START = Date.parse('2030-01-01T00:00:00Z');
+
+  async function legacyFailure(lastError: string, idempotencyKey = 'legacy-usage-limit') {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey,
+    });
+    await bindWorkRun(storage, item.id);
+    const now = new Date(START);
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'old-worker',
+      now,
+      leaseExpiresAt: new Date(START + 60_000),
+      limit: 1,
+    });
+    const failed = await storage.failDeferredDecision({
+      id: claimed!.id,
+      orgId: claimed!.orgId,
+      factoryProjectId: claimed!.factoryProjectId,
+      ownerId: 'old-worker',
+      now,
+      availableAt: now,
+      lastError,
+      failureCode: 'run_failed',
+      terminal: true,
+    });
+    return { storage, item, transitionService, failed: failed! };
+  }
+
+  it('requeues it once the limit it names has reset, and runs it', async () => {
+    const resetsAt = new Date(START + 3 * HOUR);
+    const { storage, transitionService, failed } = await legacyFailure(
+      `Factory skill run ended in error: Every Claude account this run may use is out of usage; the first comes back at ${resetsAt.toISOString()}.`,
+    );
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      boards: autoStartingBoards(),
+      staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+      usageLimitSweepIntervalMs: 1,
+    });
+
+    await dispatcher.runOnce(new Date(START + HOUR));
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
+
+    await dispatcher.runOnce(new Date(resetsAt.getTime() + 1));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      id: failed.id,
+      status: 'succeeded',
+      usageWaits: 1,
+    });
+    expect(session.sendSignal).toHaveBeenCalledOnce();
+  });
+
+  it('requeues each failure once, and leaves other failures and moved-on cards alone', async () => {
+    const boards = createLifecycleTestRegistry();
+    const limited = await legacyFailure('Factory skill run ended in error: Every Claude account this run may use is out of usage.');
+    const now = new Date(START + 2 * HOUR);
+
+    const first = await requeueUsageLimitedDecisions({
+      storage: limited.storage,
+      boards: toBoardSource(boards),
+      now,
+    });
+    expect(first.requeued.map(record => record.id)).toEqual([limited.failed.id]);
+
+    // It fails the same old way again: the sweep does not pick it up a second time.
+    const [claimed] = await limited.storage.claimDeferredDecisions({
+      ownerId: 'old-worker',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    await limited.storage.failDeferredDecision({
+      id: claimed!.id,
+      orgId: claimed!.orgId,
+      factoryProjectId: claimed!.factoryProjectId,
+      ownerId: 'old-worker',
+      now,
+      availableAt: now,
+      lastError: 'Factory skill run ended in error: out of usage',
+      failureCode: 'run_failed',
+      terminal: true,
+    });
+    expect(
+      (await requeueUsageLimitedDecisions({ storage: limited.storage, boards: toBoardSource(boards), now: new Date(now.getTime() + 2 * HOUR) }))
+        .requeued,
+    ).toEqual([]);
+
+    const other = await legacyFailure('Factory skill run ended in error: ECONNRESET', 'legacy-other');
+    expect(
+      (await requeueUsageLimitedDecisions({ storage: other.storage, boards: toBoardSource(boards), now })).requeued,
+    ).toEqual([]);
+
+    const movedOn = await legacyFailure('Factory skill run ended in error: out of usage', 'legacy-moved-on');
+    const card = await movedOn.storage.get({ orgId: 'org-1', id: movedOn.item.id });
+    await movedOn.storage.commitTransition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: movedOn.item.id,
+      expectedRevision: card!.revision,
+      destinationStage: 'done',
+      actorId: 'user-1',
+      ingress: { identity: 'move-on', triggerType: 'human', transitionId: 'move-on' },
+      configVersion: 'rules-v1',
+      causalChain: [],
+      evaluation: { outcome: 'accepted', decisions: [] },
+    });
+    expect(
+      (await requeueUsageLimitedDecisions({ storage: movedOn.storage, boards: toBoardSource(boards), now: new Date(START + 2 * HOUR) }))
+        .requeued,
+    ).toEqual([]);
   });
 });

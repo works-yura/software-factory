@@ -226,6 +226,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'run_configuration_invalid',
   'run_credentials_unavailable',
   'run_user_unauthenticated',
+  'run_usage_limited',
   'run_failed',
   'unknown',
 ] as const;
@@ -287,6 +288,10 @@ export interface FactoryDeferredDecisionRecord {
   leaseExpiresAt: Date | null;
   lastError: string | null;
   failureCode: StoredFactoryDispatchFailureCode | null;
+  /** How many times the decision waited for a model usage limit to reset. */
+  usageWaits: number;
+  /** When the current run of usage-limit waits began; cleared by any other outcome. */
+  usageLimitedSince: Date | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
   /** Who released this run — the run is attributed to them, not the repo connector. */
@@ -455,6 +460,10 @@ export interface FactoryPendingStartRecord {
   leaseExpiresAt: Date | null;
   lastError: string | null;
   failureCode: StoredFactoryDispatchFailureCode | null;
+  /** How many times the start waited for a model usage limit to reset; names each resumed delivery. */
+  usageWaits: number;
+  /** When the current run of usage-limit waits began; cleared by any other outcome. */
+  usageLimitedSince: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -485,6 +494,16 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   lastError: string;
   failureCode: FactoryDispatchFailureCode;
   terminal: boolean;
+  advanceDeliveryGeneration?: boolean;
+}
+
+/** A leased row whose run hit a model usage limit: it waits until `availableAt` without spending an attempt. */
+export interface FactoryUsageLimitWaitInput extends FactoryLeaseIdentity {
+  now: Date;
+  /** When the limit resets (plus jitter): the row is claimed again then. */
+  availableAt: Date;
+  lastError: string;
+  /** The run already took its kickoff: the resumed attempt delivers it under a new id (deferred decisions only). */
   advanceDeliveryGeneration?: boolean;
 }
 
@@ -1079,6 +1098,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       attempts: { type: 'integer' },
       delivery_generation: { type: 'integer', default: 0 },
       failure_occurrence: { type: 'integer', default: 0 },
+      usage_waits: { type: 'integer', default: 0 },
+      usage_limited_since: { type: 'timestamp', nullable: true },
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
@@ -1225,6 +1246,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       message: { type: 'text', nullable: true },
       status: { type: 'text' },
       attempts: { type: 'integer' },
+      usage_waits: { type: 'integer', default: 0 },
+      usage_limited_since: { type: 'timestamp', nullable: true },
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
@@ -1290,6 +1313,8 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
     failureCode: isStoredFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
+    usageWaits: Number(row.usage_waits ?? 0),
+    usageLimitedSince: (row.usage_limited_since as Date | null | undefined) ?? null,
     approvedAt: (row.approved_at as Date | null) ?? null,
     approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
@@ -1375,6 +1400,8 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
     failureCode: (row.failure_code as FactoryDispatchFailureCode | null) ?? null,
+    usageWaits: Number(row.usage_waits ?? 0),
+    usageLimitedSince: (row.usage_limited_since as Date | null | undefined) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -2142,6 +2169,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           lease_expires_at: null,
           last_error: input.lastError,
           failure_code: input.failureCode,
+          // Any other outcome ends a run of usage-limit waits; the cap counts from the next limit.
+          ...(input.failureCode === 'run_usage_limited' ? {} : { usage_limited_since: null }),
           completed_at: input.terminal ? input.now : null,
           ...(table === 'factory_deferred_decisions' && input.terminal
             ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 }
@@ -2151,6 +2180,39 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return failed ? row : null;
+  }
+
+  async #waitLeaseForUsageReset(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    input: FactoryUsageLimitWaitInput,
+  ): Promise<GovernanceDbRow | null> {
+    let waited = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      table,
+      { id: input.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== input.ownerId) return null;
+        waited = true;
+        return {
+          status: 'retry',
+          // Waiting out a limit is not a try: the claim that found it is refunded.
+          attempts: Math.max(0, Number(current.attempts) - 1),
+          ...(table === 'factory_deferred_decisions' && input.advanceDeliveryGeneration !== false
+            ? { delivery_generation: Number(current.delivery_generation ?? 0) + 1 }
+            : {}),
+          usage_waits: Number(current.usage_waits ?? 0) + 1,
+          usage_limited_since: (current.usage_limited_since as Date | null | undefined) ?? input.now,
+          available_at: input.availableAt,
+          lease_owner: null,
+          lease_expires_at: null,
+          last_error: input.lastError,
+          failure_code: 'run_usage_limited',
+          completed_at: null,
+          updated_at: input.now,
+        };
+      },
+    );
+    return waited ? row : null;
   }
 
   async #listWithOps(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<Card[]> {
@@ -3196,6 +3258,36 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toDeferredDecision(row) : null;
   }
 
+  /**
+   * Hand a leased decision back until a model usage limit resets: `retry` with the
+   * `run_usage_limited` reason and `availableAt` as when it resumes, the claim's attempt
+   * refunded. `usageLimitedSince` keeps when the waits began, so the dispatcher can cap them.
+   */
+  async waitDeferredDecisionForUsageReset(
+    input: FactoryUsageLimitWaitInput,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#waitLeaseForUsageReset('factory_deferred_decisions', input);
+    return row ? toDeferredDecision(row) : null;
+  }
+
+  /**
+   * Failed decisions whose failure may have been a model usage limit, newest first, across
+   * every Factory: the dispatcher requeues them once the limit has reset.
+   */
+  async listUsageLimitFailureCandidates(input: {
+    since: Date;
+    limit: number;
+  }): Promise<FactoryDeferredDecisionRecord[]> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { status: 'failed', failure_code: { in: ['run_failed', 'unknown'] } },
+      { orderBy: [['updated_at', 'desc']], limit: input.limit },
+    );
+    return rows
+      .map(toDeferredDecision)
+      .filter(record => record.updatedAt.getTime() >= input.since.getTime());
+  }
+
   /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
   async proposeDeferredDecision(
     identity: FactoryLeaseIdentity,
@@ -3595,12 +3687,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  /** Requeue the same idempotent terminal effect; non-failed or non-retryable decisions are never rerun. */
+  /**
+   * Requeue the same idempotent terminal effect; non-failed or non-retryable decisions are never rerun.
+   * `usageWait` counts the requeue as a wait for a usage limit's reset, so the sweep that requeues
+   * such failures does it once.
+   */
   async retryDeferredDecision(
     orgId: string,
     factoryProjectId: string,
     decisionId: string,
     now: Date,
+    options: { usageWait?: boolean } = {},
   ): Promise<FactoryDeferredDecisionRecord | null> {
     return this.#withTransaction(async ops => {
       let retried = false;
@@ -3616,6 +3713,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             status: 'retry',
             attempts: 0,
             delivery_generation: Number(current.delivery_generation ?? 0) + 1,
+            usage_limited_since: null,
+            ...(options.usageWait ? { usage_waits: Number(current.usage_waits ?? 0) + 1 } : {}),
             available_at: now,
             lease_owner: null,
             lease_expires_at: null,
@@ -3916,6 +4015,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async failPendingStart(input: FactoryDispatchFailureInput): Promise<FactoryPendingStartRecord | null> {
     const row = await this.#failLease('factory_pending_starts', input);
+    return row ? toPendingStart(row) : null;
+  }
+
+  /** A pending start's {@link waitDeferredDecisionForUsageReset}. */
+  async waitPendingStartForUsageReset(input: FactoryUsageLimitWaitInput): Promise<FactoryPendingStartRecord | null> {
+    const row = await this.#waitLeaseForUsageReset('factory_pending_starts', input);
     return row ? toPendingStart(row) : null;
   }
 

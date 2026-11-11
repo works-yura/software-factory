@@ -161,6 +161,8 @@ export function computeFactoryHealth(
   const bindingsById = new Map(inputs.bindings.map(binding => [binding.id, binding]));
   for (const start of inputs.pendingStarts) {
     if (start.status === 'sent') continue;
+    // Waiting for a model usage limit to reset is not a stall: the start resumes at `availableAt`.
+    if (start.status === 'retry' && start.failureCode === 'run_usage_limited' && start.availableAt > now) continue;
     const binding = bindingsById.get(start.bindingId);
     const base = subject(binding?.workItemId ?? null);
     const age = now.getTime() - start.createdAt.getTime();

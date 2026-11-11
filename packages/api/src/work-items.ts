@@ -221,7 +221,13 @@ function summarySource(decision: Record<string, unknown>): WorkItemSource | null
     : null;
 }
 
+/** A decision waiting for a model usage limit to reset is not failing: it resumes at `availableAt`. */
+function waitingForUsageReset(decision: FactoryDeferredDecisionRecord): boolean {
+  return (decision.status === 'retry' || decision.status === 'pending') && decision.failureCode === 'run_usage_limited';
+}
+
 function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord, overtaken = false) {
+  const waiting = waitingForUsageReset(decision);
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
@@ -235,6 +241,9 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
     failureCode: decision.failureCode,
     canRetry: decisionRetryable(decision, overtaken),
     lastError: decision.lastError?.slice(0, 512) ?? null,
+    /** When a decision waiting out a usage limit resumes on its own; `null` otherwise. */
+    waitingUntil: waiting ? new Date(decision.availableAt).toISOString() : null,
+    waitingReason: waiting ? ('usage_limit' as const) : null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
     completedAt: decision.completedAt?.toISOString() ?? null,

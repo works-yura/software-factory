@@ -59,6 +59,9 @@ import type {
 import { arrivalSourceFacts, workItemProviderAdapter } from '@factory/store';
 import type { FactoryRunEndReporter } from './run-end-report.ts';
 import { decisionOvertaken } from './decision-applicability.ts';
+import { usageLimitOf, usageLimitResumeAt, usageLimitWaitAllowed } from './usage-limit.ts';
+import type { UsageLimit } from './usage-limit.ts';
+import { requeueUsageLimitedDecisions } from './usage-limit-sweep.ts';
 import { isStatusEventDecision } from '@factory/core';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from '@factory/store';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.ts';
@@ -121,6 +124,9 @@ const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
 // exists to catch results missed at run end, so it runs on a slow cadence off
 // the claim path rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
+// Decisions that failed on a usage limit before runs waited for its reset are requeued once it
+// has reset: checked at start, then on this cadence or at the next reset a candidate waits for.
+const USAGE_LIMIT_SWEEP_INTERVAL_MS = 10 * 60_000;
 
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */
 class FactoryDecisionSuperseded extends Error {}
@@ -142,6 +148,15 @@ const CARD_RUN_POSTPONE_MS = 2_000;
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
+
+/** A run that ended because every model account it may use is out of usage: it waits for the reset. */
+class RunUsageLimited extends RunEndedInError {
+  readonly limit: UsageLimit;
+  constructor(message: string, limit: UsageLimit) {
+    super('run_usage_limited', message);
+    this.limit = limit;
+  }
+}
 
 // The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
 const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
@@ -170,6 +185,10 @@ function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCo
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {
   const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
+  const limit = usageLimitOf(error);
+  if (limit) {
+    return new RunUsageLimited(cause ? `${label} ended in error: ${cause}` : `${label} hit a model usage limit.`, limit);
+  }
   if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
   return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
 }
@@ -432,6 +451,8 @@ export interface FactoryDecisionDispatcherOptions {
   staleBindingTtlMs?: number;
   /** How often the bound-thread reconcile walk runs. Defaults to 30 seconds. */
   reconcileIntervalMs?: number;
+  /** How often failures on a usage limit are checked for requeue once it reset. Defaults to 10 minutes. */
+  usageLimitSweepIntervalMs?: number;
   /**
    * How long a run the registry still shows in flight is observed before it fails as overdue. Defaults to 6 hours.
    * A run the registry no longer shows fails for retry at the next ten-minute heartbeat instead.
@@ -658,6 +679,11 @@ export class FactoryDecisionDispatcher {
   readonly #skillCompletionObservationTimeoutMs: number;
   #lastReconcileAt?: Date;
   #reconcileInFlight?: Promise<void>;
+  readonly #usageLimitSweepIntervalMs: number;
+  #lastUsageLimitSweepAt?: number;
+  /** The next reset a usage-limited failure waits for; the sweep runs then too. */
+  #usageLimitSweepDueAt?: number;
+  #usageLimitSweepInFlight?: Promise<void>;
   /** A reconcile is due once activity stops, to drain results of runs that just ended. */
   #reconcileOwed = true;
   /** Last step seen on a bound session thread; counts as activity for one reconcile interval. */
@@ -702,6 +728,7 @@ export class FactoryDecisionDispatcher {
     );
     this.#staleBindingTtlMs = positiveMs(options.staleBindingTtlMs, STALE_BINDING_TTL_MS);
     this.#reconcileIntervalMs = positiveMs(options.reconcileIntervalMs, RECONCILE_INTERVAL_MS);
+    this.#usageLimitSweepIntervalMs = positiveMs(options.usageLimitSweepIntervalMs, USAGE_LIMIT_SWEEP_INTERVAL_MS);
     this.#skillCompletionObservationTimeoutMs = positiveMs(
       options.skillCompletionObservationTimeoutMs,
       SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
@@ -758,6 +785,7 @@ export class FactoryDecisionDispatcher {
   async runOnce(now = new Date()): Promise<void> {
     void this.#maybeSweepStaleBindings(now);
     this.#maybeReconcileToolResults(now);
+    await this.#maybeSweepUsageLimits(now);
     const { dispatches } = await this.#claimAndStart(now);
     await Promise.all(dispatches);
   }
@@ -795,6 +823,7 @@ export class FactoryDecisionDispatcher {
     // Fire-and-forget like the reconcile walk: the sweep reads every active
     // binding, so awaiting it would stretch the cycle as the active set grows.
     void this.#maybeSweepStaleBindings(now);
+    void this.#maybeSweepUsageLimits(now);
     // Tool results only come from runs, so the reconcile walk follows local
     // activity, plus one trailing pass after it stops.
     const active =
@@ -823,6 +852,7 @@ export class FactoryDecisionDispatcher {
     if (full || this.#runInFlight.size > 0 || this.#bookkeepingInFlight.size > 0) return POLL_MS;
 
     const dueTimes: number[] = [];
+    if (this.#usageLimitSweepDueAt !== undefined) dueTimes.push(this.#usageLimitSweepDueAt);
     if (this.#reconcileOwed) {
       dueTimes.push((this.#lastReconcileAt?.getTime() ?? 0) + this.#reconcileIntervalMs);
     }
@@ -923,6 +953,37 @@ export class FactoryDecisionDispatcher {
     return true;
   }
 
+  /**
+   * Requeues decisions that failed on a usage limit once it reset (see `requeueUsageLimitedDecisions`):
+   * at the first tick, then on its cadence or when a candidate's reset comes. Never throws.
+   */
+  #maybeSweepUsageLimits(now: Date): Promise<void> {
+    if (this.#usageLimitSweepInFlight) return this.#usageLimitSweepInFlight;
+    const at = now.getTime();
+    const due =
+      this.#lastUsageLimitSweepAt === undefined ||
+      at - this.#lastUsageLimitSweepAt >= this.#usageLimitSweepIntervalMs ||
+      (this.#usageLimitSweepDueAt !== undefined && at >= this.#usageLimitSweepDueAt);
+    if (!due) return Promise.resolve();
+    this.#lastUsageLimitSweepAt = at;
+    const sweep = requeueUsageLimitedDecisions({ storage: this.#storage, boards: this.#boards, now })
+      .then(({ requeued, nextAt }) => {
+        this.#usageLimitSweepDueAt = nextAt?.getTime();
+        if (requeued.length > 0) {
+          console.info(`Factory requeued ${requeued.length} decision(s) whose model usage limit has reset`);
+        }
+      })
+      .catch(error => {
+        console.error('Factory usage-limit sweep failed', sanitizeDispatchError(error));
+      })
+      .finally(() => {
+        this.#usageLimitSweepInFlight = undefined;
+      });
+    this.#usageLimitSweepInFlight = sweep;
+    this.#track(this.#backgroundInFlight, sweep);
+    return sweep;
+  }
+
   /** Slow-cadence revocation of leaked/legacy bindings; failures never block the claim path. */
   async #maybeSweepStaleBindings(now: Date): Promise<void> {
     // The first tick only anchors the cadence: sweeping at boot would race the
@@ -1014,8 +1075,33 @@ export class FactoryDecisionDispatcher {
         );
         return;
       }
+      if (error instanceof RunUsageLimited) {
+        // The tick that claimed it, or later when the run took a while.
+        const at = new Date(Math.max(now.getTime(), Date.now()));
+        const resumeAt = usageLimitResumeAt(error.limit, { now: at, waits: record.usageWaits });
+        if (usageLimitWaitAllowed(record.usageLimitedSince, resumeAt, at)) {
+          // The run may have taken its kickoff before the limit hit: the resumed attempt sends it
+          // again under a new id, on the same session and thread, as any retry does.
+          const waiting = await this.#storage.waitDeferredDecisionForUsageReset({
+            ...leaseIdentity(record, this.#ownerId),
+            now: at,
+            availableAt: resumeAt,
+            lastError: sanitizeDispatchError(error),
+            advanceDeliveryGeneration: !executionCompleted,
+          });
+          if (this.#reviewQueued.has(record)) {
+            await this.#reviewStatus(waiting ?? record, record.decision, {
+              phase: 'retrying',
+              endedAt: at,
+              reason: factoryDispatchFailureMetadata('run_usage_limited').label,
+            });
+          }
+          return;
+        }
+      }
       const failureCode = factoryDispatchFailureCode(error);
-      const terminal = isTerminalFailure(record.attempts, failureCode);
+      // A usage limit that reaches here has been waited on for too long.
+      const terminal = error instanceof RunUsageLimited || isTerminalFailure(record.attempts, failureCode);
       const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
@@ -2774,13 +2860,20 @@ export class FactoryDecisionDispatcher {
                     payload: { message: record.message },
                     sourceId: record.id,
                     dedupeKey,
+                    // A copy a usage-limited run left waiting merges with the resumed one.
+                    coalesceKey: `factory-kickoff:${record.kickoffKey}`,
                   },
                   { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' }, requestContext },
                 ),
               true,
             );
           try {
-            let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
+            // A start resumed after a usage limit is a new delivery: the first one was already taken.
+            let settled = await sendKickoff(
+              record.usageWaits > 0
+                ? `factory-kickoff:${record.kickoffKey}:usage:${record.usageWaits}`
+                : `factory-kickoff:${record.kickoffKey}`,
+            );
             let deliveryGeneration = 0;
             while (settled?.action === 'deliver') {
               // `deliver` only proves the signal was queued onto a run already
@@ -2816,6 +2909,20 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completePendingStart(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory kickoff lease was lost before completion.');
     } catch (error) {
+      if (error instanceof RunUsageLimited) {
+        // The tick that claimed it, or later when the run took a while.
+        const at = new Date(Math.max(now.getTime(), Date.now()));
+        const resumeAt = usageLimitResumeAt(error.limit, { now: at, waits: record.usageWaits });
+        if (usageLimitWaitAllowed(record.usageLimitedSince, resumeAt, at)) {
+          await this.#storage.waitPendingStartForUsageReset({
+            ...leaseIdentity(record, this.#ownerId),
+            now: at,
+            availableAt: resumeAt,
+            lastError: sanitizeDispatchError(error),
+          });
+          return;
+        }
+      }
       const failureCode = factoryDispatchFailureCode(error);
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),
@@ -2823,7 +2930,8 @@ export class FactoryDecisionDispatcher {
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
-        terminal: isTerminalFailure(record.attempts, failureCode),
+        // A usage limit that reaches here has been waited on for too long.
+        terminal: error instanceof RunUsageLimited || isTerminalFailure(record.attempts, failureCode),
       });
     }
   }
