@@ -67,6 +67,15 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - Інтеграції Platform (GitHub/GitLab через `MASTRA_PLATFORM_ACCESS_TOKEN`/`MASTRA_PLATFORM_SECRET_KEY`) лишаються. Телеметрія (`isFactoryTelemetryEnabled`) вмикалась лише для провайдера `mastra-studio`, тож тепер фактично вимкнена; код не чіпали.
 - `factory:dev` (`apps/server/src/factory-dev`) більше не питає оточення й провайдера пісочниці, ставить `FACTORY_SANDBOX_PROVIDER=local` і `FACTORY_LOCAL_DEV_AUTH=1`.
 
+## Вхід через Google на better-auth; Firebase-вхід прибрано (2026-11-12)
+
+Рішення: [ADR-0030](docs/adr/0030-google-sign-in-organizations-invite-links.md), опис — `docs/features/auth/design.md`.
+
+- `packages/auth-better-auth` (`@factory/auth-better-auth`) — копія `@mastra/auth-better-auth` 1.1.8 (`auth/better-auth/src/index.ts` і тести, Apache-2.0, `THIRD_PARTY_NOTICES.md`). Відхилення: немає email/пароля й `ICredentialsProvider` (`signIn`/`signUp`/`isSignUpEnabled` і їхні тести прибрано, `emailAndPassword.enabled: false`); інстанс, який будує `init()`, — лише з `socialProviders.google` (`prompt: select_account`) і без `google` не створюється; `account.accountLinking` з довіреним `google` і `updateUserInfoOnLink`; `organization()` без листів, `allowUserToCreateOrganization: false`, запрошення 7 днів, `requireEmailVerificationOnInvitation: true`; опції винесено в `factoryBetterAuthOptions`; `authContext()` віддає контекст після міграцій (для перенесення людей); `authenticateToken` перевіряє, що людина ще в активній організації сесії (upstream довіряв `activeOrganizationId`), інакше бере найстаріше членство; користувач для `IUserProvider` — свій тип `BetterAuthProfile` замість `EEUser` (`@internal/auth/ee` у v4 не експортується). Решта (особиста організація, кеш членства, підпис bearer-токена, `getClearSessionHeaders`) — як в upstream. Тест `google.test.ts` (справжній better-auth на libSQL) — лише v4.
+- `apps/server`: `FACTORY_AUTH=google` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACTORY_AUTH_SECRET`, `MASTRACODE_PUBLIC_URL`) замість `FACTORY_AUTH=firebase`; `firebase/firebase-auth.ts` з тестом, `firebase-admin`, скрипт `dev:firebase` (тепер `dev:google`) і env `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_WEB_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FACTORY_ALLOWED_EMAILS`, `FACTORY_FIREBASE_OWNER_EMAIL` прибрано. Перенесення людей під час старту (`FACTORY_OWNER_EMAIL`, `FACTORY_AUTH_IMPORT_FIREBASE_USERS`) — лише v4. `packages/integration-firebase` (логи й креші) не чіпали: `firebase-admin` воно не використовує.
+- `packages/auth`: користувач better-auth бере аватар із `image` (поле better-auth), не лише `avatarUrl` (`auth.test.ts` +1).
+- UI: `/signin` для `better-auth` — лише кнопка Google (`POST /auth/api/sign-in/social`), форму email/пароля і реєстрацію (з upstream) і Firebase-попап прибрано разом із `firebase`; нові «Налаштування › Організація» і `/invite/:invitationId` — лише v4, ходять напряму в ендпоінти better-auth `/auth/api/organization/*`.
+
 ### Словник Linear/Jira/incident.io
 
 Власник вирішив: Linear, Jira, incident.io не підтримуються. Прибрано решту словника:

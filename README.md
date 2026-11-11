@@ -17,6 +17,7 @@
 | `@factory/observability` | `packages/observability` | Request timing and product telemetry. |
 | `@factory/http` | `packages/http` | HTTP route helpers, server errors, SPA static serving. |
 | `@factory/auth` | `packages/auth` | Factory auth: provider-neutral auth gate and routes, signed OAuth state. |
+| `@factory/auth-better-auth` | `packages/auth-better-auth` | Google sign-in, organizations and invitation links on better-auth (copy of `@mastra/auth-better-auth`). |
 | `@factory/contracts` | `packages/contracts` | Wire contracts of the Factory HTTP API, shared by server and UI. |
 | `@factory/credentials` | `packages/credentials` | Provider and tenant model credentials, provider display names. |
 | `@factory/feed` | `packages/feed` | Work-item feed over HTTP: audit and comments domains, wire formats, feed events. |
@@ -109,6 +110,20 @@ cd apps/server && corepack pnpm dev:local          # http://localhost:5874
 
 `dev:local` — локальний режим без входу (`FACTORY_LOCAL_DEV_AUTH=1`), база `~/.mastracode/factory-v4/mastra.db` (окремо від v3), пісочниці на цій машині. Налаштування інтеграцій — у `apps/server/.env` (у git не потрапляє); схема змінних — `apps/server/.env.schema`. Перевіряти лише на тестовому репозиторії.
 
+### Вхід через Google
+
+`dev:google` (або `FACTORY_AUTH=google` на сервері) — кнопка «Увійти через Google», кожен новий користувач отримує свою організацію, інших додають посиланням-запрошенням з «Налаштування › Організація» ([docs/features/auth](docs/features/auth/design.md), [ADR-0030](docs/adr/0030-google-sign-in-organizations-invite-links.md)). У `apps/server/.env`:
+
+| Змінна | Що |
+| --- | --- |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth-клієнт Google (тип «Web application»); redirect URI — `<MASTRACODE_PUBLIC_URL>/auth/api/callback/google` |
+| `FACTORY_AUTH_SECRET` | підпис cookie сесії, ≥ 32 символи (`openssl rand -base64 32`); зміна виводить усіх |
+| `MASTRACODE_PUBLIC_URL` | адреса, яку бачить браузер (у `dev:google` типово `http://localhost:5874`) |
+| `FACTORY_OWNER_EMAIL` | необов'язково: Google-адреса власника; його сесії й налаштування з local dev / Firebase лишаються за ним |
+| `FACTORY_AUTH_IMPORT_FIREBASE_USERS` | необов'язково: `firebase auth:export users.json --format=json`; люди з колишнього Firebase-входу стають адміністраторами `factory-local-org` зі своїми id |
+
+Бракує обов'язкової змінної — сервер не стартує й називає її. Перенесення людей ідемпотентне, підсумок — рядок `[auth] Existing users: …` у лозі.
+
 ### GitHub без App
 
 `GITHUB_ACCESS_TOKEN` у `apps/server/.env` (група `GITHUB_APP_*` порожня) вмикає `GithubTokenIntegration` (`packages/integration-github/src/token-integration.ts`): токен акаунта, що може пушити в потрібні репозиторії (classic `repo` або fine-grained з read/write на Contents, Issues, Pull requests, Commit statuses).
@@ -123,7 +138,7 @@ cd apps/server && corepack pnpm dev:local          # http://localhost:5874
 
 | Застосунок | Тека | Що це |
 | --- | --- | --- |
-| `@factory/app-server` | `apps/server` | Хост: `MastraFactory` з GitHub і GitLab, локальний вхід, сценарні тести хоста |
+| `@factory/app-server` | `apps/server` | Хост: `MastraFactory` з GitHub і GitLab, локальний вхід і вхід через Google, сценарні тести хоста |
 | `@factory/app-ui` | `apps/ui` | Веб-UI (React, Vite); бере з пакетів лише легкі модулі через підшляхи (`@factory/core/rules/types` тощо), щоб серверний код не потрапив у бандл |
 
 ## Збірка

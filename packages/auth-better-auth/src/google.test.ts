@@ -42,6 +42,9 @@ beforeEach(async () => {
   });
   const options: BetterAuthOptions = {
     ...base,
+    // better-auth turns its origin and callback-URL checks off under NODE_ENV=test; keep them on
+    // as in production.
+    advanced: { ...base.advanced, disableOriginCheck: false },
     socialProviders: {
       google: {
         ...(base.socialProviders!.google as { clientId: string; clientSecret: string; prompt: 'select_account' }),
@@ -104,6 +107,41 @@ const BOB: GoogleProfile = { sub: 'google-bob', email: 'bob@example.com', name: 
 const EVE: GoogleProfile = { sub: 'google-eve', email: 'eve@example.com', name: 'Eve' };
 
 describe('Google sign-in on the Factory options', () => {
+  it("hands the sign-in page Google's URL, returning to the server's callback and then the page's path", async () => {
+    const response = await provider.handleAuthRequest(
+      new Request(`${ORIGIN}/auth/api/sign-in/social`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: ORIGIN },
+        body: JSON.stringify({
+          provider: 'google',
+          callbackURL: '/invite/inv-1',
+          errorCallbackURL: '/signin?returnTo=%2Finvite%2Finv-1',
+          disableRedirect: true,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const { url } = (await response.json()) as { url: string };
+    const google = new URL(url);
+    expect(google.origin).toBe('https://accounts.google.com');
+    expect(google.searchParams.get('client_id')).toBe('google-client');
+    expect(google.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/auth/api/callback/google`);
+    expect(google.searchParams.get('prompt')).toBe('select_account');
+  });
+
+  it('refuses a return address on another origin', async () => {
+    const response = await provider.handleAuthRequest(
+      new Request(`${ORIGIN}/auth/api/sign-in/social`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: ORIGIN },
+        body: JSON.stringify({ provider: 'google', callbackURL: 'https://evil.example/steal', disableRedirect: true }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
   it('signs a new person in and gives them their own organization as owner', async () => {
     const cookie = await signInWithGoogle(ADA);
     const signedIn = await signedInUser(cookie);
