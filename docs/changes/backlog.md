@@ -68,7 +68,8 @@
 - OAuth для HTTP-серверів (upstream `authProvider`); зараз лише заголовки.
 - «З підтвердженням» для Codex (зараз такі інструменти Codex не отримує).
 - Шлюз (MetaMCP / Docker MCP Gateway) під хабом, коли реплік стане кілька.
-- Пресети: Firebase MCP (`--only crashlytics`), Google Cloud Observability MCP, Sentry — і порівняти з нашою інтеграцією логів (ADR-0019).
+- Записи каталогу (`server.json` + оверлей, пакет із точною версією): Firebase MCP (`firebase-tools`, `--only crashlytics`), Google Cloud Observability MCP (`@google-cloud/observability-mcp`), Sentry — і порівняти з нашою інтеграцією логів (ADR-0019). Зараз у каталозі лише MCP Toolbox, бо інших пакетів у залежностях немає.
+- Підтягувати каталог з `registry.modelcontextprotocol.io` (оверлеї лишаються нашими); іконки серверів у картках каталогу.
 - Тип аудиту «База» / «AI-чат» на дошці «Аудити» поверх сервера бази (згода клієнта на аналіз переписки користувачів).
 
 ## Відомі вади
