@@ -286,6 +286,11 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `8015cf5a55` (#29372), `e0bbdc6066` (#29623) | Slack: розшифровка голосових кліпів, відповідь у треді, коли бота згадує незалінкований користувач | Slack у v4 прибрано. Самі можливості (розшифровка голосових, відповідь у треді користувачу без прив'язки) підуть у запланований спільний інтерфейс повідомлень, який реалізують ClickUp та інші |
 | `a3c0884445` (#29902), `c1205b357f` (#29954) | новий дизайн Switch і його повний відкат | разом нічого не змінюють: `git diff a3c0884445~1 c1205b357f -- packages/playground-ui/src/ds/components/Switch` порожній |
 | `d41d7ac33d` (#28037) | схвалення плану запускає його як мету (mastracode SDK і TUI) | у Factory-шляхах коміт лише вимикає це: `planApprovalStartsGoal: false` у конфігу mastracode. `@mastra/code-sdk` 1.18.0, який пінить v4, такої опції не має і на схвалення плану мету не запускає, тож Factory вже поводиться так само. Решта — SDK, TUI, документація mastracode, яких у v4 немає. Повернутися при оновленні `@mastra/code-sdk`: тоді додати `planApprovalStartsGoal: false` у `server/src/factory.ts`. |
+| `779d2875b1` (#29912), `23cc34a9c5` (#29938), `8bce7717eb` (#29986), `695599b8ab` (#30013), `71fb4b9795` (#30023) | `chore: version packages` | версії й changelog'и пакетів upstream; у v4 свої пакети `@factory/*` |
+| `98e46f6fc5` (#29941) | коментарі triage у Linear пишуться в Linear markdown | Linear у v4 немає |
+| `023455e2d4` (#29940) | режими build і plan у mastracode за замовчуванням на `gpt-5.6-sol` | це налаштування CLI mastracode, не Factory; у v4 модель задає Factory (Settings › Models) |
+| `d1352388a6` (#29987) | кількість сторінок на перемикачах закріплених списків Knowledge | Knowledge у v4 немає |
+| `9730315a2f` (#29432) | каталоги віддалених моделей оновлюються у фоні | це внутрішній код `@mastra/core`; v4 бере `@mastra/core` як залежність з npm і отримає зміну з оновленням версії |
 
 ## Перенесено з upstream після efc06290c0
 
