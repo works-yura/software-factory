@@ -12,6 +12,9 @@ import { createSessionAccessGuard } from '@factory/session';
 
 import { chainSessionResolvers, codexAwareModelSelectionReader, isCodexSession } from './sessions.ts';
 
+/** A Factory id: Factory project ids are uuids, and the access guard checks only uuids against the store. */
+const FACTORY_ID = '00000000-0000-4000-8000-0000000000f1';
+
 const BASE = '/api/agent-controller/code/sessions';
 
 type Script = (server: FakeCodexAppServer, turn: { threadId: string; turnId: string }) => void | Promise<void>;
@@ -58,7 +61,7 @@ async function setup(scripts: Script[], config: Partial<CodexSessionConfig> = {}
     ...config,
   });
   ui.setSessionResolver(chainSessionResolvers(async () => undefined, id => harness.getSession(id)));
-  const session = await harness.createSession({ sessionId: 'card-1', threadId: 'card-1', resourceId: 'factory-1' });
+  const session = await harness.createSession({ sessionId: 'card-1', threadId: 'card-1', resourceId: FACTORY_ID });
 
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -71,10 +74,10 @@ async function setup(scripts: Script[], config: Partial<CodexSessionConfig> = {}
     createSessionAccessGuard({
       auth: fakeRouteAuth(),
       sessions: { getBySessionId: async id => (id === 'card-1' ? ({ sessionId: id, orgId: 'org-1', userId: 'owner', visibility: 'org' } as never) : null) },
-      projects: { get: async ({ orgId, id }) => (id === 'factory-1' && orgId === 'org-1' ? ({ id, orgId } as never) : null) },
+      projects: { get: async ({ orgId, id }) => (id === FACTORY_ID && orgId === 'org-1' ? ({ id, orgId } as never) : null) },
       controller: () => ({
         getSession: async () => undefined,
-        queryThreadById: async ({ threadId }) => (threadId === 'card-1' ? { resourceId: 'factory-1' } : null),
+        queryThreadById: async ({ threadId }) => (threadId === 'card-1' ? { resourceId: FACTORY_ID } : null),
       }),
     }),
   );
