@@ -125,10 +125,24 @@ const oauth: SignInOAuth = { accessToken: 'access-1', refreshToken: 'refresh-1',
 
 describe('usage probes', () => {
   it("reads a Claude sign-in's windows from the usage endpoint with its own token", async () => {
-    const fetchMock = vi.fn(async () => Response.json({ five_hour: { utilization: 61, resets_at: '2026-11-11T20:00:00Z' }, seven_day: null }));
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        five_hour: { utilization: 61, resets_at: '2026-11-11T20:00:00Z' },
+        seven_day: null,
+        seven_day_opus: { utilization: 83, resets_at: '2026-11-15T08:00:00Z' },
+        extra_usage: { is_enabled: true, used_credits: 2_500, monthly_limit: 10_000, utilization: 25 },
+      }),
+    );
     const usage = createClaudeHarnessUsage({ signIn: async () => oauth, fetch: fetchMock as never, now: () => new Date('2026-11-11T18:00:00Z') });
     const limits = await usage.readAccountLimits!({ orgId: 'org-1', accountId: 'a' });
-    expect(limits).toMatchObject({ source: 'probe', windows: [{ id: 'five_hour', usedPercent: 61 }] });
+    expect(limits).toMatchObject({
+      source: 'probe',
+      windows: [
+        { id: 'five_hour', kind: 'session', usedPercent: 61 },
+        { id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 83 },
+        { id: 'monthly_spend', kind: 'spend', usedPercent: 25 },
+      ],
+    });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(CLAUDE_OAUTH_USAGE_URL);
     expect(init.headers).toMatchObject({ authorization: 'Bearer access-1', 'anthropic-beta': 'oauth-2025-04-20' });

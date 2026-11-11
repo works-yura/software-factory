@@ -8,6 +8,7 @@ import { createInMemorySessionStore } from './store.ts';
 import { claudeOAuthUsageToLimits, claudeRateLimitWindows } from './usageLimits.ts';
 
 const RESET = 1_793_000_000;
+const checkedAt = '2026-11-11T18:00:00.000Z';
 
 describe('claudeRateLimitWindows', () => {
   it('reads a streamed window: utilization 0–1, reset in epoch seconds', () => {
@@ -28,6 +29,23 @@ describe('claudeRateLimitWindows', () => {
     expect(claudeRateLimitWindows({ status: 'allowed', rateLimitType: 'five_hour' })).toEqual([]);
     expect(claudeRateLimitWindows({ rateLimitType: 'overage', utilization: 0.5 })).toEqual([]);
     expect(claudeRateLimitWindows(undefined)).toEqual([]);
+  });
+
+  it('drops the overage-included bucket, which names no window of its own', () => {
+    expect(claudeRateLimitWindows({ status: 'allowed', rateLimitType: 'seven_day_overage_included', utilization: 0.4 })).toEqual([]);
+  });
+
+  it('reads a utilization well past 1 as a percentage already, and says so', () => {
+    const told: unknown[] = [];
+    expect(
+      claudeRateLimitWindows({ status: 'allowed', rateLimitType: 'seven_day', utilization: 85 }, detail => told.push(detail))[0],
+    ).toMatchObject({ id: 'seven_day', usedPercent: 85 });
+    expect(told).toEqual([{ windowId: 'seven_day', value: 85 }]);
+    // A used-up window may read a little over 1: still a fraction.
+    expect(claudeRateLimitWindows({ status: 'rejected', rateLimitType: 'five_hour', utilization: 1.01 }, () => told.push('x'))[0]).toMatchObject({
+      usedPercent: 100,
+    });
+    expect(told).toHaveLength(1);
   });
 });
 
@@ -51,6 +69,63 @@ describe('claudeOAuthUsageToLimits', () => {
         { id: 'seven_day_fable_5_2', kind: 'model', label: 'Fable 5.2', usedPercent: 4, windowDurationMins: 10080 },
       ],
     });
+  });
+
+  it('clamps a window past its allowance and skips one without utilization', () => {
+    expect(
+      claudeOAuthUsageToLimits({ five_hour: { utilization: null, resets_at: null }, seven_day: { utilization: 250, resets_at: null } }, checkedAt)
+        .windows,
+    ).toEqual([{ id: 'seven_day', kind: 'weekly', usedPercent: 100, windowDurationMins: 10080 }]);
+  });
+
+  const enterprise = {
+    five_hour: null,
+    seven_day: null,
+    spend: {
+      enabled: true,
+      used: { amount_minor: 4_631, currency: 'USD', exponent: 2 },
+      limit: { amount_minor: 50_000, currency: 'USD', exponent: 2 },
+      percent: 9,
+    },
+    extra_usage: { is_enabled: true, used_credits: 4_631, monthly_limit: 50_000, utilization: 9.261999999999999, currency: 'USD' },
+  };
+  const spendWindow = { id: 'monthly_spend', kind: 'spend', usedPercent: expect.closeTo(9.262, 10) };
+
+  it('reads the spend budget precisely, beside the rolling windows', () => {
+    expect(claudeOAuthUsageToLimits(enterprise, checkedAt)).toEqual({ checkedAt, source: 'probe', windows: [spendWindow] });
+    const withSession = {
+      ...enterprise,
+      five_hour: { utilization: 12, resets_at: null },
+      extra_usage: { ...enterprise.extra_usage, used_credits: 30_000, utilization: 60 },
+    };
+    expect(claudeOAuthUsageToLimits(withSession, checkedAt).windows).toEqual([
+      { id: 'five_hour', kind: 'session', usedPercent: 12, windowDurationMins: 300 },
+      spendWindow,
+    ]);
+  });
+
+  it('falls back to enabled extra usage amounts, then its utilization, when spend is unusable', () => {
+    const disabledSpend = {
+      ...enterprise,
+      spend: { ...enterprise.spend, enabled: false, used: { amount_minor: 30_000, currency: 'USD', exponent: 2 } },
+      extra_usage: { ...enterprise.extra_usage, utilization: 9 },
+    };
+    expect(claudeOAuthUsageToLimits(disabledSpend, checkedAt).windows).toEqual([spendWindow]);
+    const utilizationOnly = {
+      ...disabledSpend,
+      spend: { enabled: true, used: null, limit: null, percent: 9 },
+      extra_usage: { ...enterprise.extra_usage, used_credits: null, monthly_limit: null },
+    };
+    expect(claudeOAuthUsageToLimits(utilizationOnly, checkedAt).windows).toEqual([spendWindow]);
+  });
+
+  it('shows no budget when both are off, or the money does not add up without a fallback', () => {
+    const off = { ...enterprise, spend: { ...enterprise.spend, enabled: false }, extra_usage: { ...enterprise.extra_usage, is_enabled: false } };
+    expect(claudeOAuthUsageToLimits(off, checkedAt).windows).toEqual([]);
+    const otherCurrency = { ...off, spend: { ...enterprise.spend, limit: { ...enterprise.spend.limit, currency: 'EUR' } } };
+    expect(claudeOAuthUsageToLimits(otherCurrency, checkedAt).windows).toEqual([]);
+    const noLimit = { ...off, spend: { ...enterprise.spend, limit: { ...enterprise.spend.limit, amount_minor: 0 } } };
+    expect(claudeOAuthUsageToLimits(noLimit, checkedAt).windows).toEqual([]);
   });
 
   it('marks an account without windows as unsupported', () => {

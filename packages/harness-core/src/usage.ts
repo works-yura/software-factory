@@ -5,3 +5,4 @@ export * from './usage/contracts.ts';
 export * from './usage/pricing.ts';
 export * from './usage/aggregate.ts';
 export * from './usage/facet.ts';
+export * from './usage/limits.ts';

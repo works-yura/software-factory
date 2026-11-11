@@ -135,4 +135,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('UsageStorage on
     expect(listed.get('account-3')?.unavailable).toEqual({ reason: 'failed', message: 'HTTP 500' });
     expect(listed.get('account-2')?.source).toBe('stream');
   });
+
+  it('keeps model caps and the spend budget beside the rolling windows, and puts right a fraction folded in', async () => {
+    const { usage, orgId } = await makeStorage();
+    const resetsAt = '2026-11-08T08:00:00.000Z';
+    await usage.saveAccountLimits(orgId, 'account-1', {
+      checkedAt: '2026-11-02T10:00:00.000Z',
+      source: 'probe',
+      windows: [
+        { id: 'seven_day', kind: 'weekly', usedPercent: 40, windowDurationMins: 10_080, resetsAt },
+        { id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 70, windowDurationMins: 10_080, resetsAt },
+        { id: 'monthly_spend', kind: 'spend', usedPercent: 9 },
+        { id: 'secondary', kind: 'weekly', usedPercent: 20, windowDurationMins: 10_080 },
+      ],
+    });
+    // A turn tells the Opus cap as 0.72 (a fraction where 0–100 was stored) with no length.
+    const merged = await usage.mergeAccountLimits(orgId, 'account-1', {
+      checkedAt: '2026-11-02T11:00:00.000Z',
+      windows: [{ id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 0.72, resetsAt }],
+    });
+    expect(merged.windows).toEqual([
+      { id: 'seven_day', kind: 'weekly', usedPercent: 40, windowDurationMins: 10_080, resetsAt },
+      { id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 72, windowDurationMins: 10_080, resetsAt },
+      { id: 'monthly_spend', kind: 'spend', usedPercent: 9 },
+      { id: 'secondary', kind: 'weekly', usedPercent: 20, windowDurationMins: 10_080 },
+    ]);
+  });
 });
