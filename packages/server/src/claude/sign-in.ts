@@ -14,7 +14,7 @@
  *   for the config dir given as `CLAUDE_SECURESTORAGE_CONFIG_DIR`, account
  *   `$USER`. `claude auth login` may also overwrite the default item
  *   (`Claude Code-credentials`, the person's own `claude` login), so that item
- *   is read before and put back after, as the Orca desktop app does.
+ *   is read before and put back after.
  * - elsewhere: `<dir>/.credentials.json`.
  * Both hold `{ claudeAiOauth: { accessToken, refreshToken, expiresAt, scopes,
  * subscriptionType } }`. Who signed in is the `oauthAccount` the CLI writes to
