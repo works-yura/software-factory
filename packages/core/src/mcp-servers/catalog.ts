@@ -81,6 +81,26 @@ export type McpCredentialKind = (typeof MCP_CREDENTIAL_KINDS)[number];
 export const MCP_SUGGESTION_SOURCES = ['google-cloud-projects', 'firestore-databases'] as const;
 export type McpSuggestionSource = (typeof MCP_SUGGESTION_SOURCES)[number];
 
+/**
+ * What each source's lookup needs besides the account, in order: `dependsOn` is the account input
+ * followed by one input per name here, sent to the lookup under that name.
+ */
+export const MCP_SUGGESTION_CONTEXT: Readonly<Record<McpSuggestionSource, readonly string[]>> = {
+  'google-cloud-projects': [],
+  'firestore-databases': ['project'],
+};
+
+/** The lookup's context from the form's values: `{ project: <the project input's value> }`. */
+export function mcpSuggestionContext(suggestion: McpSuggestion, values: Record<string, string | undefined>): Record<string, string> {
+  const names = MCP_SUGGESTION_CONTEXT[suggestion.from];
+  const context: Record<string, string> = {};
+  names.forEach((name, index) => {
+    const value = values[suggestion.dependsOn[index + 1] ?? '']?.trim();
+    if (value) context[name] = value;
+  });
+  return context;
+}
+
 /** An input's choices: their source, and the inputs (by key) the lookup needs — the account first. */
 export interface McpSuggestion {
   from: McpSuggestionSource;
@@ -209,9 +229,18 @@ export function mcpCatalogEntry(manifest: unknown, overlay: unknown): McpCatalog
       const text = extra.data.inputs[key];
       if (!text) throw new McpCatalogError(`${server.data.name}: input ${key} has no label in the overlay.`);
       const { input, kind } = found;
-      for (const dependency of text.suggest?.dependsOn ?? []) {
-        if (!variant.inputs.includes(dependency)) {
-          throw new McpCatalogError(`${server.data.name} variant ${variant.id}: ${key} suggests from ${dependency}, which this variant does not ask for.`);
+      if (text.suggest) {
+        for (const dependency of text.suggest.dependsOn) {
+          if (!variant.inputs.includes(dependency)) {
+            throw new McpCatalogError(`${server.data.name} variant ${variant.id}: ${key} suggests from ${dependency}, which this variant does not ask for.`);
+          }
+        }
+        const expected = 1 + MCP_SUGGESTION_CONTEXT[text.suggest.from].length;
+        if (text.suggest.dependsOn.length !== expected) {
+          throw new McpCatalogError(`${server.data.name}: ${key} (${text.suggest.from}) depends on ${expected} inputs: the account, then ${MCP_SUGGESTION_CONTEXT[text.suggest.from].join(', ') || 'nothing else'}.`);
+        }
+        if (!extra.data.inputs[text.suggest.dependsOn[0]!]?.credential) {
+          throw new McpCatalogError(`${server.data.name}: ${key} must depend first on an account input.`);
         }
       }
       return {

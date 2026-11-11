@@ -81,7 +81,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
   const managedBy = server?.owner?.integration;
   const configLocked = !canEdit || managedBy !== undefined;
   const factories = (useFactoriesQuery().data ?? []).map(factory => ({ id: factory.id, name: factory.name }));
-  const { save, remove, check } = useMcpServerMutations();
+  const { save, remove, check, checkDraft } = useMcpServerMutations();
   const entry = start.kind === 'catalog' ? start.entry : undefined;
   const launch = server?.launch;
 
@@ -89,7 +89,10 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
   const [name, setName] = useState(server?.name ?? '');
   const [editingName, setEditingName] = useState(false);
   const [advanced, setAdvanced] = useState(false);
-  const [assignments, setAssignments] = useState<McpServerAssignment[]>(server?.assignments ?? []);
+  // A new server opened from a Factory's settings starts with that Factory's access (removable).
+  const [assignments, setAssignments] = useState<McpServerAssignment[]>(
+    server?.assignments ?? (factoryId ? [{ factoryProjectId: factoryId }] : []),
+  );
   const [toolPolicies, setToolPolicies] = useState<McpToolPolicies>(server?.toolPolicies ?? { default: 'allow', tools: {} });
   const [maskPersonalData, setMask] = useState(server?.maskPersonalData ?? true);
   const [enabled, setEnabled] = useState(server?.enabled ?? true);
@@ -178,10 +181,27 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
       },
     );
 
+  // Required inputs still empty: «Перевірити» names them instead of starting a server that cannot run.
+  const missing = variant
+    ? variant.fields
+        .filter(field => field.required)
+        .filter(field =>
+          field.credential
+            ? !fieldValues.credentials[field.key] && !storedSecrets.files.includes(field.key)
+            : field.secret
+              ? !fieldValues.secrets[field.key]?.trim() && ![...storedSecrets.env, ...storedSecrets.files].includes(field.key)
+              : !fieldValues.inputs[field.key]?.trim() && field.default === undefined,
+        )
+        .map(field => localized(field.label))
+    : [];
+
+  // An editor checks the form as it is, saved or not; someone who may only read checks the saved server.
   const runCheck = () => {
-    if (!server) return;
-    check.mutate(server.id, { onSuccess: setStatus, onError: error => toast.error(errorMessage(error)) });
+    const done = { onSuccess: setStatus, onError: (error: unknown) => toast.error(errorMessage(error)) };
+    if (canEdit) checkDraft.mutate({ ...(server ? { id: server.id } : {}), server: buildInput() }, done);
+    else if (server) check.mutate(server.id, done);
   };
+  const checking = check.isPending || checkDraft.isPending;
 
   const writeTools = variant?.writeTools ?? [];
   const toolNames = [...new Set([...(status?.tools.map(tool => tool.name) ?? []), ...Object.keys(toolPolicies.tools)])].sort();
@@ -323,12 +343,17 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
       <SettingsRow label={t('mcpServers.tools.default')} description={t('mcpServers.tools.defaultHint')}>
         <PolicySelect label={t('mcpServers.tools.default')} value={toolPolicies.default} onChange={value => setToolPolicies(current => ({ ...current, default: value }))} />
       </SettingsRow>
-      <SettingsRow label={t('mcpServers.tools.title')} description={server ? t('mcpServers.tools.hint') : t('mcpServers.tools.saveFirst')}>
+      <SettingsRow label={t('mcpServers.tools.title')} description={t('mcpServers.tools.checkFirst')}>
         <div className="flex w-full flex-col gap-2">
-          {server && (
-            <Button size="sm" variant="ghost" className="self-start" disabled={check.isPending} onClick={runCheck}>
-              {check.isPending ? t('mcpServers.checking') : t('mcpServers.check')}
+          {(canEdit || server) && (
+            <Button size="sm" variant="ghost" className="self-start" disabled={checking || !ready || missing.length > 0} onClick={runCheck}>
+              {checking ? t('mcpServers.checking') : t('mcpServers.check')}
             </Button>
+          )}
+          {canEdit && missing.length > 0 && (
+            <Txt as="p" variant="caption" tone="muted">
+              {t('mcpServers.tools.missing', { fields: missing.join(', ') })}
+            </Txt>
           )}
           {status && (
             <Txt as="p" variant="caption" tone="muted" className={status.connected ? undefined : 'text-destructive-foreground'} role="status">

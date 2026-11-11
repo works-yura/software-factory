@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { McpCatalogError, mcpCatalogEntry, mcpCatalogVariant, mcpServerSlug, uniqueMcpServerSlug } from './catalog.ts';
+import {
+  McpCatalogError,
+  mcpCatalogEntry,
+  mcpCatalogVariant,
+  mcpServerSlug,
+  mcpSuggestionContext,
+  uniqueMcpServerSlug,
+} from './catalog.ts';
 
 /** A server.json shaped like the MCP Registry's own examples (npm package, named argument, env inputs). */
 const manifest = {
@@ -102,6 +109,14 @@ describe('mcpCatalogEntry', () => {
     };
     const region = mcpCatalogVariant(mcpCatalogEntry(manifest, databases), undefined)!.fields.find(field => field.key === 'region');
     expect(region?.suggest).toEqual({ from: 'firestore-databases', dependsOn: ['WEATHER_CERT', 'WEATHER_PROJECT'] });
+    expect(mcpSuggestionContext(region!.suggest!, { WEATHER_PROJECT: ' syncta-57c6a ' })).toEqual({ project: 'syncta-57c6a' });
+    expect(mcpSuggestionContext(region!.suggest!, {})).toEqual({});
+    expect(() =>
+      mcpCatalogEntry(manifest, { ...overlay, inputs: { ...overlay.inputs, region: { label: { uk: 'Р', en: 'R' }, suggest: { from: 'firestore-databases', dependsOn: 'WEATHER_CERT' } } } }),
+    ).toThrow(/depends on 2 inputs/);
+    expect(() =>
+      mcpCatalogEntry(manifest, { ...overlay, inputs: { ...overlay.inputs, region: { label: { uk: 'Р', en: 'R' }, suggest: { from: 'google-cloud-projects', dependsOn: 'WEATHER_PROJECT' } } } }),
+    ).toThrow(/account input/);
     expect(() =>
       mcpCatalogEntry(manifest, { ...overlay, inputs: { ...overlay.inputs, region: { label: { uk: 'Р', en: 'R' }, suggest: { from: 'firestore-databases', dependsOn: 'NOPE' } } } }),
     ).toThrow(/NOPE/);

@@ -1,4 +1,5 @@
-import type { McpCatalogField, McpCatalogVariant, McpLocalized } from '@factory/core';
+import { MCP_SUGGESTION_CONTEXT, mcpSuggestionContext } from '@factory/core';
+import type { McpCatalogField, McpCatalogVariant, McpLocalized, McpSuggestion } from '@factory/core';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
@@ -8,7 +9,9 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useMcpDiscovery } from '../../../../../hooks/useMcpServers';
 import { currentLanguage } from '../../../../i18n';
+import { DiscoveredChoice } from '../DiscoveredChoice';
 import type { McpCredentialOption, McpCredentialRef } from '../../services/mcpServers';
 import { AccountKeyDialog } from '../GoogleCloudService';
 
@@ -115,6 +118,20 @@ function FieldControl({
   const setInput = (value: string) => onChange({ ...values, inputs: { ...values.inputs, [field.key]: value } });
   const value = values.inputs[field.key] ?? '';
 
+  if (field.suggest) {
+    return (
+      <SuggestedInput
+        field={field}
+        suggest={field.suggest}
+        values={values}
+        value={value}
+        onInput={setInput}
+        preferred={field.suggest.from === 'google-cloud-projects' ? suggestion : undefined}
+        disabled={disabled}
+      />
+    );
+  }
+
   if (field.choices?.length) {
     return (
       <Select value={value} disabled={disabled} onValueChange={setInput}>
@@ -133,20 +150,52 @@ function FieldControl({
   }
 
   return (
-    <div className="flex w-full flex-col items-start gap-1">
-      <Input
-        aria-label={label}
-        value={value}
-        placeholder={field.default ? t('mcpServers.field.default', { value: field.default }) : ''}
-        disabled={disabled}
-        onChange={event => setInput(event.target.value)}
-      />
-      {suggestion && value !== suggestion && !disabled && (
-        <Button size="sm" variant="ghost" onClick={() => setInput(suggestion)}>
-          {t('mcpServers.field.suggest', { value: suggestion })}
-        </Button>
-      )}
-    </div>
+    <Input
+      aria-label={label}
+      value={value}
+      placeholder={field.default ? t('mcpServers.field.default', { value: field.default }) : ''}
+      disabled={disabled}
+      onChange={event => setInput(event.target.value)}
+    />
+  );
+}
+
+/**
+ * An input whose choices come from the account another input picked (the projects it sees, a
+ * project's databases), as the catalog overlay declares: idle until that account is chosen.
+ */
+function SuggestedInput({
+  field,
+  suggest,
+  values,
+  value,
+  onInput,
+  preferred,
+  disabled,
+}: {
+  field: McpCatalogField;
+  suggest: McpSuggestion;
+  values: CatalogFieldValues;
+  value: string;
+  onInput: (value: string) => void;
+  preferred: string | undefined;
+  disabled: boolean;
+}) {
+  const credential = values.credentials[suggest.dependsOn[0]!];
+  const context = mcpSuggestionContext(suggest, values.inputs);
+  const needsContext = MCP_SUGGESTION_CONTEXT[suggest.from].some(name => !context[name]);
+  const discovery = useMcpDiscovery(credential && !needsContext ? { credential, from: suggest.from, context } : undefined);
+  return (
+    <DiscoveredChoice
+      label={localized(field.label)}
+      value={value}
+      onChange={onInput}
+      choices={discovery.data}
+      loading={discovery.isFetching}
+      preferred={preferred}
+      disabled={disabled}
+      {...(field.default ? { placeholder: field.default } : {})}
+    />
   );
 }
 
@@ -186,7 +235,7 @@ export function McpCatalogFields({ variant, values, onChange, storedSecrets, acc
               onChange={onChange}
               stored={stored}
               accounts={field.credential ? (accounts[field.credential] ?? []) : []}
-              suggestion={field.suggest ? suggestions[field.suggest] : undefined}
+              suggestion={field.suggest?.from === 'google-cloud-projects' ? suggestions['google-cloud-project'] : undefined}
               disabled={disabled}
             />
           </SettingsRow>

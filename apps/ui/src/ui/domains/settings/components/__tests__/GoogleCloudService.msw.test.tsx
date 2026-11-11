@@ -108,6 +108,21 @@ function useHandlers(initial: { accounts?: FirebaseAccount[]; bindings?: Firebas
       state = { ...state, bindings: [...state.bindings, binding] };
       return HttpResponse.json({ binding, ...withUsage() });
     }),
+    // What each account sees: BookFate's account also sees a staging project; Syncta's databases list two.
+    http.get(`${BASE}/accounts/:accountId/projects`, ({ params }) =>
+      HttpResponse.json(
+        params.accountId === 'acc-bookfate'
+          ? { items: [{ value: 'bookfate-prod' }, { value: 'bookfate-staging', label: 'BookFate Staging' }], default: 'bookfate-prod' }
+          : { items: [{ value: 'syncta-57c6a' }], default: 'syncta-57c6a', denied: { role: 'roles/datastore.viewer', message: 'refused' } },
+      ),
+    ),
+    http.get(`${BASE}/accounts/:accountId/databases`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get('project') === 'syncta-57c6a'
+          ? { items: [{ value: '(default)' }, { value: 'analytics', detail: 'eur3' }], default: '(default)' }
+          : { items: [{ value: '(default)' }], default: '(default)' },
+      ),
+    ),
     http.put(`${BASE}/bindings/:bindingId`, async ({ request, params }) => {
       const body = await record('PUT', request);
       state = { ...state, bindings: state.bindings.map(binding => (binding.id === params.bindingId ? ({ id: binding.id, ...body } as FirebaseBinding) : binding)) };
@@ -171,7 +186,7 @@ describe('GoogleCloudService', () => {
     expect(await screen.findByRole('button', { name: /^syncts → syncta-57c6a\s*Syncta · logs$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^syncts → bookfate-prod\s*BookFate · 2 apps$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Syncta\s*.* · 1 binding$/ })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Google Cloud project ID')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Google Cloud project ID' })).not.toBeInTheDocument();
   });
 
   it('adds a binding: picks the Factory and account, proposes the key’s Google Cloud project, saves', async () => {
@@ -184,7 +199,11 @@ describe('GoogleCloudService', () => {
     await userEvent.click(await screen.findByRole('option', { name: 'book-fate' }));
     await userEvent.click(screen.getByRole('combobox', { name: 'Google Cloud account' }));
     await userEvent.click(await screen.findByRole('option', { name: 'BookFate' }));
-    expect(screen.getByLabelText('Google Cloud project ID')).toHaveValue('bookfate-prod');
+    const project = screen.getByRole('combobox', { name: 'Google Cloud project ID' });
+    await waitFor(() => expect(project).toHaveValue('bookfate-prod'));
+    await userEvent.click(project);
+    expect(await screen.findByRole('option', { name: /BookFate Staging \(bookfate-staging\)/ })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     await userEvent.type(screen.getByLabelText('Google Cloud project number'), '900351719125');
     await userEvent.click(screen.getByRole('switch', { name: 'App crashes' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add app' }));
@@ -251,12 +270,25 @@ describe('GoogleCloudService', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /^syncts → / }));
     await userEvent.click(screen.getByRole('switch', { name: 'Database (Firestore)' }));
-    await userEvent.type(screen.getByLabelText('Firestore database'), 'analytics');
+    const database = screen.getByRole('combobox', { name: 'Firestore database' });
+    await waitFor(() => expect(database).toHaveValue('(default)'));
+    await userEvent.clear(database);
+    await userEvent.type(database, 'analyt');
+    await userEvent.click(await screen.findByRole('option', { name: /^analytics/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(writes.find(write => write.method === 'PUT')?.body).toMatchObject({ database: { enabled: true, databaseId: 'analytics' } }),
     );
     expect(await screen.findByRole('button', { name: /· database/ })).toBeInTheDocument();
+  });
+
+  it('still offers the key’s own project when the account may not list projects, naming the role to grant', async () => {
+    useHandlers({ accounts: [synctaAccount], bindings: [synctaBinding] });
+    renderSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^syncts → / }));
+    expect(await screen.findByText(/grant it roles\/datastore\.viewer/)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Google Cloud project ID' })).toHaveValue('syncta-57c6a');
   });
 });

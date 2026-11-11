@@ -37,8 +37,11 @@ const stored: McpServer = {
   updatedBy: 'u1',
 };
 
+const discoveries: Array<{ from: string; context: Record<string, string> }> = [];
+
 function useHandlers(servers: McpServer[] = [], canEdit = true) {
   const writes: Array<{ method: string; url: string; body: any }> = [];
+  discoveries.length = 0;
   server.use(
     http.get(BASE, () =>
       HttpResponse.json({
@@ -73,6 +76,31 @@ function useHandlers(servers: McpServer[] = [], canEdit = true) {
       const body = await request.json();
       writes.push({ method: 'PUT', url: request.url, body });
       return HttpResponse.json({ server: { ...stored, ...(body as object) } });
+    }),
+    // What the picked account sees: the key's project first, then another; that project's databases.
+    http.post(`${BASE}/discover`, async ({ request }) => {
+      const body = (await request.json()) as { from: string; context: Record<string, string> };
+      discoveries.push(body);
+      return HttpResponse.json(
+        body.from === 'google-cloud-projects'
+          ? { items: [{ value: 'syncta-57c6a', label: 'Syncta' }, { value: 'bookfate-prod' }], default: 'syncta-57c6a' }
+          : { items: [{ value: '(default)' }, { value: 'analytics' }], default: '(default)', denied: undefined },
+      );
+    }),
+    http.post(`${BASE}/check`, async ({ request }) => {
+      const body = await request.json();
+      writes.push({ method: 'CHECK', url: request.url, body });
+      return HttpResponse.json({
+        status: {
+          connected: true,
+          toolCount: 2,
+          tools: [
+            { name: 'query_collection', description: '', policy: 'allow' },
+            { name: 'delete_documents', description: '', policy: 'allow' },
+          ],
+          checkedAt: 'now',
+        },
+      });
     }),
     http.post(`${BASE}/:id/status`, () =>
       HttpResponse.json({
@@ -124,9 +152,18 @@ describe('McpServersSection', () => {
     expect(screen.queryByRole('textbox', { name: /Service account key/ })).not.toBeInTheDocument();
     await pick('Google Cloud account', 'Syncta · factory@syncta-57c6a.iam.gserviceaccount.com');
 
+    // The account's projects are offered, its key's project prefilled; then that project's databases.
+    const project = screen.getByRole('combobox', { name: 'Google Cloud project' });
+    await waitFor(() => expect(project).toHaveValue('Syncta (syncta-57c6a)'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Firestore database' })).toHaveValue('(default)'));
+    expect(discoveries).toEqual([
+      expect.objectContaining({ from: 'google-cloud-projects', context: {} }),
+      expect.objectContaining({ from: 'firestore-databases', context: { project: 'syncta-57c6a' } }),
+    ]);
+    await userEvent.click(project);
+    expect(await screen.findByRole('option', { name: /^bookfate-prod/ })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('button', { name: 'Add Factory' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Use «syncta-57c6a» from the Factory\'s binding' }));
-    expect(screen.getByRole('textbox', { name: 'Google Cloud project' })).toHaveValue('syncta-57c6a');
 
     await userEvent.clear(screen.getByRole('textbox', { name: 'Name' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Syncta Firestore');
@@ -142,7 +179,7 @@ describe('McpServersSection', () => {
         transport: 'catalog',
         entry: 'mcp-toolbox',
         variant: 'firestore',
-        inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' },
+        inputs: { FIRESTORE_PROJECT: 'syncta-57c6a', FIRESTORE_DATABASE: '(default)' },
         credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } },
       },
       assignments: [{ factoryProjectId: 'factory-1' }],
@@ -207,8 +244,8 @@ describe('McpServersSection', () => {
     await pick('Policy for delete_documents', 'Forbidden');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({
+    await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(1));
+    expect(writes.find(write => write.method === 'PUT')).toMatchObject({
       method: 'PUT',
       body: {
         name: 'syncta-firestore',
@@ -217,7 +254,9 @@ describe('McpServersSection', () => {
         toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
       },
     });
-    expect(writes[0]!.body.secrets).toBeUndefined();
+    expect(writes.find(write => write.method === 'PUT')!.body.secrets).toBeUndefined();
+    // The check ran the form as it was, with the stored server's id for its saved secrets.
+    expect(writes.find(write => write.method === 'CHECK')!.body).toMatchObject({ id: 'srv-1', server: { name: 'syncta-firestore' } });
   });
 
   it('shows a member the servers without letting them change anything', async () => {
@@ -291,5 +330,41 @@ describe('McpServersSection', () => {
 
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(await screen.findByRole('combobox', { name: 'Google Cloud account' })).toHaveTextContent('BookFate');
+  });
+
+  it('opened from a Factory, starts with that Factory’s access; «Check» names what is missing, then lists tools before saving', async () => {
+    const writes = useHandlers();
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-1/settings/integrations?tab=mcp']}>
+        <Routes>
+          <Route path="/factories/:factoryId/settings/integrations" element={<McpServersSection />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
+    await userEvent.click(screen.getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+    await pick('What to connect', 'Firestore');
+
+    expect(await screen.findByRole('group', { name: 'Access for syncts' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check' })).toBeDisabled();
+    // The project already comes from the Factory's Google Cloud binding; only the account is missing.
+    expect(await screen.findByText('To check, fill in: Google Cloud account.')).toBeInTheDocument();
+
+    await pick('Google Cloud account', 'Syncta · factory@syncta-57c6a.iam.gserviceaccount.com');
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Google Cloud project' })).toHaveValue('Syncta (syncta-57c6a)'));
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Running: 2 tools.');
+    await pick('Policy for delete_documents', 'Forbidden');
+
+    const check = writes.find(write => write.method === 'CHECK')!;
+    expect(check.body.id).toBeUndefined();
+    expect(check.body.server).toMatchObject({ launch: { inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' } }, assignments: [{ factoryProjectId: 'factory-1' }] });
+    expect(writes.filter(write => write.method !== 'CHECK')).toEqual([]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes.find(write => write.method === 'POST')?.body).toMatchObject({
+      assignments: [{ factoryProjectId: 'factory-1' }],
+      toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
+    }));
   });
 });

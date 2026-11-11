@@ -149,6 +149,26 @@ export const deleteMcpServer = (baseUrl: string, id: string) =>
 export const checkMcpServer = async (baseUrl: string, id: string): Promise<McpServerStatus> =>
   (await request<{ status: McpServerStatus }>(baseUrl, `/web/mcp-servers/${encodeURIComponent(id)}/status`, json('POST'))).status;
 
+/** Starts the form's config without saving it (the stored secrets of `id` fill what was not retyped). */
+export const checkMcpServerDraft = async (baseUrl: string, body: { id?: string; server: McpServerInput }): Promise<McpServerStatus> =>
+  (await request<{ status: McpServerStatus }>(baseUrl, '/web/mcp-servers/check', json('POST', body))).status;
+
+/** Choices an account can see for an input: never fails — a refusal comes back as `denied`. */
+export interface DiscoveryResult {
+  items: Array<{ value: string; label?: string; detail?: string }>;
+  default?: string;
+  denied?: { role?: string; message: string };
+}
+
+export interface McpDiscoveryRequest {
+  credential: McpCredentialRef;
+  from: 'google-cloud-projects' | 'firestore-databases';
+  context: Record<string, string>;
+}
+
+export const discoverMcpChoices = (baseUrl: string, body: McpDiscoveryRequest) =>
+  request<DiscoveryResult>(baseUrl, '/web/mcp-servers/discover', json('POST', body));
+
 /** A stored server as the form's starting point (secrets are never known: only their names). */
 export function serverToInput(server: McpServer): McpServerInput {
   return {

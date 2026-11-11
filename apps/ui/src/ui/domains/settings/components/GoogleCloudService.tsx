@@ -21,7 +21,12 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { useFirebaseMutations, useFirebaseStateQuery } from '../../../../hooks/useFirebase';
+import {
+  useFirebaseDatabases,
+  useFirebaseMutations,
+  useFirebaseProjects,
+  useFirebaseStateQuery,
+} from '../../../../hooks/useFirebase';
 import type {
   FirebaseAccount,
   FirebaseApp,
@@ -30,6 +35,7 @@ import type {
   FirebaseCheckResult,
   FirebasePlatform,
 } from '../services/firebase';
+import { DiscoveredChoice } from './DiscoveredChoice';
 import { SourceItemCard } from './SourceItemCard';
 
 const PLATFORMS: FirebasePlatform[] = ['android', 'ios', 'web'];
@@ -346,6 +352,13 @@ function BindingCard({
   const [open, setOpen] = useState(stored === undefined);
   const [draft, setDraft] = useState<BindingDraft>(initial);
   const [result, setResult] = useState<FirebaseCheckResult | null>(null);
+  // What the chosen account can see: its projects, and the project's databases once «База» is on.
+  const accountKnown = accounts.some(account => account.id === draft.accountId);
+  const projects = useFirebaseProjects(open && accountKnown ? draft.accountId : undefined);
+  const databases = useFirebaseDatabases(
+    open && accountKnown && draft.database?.enabled ? draft.accountId : undefined,
+    draft.projectId.trim() || undefined,
+  );
 
   useEffect(() => {
     if (stored) setDraft(draftOf(stored));
@@ -432,11 +445,13 @@ function BindingCard({
           </Select>
         </SettingsRow>
         <SettingsRow label={t('observability.bindings.projectId')} description={t('observability.bindings.projectIdHint')}>
-          <Input
-            aria-label={t('observability.bindings.projectId')}
+          <DiscoveredChoice
+            label={t('observability.bindings.projectId')}
             value={draft.projectId}
+            onChange={projectId => update({ projectId })}
+            choices={projects.data}
+            loading={projects.isFetching}
             placeholder="syncta-prod"
-            onChange={event => update({ projectId: event.target.value })}
           />
         </SettingsRow>
         <SettingsRow label={t('observability.bindings.projectNumber')} description={t('observability.bindings.projectNumberHint')}>
@@ -462,11 +477,13 @@ function BindingCard({
         </SettingsRow>
         {draft.database?.enabled && (
           <SettingsRow label={t('observability.bindings.databaseId')} description={t('observability.bindings.databaseIdHint')}>
-            <Input
-              aria-label={t('observability.bindings.databaseId')}
+            <DiscoveredChoice
+              label={t('observability.bindings.databaseId')}
               value={draft.database.databaseId ?? ''}
+              onChange={databaseId => update({ database: { enabled: true, databaseId } })}
+              choices={databases.data}
+              loading={databases.isFetching}
               placeholder="(default)"
-              onChange={event => update({ database: { enabled: true, databaseId: event.target.value } })}
             />
           </SettingsRow>
         )}

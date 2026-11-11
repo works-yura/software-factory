@@ -127,3 +127,19 @@ export const removeFirebaseBinding = (baseUrl: string, bindingId: string) =>
 
 export const checkFirebaseBinding = (baseUrl: string, binding: FirebaseBindingInput) =>
   request<FirebaseCheckResult>(baseUrl, '/web/firebase/bindings/check', json('POST', { binding }));
+
+/** What an account can see, for the binding form: its projects, and a project's Firestore databases. */
+export interface FirebaseDiscovery {
+  items: Array<{ value: string; label?: string; detail?: string }>;
+  default?: string;
+  denied?: { role?: string; message: string };
+}
+
+export const fetchFirebaseProjects = (baseUrl: string, accountId: string) =>
+  request<FirebaseDiscovery>(baseUrl, `/web/firebase/accounts/${encodeURIComponent(accountId)}/projects`);
+
+export const fetchFirebaseDatabases = (baseUrl: string, accountId: string, projectId: string) =>
+  request<FirebaseDiscovery>(
+    baseUrl,
+    `/web/firebase/accounts/${encodeURIComponent(accountId)}/databases?project=${encodeURIComponent(projectId)}`,
+  );

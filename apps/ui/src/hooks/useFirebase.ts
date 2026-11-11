@@ -5,6 +5,8 @@ import { queryKeys } from '../api/keys';
 import {
   addFirebaseAccount,
   checkFirebaseBinding,
+  fetchFirebaseDatabases,
+  fetchFirebaseProjects,
   fetchFirebaseState,
   removeFirebaseAccount,
   removeFirebaseBinding,
@@ -17,6 +19,28 @@ import type { FirebaseBindingInput, FirebaseState } from '../ui/domains/settings
 export function useFirebaseStateQuery() {
   const { baseUrl } = useApiConfig();
   return useQuery({ queryKey: queryKeys.firebaseStatus(baseUrl), queryFn: () => fetchFirebaseState(baseUrl) });
+}
+
+/** The projects an account can see (its key's own project always first); idle without an account. */
+export function useFirebaseProjects(accountId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: ['firebase', 'projects', baseUrl, accountId] as const,
+    queryFn: () => fetchFirebaseProjects(baseUrl, accountId!),
+    enabled: Boolean(accountId),
+    staleTime: 60_000,
+  });
+}
+
+/** A project's Firestore databases through an account; idle until both are known. */
+export function useFirebaseDatabases(accountId: string | undefined, projectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: ['firebase', 'databases', baseUrl, accountId, projectId] as const,
+    queryFn: () => fetchFirebaseDatabases(baseUrl, accountId!, projectId!),
+    enabled: Boolean(accountId && projectId),
+    staleTime: 60_000,
+  });
 }
 
 /** Every write answers with the whole state, so the page shows exactly what the server keeps. */

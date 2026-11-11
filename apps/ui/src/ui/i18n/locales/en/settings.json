@@ -1,4 +1,12 @@
 {
+  "discovery": {
+    "placeholder": "Pick or type",
+    "loading": "Looking up what the account sees…",
+    "search": "Search or type your own",
+    "empty": "Nothing found — type the value",
+    "deniedRole": "The account cannot list these: grant it {{role}}. You can still type the value.",
+    "denied": "Could not list these ({{message}}). You can still type the value."
+  },
   "sections": {
     "account": "My account",
     "preferences": "Preferences",
@@ -1125,6 +1133,8 @@
       "title": "Tools",
       "hint": "«Check» starts the server and lists its tools; change what each one may do.",
       "saveFirst": "Save the server to see its tools.",
+      "checkFirst": "«Check» starts the server with what is entered — even before saving — and lists its tools; change what each one may do.",
+      "missing": "To check, fill in: {{fields}}.",
       "writes": "changes data",
       "policyFor": "Policy for {{tool}}"
     },
