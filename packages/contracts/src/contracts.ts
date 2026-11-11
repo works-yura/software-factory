@@ -122,9 +122,12 @@ const intakeRouteFields = {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
-  /** Lets an event move an existing card into a working phase, such as Triage. */
-  allowWorkingPhase: z.boolean(),
 };
+/**
+ * @deprecated Ignored and never stored: a route moves a card into any phase, and the phase's own
+ * `autoStart` decides whether its run starts. Accepted for one release so older clients keep working.
+ */
+const ignoredAllowWorkingPhase = z.boolean().optional();
 export const intakeRouteInputSchema = z
   .object({
     name: intakeRouteFields.name,
@@ -132,7 +135,7 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
+    allowWorkingPhase: ignoredAllowWorkingPhase,
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -143,7 +146,7 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
+    allowWorkingPhase: ignoredAllowWorkingPhase,
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -169,7 +172,6 @@ const intakeRouteSchema = z.object({
   when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
   on: z.array(z.enum(STATUS_EVENTS)),
-  allowWorkingPhase: z.boolean(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
@@ -180,7 +182,11 @@ const intakeRouteSchema = z.object({
   problems: z.array(z.string()),
 });
 const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
-const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
+const intakeRouteListResponseSchema = z.object({
+  intakeRoutes: z.array(intakeRouteSchema),
+  /** Whether the caller may add, edit, reorder, or delete routes. */
+  canEdit: z.boolean(),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -276,6 +282,7 @@ export const updateProjectBodySchema = z
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
+    /** @deprecated Ignored. The review skill decides whether to publish its test check. */
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
   })
@@ -974,7 +981,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   intakeRouteCreate: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes',
-    description: 'Add an intake route at the end of a Factory project',
+    description:
+      'Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card',
     pathSchema: projectPathSchema,
     bodySchema: intakeRouteInputSchema,
     responseSchema: intakeRouteResponseSchema,

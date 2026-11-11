@@ -5,6 +5,7 @@ import type { ExternalWorkItemSource, RuleGroup } from '@factory/core';
 import type { Card } from '../work-items/base.ts';
 
 import { DEFAULT_INTAKE_ROUTE } from './base.ts';
+import { arrivalSourceFacts } from '../work-items/providers/index.ts';
 
 const SOURCES: Record<string, ExternalWorkItemSource | null> = {
   manual: null,
@@ -70,6 +71,89 @@ describe('provider facts', () => {
       'item.author': 'provider-author',
       'author.trusted': true,
     });
+  });
+});
+
+describe('where an item lives, its key, state and assignees', () => {
+  const ARRIVALS = [
+    {
+      name: 'GitHub issue',
+      source: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: 'github:7:issue:12',
+        url: 'https://github.com/Acme/App/issues/12',
+      },
+      metadata: { githubRepositoryId: 7, githubIssueNumber: 12, state: 'open', assignees: ['octocat'] },
+      facts: {
+        'source.provider': 'github',
+        'source.repository': 'Acme/App',
+        'item.key': 'Acme/App#12',
+        'item.state': 'open',
+        'item.assignees': ['octocat'],
+      },
+    },
+    {
+      name: 'GitLab merge request in a subgroup',
+      source: {
+        integrationId: 'gitlab',
+        type: 'pull-request',
+        externalId: 'gitlab:9:mr:7',
+        url: 'https://gitlab.com/acme/platform/api/-/merge_requests/7',
+      },
+      metadata: { gitlabMergeRequestIid: 7, merged: true, assignees: [] },
+      facts: {
+        'source.provider': 'gitlab',
+        'source.repository': 'acme/platform/api',
+        'item.key': 'acme/platform/api!7',
+        'item.state': 'merged',
+        'item.assignees': [],
+      },
+    },
+    {
+      name: 'ClickUp task',
+      source: { integrationId: 'clickup', type: 'task', externalId: '86c0' },
+      metadata: { identifier: '86c0', state: 'to do', assignee: 'Ada' },
+      facts: {
+        'source.provider': 'clickup',
+        'item.key': '86c0',
+        'item.state': 'to do',
+        'item.assignees': ['Ada'],
+      },
+    },
+  ] as const;
+
+  // An arrival is normalized the way its work item will be, and a filed card's provider facts live
+  // on its work item; either way the card itself keeps only Factory's own metadata.
+  it.each(ARRIVALS)('reads them off a $name, as its work item stores them', ({ source, metadata, facts }) => {
+    const workItem = arrivalSourceFacts(source, metadata)!;
+    expect(
+      cardRuleFacts({ title: 'Fix', externalSource: source, metadata: { authorTrusted: true }, workItem }),
+    ).toMatchObject(facts);
+  });
+
+  it('has no repository for a ClickUp task or a GitHub item without its URL, and none of these facts for a manual card', () => {
+    const task = ARRIVALS[2];
+    const clickup = cardRuleFacts({
+      title: 'Fix',
+      externalSource: task.source,
+      metadata: {},
+      workItem: arrivalSourceFacts(task.source, task.metadata)!,
+    });
+    expect(clickup).not.toHaveProperty('source.repository');
+    const github = SOURCES['github issue']!;
+    expect(
+      cardRuleFacts({
+        title: 'Fix',
+        externalSource: github,
+        metadata: {},
+        workItem: arrivalSourceFacts(github, { githubIssueNumber: 1 })!,
+      }),
+    ).not.toHaveProperty('source.repository');
+    const manual = cardRuleFacts({ title: 'Fix', externalSource: null, metadata: {} });
+    expect(manual).not.toHaveProperty('source.repository');
+    expect(manual).not.toHaveProperty('source.provider');
+    expect(manual).not.toHaveProperty('item.key');
   });
 });
 

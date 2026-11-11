@@ -25,6 +25,17 @@ export function useIntakeRoutesQuery(factoryProjectId: string | undefined) {
   });
 }
 
+/** Whether the caller may add, edit, reorder or delete the project's routes (organization admins). */
+export function useIntakeRoutesCanEditQuery(factoryProjectId: string | undefined) {
+  const { client } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.intakeRoutes(factoryProjectId),
+    enabled: !!factoryProjectId,
+    queryFn: () => client.get<IntakeRouteListResponse>(base(factoryProjectId!)),
+    select: data => data.canEdit,
+  });
+}
+
 function useRefetchRoutes(factoryProjectId: string) {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) });

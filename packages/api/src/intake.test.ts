@@ -40,7 +40,10 @@ const github: Pick<Intake, 'listSources' | 'listItems'> = {
   })),
 };
 
-const gitlab: Pick<Intake, 'listSources' | 'listItems'> = {
+// Its binding names a board, as a ClickUp List's does, so the binding tests can move cards between
+// boards; a source without `bindingBoard` (GitHub here) only feeds the project.
+const gitlab: Pick<Intake, 'listSources' | 'listItems' | 'bindingBoard'> = {
+  bindingBoard: true,
   listSources: vi.fn(async () => [{ id: 'team-1', name: 'Platform', type: 'project' }]),
   listItems: vi.fn(async () => ({
     items: [
@@ -234,6 +237,23 @@ describe('intake configuration', () => {
       expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'gitlab', sourceId: 'team-1' })).toEqual({
         integrationId: 'gitlab',
         sourceId: 'team-1',
+        factoryProjectId: project.id,
+        board: null,
+      });
+    });
+
+    it("keeps no board on a source whose binding doesn't name one: its project's intake routes place its cards", async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const response = await put({
+        integrationId: 'github',
+        sourceId: 'repo-1',
+        factoryProjectId: project.id,
+        board: 'release',
+      });
+      expect(response.status).toBe(200);
+      expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'github', sourceId: 'repo-1' })).toEqual({
+        integrationId: 'github',
+        sourceId: 'repo-1',
         factoryProjectId: project.id,
         board: null,
       });
@@ -636,315 +656,22 @@ describe('intake configuration', () => {
   });
 
   describe('label routes', () => {
-    const put = (body: unknown, user: typeof orgUser | null = orgUser) =>
-      buildApp(user).request('/web/intake/label-routes', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    const list = (factoryProjectId?: string) =>
-      buildApp(orgUser).request(
-        factoryProjectId ? `/web/intake/label-routes?factoryProjectId=${factoryProjectId}` : '/web/intake/label-routes',
-      );
-
-    it('requires an authenticated organization', async () => {
+    it('answers 410 Gone: intake routes replaced them', async () => {
       expect((await buildApp(null).request('/web/intake/label-routes')).status).toBe(401);
-      expect((await buildApp({ id: 'u1' }).request('/web/intake/label-routes')).status).toBe(403);
-    });
-
-    it("saves no route when the project's boards can't be read", async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const response = await putWithUnreadableBoards('/web/intake/label-routes', {
-        integrationId: 'github',
-        factoryProjectId: project.id,
-        label: 'release',
-        board: 'release',
-      });
-
-      expect(response.status).toBe(500);
-      expect(await (await list(project.id)).json()).toEqual({ routes: [] });
-      expect(auditEvents).toEqual([]);
-    });
-
-    it('stores a normalized label route, reads it back per project, and clears it', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const other = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'other' } });
-      const response = await put({
-        integrationId: 'github',
-        factoryProjectId: project.id,
-        label: '  Release ',
-        board: 'release',
-      });
-
-      const route = { integrationId: 'github', factoryProjectId: project.id, label: 'release', board: 'release' };
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ routes: [route], relocated: { moved: 0, skipped: 0 } });
-      expect(await (await list(project.id)).json()).toEqual({ routes: [route] });
-      expect(await (await list(other.id)).json()).toEqual({ routes: [] });
-      expect(auditEvents.at(-1)).toEqual({
-        action: 'factory.intake.label_route_updated',
-        factoryProjectId: project.id,
-        metadata: { board: 'release', relocated: { moved: 0, skipped: 0 } },
-      });
-
-      const cleared = await put({ integrationId: 'github', factoryProjectId: project.id, label: 'RELEASE' });
-      expect(await cleared.json()).toEqual({ routes: [], relocated: { moved: 0, skipped: 0 } });
-      expect(await (await list()).json()).toEqual({ routes: [] });
-    });
-
-    it('refuses a ClickUp label route: ClickUp tags are routed by intake routes', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const withClickUp = [...integrations, { id: 'clickup', intake: github }];
-      const response = await buildApp(orgUser, withClickUp).request('/web/intake/label-routes', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ integrationId: 'clickup', factoryProjectId: project.id, label: 'bug', board: 'work' }),
-      });
-
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({ message: 'ClickUp tags are routed by intake routes, not label routes.' });
-      expect(await seed.intake.listLabelRoutes({ orgId: 'org1' })).toEqual([]);
-    });
-
-    it('rejects uninstalled boards, unknown integrations, malformed bodies, and foreign projects', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const foreign = await seed.projects.create({ orgId: 'org2', userId: 'u9', input: { name: 'other' } });
-      const invalidBoard = await put({
-        integrationId: 'github',
-        factoryProjectId: project.id,
-        label: 'release',
-        board: 'hotfix',
-      });
-      expect(invalidBoard.status).toBe(422);
-      expect(await invalidBoard.json()).toMatchObject({ error: 'invalid_board' });
-      expect(
-        (await put({ integrationId: 'notion', factoryProjectId: project.id, label: 'x', board: 'release' })).status,
-      ).toBe(400);
-      expect((await put({ integrationId: 'github', factoryProjectId: project.id, label: '   ' })).status).toBe(400);
-      expect((await put({ integrationId: 'github', factoryProjectId: project.id })).status).toBe(400);
-      expect(
-        (await put({ integrationId: 'github', factoryProjectId: foreign.id, label: 'release', board: 'release' }))
-          .status,
-      ).toBe(404);
-      expect(await (await list()).json()).toEqual({ routes: [] });
-    });
-
-    it('relocates labelled issue cards when a route is added and returns them when it is removed', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const create = (
-        externalId: string,
-        labels: string[],
-        stages: string[],
-        extra: {
-          type?: string;
-          sessions?: Record<string, { sessionId: string; branch: string; threadId: string }>;
-        } = {},
-      ) =>
-        seed.workItems.upsert({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: project.id,
-          input: {
-            board: 'work',
-            title: externalId,
-            stages,
-            sessions: extra.sessions ?? {},
-            metadata: { labels },
-            externalSource: {
-              integrationId: 'github',
-              type: extra.type ?? 'issue',
-              externalId,
-              url: `https://github.com/acme/app/${externalId}`,
-            },
-          },
+      for (const method of ['GET', 'PUT'] as const) {
+        const response = await buildApp(orgUser).request('/web/intake/label-routes', {
+          method,
+          ...(method === 'PUT'
+            ? {
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ factoryProjectId: 'p', integrationId: 'github', label: 'bug', board: 'release' }),
+              }
+            : {}),
         });
-      const labelled = (await create('github-issue:1', ['Release'], ['intake'])).item;
-      const parked = (await create('github-issue:2', ['bug', 'release'], ['triage'])).item;
-      const running = (
-        await create('github-issue:3', ['release'], ['triage'], {
-          sessions: { triage: { sessionId: 's-1', branch: 'b', threadId: 't' } },
-        })
-      ).item;
-      const finished = (await create('github-issue:4', ['release'], ['done'])).item;
-      const unlabelled = (await create('github-issue:5', ['bug'], ['intake'])).item;
-      const pullRequest = (await create('github-pr:6', ['release'], ['intake'], { type: 'pull-request' })).item;
-
-      const response = await put({
-        integrationId: 'github',
-        factoryProjectId: project.id,
-        label: 'release',
-        board: 'release',
-      });
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ relocated: { moved: 2, skipped: 2 } });
-      expect(auditEvents.at(-1)?.metadata).toEqual({ board: 'release', relocated: { moved: 2, skipped: 2 } });
-
-      const byId = async () =>
-        new Map((await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]));
-      let items = await byId();
-      expect(items.get(labelled.id)).toMatchObject({ board: 'release', stages: ['queued'] });
-      expect(items.get(parked.id)).toMatchObject({ board: 'release', stages: ['queued'] });
-      expect(items.get(running.id)).toMatchObject({ board: 'work', stages: ['triage'] });
-      expect(items.get(finished.id)).toMatchObject({ board: 'work', stages: ['done'] });
-      expect(items.get(unlabelled.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-      expect(items.get(pullRequest.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-
-      // Re-saving the same route is a no-op for cards.
-      const same = await put({
-        integrationId: 'github',
-        factoryProjectId: project.id,
-        label: 'release',
-        board: 'release',
-      });
-      expect(await same.json()).not.toHaveProperty('relocated');
-
-      // Removing the route sends the movable cards back to Work's initial phase.
-      const removed = await put({ integrationId: 'github', factoryProjectId: project.id, label: 'release' });
-      expect(await removed.json()).toMatchObject({ routes: [], relocated: { moved: 2, skipped: 0 } });
-      items = await byId();
-      expect(items.get(labelled.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-      expect(items.get(parked.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject({ error: 'label_routes_removed' });
+      }
     });
-
-    it('leaves a labelled card an intake route placed when a label route is added', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const create = (externalId: string, metadata: Record<string, unknown>) =>
-        seed.workItems.upsert({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: project.id,
-          input: {
-            board: 'work',
-            title: externalId,
-            stages: ['intake'],
-            sessions: {},
-            metadata,
-            externalSource: {
-              integrationId: 'github',
-              type: 'issue',
-              externalId,
-              url: `https://github.com/acme/app/${externalId}`,
-            },
-          },
-        });
-      const routed = (await create('github-issue:30', { labels: ['release'], intakeRouteId: 'route-1' })).item;
-      const labelled = (await create('github-issue:31', { labels: ['release'] })).item;
-
-      const response = await put({
-        integrationId: 'github',
-        factoryProjectId: project.id,
-        label: 'release',
-        board: 'release',
-      });
-
-      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 1 } });
-      const items = new Map(
-        (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
-      );
-      expect(items.get(routed.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-      expect(items.get(labelled.id)).toMatchObject({ board: 'release', stages: ['queued'] });
-    });
-
-    it("doesn't mark a card as route-placed when filing its source again reuses it", async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const input = {
-        title: 'Fix login',
-        metadata: { labels: ['release'] },
-        externalSource: {
-          integrationId: 'github',
-          type: 'issue' as const,
-          externalId: 'github-issue:32',
-          url: 'https://github.com/acme/app/issues/32',
-        },
-      };
-      const existing = (
-        await seed.workItems.upsert({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: project.id,
-          input: { ...input, board: 'work', stages: ['intake'], sessions: {} },
-        })
-      ).item;
-      // The default route matches this unstamped GitHub issue, so filing it anew without a board would route it.
-      const again = await createFactoryWorkItem({
-        workItems: seed.workItems,
-        boards: boardRegistry,
-        transitionService: undefined,
-        audit: async () => {},
-        orgId: 'org1',
-        userId: 'u1',
-        factoryProjectId: project.id,
-        input,
-        intakeRoutes: seed.storedBoards,
-      });
-      expect(again).toMatchObject({ status: 'reused', item: { id: existing.id } });
-      if (again.status !== 'reused') return;
-      expect(again.item.metadata).toEqual(existing.metadata);
-
-      const response = await put({
-        integrationId: 'github',
-        factoryProjectId: project.id,
-        label: 'release',
-        board: 'release',
-      });
-
-      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 0 } });
-      expect(await seed.workItems.getForProject('org1', project.id, existing.id)).toMatchObject({
-        board: 'release',
-        stages: ['queued'],
-      });
-    });
-
-    it.each([
-      ['internal repository id', 'repo-1'],
-      ['repository slug', 'Acme/App'],
-    ])(
-      'returns cards of a bound repository to the binding board when their route is removed (bound by %s)',
-      async (_, sourceId) => {
-        const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-        await seed.intake.setBinding({
-          orgId: 'org1',
-          integrationId: 'github',
-          sourceId,
-          factoryProjectId: project.id,
-          board: 'triage',
-          userId: 'u1',
-        });
-        const create = (externalId: string, url: string, metadata: Record<string, unknown>) =>
-          seed.workItems.upsert({
-            orgId: 'org1',
-            userId: 'u1',
-            factoryProjectId: project.id,
-            input: {
-              board: 'work',
-              title: externalId,
-              stages: ['intake'],
-              sessions: {},
-              metadata: { labels: ['release'], ...metadata },
-              externalSource: { integrationId: 'github', type: 'issue', externalId, url },
-            },
-          });
-        const bound = (await create('github-issue:1', 'https://github.com/acme/app/issues/1', {})).item;
-        // A renamed repository leaves the old slug in the URL; the stamped external id still matches.
-        const renamed = (
-          await create('github-issue:2', 'https://github.com/acme/old-name/issues/2', { githubRepositoryId: 10 })
-        ).item;
-        const elsewhere = (await create('github-issue:3', 'https://github.com/acme/other/issues/3', {})).item;
-
-        await put({ integrationId: 'github', factoryProjectId: project.id, label: 'release', board: 'release' });
-        const removed = await put({ integrationId: 'github', factoryProjectId: project.id, label: 'release' });
-        expect(await removed.json()).toMatchObject({ routes: [], relocated: { moved: 3, skipped: 0 } });
-
-        const items = new Map(
-          (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
-        );
-        expect(items.get(bound.id)).toMatchObject({ board: 'triage', stages: ['inbox'] });
-        expect(items.get(renamed.id)).toMatchObject(
-          sourceId === 'repo-1' ? { board: 'triage', stages: ['inbox'] } : { board: 'work', stages: ['intake'] },
-        );
-        expect(items.get(elsewhere.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-      },
-    );
   });
 
   it('rejects unknown integrations and invalid JSON', async () => {

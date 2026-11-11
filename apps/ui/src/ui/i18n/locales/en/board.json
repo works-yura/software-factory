@@ -160,7 +160,12 @@
     "sessions": "Sessions",
     "open": "Open {{label}}",
     "openRelated": "Open {{label}}: {{title}}",
-    "cardNowIn": "card is now in {{phase}}"
+    "cardNowIn": "card is now in {{phase}}",
+    "switchSession": "Switch session",
+    "sessionCurrentPhase": "current phase",
+    "sessionRunning": "running",
+    "sessionOpen": "open",
+    "sessionCurrent": "current"
   },
   "automationSettings": {
     "title": "Automation settings",
@@ -177,10 +182,6 @@
     "selfReview": {
       "label": "Self-review before pull requests",
       "description": "An independent agent reviews and tests the branch before the pull request opens."
-    },
-    "testChecks": {
-      "label": "Publish review test checks",
-      "description": "Report review test results as a check on the pull request."
     }
   },
   "filters": {

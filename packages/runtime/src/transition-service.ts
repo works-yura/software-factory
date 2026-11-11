@@ -22,6 +22,7 @@ import type {
   FactoryRuleStage,
   FactoryStageRuleContext,
   FactoryTransitionResult,
+  FactoryTransitionResultRejected,
 } from '@factory/core';
 import {
   boardFlow,
@@ -74,10 +75,10 @@ export interface FactoryTransitionRequest {
   completedTool?: string;
   /**
    * Internal: an intake route moves the card on a status event. A route is admin-authored, so it
-   * may name any phase on the card's board regardless of the board's next phases; it enters a
-   * working phase only when the route allows it.
+   * may name any phase on the card's board regardless of the board's next phases, working ones
+   * included. The phase's `autoStart` and the dispatcher's approval check decide whether its run starts.
    */
-  eventRoute?: { routeId: string; allowWorkingPhase: boolean };
+  eventRoute?: { routeId: string };
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -169,6 +170,21 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
     default:
       return { actorId: id, actorType: actor.type };
   }
+}
+
+function isStale(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
+  return result.status === 'rejected' && result.code === 'stale';
+}
+
+/** Tell the caller where the card is now, so a model doesn't read "stale" as "already moved". */
+function staleRejection(result: FactoryTransitionResultRejected, current: Card): FactoryTransitionResult {
+  const stage = currentStage(current.stages) ?? current.stages.join(', ');
+  return rejection(
+    result.transitionId,
+    result.itemId,
+    'stale',
+    `The card changed (now revision ${current.revision}, in ${stage}). Retry with expectedRevision ${current.revision} if the move still applies.`,
+  );
 }
 
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
@@ -309,7 +325,11 @@ export class FactoryTransitionService {
       await this.#recordTransition(request, undefined, rejection);
       return rejection;
     }
-    const result = await this.#evaluateAndCommit(request, transitionId, item);
+    let result = await this.#evaluateAndCommit(request, transitionId, item);
+    if (isStale(result)) {
+      const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
+      if (current) result = staleRejection(result, current);
+    }
     await this.#recordTransition(request, item, result);
     this.#notifyCommitted(request, item, result);
     return result;
@@ -464,20 +484,6 @@ export class FactoryTransitionService {
         transitionId,
         'invalid_transition',
         `The ${board.name} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
-      );
-    }
-
-    if (
-      request.eventRoute &&
-      !request.eventRoute.allowWorkingPhase &&
-      fromStage !== request.stage &&
-      board.isWorking(request.stage)
-    ) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'approval_required',
-        `Intake route ${request.eventRoute.routeId} moves cards into ${board.phases[request.stage]?.name ?? request.stage}, a working phase, only when the route allows working phases.`,
       );
     }
 

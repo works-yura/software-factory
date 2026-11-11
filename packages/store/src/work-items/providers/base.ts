@@ -12,6 +12,7 @@ export interface ExternalAdapterSpec {
   key(source: ExternalWorkItemSource, metadata: Record<string, unknown>): string | null;
   state?(source: ExternalWorkItemSource, metadata: Record<string, unknown>): string | null;
   author?(metadata: Record<string, unknown>): string | null;
+  repository?(item: Pick<ProviderWorkItemSource, 'key' | 'metadata'>): string | null;
 }
 
 /**
@@ -34,6 +35,7 @@ export function externalAdapter(provider: WorkItemProvider, spec: ExternalAdapte
   return {
     provider,
     providerMetadataKeys,
+    ...(spec.repository ? { repository: spec.repository } : {}),
     toSource(source: ExternalWorkItemSource | null, metadata: Record<string, unknown> | null): ProviderWorkItemSource {
       if (!source) throw new Error(`A ${provider} work item needs an external source.`);
       const facts = metadata ?? {};

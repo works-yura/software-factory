@@ -312,6 +312,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'url',
           'stage',
           'skipRules',
+          'routesApplied',
           'attachTo',
           'closesIssue',
           'metadata',
@@ -320,6 +321,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       );
       if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
         throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
+      }
+      if (value.routesApplied !== undefined && typeof value.routesApplied !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory linked work item routesApplied must be a boolean.');
       }
       const url = value.url;
       if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
@@ -338,6 +342,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(value.skipRules === true ? { skipRules: true } : {}),
+        ...(value.routesApplied === true ? { routesApplied: true } : {}),
         ...(attachTo ? { attachTo } : {}),
         ...(closesIssue ? { closesIssue } : {}),
         ...(metadata ? { metadata } : {}),

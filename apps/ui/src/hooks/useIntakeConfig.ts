@@ -5,7 +5,6 @@ import { queryKeys } from '../api/keys';
 import {
   fetchIntakeBindings,
   fetchIntakeConfig,
-  fetchIntakeLabelRoutes,
   saveIntakeBinding,
   saveIntakeConfig,
 } from '../ui/domains/factory/services/intake';
@@ -61,15 +60,5 @@ export function useSaveIntakeBindingMutation() {
     onSuccess: bindings => {
       queryClient.setQueryData(queryKeys.intakeBindings(), bindings);
     },
-  });
-}
-
-/** GitHub label → board routes of one Factory project. */
-export function useIntakeLabelRoutesQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.intakeLabelRoutes(factoryProjectId),
-    queryFn: () => fetchIntakeLabelRoutes(baseUrl, factoryProjectId!),
-    enabled: Boolean(factoryProjectId),
   });
 }

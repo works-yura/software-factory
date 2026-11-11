@@ -114,40 +114,6 @@ export async function fetchIntakeBindings(baseUrl: string): Promise<IntakeSource
   return requestIntakeBindings(baseUrl);
 }
 
-/** One GitHub label routed to an installed board within a Factory project. */
-export interface IntakeLabelRoute {
-  factoryProjectId: string;
-  integrationId: string;
-  /** Normalized (trimmed, lower-cased) label name. */
-  label: string;
-  board: string;
-}
-
-async function requestIntakeLabelRoutes(baseUrl: string, query: string): Promise<IntakeLabelRoute[]> {
-  const res = await fetch(`${baseUrl}/web/intake/label-routes${query}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    let message = tk('errors.requestFailed', { status: res.status });
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
-  const { routes } = (await res.json()) as { routes?: IntakeLabelRoute[] };
-  return routes ?? [];
-}
-
-/** Read the label → board routes of one Factory project. */
-export async function fetchIntakeLabelRoutes(baseUrl: string, factoryProjectId: string): Promise<IntakeLabelRoute[]> {
-  return requestIntakeLabelRoutes(baseUrl, `?factoryProjectId=${encodeURIComponent(factoryProjectId)}`);
-}
-
 /** Route one source to a Factory project, or clear it with `factoryProjectId: null`. */
 export async function saveIntakeBinding(
   baseUrl: string,

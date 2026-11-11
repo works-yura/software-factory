@@ -4,7 +4,7 @@ import { factoryWorkItemAdapter } from './factory.ts';
 import { githubWorkItemAdapter } from './github.ts';
 import { gitlabWorkItemAdapter } from './gitlab.ts';
 import { stringValue } from './metadata-keys.ts';
-import type { WorkItemProviderAdapter } from './types.ts';
+import type { ProviderWorkItemSource, WorkItemProviderAdapter } from './types.ts';
 
 export type { ProviderWorkItemSource, WorkItemProviderAdapter } from './types.ts';
 export { BOARD_METADATA_KEYS, SHARED_PROVIDER_METADATA_KEYS, splitCardMetadata } from './metadata-keys.ts';
@@ -30,4 +30,15 @@ export function workItemProviderAdapter(source: ExternalWorkItemSource | null): 
       adapter => adapter !== factoryWorkItemAdapter && adapter.provider === source.integrationId,
     ) ?? customWorkItemAdapter
   );
+}
+
+/**
+ * The provider facts of an arrival not filed yet, normalized from its source and metadata the way
+ * its work item will be, for {@link cardRuleFacts} (`workItem`). Null for a card with no source.
+ */
+export function arrivalSourceFacts(
+  source: ExternalWorkItemSource | null,
+  metadata: Record<string, unknown> | null,
+): ProviderWorkItemSource | null {
+  return source ? workItemProviderAdapter(source).toSource(source, metadata) : null;
 }

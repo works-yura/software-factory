@@ -66,8 +66,8 @@ export const queryKeys = {
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
-  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined, board: string | undefined) =>
-    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null, board ?? null] as const,
+  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined) =>
+    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null] as const,
   gitlabIssue: (baseUrl: string, factoryProjectId: string | undefined, issueId: string | undefined) =>
     ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
   gitlabPulls: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined) =>
@@ -81,8 +81,6 @@ export const queryKeys = {
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
-  intakeLabelRoutes: (factoryProjectId: string | undefined) =>
-    ['intake', 'label-routes', factoryProjectId ?? null] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   intakeRules: (factoryProjectId: string | undefined, locale?: string) =>
     ['intake', 'rules', factoryProjectId ?? null, ...(locale ? [locale] : [])] as const,

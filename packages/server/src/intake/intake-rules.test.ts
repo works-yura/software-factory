@@ -214,6 +214,21 @@ describe('intake rules: a schedule files Audits cards', () => {
     expect(card!.metadata).toMatchObject({ intakeRouteId: 'rules' });
   });
 
+  it("places a rule's card on the rule's own board ahead of a route that takes every new card", async () => {
+    const catchAll: IntakeRoute = {
+      id: 'everything-else',
+      enabled: true,
+      on: ['work_item.created'],
+      when: null,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+    };
+    const { seed, create, fireSchedule } = await setup({ routes: [catchAll] });
+    const fire = await fireSchedule(await create());
+    const card = await seed.workItems.get({ orgId: 'org-1', id: fire.workItemId! });
+    expect(card).toMatchObject({ board: 'audits', stages: ['analysis'] });
+    expect(card!.metadata).not.toHaveProperty('intakeRouteId');
+  });
+
   it('acts once on a fire delivered twice under the same claim', async () => {
     const { seed, scope, create, fireSchedule } = await setup();
     const rule = await create({ policyKind: 'always' });

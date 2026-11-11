@@ -2407,7 +2407,7 @@ describe('FactoryDecisionDispatcher', () => {
       }
       await seed.storedBoards.createIntakeRoute(
         scope,
-        { name: 'Closed', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey }, allowWorkingPhase: true },
+        { name: 'Closed', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey } },
         'admin',
       );
       const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {

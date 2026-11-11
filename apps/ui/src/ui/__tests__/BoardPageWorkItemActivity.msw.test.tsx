@@ -479,6 +479,71 @@ describe('Board work-item activity', () => {
     expect(within(row).getByText('Changes requested')).toBeVisible();
   });
 
+  it('names the phase and the reason of a move that was rejected, with the agent rationale on hover', async () => {
+    stubBoardEndpoints();
+    const reason =
+      'The card changed (now revision 22, in execute). Retry with expectedRevision 22 if the move still applies.';
+    const rationale = 'Self-review approved the head; opening review.';
+    const rejected = {
+      id: 'event-rejected',
+      orgId: 'org-1',
+      actorId: 'agent:binding-1',
+      actorType: 'agent',
+      action: 'factory.work_item.transition_rejected',
+      targets: [{ type: 'work_item', id: workItem.id, name: workItem.title }],
+      metadata: { agentName: 'review agent', to: 'pr-review', code: 'stale', reason, cause: rationale },
+      githubProjectId: FACTORY_ID,
+      context: {},
+      occurredAt: '2026-08-05T11:00:00.000Z',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
+        HttpResponse.json({ events: [rejected, ...events], actors }),
+      ),
+    );
+    renderBoard('work');
+
+    await expectActivity('Ada Lovelace', `Move to Review rejected: ${reason}`);
+    const row = within(screen.getByLabelText('Work item activity')).getByText(`Move to Review rejected: ${reason}`);
+    expect(row).toHaveAttribute('title', `Move to Review rejected: ${reason}\n\nWhy it was asked: ${rationale}`);
+  });
+
+  it("names a rejected move's phase from the card's own board when another board uses the same phase id", async () => {
+    stubBoardEndpoints();
+    const otherReviewBoard = {
+      ...selfReviewWorkBoardInfo,
+      id: 'other',
+      name: 'Other',
+      phases: selfReviewWorkBoardInfo.phases.map(phase => (phase.id === 'review' ? { ...phase, name: 'Reviewing' } : phase)),
+    };
+    const rejected = {
+      id: 'event-rejected',
+      orgId: 'org-1',
+      actorId: 'user-ada',
+      actorType: 'human',
+      action: 'factory.work_item.transition_rejected',
+      targets: [{ type: 'work_item', id: workItem.id, name: workItem.title }],
+      metadata: { to: 'review', code: 'invalid_transition', reason: 'Not a next phase.' },
+      githubProjectId: FACTORY_ID,
+      context: {},
+      occurredAt: '2026-08-05T11:00:00.000Z',
+    };
+    server.use(
+      // Another board names its `review` phase "Reviewing"; this card's older Work names its own `review` otherwise.
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [otherReviewBoard, selfReviewWorkBoardInfo], problems: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
+        HttpResponse.json({ events: [rejected, ...events], actors }),
+      ),
+    );
+    renderBoard('work');
+
+    const selfReview = selfReviewWorkBoardInfo.phases.find(phase => phase.id === 'review')!;
+    expect(selfReview.name).not.toBe('Reviewing');
+    await expectActivity('Ada Lovelace', `Move to ${selfReview.name} rejected: Not a next phase.`);
+  });
+
   it("shows the self-review verdict on a card in an older project's Work self-review lane", async () => {
     stubBoardEndpoints();
     server.use(

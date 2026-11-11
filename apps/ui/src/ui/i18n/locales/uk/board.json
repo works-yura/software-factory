@@ -162,7 +162,12 @@
     "sessions": "Сесії",
     "open": "Відкрити: {{label}}",
     "openRelated": "Відкрити {{label}}: {{title}}",
-    "cardNowIn": "картка зараз на етапі «{{phase}}»"
+    "cardNowIn": "картка зараз на етапі «{{phase}}»",
+    "switchSession": "Перемкнути сесію",
+    "sessionCurrentPhase": "поточна фаза",
+    "sessionRunning": "працює",
+    "sessionOpen": "відкрита",
+    "sessionCurrent": "поточна"
   },
   "automationSettings": {
     "title": "Налаштування автоматизації",
@@ -179,10 +184,6 @@
     "selfReview": {
       "label": "Самоперевірка перед пул-реквестом",
       "description": "Незалежний агент перевіряє й тестує гілку до відкриття пул-реквесту."
-    },
-    "testChecks": {
-      "label": "Публікувати перевірки тестів рев'ю",
-      "description": "Показувати результати тестів рев'ю як перевірку (check) у пул-реквесті."
     }
   },
   "filters": {

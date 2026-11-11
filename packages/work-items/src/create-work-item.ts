@@ -15,7 +15,7 @@ import type { FactoryTransitionRequest, FactoryTransitionService } from '@factor
 import type { EmitAuditInput } from '@factory/feed';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { Card } from '@factory/store';
-import { WorkItemUpdateConflictError } from '@factory/store';
+import { arrivalSourceFacts, WorkItemUpdateConflictError } from '@factory/store';
 
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */
 export type FactoryAuditEmit = (input: EmitAuditInput) => Promise<void>;
@@ -97,21 +97,20 @@ export async function createFactoryWorkItem({
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
   // A card filed without a board or stages goes where the project's intake routes say; one
   // that names either went where the person chose.
-  // Precedence: a matching route, then the caller's default target, then Work.
+  // Precedence: a route with a condition that matches, then the caller's default target (an intake
+  // rule's board), then a route that takes every new card ("Everything else"), then the default board.
   const unplaced = input.board === undefined && input.stages === undefined;
-  const routed =
-    intakeRoutes && unplaced
-      ? resolveIntakePlacement(
-          await intakeRoutes.listIntakeRoutes({ orgId, factoryProjectId }),
-          cardRuleFacts({
-            title: input.title,
-            metadata: input.metadata ?? null,
-            externalSource: input.externalSource ?? null,
-          }),
-          boards,
-        )
-      : undefined;
-  const defaultBoard = !routed && unplaced && defaultPlacement ? boards.get(defaultPlacement.board) : undefined;
+  const routes = intakeRoutes && unplaced ? await intakeRoutes.listIntakeRoutes({ orgId, factoryProjectId }) : [];
+  const sourceFacts = arrivalSourceFacts(input.externalSource ?? null, input.metadata ?? null);
+  const facts = cardRuleFacts({
+    title: input.title,
+    metadata: input.metadata ?? null,
+    externalSource: input.externalSource ?? null,
+    ...(sourceFacts ? { workItem: sourceFacts } : {}),
+  });
+  const specific = resolveIntakePlacement(routes, facts, boards, { skipCatchAll: defaultPlacement !== undefined });
+  const defaultBoard = !specific && unplaced && defaultPlacement ? boards.get(defaultPlacement.board) : undefined;
+  const routed = specific ?? (defaultPlacement && !defaultBoard ? resolveIntakePlacement(routes, facts, boards) : undefined);
   const placement: { board: string; phase: string; routeId?: string; actorId: string } | undefined = routed
     ? { ...routed, actorId: 'factory-intake-route' }
     : defaultBoard

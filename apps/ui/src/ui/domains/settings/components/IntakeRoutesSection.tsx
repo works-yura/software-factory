@@ -16,6 +16,7 @@ import { useIntakeRuleKindsQuery, useIntakeRulesQuery } from '../../../../hooks/
 import {
   useCreateIntakeRouteMutation,
   useDeleteIntakeRouteMutation,
+  useIntakeRoutesCanEditQuery,
   useIntakeRoutesQuery,
   useReorderIntakeRoutesMutation,
   useUpdateIntakeRouteMutation,
@@ -30,9 +31,15 @@ import {
   ROUTE_CONDITION_FIELDS,
   ROUTE_INTEGRATIONS,
   ROUTE_SOURCE_KINDS,
+  ROUTE_TEXT_FACTS,
   writeRouteConditions,
 } from '../services/intakeRouteConditions';
-import type { RouteCondition, RouteConditionField, RouteSourceKind } from '../services/intakeRouteConditions';
+import type {
+  RouteCondition,
+  RouteConditionField,
+  RouteSourceKind,
+  RouteTextFact,
+} from '../services/intakeRouteConditions';
 import { BoardSelect } from './RoutingSelects';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -48,6 +55,8 @@ const failure = (error: unknown, fallback: string) => (error instanceof Error &&
 export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factoryProjectId: string; factoryName: string }) {
   const { t } = useTranslation('settings');
   const routesQuery = useIntakeRoutesQuery(factoryProjectId);
+  // Everyone sees the routes; only an organization admin changes them.
+  const canEdit = useIntakeRoutesCanEditQuery(factoryProjectId).data === true;
   const catalog = useBoardCatalog(factoryProjectId);
   const create = useCreateIntakeRouteMutation(factoryProjectId);
   const update = useUpdateIntakeRouteMutation(factoryProjectId);
@@ -110,7 +119,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
       title={t('intakeRoutes.title')}
       description={t('intakeRoutes.description', { name: factoryName })}
       action={
-        editing === null && routesQuery.isSuccess ? (
+        editing === null && routesQuery.isSuccess && canEdit ? (
           <Button size="sm" disabled={busy || !catalog.isSuccess} onClick={() => setEditing('new')}>
             {t('intakeRoutes.add')}
           </Button>
@@ -125,6 +134,11 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
         </Txt>
       ) : (
         <div className="flex flex-col gap-3">
+          {!canEdit && (
+            <Txt tone="muted" as="p" variant="caption">
+              {t('intakeRoutes.readOnly')}
+            </Txt>
+          )}
           {routes.length === 0 && editing !== 'new' && (
             <Txt tone="muted" as="p" variant="caption">
               {t('intakeRoutes.empty')}
@@ -158,7 +172,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                         {routeName(route, t)}
                       </Txt>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1" hidden={!canEdit}>
                       <Switch
                         aria-label={t('intakeRoutes.enabledFor', { name: routeName(route, t) })}
                         checked={route.enabled}
@@ -259,6 +273,11 @@ function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t:
       return t('intakeRoutes.hasTag', { tag: condition.value });
     case 'item.title':
       return t('intakeRoutes.titleContains', { text: condition.value });
+    case 'source.repository':
+    case 'item.key':
+    case 'item.state':
+    case 'item.assignees':
+      return t('intakeRoutes.factIs', { field: t(`intakeRoutes.fields.${condition.field}`), value: condition.value });
   }
 }
 
@@ -278,6 +297,7 @@ const DEFAULT_ROUTE_NAMES: Readonly<Record<string, string>> = {
   'Pushes to a reviewed pull request re-review it': 'pullRequestUpdated',
   'Requested reviews go to Review': 'pullRequestReviewRequested',
   'Requested reviews go to PR review': 'pullRequestReviewRequested',
+  'Everything else goes to Work › Intake': 'everythingElse',
 };
 
 function routeName(route: IntakeRouteInfo, t: T): string {
@@ -490,6 +510,9 @@ function RouteEditor({
   );
 }
 
+const isTextFactCondition = (condition: RouteCondition): condition is Extract<RouteCondition, { field: RouteTextFact }> =>
+  (ROUTE_TEXT_FACTS as readonly string[]).includes(condition.field);
+
 function FieldPicker({
   fields,
   busy,
@@ -631,6 +654,16 @@ function ConditionRow({
             ))}
           </SelectContent>
         </Select>
+      )}
+      {isTextFactCondition(condition) && (
+        <Input
+          size="sm"
+          aria-label={fieldLabel}
+          placeholder={t(`intakeRoutes.placeholders.${condition.field}`)}
+          value={condition.value}
+          disabled={busy}
+          onChange={event => onChange({ field: condition.field, value: event.target.value })}
+        />
       )}
       {(condition.field === 'item.labels' || condition.field === 'item.title') && (
         <Input

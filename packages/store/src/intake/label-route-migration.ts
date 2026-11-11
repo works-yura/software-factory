@@ -18,10 +18,11 @@ export function labelRouteCondition(integrationId: string, label: string): RuleG
 }
 
 /**
- * Moves one integration's label routes (ClickUp's tag routes) into their projects' intake routes,
- * each appended after the routes the project already has and landing in its board's first phase,
- * then removes the label route. A route already moved by an earlier, interrupted run is not added
- * twice. Returns how many label routes were moved.
+ * Moves one integration's label routes (ClickUp's tag routes, GitHub's and GitLab's label routes)
+ * into their projects' intake routes, each landing in its board's first phase just ahead of the
+ * project's catch-all route (where it can still place new cards), then removes the label route. A
+ * route already moved by an earlier, interrupted run is not added twice. Returns how many label
+ * routes were moved.
  */
 export async function migrateLabelRoutesToIntakeRoutes({
   integrationId,

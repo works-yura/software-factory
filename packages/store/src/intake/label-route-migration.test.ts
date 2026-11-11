@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../testing.ts';
+import { CATCH_ALL_INTAKE_ROUTE } from '../boards/base.ts';
 import { labelRouteCondition, migrateLabelRoutesToIntakeRoutes } from './label-route-migration.ts';
 
 const routeName = (label: string) => `ClickUp tag "${label}"`;
@@ -14,7 +15,7 @@ async function seed() {
 }
 
 describe('migrateLabelRoutesToIntakeRoutes', () => {
-  it("moves each ClickUp tag route after the project's routes, in every org, and leaves other integrations' label routes", async () => {
+  it("moves each ClickUp tag route ahead of the project's catch-all, in every org, and leaves other integrations' label routes", async () => {
     const { intake, storedBoards, project, other, scope } = await seed();
     await intake.setLabelRoute({ ...scope, integrationId: 'clickup', label: 'Bug', board: 'work' });
     await intake.setLabelRoute({
@@ -36,8 +37,11 @@ describe('migrateLabelRoutesToIntakeRoutes', () => {
 
     expect(moved).toBe(2);
     const after = await storedBoards.listIntakeRoutes(scope);
-    expect(after.slice(0, before.length).map(route => route.id)).toEqual(before.map(route => route.id));
-    expect(after.slice(before.length)).toMatchObject([
+    const added = after.filter(route => !before.some(existing => existing.id === route.id));
+    // The project's routes keep their order; the moved one goes just ahead of the catch-all, where
+    // it can still place new cards.
+    expect(after.filter(route => !added.includes(route)).map(route => route.id)).toEqual(before.map(route => route.id));
+    expect(added).toMatchObject([
       {
         name: 'ClickUp tag "bug"',
         enabled: true,
@@ -45,8 +49,11 @@ describe('migrateLabelRoutesToIntakeRoutes', () => {
         target: { boardKey: 'work', phaseKey: null },
       },
     ]);
+    expect(after[after.indexOf(added[0]!) + 1]).toMatchObject({ name: CATCH_ALL_INTAKE_ROUTE.name });
     expect(
-      (await storedBoards.listIntakeRoutes({ orgId: 'org-2', factoryProjectId: other.id })).at(-1),
+      (await storedBoards.listIntakeRoutes({ orgId: 'org-2', factoryProjectId: other.id })).find(
+        route => route.name === routeName('docs'),
+      ),
     ).toMatchObject({ when: labelRouteCondition('clickup', 'docs'), target: { boardKey: 'review' } });
     expect(await intake.listLabelRoutes({ orgId: 'org-1', integrationId: 'clickup' })).toEqual([]);
     expect(await intake.listLabelRoutes({ orgId: 'org-2', integrationId: 'clickup' })).toEqual([]);

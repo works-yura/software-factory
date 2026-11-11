@@ -351,6 +351,193 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
   });
 });
 
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  "Factory's commented review verdict on %s",
+  backend => {
+    // GitHub will not let Factory's app request changes on a pull request it
+    // authored, so the reviewer's verdict lands as a COMMENTED review whose first
+    // line (after the proxy's attribution) asks for changes. That review is the
+    // only hand-off the builder gets.
+    const requestChanges = '> Opened by @someone\n\nVerdict: request changes\nReviewed head: ' + 'a'.repeat(40);
+
+    async function ingestReview(input: {
+      body: string;
+      sender?: string;
+      state?: string;
+      factoryPullRequest?: boolean;
+      pullRequest?: { state?: string; merged?: boolean };
+      deliveries?: number;
+    }) {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(
+        'read',
+        undefined,
+        backend === 'postgres'
+          ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+          : new LibSQLFactoryStorage({ id: 'github-commented-verdict', url: ':memory:' }),
+      );
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      });
+      if (input.factoryPullRequest === false) {
+        // Not Factory's pull request: no provenance, a person's login, and a PR
+        // card that names the issue card as its author.
+        await workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: {
+              integrationId: 'github',
+              type: 'pull-request',
+              externalId: 'github:10:pull-request:17',
+              url: 'https://github.com/acme/repo/pull/17',
+            },
+            parentWorkItemId: work.item.id,
+            title: 'PR 17',
+            stages: ['review'],
+            sessions: {},
+            metadata: {},
+          },
+        });
+      } else {
+        await integrationStorage.subscriptions.create({
+          orgId: 'org-1',
+          targetKey: 'factory-pr-provenance:10:17',
+          threadId: 'thread-1',
+          status: 'active',
+          data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+        });
+      }
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const sender = input.sender ?? 'factory-app[bot]';
+      const delivery = {
+        event: 'pull_request_review',
+        deliveryId: 'delivery-commented-verdict',
+        payload: {
+          action: 'submitted',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: sender },
+          review: {
+            id: 99,
+            state: input.state ?? 'commented',
+            body: input.body,
+            html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+            user: { login: sender },
+          },
+          pull_request: {
+            number: 17,
+            title: 'PR 17',
+            html_url: 'https://github.com/acme/repo/pull/17',
+            state: input.pullRequest?.state ?? 'open',
+            merged: input.pullRequest?.merged ?? false,
+            user: { login: input.factoryPullRequest === false ? 'contributor' : 'factory-app[bot]' },
+            head: { ref: 'feature' },
+            base: { ref: 'main' },
+          },
+        },
+      };
+      const results = [];
+      for (let delivered = 0; delivered < (input.deliveries ?? 1); delivered++) {
+        results.push(await service.ingest(delivery));
+      }
+      const messages = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.decision.type === 'sendMessage',
+      );
+      return { results, messages, workItemId: work.item.id };
+    }
+
+    it('wakes the builder on a Factory-sent commented review that requests changes on its pull request', async () => {
+      const { messages, workItemId } = await ingestReview({ body: requestChanges });
+      expect(messages).toEqual([
+        expect.objectContaining({
+          workItemId,
+          decision: expect.objectContaining({
+            type: 'sendMessage',
+            role: 'work',
+            priority: 'high',
+            idempotencyKey: expect.stringMatching(/:address-review-feedback$/),
+            message: expect.stringContaining('#pullrequestreview-99'),
+          }),
+        }),
+      ]);
+    });
+
+    it('wakes the builder once when the same review is delivered twice', async () => {
+      const { results, messages } = await ingestReview({ body: requestChanges, deliveries: 2 });
+      expect(results.at(-1)).toEqual({ status: 'replayed' });
+      expect(messages).toHaveLength(1);
+    });
+
+    it("ignores the same commented review from a person: a person's notes do not block", async () => {
+      const { messages } = await ingestReview({ body: requestChanges, sender: 'maintainer' });
+      expect(messages).toEqual([]);
+    });
+
+    it.each([
+      ['an approval', 'Verdict: approve\nReviewed head: ' + 'a'.repeat(40)],
+      ['plain notes', '> Opened by @someone\n\nA few notes on naming.'],
+      ['a verdict quoted on a later line', 'Some notes first.\n\nVerdict: request changes'],
+    ])('ignores a Factory-sent commented review carrying %s', async (_label, body) => {
+      const { messages } = await ingestReview({ body });
+      expect(messages).toEqual([]);
+    });
+
+    it("ignores a Factory-sent commented verdict on a pull request Factory did not author", async () => {
+      const { messages } = await ingestReview({ body: requestChanges, factoryPullRequest: false });
+      expect(messages).toEqual([]);
+    });
+
+    it.each([{ state: 'closed' }, { state: 'closed', merged: true }])(
+      'ignores a Factory-sent commented verdict on a %o pull request',
+      async pullRequest => {
+        const { messages } = await ingestReview({ body: requestChanges, pullRequest });
+        expect(messages).toEqual([]);
+      },
+    );
+
+    it('still wakes the builder on a native changes-requested review, from a person or on any pull request', async () => {
+      for (const input of [
+        { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested' },
+        { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested', factoryPullRequest: false },
+      ]) {
+        const { messages } = await ingestReview(input);
+        expect(messages).toEqual([
+          expect.objectContaining({
+            decision: expect.objectContaining({
+              type: 'sendMessage',
+              role: 'work',
+              idempotencyKey: expect.stringMatching(/:address-review-feedback$/),
+            }),
+          }),
+        ]);
+      }
+    });
+  },
+);
+
 describe('GithubRules', () => {
   it('accepts a linked target on another installed board and preserves committed ingress after uninstall', async () => {
     const decision = {
@@ -1369,7 +1556,8 @@ describe('GithubRules', () => {
   });
 
   it('materializes and starts the first Review pass when a trusted maintainer requests Factory', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project, storedBoards } =
+      await setup('write');
     const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
@@ -1389,6 +1577,8 @@ describe('GithubRules', () => {
       }),
       storage: workItems,
       boards: createBoardRegistry(),
+      // The project's default `pull-requests` intake route sends the trusted request to review.
+      intakeRoutes: storedBoards,
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1444,7 +1634,8 @@ describe('GithubRules', () => {
   });
 
   it("materializes a Review card from Factory's exact PR comment command", async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project, storedBoards } =
+      await setup('write');
     const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
@@ -1464,6 +1655,8 @@ describe('GithubRules', () => {
       }),
       storage: workItems,
       boards: createBoardRegistry(),
+      // The project's default `pull-requests` intake route sends the trusted request to review.
+      intakeRoutes: storedBoards,
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -3726,7 +3919,7 @@ describe('GithubRules', () => {
   });
 });
 
-describe('GithubRules label routes', () => {
+describe('GithubRules issue labels', () => {
   function issueLabels(action: 'labeled' | 'unlabeled', labels: string[], deliveryId = `label-${action}`) {
     return {
       event: 'issues',
@@ -3746,35 +3939,8 @@ describe('GithubRules label routes', () => {
     };
   }
 
-  async function setupRoutes(
-    route: string | undefined,
-    binding?: { board: string | null; sourceId?: 'id' | 'slug'; otherProject?: boolean },
-  ) {
+  async function setupRoutes() {
     const base = await setup('write');
-    const intake = base.intake;
-    if (route) {
-      await intake.setLabelRoute({
-        orgId: 'org-1',
-        factoryProjectId: base.project.id,
-        integrationId: 'github',
-        label: route,
-        board: 'release',
-        userId: 'user-1',
-      });
-    }
-    if (binding) {
-      const factoryProjectId = binding.otherProject
-        ? (await base.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Project 2' } })).id
-        : base.project.id;
-      await intake.setBinding({
-        orgId: 'org-1',
-        integrationId: 'github',
-        sourceId: binding.sourceId === 'slug' ? 'acme/repo' : base.projectRepository.repositoryId,
-        factoryProjectId,
-        board: binding.board,
-        userId: 'user-1',
-      });
-    }
     const service = new GithubRules({
       github: base.github,
       sourceControl: base.sourceControl,
@@ -3783,110 +3949,50 @@ describe('GithubRules label routes', () => {
       storage: base.workItems,
       boards: createBoardRegistry({ boards: [createTestBoard(), createTestBoard({ id: 'triage' })] }),
       configVersion: 'factory-config-v1',
-      intake,
     });
     return { ...base, service };
   }
 
-  it('materializes a labelled issue on the routed board at its initial phase', async () => {
-    const { service, workItems, project } = await setupRoutes('Release');
-    const ingress = issueOpened('routed-open');
+  it('files every new issue on Work › Intake, whatever its labels', async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const ingress = issueOpened('labelled-open');
     (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'release' }];
     await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
     const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decision?.decision).toMatchObject({
       type: 'upsertLinkedWorkItem',
-      board: 'release',
-      stage: 'queued',
+      board: 'work',
+      stage: 'intake',
       metadata: expect.objectContaining({ labels: ['release'] }),
     });
   });
 
-  it('keeps unrouted issues on Work › Intake', async () => {
-    const { service, workItems, project } = await setupRoutes('release');
-    const ingress = issueOpened('unrouted-open');
-    (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'bug' }];
-    await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
-  });
-
-  it('moves a movable issue card to the routed board when the label is added, and back when removed', async () => {
-    const { service, workItems, project } = await setupRoutes('release');
+  it('records label changes on a card without moving it', async () => {
+    const { service, workItems, project } = await setupRoutes();
     const item = await createLinkedIssue(workItems, project.id);
-    const supersede = vi.spyOn(workItems, 'supersedeDecisionsForWorkItem');
 
     await expect(service.ingest(issueLabels('labeled', ['Release']))).resolves.toEqual({ status: 'committed' });
-    const moved = await workItems.get({ orgId: 'org-1', id: item.id });
-    expect(moved).toMatchObject({ board: 'release', stages: ['queued'], workItem: expect.objectContaining({ metadata: expect.objectContaining({labels: ['Release']}) }) });
-    // Runs the old board proposed (Work's triage) must not follow the card.
-    expect(supersede).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org-1', factoryProjectId: project.id, workItemId: item.id }),
-    );
-
-    await expect(service.ingest(issueLabels('unlabeled', []))).resolves.toEqual({ status: 'committed' });
     expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
-      board: 'work',
-      stages: ['intake'],
-      workItem: expect.objectContaining({ metadata: expect.objectContaining({labels: []}) }),
+      board: item.board,
+      stages: item.stages,
+      workItem: expect.objectContaining({ metadata: expect.objectContaining({ labels: ['Release'] }) }),
     });
-  });
+    await expect(service.ingest(issueLabels('labeled', ['Release'], 'label-again'))).resolves.toEqual({
+      status: 'ignored',
+    });
 
-  it.each(['id', 'slug'] as const)(
-    'lands an unlabelled issue on the board its repository binding names (bound by %s)',
-    async sourceId => {
-      const { service, workItems, project } = await setupRoutes(undefined, { board: 'release', sourceId });
-      await expect(service.ingest(issueOpened('bound-open'))).resolves.toEqual({ status: 'committed' });
-      const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-      expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'release', stage: 'queued' });
-    },
-  );
-
-  it('prefers a matching label route over the repository binding', async () => {
-    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
-    const routed = issueOpened('routed-over-binding');
-    (routed.payload.issue as Record<string, unknown>).labels = [{ name: 'release' }];
-    await expect(service.ingest(routed)).resolves.toEqual({ status: 'committed' });
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decision?.decision).toMatchObject({ board: 'release', stage: 'queued' });
-  });
-
-  it('falls back to the repository binding when no label route matches', async () => {
-    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
-    const unrouted = issueOpened('unrouted-bound');
-    (unrouted.payload.issue as Record<string, unknown>).labels = [{ name: 'bug' }];
-    await expect(service.ingest(unrouted)).resolves.toEqual({ status: 'committed' });
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decision?.decision).toMatchObject({ board: 'triage', stage: 'queued' });
-  });
-
-  it.each([
-    ['has no board', { board: null }],
-    ['names a board that is not installed', { board: 'missing' }],
-    ['belongs to another project', { board: 'release', otherProject: true }],
-  ])('keeps the issue on Work › Intake when the binding %s', async (_, binding) => {
-    const { service, workItems, project } = await setupRoutes(undefined, binding);
-    await expect(service.ingest(issueOpened('binding-fallback'))).resolves.toEqual({ status: 'committed' });
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
-  });
-
-  it('moves a card to the binding board when its last routed label is removed', async () => {
-    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
-    const item = await createLinkedIssue(workItems, project.id);
-    await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
-    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'release' });
     await expect(service.ingest(issueLabels('unlabeled', []))).resolves.toEqual({ status: 'committed' });
     expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
-      board: 'triage',
-      stages: ['queued'],
+      board: item.board,
+      stages: item.stages,
+      workItem: expect.objectContaining({ metadata: expect.objectContaining({ labels: [] }) }),
     });
   });
 
   it.each(['work', 'plan'])(
     'leaves a card a run owns (session %s) where it is but still records the labels',
     async role => {
-      const { service, workItems, project } = await setupRoutes('release');
+      const { service, workItems, project } = await setupRoutes();
       const item = await createLinkedIssue(workItems, project.id);
       await workItems.update({
         orgId: 'org-1',
@@ -3908,7 +4014,7 @@ describe('GithubRules label routes', () => {
   );
 
   it('ignores label changes for issues without a card and label events on pull requests', async () => {
-    const { service } = await setupRoutes('release');
+    const { service } = await setupRoutes();
     await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'ignored' });
     const onPullRequest = issueLabels('labeled', ['release'], 'pr-labeled');
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
@@ -3929,7 +4035,7 @@ describe('GithubRules label routes', () => {
   ] as const)(
     'mirrors $action from $before to $after onto the linked issue card without moving it or proposing runs',
     async ({ action, before, after }) => {
-      const { service, workItems, project } = await setupRoutes('release');
+      const { service, workItems, project } = await setupRoutes();
       const created = await createLinkedIssue(workItems, project.id);
       const item = (await workItems.update({
         orgId: 'org-1',
@@ -3949,7 +4055,7 @@ describe('GithubRules label routes', () => {
   );
 
   it('keeps the newer assignees when an older assigned payload arrives after a newer unassigned one', async () => {
-    const { service, workItems, project } = await setupRoutes('release');
+    const { service, workItems, project } = await setupRoutes();
     const created = await createLinkedIssue(workItems, project.id);
     await workItems.update({
       orgId: 'org-1',
@@ -3968,7 +4074,7 @@ describe('GithubRules label routes', () => {
   });
 
   it('advances the stored time on a newer no-op so a delayed older unassigned cannot overwrite it', async () => {
-    const { service, workItems, project } = await setupRoutes('release');
+    const { service, workItems, project } = await setupRoutes();
     const created = await createLinkedIssue(workItems, project.id);
     await workItems.update({
       orgId: 'org-1',
@@ -3987,7 +4093,7 @@ describe('GithubRules label routes', () => {
   });
 
   it('ignores assignee changes for issues without a card and on pull requests', async () => {
-    const { service, workItems, project } = await setupRoutes('release');
+    const { service, workItems, project } = await setupRoutes();
     await expect(service.ingest(issueAssignees('assigned', ['alice']))).resolves.toEqual({ status: 'ignored' });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     const onPullRequest = issueAssignees('assigned', ['alice'], 'pr-assigned');
@@ -4003,21 +4109,13 @@ describe('GithubRules with intake routes', () => {
   } as const;
 
   /**
-   * GitHub rules, a real dispatcher and transition service, the old label routes and the new intake
-   * routes. The project's default routes are removed unless a test asks for them.
+   * GitHub rules, a real dispatcher and transition service, and the project's intake routes. The
+   * project's default routes are removed unless a test asks for them.
    */
   async function setupIntake(permission: string, { withDefaultRoute = false } = {}) {
     const base = await setup(permission);
     const boards = createBoardRegistry({ boards: [createTestBoard()] });
     const configVersion = 'intake-routes';
-    await base.intake.setLabelRoute({
-      orgId: 'org-1',
-      factoryProjectId: base.project.id,
-      integrationId: 'github',
-      label: 'release',
-      board: 'release',
-      userId: 'user-1',
-    });
     const service = new GithubRules({
       github: base.github,
       sourceControl: base.sourceControl,
@@ -4026,7 +4124,6 @@ describe('GithubRules with intake routes', () => {
       storage: base.workItems,
       boards,
       configVersion,
-      intake: base.intake,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       harness: {} as never,
@@ -4057,7 +4154,7 @@ describe('GithubRules with intake routes', () => {
       const [item] = await base.workItems.list(scope);
       return item;
     };
-    /** GitHub reports a label change on issue 42: not a rule event, the label route re-files the card. */
+    /** GitHub reports a label change on issue 42: not a rule event, only the card's labels change. */
     const relabel = async (deliveryId: string, labels: string[]) => {
       const ingress = issueOpened(deliveryId);
       ingress.payload.action = 'labeled';
@@ -4096,9 +4193,24 @@ describe('GithubRules with intake routes', () => {
     });
   });
 
-  it('still files on the label route board when no intake route matches', async () => {
-    const { open } = await setupIntake('read');
-    expect(await open('label-routed', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  it('files a labelled issue on the board a route for that label names', async () => {
+    const { open, storedBoards: boards, scope } = await setupIntake('read');
+    await boards.createIntakeRoute(
+      scope,
+      {
+        name: 'Release issues',
+        when: {
+          operator: 'AND',
+          conditions: [
+            { field: 'item.labels', operator: 'contains', value: 'release' },
+            { field: 'source.integration', operator: 'equals', value: 'github' },
+          ],
+        },
+        target: { boardKey: 'release' },
+      },
+      'admin',
+    );
+    expect(await open('label-routed', ['Release'])).toMatchObject({ board: 'release', stages: ['queued'] });
   });
 
   it("keeps a routed card on the route's board when GitHub reports a label change", async () => {
@@ -4111,10 +4223,14 @@ describe('GithubRules with intake routes', () => {
     });
   });
 
-  it('still moves a card no intake route placed when GitHub reports a label change', async () => {
+  it('leaves a card no route placed where it is when GitHub reports a label change', async () => {
     const { open, relabel } = await setupIntake('read');
     await open('unrouted-then-labeled');
-    expect(await relabel('labeled-release', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+    expect(await relabel('labeled-release', ['release'])).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      workItem: { labels: ['release'] },
+    });
   });
 
   it("keeps a routed card on the route's board when the reconcile sweep replays its labels", async () => {
@@ -4127,11 +4243,6 @@ describe('GithubRules with intake routes', () => {
       ['succeeded', null],
       ['succeeded', null],
     ]);
-  });
-
-  it('lets a matching intake route win over the label route', async () => {
-    const { open } = await setupIntake('write');
-    expect(await open('intake-over-label', ['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
   });
 
   it("keeps an outside author's labelled issue in Work › Intake by the default route, through later label changes", async () => {
@@ -5741,8 +5852,8 @@ describe('pull request cards on the Work board', () => {
     },
   );
 
-  it("files a pull request a maintainer asks Factory to review straight into Work's PR review phase", async () => {
-    const harness = await workBoardHarness('write');
+  it("files a pull request a maintainer asks Factory to review into Work's PR review phase through its intake route", async () => {
+    const harness = await workBoardHarness('write', { withRoutes: true });
 
     await harness.service.ingest(pullRequestComment('delivery-command'));
     await harness.dispatch();
@@ -6601,6 +6712,115 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card!.id).toBe(attached.id);
       expect(card!.workItem.sources.map(source => source.state)).toEqual(['open', 'open', 'closed']);
       expect(card!.metadata.openPullRequestNumber ?? null).toBeNull();
+    });
+  },
+);
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  'a pull request opened from the head self-review approved, on %s',
+  backend => {
+    const APPROVED_HEAD = 'a'.repeat(40);
+
+    /** `permission` is what GitHub answers for the PR's author; `provenance` marks the PR Factory-authored. */
+    async function harness({ permission, provenance }: { permission: string; provenance: boolean }) {
+      const seeded = await setup(
+        permission,
+        undefined,
+        backend === 'postgres'
+          ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+          : new LibSQLFactoryStorage({ id: 'github-self-review-handoff', url: ':memory:' }),
+      );
+      // Work as a project stored it with its self-review phase: execute -> review (self-review) -> pr-review.
+      const boards = olderWork();
+      const configVersion = 'self-review-handoff';
+      const card = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: seeded.project.id,
+          input: {
+            board: 'work',
+            externalSource: {
+              integrationId: 'github',
+              type: 'issue',
+              externalId: 'github:10:issue:42',
+              url: 'https://github.com/acme/repo/issues/42',
+            },
+            title: 'Issue 42',
+            stages: ['review'],
+            sessions: {
+              work: { sessionId: 'session-work', branch: 'feature', threadId: 'thread-work', startedBy: 'user-1' },
+            },
+            metadata: {
+              authorTrusted: true,
+              state: 'open',
+              selfReviewVerdict: 'approve',
+              selfReviewedHeadSha: APPROVED_HEAD,
+            },
+          },
+        })
+      ).item;
+      if (provenance) {
+        await seeded.integrationStorage.subscriptions.create({
+          orgId: 'org-1',
+          targetKey: 'factory-pr-provenance:10:17',
+          threadId: 'thread-work',
+          status: 'active',
+          data: { kind: 'factory-pr-provenance', factoryProjectId: seeded.project.id, workItemId: card.id },
+        });
+      }
+      const service = new GithubRules({
+        github: seeded.github,
+        sourceControl: seeded.sourceControl,
+        integrationStorage: seeded.integrationStorage,
+        projects: seeded.projects,
+        storage: seeded.workItems,
+        boards,
+        configVersion,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({ storage: seeded.workItems, configVersion, boards }),
+        storage: seeded.workItems,
+        boards,
+        intakeRoutes: seeded.boards,
+        isAutoRunEnabled: async () => true,
+        ownerId: 'worker-1',
+      });
+      const openPullRequest = async (headSha: string) => {
+        const delivery = pullRequest('opened', `delivery-open-${headSha.slice(0, 4)}`);
+        delivery.payload.pull_request.head = { ref: 'feature', sha: headSha.toUpperCase() } as never;
+        await service.ingest(delivery);
+        for (let pass = 0; pass < 3; pass++) {
+          await dispatcher.runOnce(new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * pass));
+        }
+      };
+      const stages = async () => (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.stages;
+      const moves = async () =>
+        (await seeded.workItems.listDeferredDecisions('org-1', seeded.project.id)).filter(
+          entry => entry.workItemId === card.id && entry.decision.type === 'transition',
+        );
+      return { openPullRequest, stages, moves };
+    }
+
+    it('moves the card from self-review to PR review without the agent moving it', async () => {
+      const h = await harness({ permission: 'read', provenance: true });
+      await h.openPullRequest(APPROVED_HEAD);
+      expect(await h.stages()).toEqual(['pr-review']);
+    });
+
+    it('leaves the card in self-review when the pull request opens from a head it never approved', async () => {
+      const h = await harness({ permission: 'read', provenance: true });
+      await h.openPullRequest('b'.repeat(40));
+      expect(await h.stages()).toEqual(['review']);
+    });
+
+    it("leaves the card in self-review for an outsider's pull request on its branch, even at the approved head", async () => {
+      const h = await harness({ permission: 'read', provenance: false });
+      await h.openPullRequest(APPROVED_HEAD);
+      // The branch alone matches the card, so the rule itself must refuse to move it.
+      expect(await h.moves()).toEqual([]);
+      expect(await h.stages()).toEqual(['review']);
     });
   },
 );

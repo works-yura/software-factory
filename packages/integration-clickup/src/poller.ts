@@ -2,6 +2,7 @@ import { cardRuleFacts, INTAKE_ROUTE_METADATA_KEY, resolveBoardClosure, resolveI
 import type { BoardRegistry, ExternalWorkItemSource, IntakeRoutesReader } from '@factory/core';
 import type { IssueReconcileSummary } from '@factory/integrations';
 import type { FactoryProject, FactoryProjectsStorage, IntakeStorage, WorkItemRow, WorkItemsStorage } from '@factory/store';
+import { arrivalSourceFacts } from '@factory/store';
 
 import type { ClickUpTask, ClickUpTaskSource } from './api.ts';
 import { isClosedTask } from './intake.ts';
@@ -145,19 +146,26 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
     return true;
   };
 
-  /** Where an intake route sends a new task, if one matches; the route wins over tag routes and the List's board. */
+  /**
+   * Where an intake route with a condition sends a new task, if one matches. A route that takes
+   * every new card ("Everything else") doesn't count: the List's board, whose columns its status
+   * rules move cards between, is the task's default.
+   */
   const routePlacement = async (project: FactoryProject, task: ClickUpTask, source: ExternalWorkItemSource) => {
     if (!options.intakeRoutes) return undefined;
     const scope = { orgId: project.orgId, factoryProjectId: project.id };
     const routes = await options.intakeRoutes.listIntakeRoutes(scope);
     if (routes.length === 0) return undefined;
     const registry = options.projectBoards ? await options.projectBoards.load(scope) : (options.boards as BoardRegistry);
+    const metadata = taskMetadata(task);
+    const workItem = arrivalSourceFacts(source, metadata);
     const facts = cardRuleFacts({
       title: task.name || `ClickUp task ${task.id}`,
-      metadata: taskMetadata(task),
+      metadata,
       externalSource: source,
+      ...(workItem ? { workItem } : {}),
     });
-    const placement = resolveIntakePlacement(routes, facts, registry);
+    const placement = resolveIntakePlacement(routes, facts, registry, { skipCatchAll: true });
     return placement && { ...placement, initialPhase: registry.get(placement.board)!.initialPhase };
   };
 
@@ -236,7 +244,9 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
           title: task.name || `ClickUp task ${task.id}`,
           url: task.url || null,
           stage,
-          // Naming the route tells the dispatcher the routes were applied: it keeps this placement.
+          // The poller applied the routes itself (the List's board stands in for the catch-all route):
+          // the dispatcher keeps this placement.
+          routesApplied: true,
           metadata: routed ? { ...taskMetadata(task), [INTAKE_ROUTE_METADATA_KEY]: routed.routeId } : taskMetadata(task),
         },
       ],

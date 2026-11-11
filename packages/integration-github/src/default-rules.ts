@@ -51,6 +51,21 @@ function authoringCard(context: FactoryGithubRuleContext): boolean {
   );
 }
 
+/** Whether the card sits in `selfReview` with an approve verdict on the head its pull request opened with. */
+function selfReviewApprovedHead(context: FactoryGithubRuleContext, selfReview: string): boolean {
+  const { item, pullRequest } = context;
+  const metadata = item?.metadata;
+  const approvedHead = metadata?.selfReviewedHeadSha;
+  return (
+    item?.stages.length === 1 &&
+    item.stages[0] === selfReview &&
+    metadata?.selfReviewVerdict === 'approve' &&
+    typeof approvedHead === 'string' &&
+    pullRequest?.headSha !== undefined &&
+    approvedHead.toLowerCase() === pullRequest.headSha
+  );
+}
+
 /** Whether the card sits in its board's pull request review phase, alone. */
 function inPullRequestReview(context: FactoryGithubRuleContext): boolean {
   const phase = context.flow?.pullRequestReview;
@@ -105,9 +120,8 @@ function githubSourceKey(
 
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue || !context.intake) return;
-  // Everything arrives on the routed board's initial phase (the project's default board when no
-  // label route or binding selects another). Trust/timing stamps remain available to custom board
-  // rules.
+  // Everything arrives on the default board's initial phase; the project's intake routes place
+  // the card from there. Trust/timing stamps remain available to custom board rules.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -161,17 +175,10 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  {
-    idempotencyKey,
-    autoStartCandidate,
-    review = false,
-  }: { idempotencyKey: string; autoStartCandidate: boolean; review?: boolean },
+  { idempotencyKey, autoStartCandidate }: { idempotencyKey: string; autoStartCandidate: boolean },
 ) {
   const { intake } = context;
   if (!context.pullRequest || !intake) return;
-  // A requested review lands straight in the board's pull request review phase; a board without
-  // one files the pull request where everything else arrives.
-  const stage = review ? (intake.pullRequestReview ?? intake.initialPhase) : intake.initialPhase;
   const home = context.pullRequestHome;
   return {
     type: 'upsertLinkedWorkItem',
@@ -181,7 +188,7 @@ function materializePullRequestIntake(
     sourceKey: githubSourceKey(context, 'github-pr', context.pullRequest.number),
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage,
+    stage: intake.initialPhase,
     // A pull request for a card already on the board is filed on that card; the authoring card's
     // own evaluation moves it. For one that closes an issue on the board, the project's intake
     // routes decide whether it joins that card.
@@ -215,15 +222,19 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // Opening a pull request is evaluated once per card it concerns. This rule
   // files the pull request's own card, which is the arrival — the
   // evaluation carrying `pullRequestIntake` — so the authoring card's own
-  // evaluation only moves it out for review. Self-review runs before a pull
-  // request exists and opens it itself, so a pull request opened while the
-  // card is still in its build phase skipped self-review: the card goes to its
-  // board's pull request review phase. It rests there through every round of
-  // feedback — the builder is woken in place — until the merge closes it.
+  // evaluation only moves it out for review: from its build phase (a board
+  // without self-review, or a pull request opened before self-review ran), or
+  // from self-review once it approved the very head the pull request opens
+  // with. Opening the pull request writes it onto the card, so the agent's own
+  // move at its pre-PR revision always loses that race; the event moves the
+  // card instead. It rests in the board's pull request review phase through
+  // every round of feedback — the builder is woken in place — until the merge
+  // closes it.
   if (context.item && context.pullRequestIntake !== true) {
     if (!authoringCard(context) || context.pullRequest.state !== 'open') return;
-    const { build, pullRequestReview } = context.flow ?? {};
-    if (!context.board || !build || !pullRequestReview || !context.item.stages.includes(build)) return;
+    const { build, selfReview, pullRequestReview } = context.flow ?? {};
+    if (!context.board || !build || !pullRequestReview) return;
+    if (!context.item.stages.includes(build) && !(selfReview && selfReviewApprovedHead(context, selfReview))) return;
     // Someone else's pull request attached to the issue does not mean this card's build is out.
     if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
     // Resolution can match a card by branch alone, so a fork's pull
@@ -320,10 +331,19 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
   // A closed or merged pull request has no branch left to push fixes to.
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
-  // `approved` needs no work, and `commented` (a review body with no verdict)
-  // is how a reviewer leaves notes without blocking — only a verdict that asks
-  // for changes should pull the author back in.
-  if (context.review.state.toLowerCase() !== 'changes_requested') return;
+  // `approved` needs no work, and `commented` is how a reviewer leaves notes
+  // without blocking — only a verdict that asks for changes should pull the
+  // author back in. GitHub will not let Factory's app request changes on a pull
+  // request it authored, so there Factory's own `commented` review carries the
+  // verdict on its first line instead; that one counts too.
+  const state = context.review.state.toLowerCase();
+  const factoryVerdict =
+    state === 'commented' &&
+    context.actor.type === 'github' &&
+    context.actor.factoryAuthored &&
+    context.pullRequest.factoryAuthored &&
+    requestsChangesVerdict(context.review.body);
+  if (state !== 'changes_requested' && !factoryVerdict) return;
   // The authoring thread is already subscribed to this PR (`gh pr create`
   // subscribes automatically), so it can read the individual line comments
   // from its own notification inbox — the message only has to wake it and
@@ -453,11 +473,10 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
     // On this path the actor is the *requester*, so the materialized
     // `authorTrusted` stamp records their trust (always true past the gate
     // above), not the PR author's: a trusted maintainer requesting a Factory
-    // review vouches for the PR.
+    // review vouches for the PR, so the project's pull request route sends it to review.
     return materializePullRequestIntake(context, {
       idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
       autoStartCandidate: true,
-      review: true,
     });
   }
   // Already in review with no verdict yet: a pass is pending or running.

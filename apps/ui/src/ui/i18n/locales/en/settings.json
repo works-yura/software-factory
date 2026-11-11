@@ -837,7 +837,7 @@
   },
   "intakeRoutes": {
     "title": "Intake routes",
-    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; with no match, a ClickUp task lands on its List’s board. A route places a card once, when it arrives.",
+    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; a ClickUp task no route with a condition takes lands on its List’s board, and everything else goes where the last route that takes every card says. A route places a card once, when it arrives.",
     "add": "Add route",
     "loading": "Loading routes…",
     "unavailable": "Couldn't load intake routes.",
@@ -894,7 +894,11 @@
       "item.labels": "Tag",
       "item.title": "Title",
       "intake.rule": "Rule",
-      "intake.trigger": "Rule trigger"
+      "intake.trigger": "Rule trigger",
+      "source.repository": "Repository",
+      "item.key": "Key",
+      "item.state": "State",
+      "item.assignees": "Assignee"
     },
     "integrations": {
       "github": "GitHub",
@@ -918,7 +922,8 @@
       "pullRequestClosed": "Pull requests closed unmerged go to Canceled",
       "pullRequestClosedIssue": "Issues whose pull request closed unmerged go back to Intake",
       "pullRequestUpdated": "Pushes to a reviewed pull request re-review it",
-      "pullRequestReviewRequested": "Requested reviews go to Review"
+      "pullRequestReviewRequested": "Requested reviews go to Review",
+      "everythingElse": "Everything else goes to Work › Intake"
     },
     "events": {
       "work_item.created": "new card",
@@ -933,7 +938,15 @@
     "closeReasons": {
       "completed": "as completed",
       "canceled": "as not planned"
-    }
+    },
+    "placeholders": {
+      "source.repository": "owner/repository",
+      "item.key": "owner/repository#42",
+      "item.state": "open",
+      "item.assignees": "login"
+    },
+    "factIs": "{{field}} is \"{{value}}\"",
+    "readOnly": "Only an organization admin can change these routes."
   },
   "workBoard": {
     "description": "How cards move through this board: when each phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only.",
