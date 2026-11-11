@@ -19,6 +19,7 @@
     "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
     "@factory/credentials": "workspace:*",
+    "@factory/device": "workspace:*",
     "@factory/feed": "workspace:*",
     "@factory/integration-github": "workspace:*",
     "@factory/observability": "workspace:*",

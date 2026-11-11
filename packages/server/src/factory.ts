@@ -19,6 +19,8 @@
  */
 
 
+import type { Server } from 'node:http';
+
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
@@ -114,6 +116,8 @@ import { reconcileGithubAcceptanceLabels } from '@factory/integration-github';
 import type { GithubRuleOverrides } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.ts';
+import { createFactoryDevice } from './device.ts';
+import type { FactoryDevice, FactoryDeviceConfig } from './device.ts';
 import {
   recordFactoryPullRequestProvenance,
   resolveFactoryPullRequestParentWorkItemId,
@@ -420,6 +424,12 @@ export interface MastraFactoryConfig {
    * Whether projects get the built-in Work board, stored in each project once. Default: true.
    */
   includeDefaultBoards?: boolean;
+  /**
+   * Device preview: simulators and emulators on this server's machine, streamed into the session
+   * panel (`/web/device`). Only for a server on the person's own machine; the host calls
+   * `attachDevice(server)` for the hub's WebSockets.
+   */
+  device?: FactoryDeviceConfig;
 
   /**
    * Platform-specific overrides.
@@ -573,6 +583,7 @@ export class MastraFactory {
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
+  #device: FactoryDevice | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
@@ -760,6 +771,8 @@ export class MastraFactory {
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
+    const device = this.#config.device ? await createFactoryDevice(this.#config.device, routeAuth) : undefined;
+    this.#device = device;
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(mcpConfig);
@@ -2632,6 +2645,7 @@ export class MastraFactory {
               })
             : []),
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
+          ...(device ? device.routes : []),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             ...(attachmentService ? { attachments: attachmentService } : {}),
@@ -2670,6 +2684,7 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             claudeCodeEnabled: claudeCode !== undefined,
+            deviceEnabled: device !== undefined,
             // New chats of a Claude Code Factory are Claude Code sessions, checked out like a card's.
             ...(claudeCode
               ? {
@@ -3207,6 +3222,15 @@ export class MastraFactory {
       logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
   }
 
+  /**
+   * Serves device preview's hub WebSockets on the host's HTTP server. Throws when the factory was
+   * built without `device` or before `prepare()`.
+   */
+  attachDevice(server: Server): () => void {
+    if (!this.#device) throw new Error('Device preview is not configured: pass `device` to MastraFactory and call prepare() first.');
+    return this.#device.attach(server);
+  }
+
   /** Stop Factory-owned background dispatch before the host process shuts down. */
   async shutdown(): Promise<void> {
     const unsubscribeDispatchWakes = this.#unsubscribeDispatchWakes;
@@ -3222,6 +3246,7 @@ export class MastraFactory {
     backfill?.controller.abort();
     await Promise.all([
       this.#dispatcher?.stop(),
+      this.#device?.dispose(),
       // Stops between cards; failures are already logged.
       backfill?.promise,
     ]);

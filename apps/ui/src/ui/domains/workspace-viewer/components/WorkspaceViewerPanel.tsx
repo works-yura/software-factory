@@ -1,7 +1,9 @@
-import { useContext, useState } from 'react';
+import { lazy, Suspense, useContext, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
@@ -13,6 +15,9 @@ import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceOverview } from './WorkspaceOverview';
 import { WorkspacePanelContext } from '../context/WorkspacePanelContext';
 import { selectWorkspaceFilePreview } from './workspace-file-preview';
+
+// three.js and the device models load only when someone opens the device view.
+const WorkspaceDevicePanel = lazy(() => import('./WorkspaceDevicePanel'));
 
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
@@ -31,7 +36,8 @@ type WorkspacePanelView =
   | { type: 'files'; selectedPath?: string }
   | { type: 'file'; path: string }
   | { type: 'changes' }
-  | { type: 'feed' };
+  | { type: 'feed' }
+  | { type: 'device' };
 
 export function WorkspaceViewerPanel({
   workspacePath,
@@ -44,6 +50,8 @@ export function WorkspaceViewerPanel({
 }: WorkspaceViewerPanelProps) {
   const session = useUserSessionQuery(sessionId);
   const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
+  const deviceAvailable = useServerFeatures().data?.device === true;
+  const { t } = useTranslation('workspaces');
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
@@ -79,6 +87,20 @@ export function WorkspaceViewerPanel({
     setView({ type: 'feed' });
     onSizeChange?.('half');
   };
+
+  // Device preview asks for half the chat: enough for a phone, small beside the conversation.
+  const showDevice = () => {
+    setView({ type: 'device' });
+    onSizeChange?.('half');
+  };
+
+  if (view.type === 'device') {
+    return (
+      <Suspense fallback={<p className="text-muted-foreground p-3 text-sm">{t('device.loading')}</p>}>
+        <WorkspaceDevicePanel threadId={sessionId ?? workspacePath} visible={visible} onBack={showOverview} />
+      </Suspense>
+    );
+  }
 
   if (view.type === 'feed' && workItem) {
     return (
@@ -136,6 +158,7 @@ export function WorkspaceViewerPanel({
       onShowChanges={() => showView('changes')}
       commentCount={workItem?.commentCount}
       onShowComments={workItem ? showFeed : undefined}
+      onShowDevice={deviceAvailable ? showDevice : undefined}
       recreateSandbox={
         canRecreateSandbox && sessionId ? { sessionId, factoryId: factoryProjectId, workspacePath } : undefined
       }

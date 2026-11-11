@@ -1,0 +1,41 @@
+{
+  "name": "@factory/device",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Device preview: iOS Simulator and Android emulator streamed into the web UI (WebRTC, H.264 over WebCodecs, MJPEG), touch and keyboard input, settings and app actions, agent control and video recording through agent-device. Ported from t3code.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.ts",
+    "./react": "./src/react/index.ts",
+    "./models/*": "./src/react/models/*"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "4.13.13",
+    "three": "0.180.0",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@testing-library/react": "16.3.2",
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.180.0",
+    "jsdom": "30.1.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

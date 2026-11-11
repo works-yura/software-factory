@@ -2,6 +2,9 @@
 @import '@mastra/playground-ui/components.css';
 @import '@mastra/playground-ui/sources.css';
 
+/* Device preview (`@factory/device`) ships its panel as source: Tailwind scans it here. */
+@source '../../../../packages/device/src/react';
+
 /* Mona Sans and Commit Mono, same as Studio. Mona Sans comes from
  * @fontsource-variable/mona-sans, imported in main.tsx. Commit Mono is bundled
  * like Studio's (packages/playground/src/fonts.css): SIL OFL, see
@@ -106,4 +109,19 @@
       transform: translateY(-4.75rem);
     }
   }
+}
+
+/* Sizes and a surface device preview's panel (ported from t3code) uses that our theme lacks.
+ * Its colors use our tokens directly. */
+@theme inline {
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.875rem;
+  --font-heading: var(--font-display);
+}
+
+@utility dropdown-glass {
+  background-color: color-mix(in srgb, var(--color-popover) 88%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
 }

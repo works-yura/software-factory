@@ -459,7 +459,8 @@
     "changedCount_other": "{{count}} changed",
     "unavailable": "Unavailable",
     "loadingChanges": "Loading changes",
-    "loadingDetails": "Loading workspace details"
+    "loadingDetails": "Loading workspace details",
+    "device": "Device"
   },
   "fileViewer": {
     "label": "Workspace file viewer",
@@ -538,5 +539,10 @@
     "agentRuns_other": "{{count}} agent runs",
     "now": "now",
     "timeline": "Session timeline"
+  },
+  "device": {
+    "label": "Device preview",
+    "back": "Back to workspace",
+    "loading": "Loading device preview"
   }
 }

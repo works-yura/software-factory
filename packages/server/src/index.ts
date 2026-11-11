@@ -73,3 +73,5 @@ export type {
   IntegrationHooks,
   IntegrationTools,
 } from '@factory/integrations';
+export { attachOnFirstRequest, DEVICE_BASE_PATH } from './device.ts';
+export type { FactoryDeviceConfig } from './device.ts';

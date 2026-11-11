@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DiffStat } from '../../../ui/DiffStat';
-import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
+import { FileDiff, MessageSquare, NotepadText, Smartphone } from 'lucide-react';
 
 import type { WorkspaceChanges } from '../../../../api/types';
 import { RecreateSandboxAction } from './RecreateSandboxAction';
@@ -21,6 +21,8 @@ interface WorkspaceOverviewProps {
   /** From the board snapshot the thread already polls; absent when the thread has no work item. */
   commentCount?: number;
   onShowComments?: () => void;
+  /** Present when the server offers device preview (simulators and emulators on its machine). */
+  onShowDevice?: () => void;
   /** Present only when the server says the viewer may recreate this session's sandbox. */
   recreateSandbox?: RecreateSandboxTarget;
 }
@@ -46,6 +48,7 @@ export function WorkspaceOverview({
   onShowChanges,
   commentCount,
   onShowComments,
+  onShowDevice,
   recreateSandbox,
 }: WorkspaceOverviewProps) {
   const { t } = useTranslation('workspaces');
@@ -80,6 +83,12 @@ export function WorkspaceOverview({
           <Txt as="span" variant="meta" tone="muted" className="ml-auto">
             {commentCount === 0 ? t('overview.noneYet') : commentCount}
           </Txt>
+        </Button>
+      ) : null}
+      {onShowDevice ? (
+        <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowDevice}>
+          <Smartphone />
+          <span>{t('overview.device')}</span>
         </Button>
       ) : null}
       {recreateSandbox ? (

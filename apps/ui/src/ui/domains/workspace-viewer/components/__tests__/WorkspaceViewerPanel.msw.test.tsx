@@ -701,3 +701,17 @@ describe('WorkspaceViewerPanel opened from a chat link', () => {
     expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
   });
 });
+
+describe('WorkspaceViewerPanel device preview', () => {
+  it('offers the device only where the server serves device preview', async () => {
+    installHandlers();
+    const { unmount } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+    await screen.findByRole('button', { name: /Files/ });
+    expect(screen.queryByRole('button', { name: /Device/ })).toBeNull();
+    unmount();
+
+    server.use(http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false, device: true })));
+    renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+    expect(await screen.findByRole('button', { name: /Device/ })).toBeTruthy();
+  });
+});

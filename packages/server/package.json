@@ -21,6 +21,7 @@
     "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
     "@factory/credentials": "workspace:*",
+    "@factory/device": "workspace:*",
     "@factory/feed": "workspace:*",
     "@factory/harness": "workspace:*",
     "@factory/harness-claude-code": "workspace:*",

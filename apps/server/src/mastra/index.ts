@@ -26,7 +26,13 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { AgentBrowser } from '@mastra/agent-browser';
-import { createFactorySecretEncryption, LocalFactorySandbox, LocalFileBlobStore, MastraFactory } from '@factory/server';
+import {
+  attachOnFirstRequest,
+  createFactorySecretEncryption,
+  LocalFactorySandbox,
+  LocalFileBlobStore,
+  MastraFactory,
+} from '@factory/server';
 import { GithubIntegration, GithubTokenIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
 import { FirebaseIntegration } from '@factory/integration-firebase';
@@ -356,6 +362,15 @@ export const factory = new MastraFactory({
     ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
   },
   ...(browser ? { browser } : {}),
+  // Device preview drives simulators and emulators on this machine, so only a local development
+  // server (the person's own machine) offers it. State and the device tools sit next to the database.
+  ...(localDevAuthEnabled
+    ? {
+        device: {
+          stateDir: process.env.FACTORY_DEVICE_STATE_DIR?.trim() || join(dirname(getDatabasePath()), 'factory-device'),
+        },
+      }
+    : {}),
   // Card and session attachments (chat/comment uploads, later ClickUp/GitHub files): bytes on this
   // host's disk, next to the local database unless FACTORY_ATTACHMENTS_DIR names another directory.
   // A multi-replica deployment needs a shared store here (an S3 `AttachmentBlobStore`).
@@ -420,3 +435,7 @@ export const mastra = new Mastra({
 // instance's storage) and start its workers. Runs at module load via top-level
 // await, so the deployer imports a fully-booted instance.
 await factory.finalize();
+
+// The deployer creates the HTTP server itself; device preview's hub sockets attach to it on its
+// first request (the page and its API load before any device socket opens).
+if (localDevAuthEnabled) attachOnFirstRequest(server => factory.attachDevice(server));

@@ -159,6 +159,8 @@ export interface FactoryApiRoutesDeps {
   mcpEnabled: boolean;
   /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
   claudeCodeEnabled?: boolean;
+  /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
+  deviceEnabled?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
   claudeSignIn?: ClaudeSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
@@ -876,6 +878,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         knowledge: deps.knowledgeEnabled,
         mcp: deps.mcpEnabled,
         claudeCode: deps.claudeCodeEnabled ?? false,
+        device: deps.deviceEnabled ?? false,
         claudeSignIn: deps.claudeSignIn !== undefined,
       },
       deploymentProviders: deps.deploymentModelProviders,
