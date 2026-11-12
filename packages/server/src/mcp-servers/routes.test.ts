@@ -11,7 +11,7 @@ import { buildMcpServerRoutes } from './routes.ts';
 
 const admin: TestAuthUser = { id: 'u1', organizationId: 'org-1' };
 
-async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
+async function setup(options: { isAdmin?: boolean; user?: TestAuthUser; now?: Date } = {}) {
   const backend = new LibSQLFactoryStorage({ id: 'mcp-routes-test', url: ':memory:' });
   const servers = backend.registerDomain(
     new McpServersStorage(createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(3) } })),
@@ -23,6 +23,7 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
   const dryRuns: Array<{ name: string; launch: unknown; secrets: unknown }> = [];
   const discoveries: Array<{ credential: unknown; source: string; context: unknown }> = [];
   const reconnected: string[] = [];
+  const auditQueries: Array<{ factoryProjectId?: string; actions?: string[] }> = [];
   const auditEvents: Array<{
     actorId: string;
     actorType: string;
@@ -60,7 +61,13 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
           return { ok: true, output: { id, tool, args }, durationMs: 5 };
         },
       },
-      auditLog: { list: async () => ({ events: auditEvents }) },
+      auditLog: {
+        list: async input => {
+          auditQueries.push(input);
+          return { events: auditEvents.filter(event => !input.factoryProjectId || event.factoryProjectId === input.factoryProjectId) };
+        },
+      },
+      ...(options.now ? { now: () => options.now! } : {}),
       credentials: {
         options: async () => ({ 'google-cloud-account': [{ id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' }] }),
         suggestions: async (_org, factoryProjectId) => (factoryProjectId === 'syncts' ? { 'google-cloud-project': 'syncta-57c6a' } : {}),
@@ -76,7 +83,7 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
   );
   const call = (method: string, path: string, body?: unknown) =>
     app.request(path, { method, ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
-  return { call, audits, checked, servers, dryRuns, discoveries, reconnected, auditEvents };
+  return { call, audits, checked, servers, dryRuns, discoveries, reconnected, auditEvents, auditQueries };
 }
 
 const firestore = {
@@ -156,6 +163,46 @@ describe('MCP server routes: status, try, reconnect, calls', () => {
       { at: at(5).toISOString(), tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-1', factoryProjectId: 'syncts', tried: false },
       { at: at(4).toISOString(), tool: 'get_documents', outcome: 'error', durationMs: 900, factoryProjectId: 'syncts', tried: true },
     ]);
+  });
+});
+
+describe('MCP server routes: a Factory’s activity', () => {
+  const now = new Date(Date.UTC(2026, 10, 12, 12, 0));
+  const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000);
+
+  it('counts the Factory’s calls through every server in the last 24 hours, newest first, with the server named', async () => {
+    const { call, auditEvents, auditQueries } = await setup({ now });
+    const { server } = await (await call('POST', '/web/mcp-servers', firestore)).json();
+    const event = (at: Date, outcome: string, factoryProjectId: string, target = server.id) => ({
+      actorId: 'session-1',
+      actorType: 'agent',
+      action: 'factory.mcp_server.tool_called',
+      targets: [{ type: 'mcp_server', id: target }],
+      metadata: { tool: 'list_collections', outcome, sessionId: 'session-1', server: 'gone-db' },
+      factoryProjectId,
+      occurredAt: at,
+    });
+    auditEvents.push(
+      event(hoursAgo(1), 'ok', 'syncts'),
+      event(hoursAgo(2), 'error', 'syncts', 'deleted-server'),
+      event(hoursAgo(3), 'ok', 'post-airborne'),
+      event(hoursAgo(30), 'ok', 'syncts'),
+    );
+
+    const res = await call('GET', '/web/mcp-servers/activity?factoryProjectId=syncts');
+    expect(res.status).toBe(200);
+    const activity = await res.json();
+    expect(activity).toMatchObject({ since: hoursAgo(24).toISOString(), total: 2, errors: 1, truncated: false });
+    expect(activity.calls.map((c: { serverLabel: string; outcome: string }) => [c.serverLabel, c.outcome])).toEqual([
+      ['Syncta Firestore', 'ok'],
+      ['gone-db', 'error'],
+    ]);
+    expect(auditQueries.at(-1)).toMatchObject({ factoryProjectId: 'syncts', actions: ['factory.mcp_server.tool_called', 'factory.mcp_server.tool_tried'] });
+  });
+
+  it('asks which Factory', async () => {
+    const { call } = await setup({ now });
+    expect((await call('GET', '/web/mcp-servers/activity')).status).toBe(400);
   });
 });
 

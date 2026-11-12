@@ -46,7 +46,7 @@ export interface McpServerRoutesOptions {
   };
   /** The audit trail, read for a server's recent calls. */
   auditLog?: {
-    list(input: { orgId: string; actions?: string[]; limit?: number }): Promise<{
+    list(input: { orgId: string; factoryProjectId?: string; actions?: string[]; limit?: number; before?: string }): Promise<{
       events: Array<{
         actorId: string;
         actorType: string;
@@ -56,8 +56,11 @@ export interface McpServerRoutesOptions {
         factoryProjectId: string | null;
         occurredAt: Date;
       }>;
+      nextCursor?: string;
     }>;
   };
+  /** The clock activity windows are measured from (tests pin it). */
+  now?: () => Date;
 }
 
 /** One call to a server's tool, as the page lists it. */
@@ -73,6 +76,45 @@ export interface McpServerCall {
 }
 
 const RECENT_CALLS = 20;
+
+/** One call in a Factory's activity: the call, and which server it went to. */
+export interface McpActivityCall extends McpServerCall {
+  serverId: string;
+  serverLabel: string;
+}
+
+/** What «Активність» on Підключення shows: the window's counts and its newest calls. */
+export interface McpActivity {
+  since: string;
+  total: number;
+  errors: number;
+  calls: McpActivityCall[];
+  /** The trail held more than was read: counts are a lower bound. */
+  truncated: boolean;
+}
+
+const CALL_ACTIONS = ['factory.mcp_server.tool_called', 'factory.mcp_server.tool_tried'];
+const ACTIVITY_CALLS = 50;
+const ACTIVITY_PAGE = 200;
+const ACTIVITY_PAGES = 5;
+const ACTIVITY_MAX_HOURS = 24 * 7;
+
+type AuditEvent = Awaited<ReturnType<NonNullable<McpServerRoutesOptions['auditLog']>['list']>>['events'][number];
+
+/** An audit event of a tool call as the page lists it: no payloads, a person's try marked as such. */
+function callOf(event: AuditEvent): McpServerCall {
+  const tried = event.action === 'factory.mcp_server.tool_tried';
+  const sessionId = typeof event.metadata.sessionId === 'string' ? event.metadata.sessionId : undefined;
+  return {
+    at: new Date(event.occurredAt).toISOString(),
+    tool: String(event.metadata.tool ?? ''),
+    outcome: event.metadata.outcome === 'error' ? 'error' : 'ok',
+    ...(typeof event.metadata.durationMs === 'number' ? { durationMs: event.metadata.durationMs } : {}),
+    ...(sessionId && !tried ? { sessionId } : {}),
+    ...(event.factoryProjectId ? { factoryProjectId: event.factoryProjectId } : {}),
+    tried,
+  };
+}
 
 class Refusal extends Error {
   readonly status: 400 | 401 | 403 | 404 | 409 | 422;
@@ -174,6 +216,7 @@ function target(server: McpServerView) {
 
 export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[] {
   const { auth, servers, hub, audit, credentials, managed, auditLog } = options;
+  const now = options.now ?? (() => new Date());
   return [
     registerApiRoute('/web/mcp-servers', {
       method: 'GET',
@@ -191,6 +234,45 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
         const factoryProjectId = c.req.query('factoryProjectId');
         if (!factoryProjectId || factoryProjectId.length > 128) throw new Refusal(400, { error: 'factory_required' });
         return c.json({ suggestions: await credentials.suggestions(orgId, factoryProjectId) });
+      }),
+    }),
+    // «Активність» on a Factory's Підключення: its agents' calls through every server in the last
+    // `hours` (default 24), newest first, with counts. No payloads.
+    registerApiRoute('/web/mcp-servers/activity', {
+      method: 'GET',
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, false);
+        const factoryProjectId = c.req.query('factoryProjectId');
+        if (!factoryProjectId || factoryProjectId.length > 128) throw new Refusal(400, { error: 'factory_required' });
+        const hoursParam = Number(c.req.query('hours') ?? 24);
+        const hours = Number.isFinite(hoursParam) ? Math.min(Math.max(Math.trunc(hoursParam), 1), ACTIVITY_MAX_HOURS) : 24;
+        const since = new Date(now().getTime() - hours * 3_600_000);
+        const activity: McpActivity = { since: since.toISOString(), total: 0, errors: 0, calls: [], truncated: false };
+        if (!auditLog) return c.json(activity);
+        const labels = new Map((await servers.list(orgId)).map(server => [server.id, server.label]));
+        let before: string | undefined;
+        for (let page = 0; page < ACTIVITY_PAGES; page += 1) {
+          const result = await auditLog.list({ orgId, factoryProjectId, actions: CALL_ACTIONS, limit: ACTIVITY_PAGE, ...(before ? { before } : {}) });
+          let reachedStart = false;
+          for (const event of result.events) {
+            if (new Date(event.occurredAt) < since) {
+              reachedStart = true;
+              break;
+            }
+            const target = event.targets.find(candidate => candidate.type === 'mcp_server');
+            if (!target) continue;
+            const call = callOf(event);
+            activity.total += 1;
+            if (call.outcome === 'error') activity.errors += 1;
+            if (activity.calls.length < ACTIVITY_CALLS) {
+              activity.calls.push({ ...call, serverId: target.id, serverLabel: labels.get(target.id) ?? (typeof event.metadata.server === 'string' ? event.metadata.server : target.id) });
+            }
+          }
+          if (reachedStart || !result.nextCursor) break;
+          before = result.nextCursor;
+          if (page === ACTIVITY_PAGES - 1) activity.truncated = true;
+        }
+        return c.json(activity);
       }),
     }),
     // Choices for an input from the account another input picked (projects, databases). Read-only;
@@ -330,25 +412,13 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
         if (!auditLog) return c.json({ calls: [] });
         const page = await auditLog.list({
           orgId,
-          actions: ['factory.mcp_server.tool_called', 'factory.mcp_server.tool_tried'],
+          actions: CALL_ACTIONS,
           limit: 200,
         });
         const calls: McpServerCall[] = page.events
           .filter(event => event.targets.some(target => target.type === 'mcp_server' && target.id === serverId))
           .slice(0, RECENT_CALLS)
-          .map(event => {
-            const tried = event.action === 'factory.mcp_server.tool_tried';
-            const sessionId = typeof event.metadata.sessionId === 'string' ? event.metadata.sessionId : undefined;
-            return {
-              at: new Date(event.occurredAt).toISOString(),
-              tool: String(event.metadata.tool ?? ''),
-              outcome: event.metadata.outcome === 'error' ? 'error' : 'ok',
-              ...(typeof event.metadata.durationMs === 'number' ? { durationMs: event.metadata.durationMs } : {}),
-              ...(sessionId && !tried ? { sessionId } : {}),
-              ...(event.factoryProjectId ? { factoryProjectId: event.factoryProjectId } : {}),
-              tried,
-            };
-          });
+          .map(callOf);
         return c.json({ calls });
       }),
     }),
