@@ -146,6 +146,12 @@ describe('factoryConnections', () => {
     ]);
   });
 
+  it("lets an admin replace or remove the server's GitHub token like any other connection", () => {
+    const github = rows.find(row => row.id === 'github:4242');
+    expect(github?.state).toBe('env');
+    expect(github?.orgActions).toMatchObject({ reconnect: true, remove: true });
+  });
+
   it("folds a binding's «База» server into the binding's row and takes its health", () => {
     const binding = rows[0]!;
     expect(binding).toMatchObject({ title: 'syncta-57c6a', account: { name: 'Syncta' }, state: 'ok', server: { id: 'srv-db' } });

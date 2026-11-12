@@ -279,9 +279,11 @@ function sourceRows(sources: ConnectionSources): ConnectionRow[] {
         ...(installation.connectedBy ? { createdBy: installation.connectedBy } : {}),
         orgActions: {
           rename: installation.id ? admin : 'env',
-          // The App is re-authorized on GitHub; a stored token is replaced in its connect step; the server's token in its environment.
-          reconnect: fromEnv ? 'env' : admin,
-          remove: fromEnv ? 'env' : installation.id ? admin : 'env',
+          // The App is re-authorized on GitHub; a token — stored, or the server's legacy one — is replaced in
+          // the token step, which moves a server token into the organization's encrypted store.
+          reconnect: admin,
+          // The server refuses (409) while projects still use the connection's repositories, and says so.
+          remove: installation.id ? admin : 'env',
         },
       });
     }
