@@ -2726,16 +2726,20 @@ export class FactoryDecisionDispatcher {
     renew: (leaseExpiresAt: Date) => Promise<unknown | null>,
     effect: () => Promise<void>,
   ): Promise<void> {
-    let renewalFailure: unknown;
+    // Only a renewal the store refused proves the lease lost (another dispatcher may hold it now).
+    // A renewal that threw (a database blip) proves nothing: the next one, or the completion's own
+    // owner check, tells. Failing the attempt for it would retry, and so repeat, an effect that ran.
+    let lost: Error | undefined;
     let renewal = Promise.resolve();
     const timer = setInterval(
       () => {
         renewal = renewal.then(async () => {
+          if (lost) return;
           try {
             const renewed = await renew(new Date(Date.now() + LEASE_MS));
-            if (!renewed) renewalFailure = new Error('Factory dispatch lease was lost during execution.');
+            if (!renewed) lost = new Error('Factory dispatch lease was lost during execution.');
           } catch (error) {
-            renewalFailure = error;
+            console.warn('Factory dispatch lease renewal failed; keeping the claim', sanitizeDispatchError(error));
           }
         });
       },
@@ -2745,7 +2749,7 @@ export class FactoryDecisionDispatcher {
     try {
       await effect();
       await renewal;
-      if (renewalFailure) throw renewalFailure;
+      if (lost) throw lost;
     } finally {
       clearInterval(timer);
       await renewal;

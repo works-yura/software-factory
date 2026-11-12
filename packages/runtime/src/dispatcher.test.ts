@@ -1488,6 +1488,70 @@ describe('FactoryDecisionDispatcher', () => {
     }
   });
 
+  it('keeps a decision whose lease renewal failed once and then succeeded, instead of rerunning it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Review completion.',
+        idempotencyKey: 'message-1',
+      });
+      let accept!: (value: unknown) => void;
+      const accepted = new Promise<unknown>(resolve => {
+        accept = resolve;
+      });
+      const { controller, sendNotificationSignal } = createSession(accepted);
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-null',
+        kickoffMessage: null,
+      });
+      // A database blip on one renewal; the next one goes through, so the claim was never lost.
+      const renew = vi
+        .spyOn(storage, 'renewDeferredDecisionLease')
+        .mockRejectedValueOnce(new Error('connection reset by peer'));
+      const dispatcher = new FactoryDecisionDispatcher({
+        harness: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      const dispatch = dispatcher.runOnce();
+      await vi.advanceTimersByTimeAsync(20_001);
+      expect(renew).toHaveBeenCalledTimes(2);
+      accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
+      await dispatch;
+
+      const [message] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(message).toMatchObject({ status: 'succeeded', deliveryGeneration: 0, lastError: null });
+      expect(sendNotificationSignal).toHaveBeenCalledOnce();
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps claiming newer decisions while a slow dispatch is still in flight', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
