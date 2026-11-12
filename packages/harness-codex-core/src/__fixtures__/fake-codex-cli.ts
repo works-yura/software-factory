@@ -79,6 +79,8 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
     case 'initialize':
       if (!spec.silent) reply({ userAgent: 'factory/0.200.0 (fake)', codexHome: process.env.CODEX_HOME || '', platformFamily: 'unix', platformOs: 'macos' });
       return;
+    case 'account/login/start':
+      return reply({ type: params.type });
     case 'account/read':
       return reply({ account: null, requiresOpenaiAuth: true });
     case 'model/list':
