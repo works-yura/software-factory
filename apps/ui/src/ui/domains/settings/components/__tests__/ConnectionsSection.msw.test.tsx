@@ -223,19 +223,14 @@ describe('Підключення', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('add=1&step=clickup');
   });
 
-  it('keeps actions a token from the server environment cannot take, disabled, saying where to change it', async () => {
+  it("lets the organization rename, replace or delete the server's GitHub token connection", async () => {
     useHandlers();
     renderConnections();
     await rows();
     await openMenu('yura');
-    // Its name is the organization's to give; its token is the server's.
-    expect(screen.getByRole('menuitem', { name: 'Rename' })).not.toHaveAttribute('aria-disabled', 'true');
-    for (const name of [/^Reconnect/, /^Delete connection/]) {
-      const item = screen.getByRole('menuitem', { name });
-      expect(item).toHaveAttribute('aria-disabled', 'true');
-      // The reason is its own line under the item (outside the disabled dimming), read out as the item's description.
-      expect(item).toHaveAccessibleDescription('Set in the server environment — change the environment variables');
-      expect(item).not.toHaveTextContent('Set in the server environment');
+    // Replacing moves the server's token into the organization's store; deleting shows what moves first.
+    for (const name of ['Rename', /^Reconnect/, /^Delete connection/]) {
+      expect(screen.getByRole('menuitem', { name })).not.toHaveAttribute('aria-disabled', 'true');
     }
   });
 
