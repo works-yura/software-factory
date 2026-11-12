@@ -376,6 +376,8 @@ export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
+  // Third-party connectors for Settings › Підключення, imported at boot (ADR-0037).
+  connectorPackages: (process.env.FACTORY_CONNECTOR_PACKAGES ?? '').split(',').map(spec => spec.trim()).filter(Boolean),
   configVersion: factoryConfigVersion,
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.

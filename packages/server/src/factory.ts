@@ -114,7 +114,7 @@ import type {
 import type { ChatTranscriptSession, ClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import type { ModelSelection } from '@factory/harness/models/contracts';
 import { withConnectionAvailability } from '@factory/harness/models/facet';
-import { CLAUDE_CODE_HARNESS, CODEX_HARNESS } from '@factory/contracts';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
 import { chainSessionResolvers, codexAwareModelSelectionReader } from '@factory/harness-codex-ui';
 import { findCodexBinary } from '@factory/harness-codex';
 import type { CodexSession, CodexSessionMode } from '@factory/harness-codex';
@@ -147,7 +147,7 @@ import { isFactoryGithubLogin, trustedCollaborator } from '@factory/integration-
 import { dismissStaleFactoryReviews } from '@factory/integration-github';
 import { createGithubReviewStatusReporter, reviewStatusAnimationFromEnv } from '@factory/integration-github';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
-import { buildPlatformConnectRoutes } from '@factory/integrations';
+import { buildPlatformConnectRoutes, loadConnectorPackages } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
 import {
@@ -439,6 +439,12 @@ export interface MastraFactoryConfig {
    * were dropped (see MIGRATION.md).
    */
   integrations?: FactoryIntegration[];
+  /**
+   * Connector packages to import at boot (`FACTORY_CONNECTOR_PACKAGES`, ADR-0037): module specifiers
+   * or paths, each exporting `connector` (`ConnectorPackage`). One that does not load is named in
+   * Settings › Підключення and the server starts anyway.
+   */
+  connectorPackages?: readonly string[];
   /**
    * Operator-maintained provenance label stamped on transition audit rows,
    * deferred decisions, and session kickoff headers so a row can be traced
@@ -1195,6 +1201,16 @@ export class MastraFactory {
         }),
       );
     }
+
+    // Connector packages named in configuration (ADR-0037): imported once at boot, checked against the
+    // connections contract; one that fails is isolated and named in Settings › Підключення.
+    const loadedConnectorPackages = await loadConnectorPackages(this.#config.connectorPackages ?? [], {
+      reservedIds: [
+        ...integrations.map(integration => integration.id),
+        'mcp',
+        ...HARNESSES.flatMap(harness => (harness.setup.accounts ? [harness.setup.accounts.connector] : [])),
+      ],
+    });
 
     // Every integration uses generic integration storage. Version-control
     // providers additionally require the source-control storage domain. Readiness
@@ -2995,8 +3011,10 @@ export class MastraFactory {
           ...(device ? device.routes : []),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
-            // Settings › Підключення: MCP servers are a connector beside the integrations (ADR-0035).
+            // Settings › Підключення: MCP servers are a connector beside the integrations (ADR-0035),
+            // then the connector packages loaded at boot (ADR-0037).
             connectors: [
+              ...loadedConnectorPackages.registrations,
               {
                 id: 'mcp',
                 connections: new McpConnections({
