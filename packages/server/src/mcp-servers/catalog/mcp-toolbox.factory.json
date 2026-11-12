@@ -1,6 +1,7 @@
 {
   "server": "io.github.googleapis/mcp-toolbox",
   "id": "mcp-toolbox",
+  "integration": "google-cloud",
   "label": { "uk": "База даних (MCP Toolbox)", "en": "Database (MCP Toolbox)" },
   "summary": {
     "uk": "Агенти читають базу через MCP Toolbox від Google: Firestore, PostgreSQL або ваш tools.yaml. Лише читання, якщо в облікового запису лише права на читання.",
@@ -38,8 +39,8 @@
     "GOOGLE_APPLICATION_CREDENTIALS": {
       "label": { "uk": "Акаунт Google Cloud", "en": "Google Cloud account" },
       "description": {
-        "uk": "Один з акаунтів Google Cloud (Інтеграції › Сервіси › Google Cloud). Для читання досить ролі Cloud Datastore Viewer.",
-        "en": "One of the Google Cloud accounts (Integrations › Services › Google Cloud). Cloud Datastore Viewer is enough for reading."
+        "uk": "Один з акаунтів Google Cloud (Підключення › Google Cloud). Для читання досить ролі Cloud Datastore Viewer.",
+        "en": "One of the Google Cloud accounts (Connections › Google Cloud). Cloud Datastore Viewer is enough for reading."
       },
       "credential": "google-cloud-account"
     },

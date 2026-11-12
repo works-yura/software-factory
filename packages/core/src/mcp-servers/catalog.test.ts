@@ -63,6 +63,11 @@ const overlay = {
 };
 
 describe('mcpCatalogEntry', () => {
+  it('names the first-party integration that runs the entry under the hood, when the overlay says so', () => {
+    expect(mcpCatalogEntry(manifest, overlay).integration).toBeUndefined();
+    expect(mcpCatalogEntry(manifest, { ...overlay, integration: 'google-cloud' }).integration).toBe('google-cloud');
+  });
+
   it('builds the form from server.json inputs and the overlay, honouring required, secret, file, default and choices', () => {
     const entry = mcpCatalogEntry(manifest, overlay);
     expect(entry.package).toEqual({ registryType: 'npm', identifier: '@example/weather-mcp', version: '1.2.0', entrypoint: 'dist/cli.js' });
@@ -93,6 +98,7 @@ describe('mcpCatalogEntry', () => {
 
   it('fails loudly on a broken manifest, a mismatched overlay, or an input the manifest does not declare', () => {
     expect(() => mcpCatalogEntry({ ...manifest, name: 'not a name' }, overlay)).toThrow(McpCatalogError);
+    expect(() => mcpCatalogEntry(manifest, { ...overlay, integration: 'firebase' })).toThrow(McpCatalogError);
     expect(() => mcpCatalogEntry(manifest, { ...overlay, server: 'io.github.example/other' })).toThrow(/not io.github.example\/weather/);
     expect(() =>
       mcpCatalogEntry(manifest, { ...overlay, variants: [{ ...overlay.variants[0], inputs: ['UNDECLARED'] }] }),

@@ -121,6 +121,12 @@ export const mcpCatalogOverlaySchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{1,40}$/),
   label: localizedSchema,
   summary: localizedSchema,
+  /**
+   * The first-party integration that runs this server under the hood (`google-cloud` for MCP
+   * Toolbox's Firestore). People never pick it from the catalog: they connect the integration, and
+   * a server made from it shows as that integration's capability, not as an MCP server.
+   */
+  integration: z.enum(['google-cloud', 'clickup', 'github', 'gitlab']).optional(),
   /** The installed package's launcher, relative to the package root (npm packages run with this Node). */
   entrypoint: z.string().min(1),
   /** Ways to run the server; a person picks one (e.g. which database). Absent: one way, every input. */
@@ -188,6 +194,8 @@ export interface McpCatalogEntry {
   label: McpLocalized;
   summary: McpLocalized;
   websiteUrl?: string;
+  /** Run under the hood by this first-party integration; hidden from the catalog people pick from. */
+  integration?: 'google-cloud' | 'clickup' | 'github' | 'gitlab';
   package: { registryType: string; identifier: string; version: string; entrypoint: string };
   variants: McpCatalogVariant[];
 }
@@ -265,6 +273,7 @@ export function mcpCatalogEntry(manifest: unknown, overlay: unknown): McpCatalog
     label: extra.data.label,
     summary: extra.data.summary,
     ...(server.data.websiteUrl ? { websiteUrl: server.data.websiteUrl } : {}),
+    ...(extra.data.integration ? { integration: extra.data.integration } : {}),
     package: { registryType: pkg.registryType, identifier: pkg.identifier, version: pkg.version, entrypoint: extra.data.entrypoint },
     variants,
   };
