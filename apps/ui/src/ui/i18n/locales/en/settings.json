@@ -16,7 +16,7 @@
     "repositories": "Repositories",
     "environment": "Environment",
     "intake": "Work Intake",
-    "integrations": "Integrations",
+    "integrations": "Connections",
     "board": "Boards",
     "models": "Harness",
     "skills": "Skills",
@@ -54,7 +54,7 @@
     "clickupLink": {
       "connected": "ClickUp is connected.",
       "notConnected": "ClickUp is not connected.",
-      "open": "Set it up in Integrations"
+      "open": "Set it up in Connections"
     }
   },
   "intakeSource": {
@@ -225,8 +225,8 @@
     "githubFromEnv": "GitHub managed by the deployment's access token (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab managed by deployment environment variables",
     "environmentHint": "Sandbox resources, repository order and setup commands live in <link>Environment</link>.",
-    "connectionsHint": "Connecting GitHub and GitLab is under Integrations.",
-    "openIntegrations": "Open Integrations"
+    "connectionsHint": "GitHub and GitLab are connected under Connections.",
+    "openIntegrations": "Open Connections"
   },
   "skills": {
     "title": "Factory skills",
@@ -1081,7 +1081,7 @@
     "field": {
       "required": "required",
       "default": "Empty means {{value}}",
-      "noAccounts": "No Google Cloud account yet. Add one here or in Integrations › Google Cloud.",
+      "noAccounts": "No Google Cloud account yet. Add one here or in Connections › Google Cloud.",
       "pickAccount": "Pick an account",
       "suggest": "Use «{{value}}» from the Factory's binding",
       "pickChoice": "Pick one",
@@ -1238,7 +1238,7 @@
     "managed": {
       "title": "Managed by {{integration}}",
       "hint": "Its binding in the service sets the config and access; here you can change only what each tool may do and the masking.",
-      "open": "Open in Services",
+      "open": "Open Google Cloud",
       "accessHint": "Its binding in the service sets which Factory gets it.",
       "summary": "managed by {{integration}}",
       "by": {
@@ -1338,7 +1338,7 @@
       "removeBinding": "Remove binding",
       "removeAria": "Remove binding {{title}}",
       "database": "Database (Firestore)",
-      "databaseHint": "Agents read this project’s Firestore through MCP Toolbox. Read-only when the account has only Cloud Datastore Viewer. Shows in the MCP tab as “managed by Google Cloud”.",
+      "databaseHint": "Agents read this project’s Firestore through MCP Toolbox. Read-only when the account has only Cloud Datastore Viewer. What its tools may do is set on this connection’s page.",
       "databaseId": "Firestore database",
       "databaseIdHint": "Empty for the (default) database.",
       "databaseOn": "database"
@@ -1482,13 +1482,7 @@
     }
   },
   "integrations": {
-    "tabs": {
-      "services": "Services",
-      "mcp": "MCP"
-    },
     "services": {
-      "title": "Services",
-      "description": "What the Factory connects to. Some run an MCP server under the hood (the Google Cloud database is MCP Toolbox); you never set it up separately.",
       "names": {
         "google-cloud": "Google Cloud",
         "clickup": "ClickUp",
@@ -1563,6 +1557,135 @@
       "current": "Current",
       "switch": "Switch",
       "switchNamed": "Switch to {{name}}"
+    }
+  },
+  "connections": {
+    "title": "Connections",
+    "description": "Services and tools this Factory's agents use. Accounts belong to the organization: one can be linked to several Factories.",
+    "add": "Add connection",
+    "loading": "Loading connections…",
+    "empty": "This Factory uses nothing yet. Add a connection: Google Cloud, an MCP server, ClickUp or GitHub.",
+    "listLabel": "This Factory's connections",
+    "columns": {
+      "integration": "Integration",
+      "account": "Account",
+      "capabilities": "Capabilities",
+      "state": "Status",
+      "actions": "Actions"
+    },
+    "mcpBadge": "MCP",
+    "organizationWide": "Whole organization",
+    "kinds": {
+      "google-cloud": "Google Cloud",
+      "mcp": "MCP server",
+      "clickup": "ClickUp",
+      "github": "GitHub",
+      "gitlab": "GitLab"
+    },
+    "summaries": {
+      "google-cloud": "Logs, crashes and the Firestore database of Google Cloud projects through a service account.",
+      "mcp-custom": "Your own MCP server: a local command or an address.",
+      "clickup": "Tasks from ClickUp Lists land on boards by the intake routes.",
+      "github": "GitHub repositories, issues and pull requests.",
+      "gitlab": "GitLab repositories and issues."
+    },
+    "capabilities": {
+      "logs": "Logs",
+      "crashes_one": "Crashes · {{count}} app",
+      "crashes_other": "Crashes · {{count}} apps",
+      "database": "Database (MCP)",
+      "tools_one": "{{count}} tool",
+      "tools_other": "{{count}} tools",
+      "tasks": "Tasks",
+      "repositories": "Repositories"
+    },
+    "states": {
+      "ok": "Working",
+      "error": "Error",
+      "needs_auth": "Needs access",
+      "unchecked": "Not checked yet",
+      "disabled": "Off",
+      "configured": "Set up",
+      "reads-nothing": "Reads nothing",
+      "connected": "Connected",
+      "env": "From the server environment"
+    },
+    "actions": {
+      "menu": "Actions for {{name}}",
+      "open": "Open",
+      "rename": "Rename",
+      "renameAccount": "Rename account",
+      "reconnect": "Reconnect",
+      "unlink": "Unlink from Factory",
+      "delete": "Delete from organization",
+      "deleteAccount": "Remove account from organization"
+    },
+    "rename": {
+      "title": "Rename “{{name}}”",
+      "label": "Name",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saved": "Renamed"
+    },
+    "unlink": {
+      "title": "Unlink “{{name}}” from this Factory?",
+      "mcpBody": "This Factory's agents stop seeing the server's tools and its access settings for this Factory are cleared. The server stays in the organization for other Factories.",
+      "bindingBody": "The Factory stops reading this project; its logs, crashes, apps and database settings are cleared. The account stays in the organization.",
+      "confirm": "Unlink",
+      "cancel": "Cancel",
+      "done": "Unlinked from the Factory"
+    },
+    "delete": {
+      "title": "Delete “{{name}}” from the organization?",
+      "body": "The server goes for every Factory, with its keys and settings. This cannot be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "done": "Deleted"
+    },
+    "reconnected_one": "Reconnected: {{count}} tool",
+    "reconnected_other": "Reconnected: {{count}} tools",
+    "reconnectFailed": "Could not reconnect: {{error}}",
+    "back": "All connections",
+    "detail": {
+      "account": "Google Cloud account",
+      "database": "Database (MCP Toolbox)",
+      "databaseHint": "What the database tools may do and whether personal data is masked. The binding above sets the project and access.",
+      "notFound": "This connection is gone: it was unlinked or deleted.",
+      "newMcp": "New MCP server"
+    },
+    "drawer": {
+      "title": "Add connection",
+      "description": "A new integration for this Factory, or an account the organization already has.",
+      "search": "Search integrations and accounts",
+      "filters": {
+        "label": "Type",
+        "all": "All",
+        "tools": "Tools",
+        "sources": "Sources"
+      },
+      "accounts": "Already in the organization",
+      "catalog": "Integrations",
+      "link": "Link",
+      "connect": "Connect",
+      "open": "Open",
+      "connected": "Connected",
+      "nothing": "Nothing found.",
+      "linked": "“{{name}}” linked to the Factory",
+      "accountHint": "A new project through this account"
+    },
+    "activity": {
+      "title": "Activity",
+      "description": "Tool calls by this Factory's agents in the last 24 hours. Only MCP server calls are recorded so far (including the Google Cloud database); reading logs and crashes is not logged.",
+      "none": "No calls by agents in the last 24 hours.",
+      "summary_one": "{{count}} call · errors: {{errors}}",
+      "summary_other": "{{count}} calls · errors: {{errors}}",
+      "truncated": "Not everything is shown: there are more calls than were read.",
+      "unavailable": "Activity is unavailable right now.",
+      "listLabel": "Latest calls",
+      "ok": "ok",
+      "error": "error",
+      "tried": "tried from settings",
+      "session": "Open session"
     }
   }
 }

@@ -23,7 +23,7 @@ function renderService(element: ReactElement) {
 const signedIn = () =>
   http.get(`${TEST_BASE_URL}/auth/me`, () => HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }));
 
-describe('Integrations › GitLab', () => {
+describe('Connections › GitLab', () => {
   it('offers reconnection when the Platform GitLab account needs reauthorization', async () => {
     server.use(
       signedIn(),
@@ -60,7 +60,7 @@ describe('Integrations › GitLab', () => {
   });
 });
 
-describe('Integrations › GitHub', () => {
+describe('Connections › GitHub', () => {
   it('names a deployment access token and offers no Manage step', async () => {
     server.use(
       signedIn(),

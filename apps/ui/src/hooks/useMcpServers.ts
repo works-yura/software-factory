@@ -6,6 +6,7 @@ import {
   checkMcpServerDraft,
   deleteMcpServer,
   discoverMcpChoices,
+  fetchMcpActivity,
   fetchMcpServers,
   fetchMcpServerCalls,
   fetchMcpSuggestions,
@@ -72,5 +73,16 @@ export function useMcpServerCalls(id: string | undefined) {
     queryKey: ['mcp-servers', 'calls', baseUrl, id] as const,
     queryFn: () => fetchMcpServerCalls(baseUrl, id!),
     enabled: Boolean(id),
+  });
+}
+
+/** A Factory's agent calls through its MCP servers in the last 24 hours, for «Активність». */
+export function useMcpActivity(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: ['mcp-servers', 'activity', baseUrl, factoryProjectId] as const,
+    queryFn: () => fetchMcpActivity(baseUrl, factoryProjectId!),
+    enabled: Boolean(factoryProjectId),
+    refetchInterval: 60_000,
   });
 }

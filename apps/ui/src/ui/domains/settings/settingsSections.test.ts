@@ -1,23 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { integrationsPath, isSettingsSection, retiredSettingsTarget } from './settingsSections';
+import { connectionsPath, isSettingsSection, retiredSettingsTarget } from './settingsSections';
 
-describe('Settings › Інтеграції', () => {
-  it('sends the retired «Логи і креші» and «MCP-сервери» pages to their place in Інтеграції', () => {
-    expect(retiredSettingsTarget('observability', '')).toEqual({
-      section: 'integrations',
-      search: '?tab=services&service=google-cloud',
-    });
-    expect(retiredSettingsTarget('mcp-servers', '')).toEqual({ section: 'integrations', search: '?tab=mcp' });
+describe('Settings › Підключення', () => {
+  it('sends the retired «Логи і креші» and «MCP-сервери» pages to Підключення', () => {
+    expect(retiredSettingsTarget('observability', '')).toEqual({ section: 'integrations', search: '?connection=google-cloud' });
+    expect(retiredSettingsTarget('mcp-servers', '')).toEqual({ section: 'integrations' });
     expect(isSettingsSection('observability')).toBe(false);
     expect(isSettingsSection('mcp-servers')).toBe(false);
     expect(isSettingsSection('integrations')).toBe(true);
   });
 
-  it('links a tab and, on Сервіси, the service to open', () => {
-    expect(integrationsPath('fp-1', { tab: 'mcp' })).toBe('/factories/fp-1/settings/integrations?tab=mcp');
-    expect(integrationsPath('fp-1', { tab: 'services', service: 'clickup' })).toBe(
-      '/factories/fp-1/settings/integrations?tab=services&service=clickup',
-    );
+  it('links the list, or one integration to open', () => {
+    expect(connectionsPath('fp-1')).toBe('/factories/fp-1/settings/integrations');
+    expect(connectionsPath('fp-1', 'clickup')).toBe('/factories/fp-1/settings/integrations?connection=clickup');
   });
 });

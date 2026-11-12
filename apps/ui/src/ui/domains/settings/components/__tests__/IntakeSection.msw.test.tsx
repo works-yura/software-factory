@@ -33,14 +33,14 @@ function useHandlers(clickup: { connected: boolean }) {
 }
 
 describe('IntakeSection', () => {
-  it('keeps only the routes, with one line about ClickUp that links to Integrations', async () => {
+  it('keeps only the routes, with one line about ClickUp that links to Connections', async () => {
     useHandlers({ connected: true });
     renderIntake();
 
     expect(await screen.findByText(/ClickUp is connected\./)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Set it up in Integrations' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Set it up in Connections' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/integrations?tab=services&service=clickup`,
+      `/factories/${FACTORY_ID}/settings/integrations?connection=clickup`,
     );
     expect(screen.queryByRole('switch', { name: 'Import ClickUp tasks' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Sources' })).not.toBeInTheDocument();

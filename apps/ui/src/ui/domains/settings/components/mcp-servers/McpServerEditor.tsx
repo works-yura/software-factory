@@ -46,7 +46,7 @@ import { McpCatalogFields, localized } from './McpCatalogFields';
 import type { CatalogFieldValues } from './McpCatalogFields';
 import { AssignmentRow, newAssignment, PolicySelect } from './McpServerAccess';
 import { inspectTools, mcpErrorText, McpRecentCalls, McpToolsPanel } from './McpServerInspect';
-import { integrationsPath } from '../../settingsSections';
+import { connectionsPath } from '../../settingsSections';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -255,7 +255,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
       {managedBy && (
         <SettingsRow label={t('mcpServers.managed.title', { integration: t(`mcpServers.managed.by.${managedBy}`, { defaultValue: managedBy }) })} description={t('mcpServers.managed.hint')}>
           {factoryId && (
-            <Link to={integrationsPath(factoryId, { tab: 'services', service: 'google-cloud' })} className="underline">
+            <Link to={connectionsPath(factoryId, 'google-cloud')} className="underline">
               {t('mcpServers.managed.open')}
             </Link>
           )}

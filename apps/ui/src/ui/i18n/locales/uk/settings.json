@@ -16,7 +16,7 @@
     "repositories": "Репозиторії",
     "environment": "Середовище",
     "intake": "Надходження задач",
-    "integrations": "Інтеграції",
+    "integrations": "Підключення",
     "board": "Дошки",
     "models": "Харнес",
     "skills": "Скіли",
@@ -54,7 +54,7 @@
     "clickupLink": {
       "connected": "ClickUp підключено.",
       "notConnected": "ClickUp не підключено.",
-      "open": "Налаштувати в «Інтеграціях»"
+      "open": "Налаштувати в «Підключеннях»"
     }
   },
   "intakeSource": {
@@ -227,8 +227,8 @@
     "githubFromEnv": "GitHub налаштовано токеном доступу розгортання (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab налаштовано через змінні середовища розгортання",
     "environmentHint": "Ресурси пісочниці, порядок репозиторіїв і команди налаштування задаються в розділі <link>Середовище</link>.",
-    "connectionsHint": "Підключення GitHub і GitLab — у розділі «Інтеграції».",
-    "openIntegrations": "Відкрити «Інтеграції»"
+    "connectionsHint": "GitHub і GitLab підключаються в розділі «Підключення».",
+    "openIntegrations": "Відкрити «Підключення»"
   },
   "skills": {
     "title": "Скіли Factory",
@@ -1089,7 +1089,7 @@
     "field": {
       "required": "обов'язково",
       "default": "Порожньо — {{value}}",
-      "noAccounts": "Ще немає жодного акаунта Google Cloud. Додайте його тут або в «Інтеграції › Google Cloud».",
+      "noAccounts": "Ще немає жодного акаунта Google Cloud. Додайте його тут або в «Підключення › Google Cloud».",
       "pickAccount": "Оберіть акаунт",
       "suggest": "Взяти «{{value}}» з прив'язки Factory",
       "pickChoice": "Оберіть",
@@ -1250,7 +1250,7 @@
     "managed": {
       "title": "Керує {{integration}}",
       "hint": "Налаштування й доступ задає прив’язка в сервісі; тут можна змінити лише, що можна робити кожним інструментом, і маскування.",
-      "open": "Відкрити в «Сервісах»",
+      "open": "Відкрити Google Cloud",
       "accessHint": "Factory, які його отримують, задає прив’язка в сервісі.",
       "summary": "керує {{integration}}",
       "by": {
@@ -1356,7 +1356,7 @@
       "removeBinding": "Видалити прив’язку",
       "removeAria": "Видалити прив’язку {{title}}",
       "database": "База (Firestore)",
-      "databaseHint": "Агенти читають Firestore цього проєкту через MCP Toolbox. Лише читання, якщо в акаунта лише роль Cloud Datastore Viewer. З’являється у вкладці MCP як «керує Google Cloud».",
+      "databaseHint": "Агенти читають Firestore цього проєкту через MCP Toolbox. Лише читання, якщо в акаунта лише роль Cloud Datastore Viewer. Що можуть його інструменти, налаштовується на сторінці цього підключення.",
       "databaseId": "База Firestore",
       "databaseIdHint": "Порожньо — база (default).",
       "databaseOn": "база"
@@ -1500,13 +1500,7 @@
     }
   },
   "integrations": {
-    "tabs": {
-      "services": "Сервіси",
-      "mcp": "MCP"
-    },
     "services": {
-      "title": "Сервіси",
-      "description": "Підключення, з якими працює Factory. Деякі під капотом запускають MCP-сервер (база Google Cloud — це MCP Toolbox); налаштовувати його окремо не треба.",
       "names": {
         "google-cloud": "Google Cloud",
         "clickup": "ClickUp",
@@ -1581,6 +1575,143 @@
       "current": "Поточна",
       "switch": "Перейти",
       "switchNamed": "Перейти до {{name}}"
+    }
+  },
+  "connections": {
+    "title": "Підключення",
+    "description": "Сервіси й інструменти, якими користуються агенти цієї Factory. Акаунти належать організації: один і той самий можна під'єднати до кількох Factory.",
+    "add": "Додати підключення",
+    "loading": "Завантажую підключення…",
+    "empty": "Ця Factory ще нічим не користується. Додайте підключення: Google Cloud, сервер MCP, ClickUp чи GitHub.",
+    "listLabel": "Підключення цієї Factory",
+    "columns": {
+      "integration": "Інтеграція",
+      "account": "Акаунт",
+      "capabilities": "Можливості",
+      "state": "Стан",
+      "actions": "Дії"
+    },
+    "mcpBadge": "MCP",
+    "organizationWide": "Уся організація",
+    "kinds": {
+      "google-cloud": "Google Cloud",
+      "mcp": "Сервер MCP",
+      "clickup": "ClickUp",
+      "github": "GitHub",
+      "gitlab": "GitLab"
+    },
+    "summaries": {
+      "google-cloud": "Логи, креші й база Firestore проєктів Google Cloud через сервісний акаунт.",
+      "mcp-custom": "Свій сервер MCP: локальна команда або адреса.",
+      "clickup": "Задачі зі списків ClickUp потрапляють на дошки за маршрутами надходження.",
+      "github": "Репозиторії, задачі й pull request'и GitHub.",
+      "gitlab": "Репозиторії й задачі GitLab."
+    },
+    "capabilities": {
+      "logs": "Логи",
+      "crashes_one": "Креші · {{count}} застосунок",
+      "crashes_few": "Креші · {{count}} застосунки",
+      "crashes_many": "Креші · {{count}} застосунків",
+      "crashes_other": "Креші · {{count}} застосунку",
+      "database": "База (MCP)",
+      "tools_one": "{{count}} інструмент",
+      "tools_few": "{{count}} інструменти",
+      "tools_many": "{{count}} інструментів",
+      "tools_other": "{{count}} інструменту",
+      "tasks": "Задачі",
+      "repositories": "Репозиторії"
+    },
+    "states": {
+      "ok": "Працює",
+      "error": "Помилка",
+      "needs_auth": "Потрібен доступ",
+      "unchecked": "Ще не перевірявся",
+      "disabled": "Вимкнено",
+      "configured": "Налаштовано",
+      "reads-nothing": "Нічого не читає",
+      "connected": "Підключено",
+      "env": "З середовища сервера"
+    },
+    "actions": {
+      "menu": "Дії для {{name}}",
+      "open": "Відкрити",
+      "rename": "Перейменувати",
+      "renameAccount": "Перейменувати акаунт",
+      "reconnect": "Перепідключити",
+      "unlink": "Відв'язати від Factory",
+      "delete": "Видалити з організації",
+      "deleteAccount": "Видалити акаунт з організації"
+    },
+    "rename": {
+      "title": "Перейменувати «{{name}}»",
+      "label": "Назва",
+      "save": "Зберегти",
+      "cancel": "Скасувати",
+      "saved": "Назву змінено"
+    },
+    "unlink": {
+      "title": "Відв'язати «{{name}}» від цієї Factory?",
+      "mcpBody": "Агенти цієї Factory більше не бачитимуть інструменти сервера, а його налаштування доступу для неї зітруться. Сервер лишиться в організації для інших Factory.",
+      "bindingBody": "Factory перестане читати цей проєкт; налаштування логів, крешів, застосунків і бази для нього зітруться. Акаунт лишиться в організації.",
+      "confirm": "Відв'язати",
+      "cancel": "Скасувати",
+      "done": "Відв'язано від Factory"
+    },
+    "delete": {
+      "title": "Видалити «{{name}}» з організації?",
+      "body": "Сервер зникне для всіх Factory, разом із ключами й налаштуваннями. Цього не скасувати.",
+      "confirm": "Видалити",
+      "cancel": "Скасувати",
+      "done": "Видалено"
+    },
+    "reconnected_one": "Перепідключено: {{count}} інструмент",
+    "reconnected_few": "Перепідключено: {{count}} інструменти",
+    "reconnected_many": "Перепідключено: {{count}} інструментів",
+    "reconnected_other": "Перепідключено: {{count}} інструменту",
+    "reconnectFailed": "Не вдалося перепідключити: {{error}}",
+    "back": "Усі підключення",
+    "detail": {
+      "account": "Акаунт Google Cloud",
+      "database": "База (MCP Toolbox)",
+      "databaseHint": "Що можуть інструменти бази і чи маскувати персональні дані. Проєкт і доступ задає прив'язка вище.",
+      "notFound": "Такого підключення вже немає: його відв'язали чи видалили.",
+      "newMcp": "Новий сервер MCP"
+    },
+    "drawer": {
+      "title": "Додати підключення",
+      "description": "Нова інтеграція для цієї Factory або акаунт, який уже є в організації.",
+      "search": "Пошук інтеграцій і акаунтів",
+      "filters": {
+        "label": "Тип",
+        "all": "Усі",
+        "tools": "Інструменти",
+        "sources": "Джерела"
+      },
+      "accounts": "Уже є в організації",
+      "catalog": "Інтеграції",
+      "link": "Під'єднати",
+      "connect": "Підключити",
+      "open": "Відкрити",
+      "connected": "Підключено",
+      "nothing": "Нічого не знайдено.",
+      "linked": "«{{name}}» під'єднано до Factory",
+      "accountHint": "Новий проєкт через цей акаунт"
+    },
+    "activity": {
+      "title": "Активність",
+      "description": "Виклики інструментів агентами цієї Factory за останні 24 години. Поки що записуються лише виклики серверів MCP (зокрема бази Google Cloud); читання логів і крешів у журнал не пишеться.",
+      "none": "За останні 24 години агенти нічого не викликали.",
+      "summary_one": "{{count}} виклик · помилок: {{errors}}",
+      "summary_few": "{{count}} виклики · помилок: {{errors}}",
+      "summary_many": "{{count}} викликів · помилок: {{errors}}",
+      "summary_other": "{{count}} виклику · помилок: {{errors}}",
+      "truncated": "Показано не все: викликів більше, ніж прочитано.",
+      "unavailable": "Активність зараз недоступна.",
+      "listLabel": "Останні виклики",
+      "ok": "успішно",
+      "error": "помилка",
+      "tried": "спроба з налаштувань",
+      "session": "Відкрити сесію"
     }
   }
 }

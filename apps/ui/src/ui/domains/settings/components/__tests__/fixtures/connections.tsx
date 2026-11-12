@@ -1,0 +1,89 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+
+import { server } from '../../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
+import type { FirebaseState } from '../../../services/firebase';
+import type { McpServer } from '../../../services/mcpServers';
+import { ConnectionsSection } from '../../connections/ConnectionsSection';
+
+export const FACTORY_ID = 'factory-1';
+export const MCP_BASE = `${TEST_BASE_URL}/web/mcp-servers`;
+
+export const firebaseState: FirebaseState = {
+  accounts: [
+    { id: 'acc-1', name: 'Syncta', clientEmail: 'factory@syncta-57c6a.iam.gserviceaccount.com', projectId: 'syncta-57c6a', keyId: 'k', bindingIds: ['bnd-1'] },
+  ],
+  bindings: [
+    { id: 'bnd-1', factoryProjectId: FACTORY_ID, accountId: 'acc-1', projectId: 'syncta-57c6a', logs: true, crashes: false, apps: [], database: { enabled: true } },
+  ],
+};
+
+/** Google Cloud's «База» for `bnd-1`, as the server lists it. */
+export const managedServer: McpServer = {
+  id: 'srv-gc',
+  name: 'db-syncta-57c6a',
+  label: 'Firestore syncta-57c6a',
+  owner: { integration: 'firebase', key: 'bnd-1' },
+  launch: { transport: 'catalog', entry: 'mcp-toolbox', variant: 'firestore', inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' },
+    credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } },
+  },
+  secretNames: { env: [], headers: [], files: [] },
+  assignments: [{ factoryProjectId: FACTORY_ID }],
+  toolPolicies: { default: 'allow', tools: {} },
+  maskPersonalData: true,
+  enabled: true,
+  health: { state: 'ok', tools: [{ name: 'list_collections', description: '' }] },
+  updatedAt: '2026-11-12T00:00:00.000Z',
+  updatedBy: 'integration:firebase',
+};
+
+/**
+ * The integrations' state around the MCP servers a test brings: one Google Cloud binding (or
+ * none), ClickUp connected, GitHub from the environment, GitLab not set up, no activity.
+ */
+export function useIntegrationHandlers(options: { firebase?: FirebaseState } = {}) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'syncts', repositories: [] }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/firebase/status`, () => HttpResponse.json(options.firebase ?? { accounts: [], bindings: [] })),
+    http.get(`${TEST_BASE_URL}/web/clickup/status`, () =>
+      HttpResponse.json({ configured: true, connected: true, workspaces: ['eclipt.ai'], intervalSeconds: 60 }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+      HttpResponse.json({ config: { github: { enabled: false, sourceIds: null }, gitlab: { enabled: false, sourceIds: null }, clickup: { enabled: true, sourceIds: null } } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json({ enabled: true, mode: 'token', connected: true, installations: [], reason: 'ready' })),
+    http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' })),
+    http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/projects`, () => HttpResponse.json({ items: [{ value: 'syncta-57c6a' }] })),
+    http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/databases`, () => HttpResponse.json({ items: [{ value: '(default)' }] })),
+    http.get(`${MCP_BASE}/activity`, () => HttpResponse.json({ since: '2026-11-11T12:00:00.000Z', total: 0, errors: 0, calls: [], truncated: false })),
+  );
+}
+
+/** The URL's query, for tests that check what a click put there. */
+function Search() {
+  return <span data-testid="search">{useLocation().search}</span>;
+}
+
+/** Settings › Підключення of `factory-1`, at `search` (`?connection=…` opens one). */
+export function renderConnections(search = '') {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/integrations${search}`]}>
+      <Routes>
+        <Route
+          path="/factories/:factoryId/settings/integrations"
+          element={
+            <>
+              <ConnectionsSection />
+              <Search />
+              <Toaster />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}

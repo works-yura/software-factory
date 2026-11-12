@@ -154,7 +154,7 @@ export function AccountKeyDialog({
 }
 
 /** Confirms removing an account its bindings read through: the bindings go with it. */
-function RemoveAccountDialog({
+export function RemoveAccountDialog({
   account,
   bindings,
   factoryName,
@@ -214,7 +214,7 @@ function RemoveAccountDialog({
 }
 
 /** One Google Cloud account: its name, whose key it is, the bindings that use it, key and removal. */
-function AccountCard({
+export function AccountCard({
   account,
   bindings,
   factoryName,
@@ -328,17 +328,18 @@ function CheckResult({ result }: { result: FirebaseCheckResult }) {
   );
 }
 
-type BindingDraft = Omit<FirebaseBindingInput, 'projectNumber'> & { id?: string; projectNumber: string };
+export type BindingDraft = Omit<FirebaseBindingInput, 'projectNumber'> & { id?: string; projectNumber: string };
 
-const draftOf = (binding: FirebaseBinding): BindingDraft => ({ ...binding, projectNumber: binding.projectNumber ?? '' });
+export const draftOf = (binding: FirebaseBinding): BindingDraft => ({ ...binding, projectNumber: binding.projectNumber ?? '' });
 
 /** One binding: which Factory reads which Google Cloud project through which account, and a check that it can. */
-function BindingCard({
+export function BindingCard({
   stored,
   draft: initial,
   accounts,
   factories,
   onDone,
+  defaultOpen,
 }: {
   stored?: FirebaseBinding;
   draft: BindingDraft;
@@ -346,10 +347,12 @@ function BindingCard({
   factories: Factory[];
   /** A new binding was saved or dropped: the page removes its draft. */
   onDone?: () => void;
+  /** Opened by default (a connection's own page shows its binding open). */
+  defaultOpen?: boolean;
 }) {
   const { t } = useTranslation('settings');
   const { saveBinding, removeBinding, checkBinding } = useFirebaseMutations();
-  const [open, setOpen] = useState(stored === undefined);
+  const [open, setOpen] = useState(stored === undefined || defaultOpen === true);
   const [draft, setDraft] = useState<BindingDraft>(initial);
   const [result, setResult] = useState<FirebaseCheckResult | null>(null);
   // What the chosen account can see: its projects, and the project's databases once «База» is on.
@@ -594,20 +597,22 @@ function BindingCard({
 }
 
 /**
- * Settings › Інтеграції › Сервіси › Google Cloud: the org's Google Cloud accounts (each its own key)
- * and the bindings — which Factory reads which Google Cloud project through which account, and what:
+ * Settings › Підключення › Google Cloud: the organization's Google Cloud accounts (each its own key)
+ * and this Factory's bindings — which Google Cloud project it reads through which account, and what:
  * logs and crashes (our adapter) and «База», the project's Firestore through MCP Toolbox run under
- * the hood (listed in the MCP tab as «керує Google Cloud»). A Factory may have several bindings.
+ * the hood. A Factory may have several bindings. Without `factoryId` every Factory's bindings show.
+ * `linkAccountId` opens a new binding through that account (picked in «Додати підключення»).
  */
-export function GoogleCloudService() {
+export function GoogleCloudService({ factoryId, linkAccountId }: { factoryId?: string; linkAccountId?: string } = {}) {
   const { t } = useTranslation('settings');
   const state = useFirebaseStateQuery();
   const factoriesQuery = useFactoriesQuery();
   const [addingAccount, setAddingAccount] = useState(false);
-  const [drafts, setDrafts] = useState<number[]>([]);
-  const [nextDraft, setNextDraft] = useState(0);
+  const [drafts, setDrafts] = useState<number[]>(linkAccountId ? [0] : []);
+  const [nextDraft, setNextDraft] = useState(linkAccountId ? 1 : 0);
   const accounts = state.data?.accounts ?? [];
-  const bindings = state.data?.bindings ?? [];
+  const allBindings = state.data?.bindings ?? [];
+  const bindings = allBindings.filter(binding => !factoryId || binding.factoryProjectId === factoryId);
   const factories: Factory[] = factoriesQuery.data ?? [];
   const factoryName = (id: string) => factories.find(factory => factory.id === id)?.name ?? id;
 
@@ -629,9 +634,9 @@ export function GoogleCloudService() {
     setNextDraft(next => next + 1);
   };
   const newDraft = (): BindingDraft => {
-    const account = accounts.length === 1 ? accounts[0] : undefined;
+    const account = accounts.find(candidate => candidate.id === linkAccountId) ?? (accounts.length === 1 ? accounts[0] : undefined);
     return {
-      factoryProjectId: factories.length === 1 ? factories[0]!.id : '',
+      factoryProjectId: factoryId ?? (factories.length === 1 ? factories[0]!.id : ''),
       accountId: account?.id ?? '',
       projectId: account?.projectId ?? '',
       projectNumber: '',
@@ -665,7 +670,7 @@ export function GoogleCloudService() {
             {t('observability.accounts.none')}
           </Txt>
         ) : (
-          accounts.map(account => <AccountCard key={account.id} account={account} bindings={bindings} factoryName={factoryName} />)
+          accounts.map(account => <AccountCard key={account.id} account={account} bindings={allBindings} factoryName={factoryName} />)
         )}
       </div>
 

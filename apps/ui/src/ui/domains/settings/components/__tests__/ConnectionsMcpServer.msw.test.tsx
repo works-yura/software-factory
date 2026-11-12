@@ -1,18 +1,16 @@
 import { mcpCatalogEntry } from '@factory/core';
-import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 // The real catalog files the server ships, so the form under test is the one people get.
 import toolboxOverlay from '../../../../../../../../packages/server/src/mcp-servers/catalog/mcp-toolbox.factory.json';
 import toolboxManifest from '../../../../../../../../packages/server/src/mcp-servers/catalog/mcp-toolbox.server.json';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { McpServer } from '../../services/mcpServers';
-import { McpServersSection } from '../McpServersSection';
+import { firebaseState, managedServer, renderConnections, useIntegrationHandlers } from './fixtures/connections';
 
 const BASE = `${TEST_BASE_URL}/web/mcp-servers`;
 const toolbox = mcpCatalogEntry(toolboxManifest, toolboxOverlay);
@@ -39,9 +37,10 @@ const stored: McpServer = {
 
 const discoveries: Array<{ from: string; context: Record<string, string> }> = [];
 
-function useHandlers(servers: McpServer[] = [], canEdit = true) {
+function useHandlers(servers: McpServer[] = [], canEdit = true, firebase: typeof firebaseState = { accounts: [], bindings: [] }) {
   const writes: Array<{ method: string; url: string; body: any }> = [];
   discoveries.length = 0;
+  useIntegrationHandlers({ firebase });
   server.use(
     http.get(BASE, () =>
       HttpResponse.json({
@@ -121,31 +120,28 @@ function useHandlers(servers: McpServer[] = [], canEdit = true) {
   return writes;
 }
 
-function render() {
-  return renderWithProviders(
-    <>
-      <McpServersSection />
-      <Toaster />
-    </>,
-  );
+/** The page at `search`: the list, a stored server (`?connection=mcp:srv-1`) or a new one from the catalog. */
+async function render(search = '') {
+  renderConnections(search);
+  // A connection's own view shows once the integrations have loaded.
+  if (search) await screen.findByRole('button', { name: 'All connections' });
 }
+const NEW_TOOLBOX = '?connection=mcp-new:mcp-toolbox';
 
 async function pick(combobox: string, option: string) {
   await userEvent.click(screen.getByRole('combobox', { name: combobox }));
   await userEvent.click(await screen.findByRole('option', { name: option }));
 }
 
-describe('McpServersSection', () => {
+describe('Підключення: MCP servers', () => {
   it('adds Firestore from the catalog: picks the Google Cloud account, takes the project from the Factory, no raw variable names', async () => {
     const writes = useHandlers();
-    render();
-    expect(await screen.findByText(/No servers yet/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Add server' }));
-    const catalog = screen.getByRole('group', { name: 'Which server?' });
-    await userEvent.type(within(catalog).getByRole('textbox', { name: 'Search servers' }), 'firestore');
-    expect(within(catalog).queryByRole('button', { name: /Own server/ })).not.toBeInTheDocument();
-    await userEvent.click(within(catalog).getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+    await render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Add connection' });
+    await userEvent.type(within(drawer).getByRole('searchbox', { name: 'Search integrations and accounts' }), 'firestore');
+    expect(within(drawer).queryByRole('button', { name: /Own server/ })).not.toBeInTheDocument();
+    await userEvent.click(within(drawer).getByRole('button', { name: 'Connect: Database (MCP Toolbox)' }));
 
     await pick('What to connect', 'Firestore');
     // The form is the manifest's inputs in the person's language, never env names.
@@ -165,7 +161,6 @@ describe('McpServersSection', () => {
     await userEvent.click(project);
     expect(await screen.findByRole('option', { name: /^bookfate-prod/ })).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
-    await userEvent.click(screen.getByRole('button', { name: 'Add Factory' }));
 
     await userEvent.clear(screen.getByRole('textbox', { name: 'Name' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Syncta Firestore');
@@ -193,9 +188,7 @@ describe('McpServersSection', () => {
 
   it('sends a secret input once, as a secret, for PostgreSQL', async () => {
     const writes = useHandlers();
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
-    await userEvent.click(screen.getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+    await render(NEW_TOOLBOX);
     await pick('What to connect', 'PostgreSQL');
     await userEvent.type(screen.getByRole('textbox', { name: 'Database' }), 'reports');
     await userEvent.type(screen.getByRole('textbox', { name: 'User' }), 'reader');
@@ -213,9 +206,8 @@ describe('McpServersSection', () => {
 
   it('adds an own server as a local command, with no stdio/HTTP wording', async () => {
     const writes = useHandlers();
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
-    await userEvent.click(screen.getByRole('button', { name: /Own server/ }));
+    await render('?connection=mcp-new:custom');
+    await screen.findByRole('textbox', { name: 'Command' });
     expect(screen.queryByText(/stdio|HTTP\)/)).not.toBeInTheDocument();
     await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Notes');
     await userEvent.type(screen.getByRole('textbox', { name: 'Command' }), '/usr/local/bin/notes-mcp');
@@ -232,9 +224,7 @@ describe('McpServersSection', () => {
 
   it('assigns a stored server to a Factory board and sets one tool to forbidden after a check', async () => {
     const writes = useHandlers([stored]);
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
-    expect(screen.getByText(/Firestore · 1 Factory/)).toBeInTheDocument();
+    await render('?connection=mcp:srv-1');
 
     const access = await screen.findByRole('group', { name: 'Access for syncts' });
     // A row from before session kinds with a board limit meant cards only.
@@ -268,37 +258,24 @@ describe('McpServersSection', () => {
 
   it('shows a member the servers without letting them change anything', async () => {
     useHandlers([stored], false);
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
-    expect(screen.queryByRole('button', { name: 'Add server' })).not.toBeInTheDocument();
+    await render('?connection=mcp:srv-1');
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
   });
 
-  it('marks a server Google Cloud manages: config and access read-only, tool policy editable, no delete, a link to the service', async () => {
-    const managed: McpServer = { ...stored, id: 'srv-gc', name: 'db-syncta-57c6a', label: 'Firestore syncta-57c6a', owner: { integration: 'firebase', key: 'bnd-1' }, assignments: [{ factoryProjectId: 'factory-1' }] };
-    const writes = useHandlers([managed]);
-    renderWithProviders(
-      <MemoryRouter initialEntries={['/factories/factory-1/settings/integrations?tab=mcp']}>
-        <Routes>
-          <Route path="/factories/:factoryId/settings/integrations" element={<McpServersSection />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it('shows the «База» Google Cloud manages on its binding’s page: config and access read-only, tool policy editable, no delete', async () => {
+    const writes = useHandlers([{ ...managedServer, health: undefined }], true, firebaseState);
+    await render('?connection=google-cloud:bnd-1');
 
-    const card = await screen.findByRole('button', { name: /^Firestore syncta-57c6a.*managed by Google Cloud/ });
-    await userEvent.click(card);
-    expect(screen.getByRole('link', { name: 'Open in Services' })).toHaveAttribute(
-      'href',
-      '/factories/factory-1/settings/integrations?tab=services&service=google-cloud',
-    );
+    expect(await screen.findByRole('heading', { name: 'Database (MCP Toolbox)' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Add Factory' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Check' }));
     await pick('Policy for delete_documents', 'Forbidden');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Save' }).at(-1)!);
     await waitFor(() => expect(writes.at(-1)?.body.toolPolicies).toEqual({ default: 'allow', tools: { delete_documents: 'deny' } }));
   });
 
@@ -325,9 +302,7 @@ describe('McpServersSection', () => {
         }),
       ),
     );
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
-    await userEvent.click(screen.getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+    await render(NEW_TOOLBOX);
     await pick('What to connect', 'Firestore');
 
     await userEvent.click(screen.getByRole('button', { name: '+ Add account' }));
@@ -341,15 +316,7 @@ describe('McpServersSection', () => {
 
   it('opened from a Factory, starts with that Factory’s access; «Check» names what is missing, then lists tools before saving', async () => {
     const writes = useHandlers();
-    renderWithProviders(
-      <MemoryRouter initialEntries={['/factories/factory-1/settings/integrations?tab=mcp']}>
-        <Routes>
-          <Route path="/factories/:factoryId/settings/integrations" element={<McpServersSection />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
-    await userEvent.click(screen.getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+    await render(NEW_TOOLBOX);
     await pick('What to connect', 'Firestore');
 
     expect(await screen.findByRole('group', { name: 'Access for syncts' })).toBeInTheDocument();
@@ -395,13 +362,14 @@ describe('McpServersSection', () => {
       },
       { ...stored, id: 'srv-3', name: 'fresh', label: 'Fresh DB' },
     ]);
-    render();
-    const row = await screen.findByRole('button', { name: /Syncta Firestore/ });
-    expect(row).toHaveTextContent('2 tools · checked 5m');
-    expect(screen.getByRole('button', { name: /Broken DB/ })).toHaveTextContent(
+    await render();
+    const rowOf = async (name: string) => (await screen.findByRole('button', { name: new RegExp(`^${name}`) })).closest('li')!;
+    expect(await rowOf('Syncta Firestore')).toHaveTextContent('2 tools');
+    expect(await rowOf('Syncta Firestore')).toHaveTextContent('Working');
+    expect(await rowOf('Broken DB')).toHaveTextContent(
       'The account was refused access; give it the role the server needs. (7 PERMISSION_DENIED)',
     );
-    expect(screen.getByRole('button', { name: /Fresh DB/ })).toHaveTextContent('Not checked yet');
+    expect(await rowOf('Fresh DB')).toHaveTextContent('Not checked yet');
   });
 
   it('inspects tools: risk from annotations, parameters, a quarantined tool highlighted, and tries a read-only one', async () => {
@@ -432,8 +400,7 @@ describe('McpServersSection', () => {
         return HttpResponse.json({ trial: { ok: true, output: { collections: ['bookings'] }, durationMs: 42 } });
       }),
     );
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
+    await render('?connection=mcp:srv-1');
 
     const list = within(screen.getByRole('listitem', { name: 'list_collections' }));
     expect(list.getByText('reads')).toBeInTheDocument();
@@ -466,8 +433,7 @@ describe('McpServersSection', () => {
         }),
       ),
     );
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
+    await render('?connection=mcp:srv-1');
     await userEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Does not start: The server did not answer in time. (find_user timed out after 60 s)',
@@ -486,8 +452,7 @@ describe('McpServersSection', () => {
         }),
       ),
     );
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
+    await render('?connection=mcp:srv-1');
     const calls = await screen.findByRole('list', { name: 'Recent calls' });
     expect(calls).toHaveTextContent('list_collections');
     expect(calls).toHaveTextContent('ok · 120 ms · session session-');
@@ -497,9 +462,8 @@ describe('McpServersSection', () => {
 
   it('gives access by session kind, keeps one row per Factory, and drops board limits with cards', async () => {
     const writes = useHandlers([{ ...stored, assignments: [] }]);
-    render();
-    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Factory' }));
+    await render('?connection=mcp:srv-1');
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Factory' }));
     const access = await screen.findByRole('group', { name: 'Access for syncts' });
     // A new row reaches every kind of session; with the only Factory listed, no second row can be added.
     for (const kind of ['Factory chat', 'Own sessions', 'Cards']) {

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router';
 
 import { useClickUpStatusQuery } from '../../../../hooks/useClickUp';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { integrationsPath } from '../settingsSections';
+import { connectionsPath } from '../settingsSections';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 
 /**
@@ -26,7 +26,7 @@ export function IntakeSection() {
       {factory && (
         <Txt as="p" variant="caption" tone="muted">
           {clickup?.connected ? t('intake.clickupLink.connected') : t('intake.clickupLink.notConnected')}{' '}
-          <Link to={integrationsPath(factory.id, { tab: 'services', service: 'clickup' })} className="underline">
+          <Link to={connectionsPath(factory.id, 'clickup')} className="underline">
             {t('intake.clickupLink.open')}
           </Link>
         </Txt>

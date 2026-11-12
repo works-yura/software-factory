@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { ConnectRepositoriesPanel } from '../../workspaces';
-import { integrationsPath, settingsSectionPath } from '../settingsSections';
+import { connectionsPath, settingsSectionPath } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
@@ -40,7 +40,7 @@ export function RepositoriesSection() {
 
       <Txt as="p" variant="meta" tone="muted">
         {t('repositories.connectionsHint')}{' '}
-        <Link to={integrationsPath(activeFactory.id, { tab: 'services', service: 'github' })} className="underline">
+        <Link to={connectionsPath(activeFactory.id, 'github')} className="underline">
           {t('repositories.openIntegrations')}
         </Link>
       </Txt>

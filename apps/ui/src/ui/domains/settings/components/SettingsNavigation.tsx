@@ -156,7 +156,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Plug,
         searchText:
-          'integrations services connections google cloud firebase logs crashes crashlytics database firestore clickup github gitlab mcp servers tools toolbox connectors service account',
+          'connections integrations services google cloud firebase logs crashes crashlytics database firestore clickup github gitlab mcp servers tools toolbox connectors service account',
       },
       {
         id: 'factory',

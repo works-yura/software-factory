@@ -101,9 +101,9 @@ describe('Repositories settings', () => {
     );
     // Connecting GitLab (another account, managing it) is in Інтеграції; here only a link there.
     expect(screen.queryByRole('button', { name: 'Connect another GitLab account' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Integrations' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Open Connections' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/integrations?tab=services&service=github`,
+      `/factories/${FACTORY_ID}/settings/integrations?connection=github`,
     );
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });

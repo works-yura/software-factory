@@ -54,13 +54,14 @@ type SettingsAnchor = ModelDefaultsAnchor | typeof NEW_CARD_ROUTES_ANCHOR;
 
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor; search?: string };
 
-/** The tabs of Settings › Інтеграції, kept in the URL (`?tab=`), and the service a link opens. */
-export type IntegrationsTab = 'services' | 'mcp';
-export type IntegrationsService = 'google-cloud' | 'clickup' | 'github' | 'gitlab';
+/**
+ * A connection Settings › Підключення opens by link (`?connection=`): an integration's own view.
+ * The section keeps its `integrations` path, so links made before the one list still land here.
+ */
+export type ConnectionLink = 'google-cloud' | 'clickup' | 'github' | 'gitlab';
 
-function integrationsSearch(target: { tab: IntegrationsTab; service?: IntegrationsService }): string {
-  const params = new URLSearchParams({ tab: target.tab, ...(target.service ? { service: target.service } : {}) });
-  return `?${params.toString()}`;
+function connectionsSearch(connection?: ConnectionLink): string {
+  return connection ? `?${new URLSearchParams({ connection }).toString()}` : '';
 }
 
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
@@ -70,9 +71,9 @@ const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
   ['connections', { section: 'repositories' }],
   // Usage became Analytics, which now lives in Settings.
   ['usage', { section: 'analytics' }],
-  // Logs and crashes became the Google Cloud service, MCP servers a tab, both in Інтеграції.
-  ['observability', { section: 'integrations', search: integrationsSearch({ tab: 'services', service: 'google-cloud' }) }],
-  ['mcp-servers', { section: 'integrations', search: integrationsSearch({ tab: 'mcp' }) }],
+  // Logs and crashes became the Google Cloud connection, MCP servers rows of Підключення.
+  ['observability', { section: 'integrations', search: connectionsSearch('google-cloud') }],
+  ['mcp-servers', { section: 'integrations' }],
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {
@@ -91,7 +92,7 @@ export function settingsSectionPath(factoryId: string, section: SettingsSection,
   return anchor ? `${path}#${anchor}` : path;
 }
 
-/** A link into Settings › Інтеграції: a tab, and on «Сервіси» the service to open. */
-export function integrationsPath(factoryId: string, target: { tab: IntegrationsTab; service?: IntegrationsService }): string {
-  return `${settingsSectionPath(factoryId, 'integrations')}${integrationsSearch(target)}`;
+/** A link into Settings › Підключення, opening one integration's view when given. */
+export function connectionsPath(factoryId: string, connection?: ConnectionLink): string {
+  return `${settingsSectionPath(factoryId, 'integrations')}${connectionsSearch(connection)}`;
 }

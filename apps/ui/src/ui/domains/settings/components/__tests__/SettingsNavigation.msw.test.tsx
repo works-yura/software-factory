@@ -50,7 +50,7 @@ describe('SettingsNavigation', () => {
       'Repositories',
       'Environment',
       'Work Intake',
-      'Integrations',
+      'Connections',
       'Manage Factory',
       'Debug',
     ]);
@@ -89,9 +89,9 @@ describe('SettingsNavigation', () => {
     { query: 'factory memory', destination: 'Memory' },
     { query: 'shared memory', destination: 'Memory' },
     { query: 'usage', destination: 'Analytics' },
-    { query: 'mcp', destination: 'Integrations' },
-    { query: 'crashlytics', destination: 'Integrations' },
-    { query: 'clickup', destination: 'Integrations' },
+    { query: 'mcp', destination: 'Connections' },
+    { query: 'crashlytics', destination: 'Connections' },
+    { query: 'clickup', destination: 'Connections' },
     { query: 'metrics', destination: 'Analytics' },
   ])('finds $destination by the former page name "$query"', async ({ query, destination }) => {
     const user = userEvent.setup();
