@@ -10,8 +10,12 @@ import type { ServerVersions } from '../../../../hooks/useServerVersions';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /** Plain-text version list, for pasting into an issue or a session. */
-export function formatVersions({ packages, nodeVersion }: ServerVersions): string {
-  return [...packages.map(({ name, version }) => `${name}@${version}`), `node@${nodeVersion}`].join('\n');
+export function formatVersions({ packages, nodeVersion, harnessExecutables = [] }: ServerVersions): string {
+  return [
+    ...packages.map(({ name, version }) => `${name}@${version}`),
+    `node@${nodeVersion}`,
+    ...harnessExecutables.map(cli => (cli.found ? `${cli.name}@${cli.version ?? 'unknown'} (${cli.path})` : `${cli.name}: not found`)),
+  ].join('\n');
 }
 
 function VersionValue({ children }: { children: string }) {
@@ -72,6 +76,16 @@ export function DebugSection() {
             <SettingsRow label="Node.js">
               <VersionValue>{query.data.nodeVersion}</VersionValue>
             </SettingsRow>
+            {(query.data.harnessExecutables ?? []).map(cli => (
+              // Where the server found each agent CLI, or where it looked: what to read when a harness does not run.
+              <SettingsRow
+                key={cli.name}
+                label={t('debug.harnessCli', { harness: cli.harness })}
+                description={cli.found ? cli.path : t('debug.harnessLookedIn', { paths: cli.searched.join(', ') })}
+              >
+                <VersionValue>{cli.found ? (cli.version ?? t('debug.harnessVersionUnknown')) : t('debug.harnessMissing')}</VersionValue>
+              </SettingsRow>
+            ))}
           </SettingsContainer>
         </>
       )}

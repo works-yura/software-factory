@@ -17,5 +17,9 @@
   "completionSound": {
     "label": "Звук завершення",
     "description": "Лунає, коли агент завершує роботу в робочому просторі"
+  },
+  "harnessUnavailable": {
+    "executableMissing": "{{name}} не встановлено на цьому сервері.",
+    "connectionMissing": "У вас немає підключеного акаунта {{name}}."
   }
 }

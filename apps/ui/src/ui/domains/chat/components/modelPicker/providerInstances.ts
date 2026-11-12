@@ -19,6 +19,7 @@ import { getAvailableThinkingLevelsForModel } from "@mastra/code-sdk/thinking";
 import type { ThinkingLevelSetting } from "@mastra/code-sdk/thinking";
 
 import { translator } from "../../../../i18n/t";
+import { harnessUnavailableReason } from "../../../../../hooks/harnessUnavailableReason";
 import { THINKING_LEVEL_LABELS } from "../../services/thinkingLevels";
 
 const tk = translator("chat");
@@ -160,7 +161,7 @@ function toEntry(instance: HarnessModelInstanceInfo): ProviderInstanceEntry {
     catalogDefault,
     appliesToRunningSessions: instance.appliesToRunningSessions ?? false,
     acceptsHandoff: instance.acceptsHandoff ?? false,
-    ...(instance.reason ? { reason: instance.reason } : {}),
+    ...reasonOf(instance, displayName),
     ...(instance.connector ? { connector: instance.connector } : {}),
     // "Default" in the picker is what a session follows: the Factory's default, else the catalog's.
     models: withDefaultMarked(models, factoryDefault ?? catalogDefault),
@@ -213,4 +214,10 @@ export function findInstanceModel(
     models.find((model) => model.slug === selection.model) ??
     models.find((model) => model.aliases?.includes(selection.model))
   );
+}
+
+/** Why the instance cannot run (or runs limited), in the viewer's language when the server named the cause. */
+function reasonOf(instance: HarnessModelInstanceInfo, displayName: string): { reason?: string } {
+  const reason = harnessUnavailableReason(instance, displayName);
+  return reason ? { reason } : {};
 }

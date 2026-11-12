@@ -17,5 +17,9 @@
   "completionSound": {
     "label": "Completion sound",
     "description": "Played when an agent run finishes in a workspace"
+  },
+  "harnessUnavailable": {
+    "executableMissing": "{{name}} isn’t installed on this server.",
+    "connectionMissing": "You have no {{name}} account connected."
   }
 }

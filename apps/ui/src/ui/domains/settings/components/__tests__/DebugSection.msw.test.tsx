@@ -44,6 +44,41 @@ describe('Debug settings', () => {
     );
   });
 
+  it('shows where the server found each agent CLI and its version, or where it looked', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    serveVersions({
+      packages: [],
+      nodeVersion: 'v22.15.0',
+      harnessExecutables: [
+        {
+          harness: 'Claude Code',
+          name: 'claude',
+          found: true,
+          path: '/Users/a/.local/bin/claude',
+          source: 'well-known',
+          version: '2.1.0 (Claude Code)',
+          searched: ['/usr/bin/claude', '/Users/a/.local/bin/claude'],
+        },
+        { harness: 'Codex', name: 'codex', found: false, searched: ['/usr/bin/codex', '/opt/homebrew/bin/codex'] },
+      ],
+    });
+    renderWithProviders(<DebugSection />);
+
+    expect(await screen.findByText('Claude Code CLI')).toBeInTheDocument();
+    expect(screen.getByText('2.1.0 (Claude Code)')).toBeInTheDocument();
+    expect(screen.getByText('/Users/a/.local/bin/claude')).toBeInTheDocument();
+    expect(screen.getByText('Codex CLI')).toBeInTheDocument();
+    expect(screen.getByText('Not installed')).toBeInTheDocument();
+    expect(screen.getByText('Looked in /usr/bin/codex, /opt/homebrew/bin/codex')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy versions' }));
+    await screen.findByRole('button', { name: 'Copied!' });
+    expect(writeText).toHaveBeenCalledWith(
+      'node@v22.15.0\nclaude@2.1.0 (Claude Code) (/Users/a/.local/bin/claude)\ncodex: not found',
+    );
+  });
+
   it('says when the build shipped no package list', async () => {
     serveVersions({ packages: [], nodeVersion: 'v22.15.0' });
     renderWithProviders(<DebugSection />);

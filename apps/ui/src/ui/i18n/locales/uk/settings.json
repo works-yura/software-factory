@@ -553,6 +553,7 @@
       "changeFailed": "Не вдалося змінити харнес",
       "connectHeading": "Харнеси, які треба підключити",
       "notOffered": "{{name}} не пропонується: немає вашого акаунта для нього.",
+      "notOfferedBecause": "{{name}} не пропонується: {{reason}}",
       "connect": "Підключити {{name}}"
     },
     "agentAccounts": {
@@ -987,12 +988,16 @@
   },
   "debug": {
     "title": "Запущені версії",
-    "description": "Пакети Mastra, з якими зібрано цей сервер Factory. Додавайте їх, коли повідомляєте про проблему.",
+    "description": "Пакети Mastra, з якими зібрано цей сервер Factory, і CLI агентів, які він запускає. Додавайте їх, коли повідомляєте про проблему.",
     "copy": "Копіювати версії",
     "loading": "Завантаження версій…",
     "loadFailed": "Не вдалося завантажити версії.",
     "retry": "Повторити",
-    "noPackages": "Збірка цього сервера не має списку пакетів. Збірки новішим CLI <code>mastra</code> його містять."
+    "noPackages": "Збірка цього сервера не має списку пакетів. Збірки новішим CLI <code>mastra</code> його містять.",
+    "harnessCli": "CLI {{harness}}",
+    "harnessMissing": "Не встановлено",
+    "harnessVersionUnknown": "Версія невідома",
+    "harnessLookedIn": "Шукали в {{paths}}"
   },
   "mcpServers": {
     "title": "MCP-сервери",

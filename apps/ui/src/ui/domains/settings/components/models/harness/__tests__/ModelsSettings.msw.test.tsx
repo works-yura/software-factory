@@ -63,7 +63,10 @@ const roboConnection = (label: string, tone: 'ok' | 'warning') => ({
 });
 
 /** A stateful Factory: GET reflects every PATCH; `reject` makes the next PATCH fail. */
-function stubFactory(initial: Partial<FactoryProjectPayload>, { robo = true, reject = false } = {}) {
+function stubFactory(
+  initial: Partial<FactoryProjectPayload>,
+  { robo = true, reject = false, roboInstalled = true }: { robo?: boolean; reject?: boolean; roboInstalled?: boolean } = {},
+) {
   let project: FactoryProjectPayload = { id: 'fp-1', name: 'Mastra', ...initial };
   const patches: unknown[] = [];
   server.use(
@@ -85,7 +88,16 @@ function stubFactory(initial: Partial<FactoryProjectPayload>, { robo = true, rej
           instance('mastra', 'Mastra'),
           instance('robo', 'Robo Agent', {
             connector: 'robo',
-            ...(robo ? {} : { available: false, needsSetup: true, reason: 'No Robo sign-in of yours.', models: [] }),
+            ...(robo ? {} : { available: false, needsSetup: true, reason: 'No Robo sign-in of yours.', reasonCode: 'connection_missing', models: [] }),
+            ...(roboInstalled
+              ? {}
+              : {
+                  available: false,
+                  needsSetup: false,
+                  reason: 'Robo Agent is not installed on this server: `robo` was not found.',
+                  reasonCode: 'executable_missing',
+                  models: [],
+                }),
           }),
         ],
       }),
@@ -178,6 +190,16 @@ describe('Models settings per harness', () => {
       'href',
       '/factories/fp-1/settings/integrations?add=1&step=connector%3Arobo',
     );
+  });
+
+  it('does not offer a harness whose CLI is not installed on the server, and says so without a connect link', async () => {
+    stubFactory({ harness: 'mastra' }, { roboInstalled: false });
+    renderModels();
+
+    const control = await harnessSwitch();
+    expect(await screen.findByText('Robo Agent isn’t offered: Robo Agent isn’t installed on this server.')).toBeInTheDocument();
+    expect(within(control).queryByRole('radio', { name: 'Robo Agent' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Connect Robo Agent' })).not.toBeInTheDocument();
   });
 
   it("keeps a Factory's own harness readable when its connection is gone, but not pickable", async () => {
