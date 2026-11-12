@@ -41,7 +41,7 @@ import {
   waitForSessionRunAudit,
 } from './run-audit.ts';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from './skills/service.ts';
-import { isAgentActor, isHumanActorId } from '@factory/store';
+import { isAgentActor, isHumanActorId, runBindingOwner } from '@factory/store';
 import type { AuditRecorder } from './audit-recorder.ts';
 import { withWorkItemDescription, withWorkItemFeed } from '@factory/store';
 import type { FactoryFeedReader } from '@factory/store';
@@ -1010,6 +1010,8 @@ export class FactoryDecisionDispatcher {
             return false;
           }
         },
+        // A binding on a session the harness no longer has can never run (the session was deleted).
+        sessionExists: async binding => (await this.#harness.getSession(binding.sessionId)) !== undefined,
       });
       if (revoked > 0) console.info(`Factory stale-binding sweep revoked ${revoked} binding(s)`);
     } catch (error) {
@@ -1458,12 +1460,7 @@ export class FactoryDecisionDispatcher {
           throw new FactoryDecisionPostponed(CARD_RUN_POSTPONE_MS);
         }
         await this.#withBindingSkillRun(binding.id, async () => {
-          const item = record.workItemId
-            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
-            : null;
-          const startedBy = item?.sessions[binding.role]?.startedBy;
-          if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-          await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+          const { startedBy, item } = await this.#runOwner(binding);
           const session = await this.#requireSession(binding);
           const requestContext = this.#harness.runContext(session, {
             userId: startedBy,
@@ -1697,10 +1694,7 @@ export class FactoryDecisionDispatcher {
         const binding = await this.#messageBinding(record, decision);
         // Nobody live on the card means nobody to tell, not a failure to retry.
         if (!binding) return;
-        const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-        const startedBy = item?.sessions[binding.role]?.startedBy;
-        if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const { startedBy } = await this.#runOwner(binding);
         const session = await this.#requireSession(binding);
         const requestContext = this.#harness.runContext(session, {
           userId: startedBy,
@@ -1743,10 +1737,7 @@ export class FactoryDecisionDispatcher {
         const binding = await this.#requireBinding(record);
         // A notification can wake the idle session, so it runs as the session's
         // owner like any other Factory-started run, never as nobody.
-        const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-        const startedBy = item?.sessions[binding.role]?.startedBy;
-        if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const { startedBy } = await this.#runOwner(binding);
         const session = await this.#requireSession(binding);
         const requestContext = this.#harness.runContext(session, {
           userId: startedBy,
@@ -2379,20 +2370,70 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord | undefined> {
     if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
-    const active = bindings.filter(
+    const candidates = bindings.filter(
       candidate => candidate.status === 'active' && (role === undefined || candidate.role === role),
     );
-    // Without a role, the builder's session answers for the card: it owns the work.
-    let builder: string | undefined;
-    if (role === undefined && active.length > 1) {
-      const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
-      builder = item ? cardBoardFlow(await this.#boards.load(record), item).buildRole : undefined;
+    if (candidates.length === 0) return undefined;
+    const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
+    // A binding whose card names no owner for its seat points at a session that is gone (deleted
+    // around it): it is revoked here, so the start path prepares a fresh session instead of every
+    // run failing on a session nobody owns.
+    const active: FactoryRunBindingRecord[] = [];
+    for (const candidate of candidates) {
+      if (runBindingOwner(item, candidate) !== undefined) active.push(candidate);
+      else await this.#revokeOrphanedBinding(candidate);
     }
+    // Without a role, the builder's session answers for the card: it owns the work.
+    const builder =
+      role === undefined && active.length > 1 && item
+        ? cardBoardFlow(await this.#boards.load(record), item).buildRole
+        : undefined;
     return active.sort((left, right) => {
       if (builder !== undefined && left.role === builder && right.role !== builder) return -1;
       if (builder !== undefined && right.role === builder && left.role !== builder) return 1;
       return right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id);
     })[0];
+  }
+
+  /**
+   * Revokes an active binding whose session is gone: the card names no owner for its seat any
+   * more. Its runs could never run as anybody; a revoked one lets the card's next start prepare
+   * a fresh session (owned by the decision's approver, as any start).
+   */
+  async #revokeOrphanedBinding(binding: FactoryRunBindingRecord): Promise<void> {
+    const revoked = await this.#storage.revokeRunBinding({
+      orgId: binding.orgId,
+      factoryProjectId: binding.factoryProjectId,
+      bindingId: binding.id,
+      revokedAt: new Date(),
+    });
+    if (revoked) {
+      console.info(
+        `[factory] revoked binding ${binding.id}: card ${binding.workItemId} no longer names session ${binding.sessionId} for its ${binding.role} seat`,
+      );
+    }
+  }
+
+  /**
+   * The person a binding's runs run as (the owner the card names for its seat), with their
+   * credentials primed. Bindings come from `#findBinding`, which drops orphaned ones, or were just
+   * prepared, so a missing owner means the session went away under this decision: the binding is
+   * revoked so the card's next start prepares a fresh one, and this decision fails without retries.
+   */
+  async #runOwner(binding: FactoryRunBindingRecord): Promise<{ startedBy: string; item: Card }> {
+    const item = await this.#storage.get({ orgId: binding.orgId, id: binding.workItemId });
+    const owner = runBindingOwner(item, binding);
+    if (!owner || !item) {
+      await this.#revokeOrphanedBinding(binding);
+      throw new FactoryDispatchError(
+        'run_user_unauthenticated',
+        item
+          ? `Factory binding ${binding.id} has no session owner: card ${binding.workItemId} no longer names session ${binding.sessionId} for its ${binding.role} seat (it was deleted). The binding is revoked; the card's next run starts a fresh session.`
+          : `Factory binding ${binding.id} has no session owner: its card ${binding.workItemId} is gone.`,
+      );
+    }
+    await this.#primeCredentials?.({ orgId: binding.orgId, userId: owner });
+    return { startedBy: owner, item };
   }
 
   async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
@@ -2421,10 +2462,7 @@ export class FactoryDecisionDispatcher {
     if (!record.workItemId) return;
     const binding = await this.#findBinding(record);
     if (!binding) return;
-    const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
-    const startedBy = item?.sessions[binding.role]?.startedBy;
-    if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-    await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+    const { startedBy } = await this.#runOwner(binding);
     const session = await this.#requireSession(binding);
     const author = decision.author
       ? `@${decision.author}${decision.authorTrusted ? '' : ' (untrusted author)'}`
@@ -2824,10 +2862,7 @@ export class FactoryDecisionDispatcher {
           }
           // Wake runs build the Factory workspace, which requires the
           // authenticated session owner on the request context.
-          const item = await this.#storage.get({ orgId: record.orgId, id: binding.workItemId });
-          const startedBy = item?.sessions[binding.role]?.startedBy;
-          if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-          await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+          const { startedBy, item } = await this.#runOwner(binding);
           const session = await this.#requireSession(binding);
           const requestContext = this.#harness.runContext(session, {
             userId: startedBy,

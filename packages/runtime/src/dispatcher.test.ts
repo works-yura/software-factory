@@ -669,6 +669,7 @@ describe('FactoryDecisionDispatcher', () => {
       olderThan: new Date(t1.getTime() - 24 * 60 * 60_000),
       now: t1,
       keep: expect.any(Function),
+      sessionExists: expect.any(Function),
     });
 
     // And the cadence resets: the next sweep waits another full interval.
@@ -721,6 +722,31 @@ describe('FactoryDecisionDispatcher', () => {
     await expect(keep!(binding)).resolves.toBe(false);
     controller.getSession.mockRejectedValueOnce(new Error('forbidden'));
     await expect(keep!(binding)).resolves.toBe(false);
+
+    await dispatcher.stop();
+  });
+
+  it("sweeps away bindings whose session the harness no longer has, whatever their age", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
+      storage,
+    });
+
+    const t0 = new Date('2030-01-01T00:00:00Z');
+    await dispatcher.runOnce(t0);
+    await dispatcher.runOnce(new Date(t0.getTime() + 11 * 60_000));
+    const sessionExists = sweep.mock.calls[0]?.[0].sessionExists;
+    const binding = { sessionId: 'session-1' } as Parameters<NonNullable<typeof sessionExists>>[0];
+
+    await expect(sessionExists!(binding)).resolves.toBe(true);
+    expect(controller.getSession).toHaveBeenLastCalledWith('session-1');
+    controller.getSession.mockResolvedValueOnce(undefined);
+    await expect(sessionExists!(binding)).resolves.toBe(false);
 
     await dispatcher.stop();
   });
@@ -1244,6 +1270,162 @@ describe('FactoryDecisionDispatcher', () => {
     );
     const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
     expect(requestContext?.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+  });
+
+  describe('a binding whose session was deleted around it (its card no longer names the seat)', () => {
+    /** The state a session deletion that predates revoking bindings left: the card's ref gone, the binding active. */
+    async function orphanedBinding(decision: FactoryCommitDecision) {
+      const seeded = await createFactoryStorageForTests();
+      const storage = seeded.workItems;
+      const { item, transitionService } = await queueDecision(storage, decision);
+      const orphaned = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'plan',
+        session: { sessionId: 'session-deleted', branch: 'factory/issue-1', threadId: 'thread-deleted' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-deleted',
+        kickoffMessage: null,
+      });
+      await new Cards(seeded.storage.ops).updateAtomic({ id: item.id }, () => ({ sessions: {} }));
+      const bindingStatus = async (id: string) =>
+        (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(binding => binding.id === id)?.status;
+      return { storage, item, transitionService, orphaned: orphaned.binding, bindingStatus };
+    }
+
+    it('is revoked and a fresh session prepared for the run, owned by whoever approved it', async () => {
+      const { storage, item, transitionService, orphaned, bindingStatus } = await orphanedBinding({
+        type: 'sendMessage',
+        role: 'plan',
+        message: 'Plan the work.',
+        prepareBinding: true,
+        idempotencyKey: 'message-orphaned',
+      });
+      const { controller, session, sendNotificationSignal } = createSession();
+      // The harness still finds the deleted session (its state outlived the row): only the card says it is gone.
+      controller.getSession.mockImplementation(async () => session);
+      // What the start path does: a new session owned by the decision's approver.
+      const prepareBinding = vi.fn(async () => {
+        await storage.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'user-2',
+          factoryProjectId: PROJECT_ID,
+          workItem: {
+            id: item.id,
+            input: { externalSource: item.externalSource, title: item.title, stages: ['execute'], sessions: {}, metadata: item.metadata },
+          },
+          role: 'plan',
+          session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+          resourceId: PROJECT_ID,
+          kickoffKey: 'kickoff-fresh',
+          kickoffMessage: null,
+        });
+      });
+      const primeCredentials = vi.fn(async () => {});
+      const dispatcher = new FactoryDecisionDispatcher({
+        harness: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+        primeCredentials,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(await bindingStatus(orphaned.id)).toBe('revoked');
+      expect(prepareBinding).toHaveBeenCalledTimes(1);
+      expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-2' });
+      expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+      expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('user')).toEqual({
+        id: 'user-2',
+        organizationId: 'org-1',
+      });
+      const [message] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(message).toMatchObject({ status: 'succeeded', attempts: 1 });
+    });
+
+    it('is revoked, and a message for the live session finds nobody to tell', async () => {
+      const { storage, transitionService, orphaned, bindingStatus } = await orphanedBinding({
+        type: 'sendMessage',
+        role: 'plan',
+        message: 'New comment.',
+        idempotencyKey: 'message-nobody',
+      });
+      const { controller, session, sendNotificationSignal } = createSession();
+      controller.getSession.mockImplementation(async () => session);
+      const dispatcher = new FactoryDecisionDispatcher({
+        harness: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(await bindingStatus(orphaned.id)).toBe('revoked');
+      expect(sendNotificationSignal).not.toHaveBeenCalled();
+      const [message] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(message).toMatchObject({ status: 'succeeded' });
+    });
+  });
+
+  it('fails a kickoff whose session lost its owner once, saying why, and revokes its binding', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const storage = seeded.workItems;
+    const item = await createItem(storage);
+    const prepared = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: 'session-1',
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: 'Investigate the issue.',
+    });
+    // The session was deleted between preparing the kickoff and sending it.
+    await new Cards(seeded.storage.ops).updateAtomic({ id: item.id }, () => ({ sessions: {} }));
+    const { controller, sendNotificationSignal } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const [start] = await storage.listPendingStarts('org-1', PROJECT_ID);
+    expect(start).toMatchObject({ status: 'failed', attempts: 1, failureCode: 'run_user_unauthenticated' });
+    expect(start?.lastError).toContain(`no longer names session session-1 for its work seat`);
+    const [binding] = await storage.listRunBindings('org-1', PROJECT_ID, item.id);
+    expect(binding).toMatchObject({ id: prepared.binding.id, status: 'revoked' });
   });
 
   it('renews the lease while an external delivery remains in flight', async () => {
