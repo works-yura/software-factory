@@ -138,6 +138,18 @@ export interface WorkItemSessionRef {
   startedBy: string;
 }
 
+/**
+ * Who a run binding's runs run as: the owner the card names for the binding's seat. `undefined`
+ * when the card is gone or no longer names a session for that seat (the session was deleted and
+ * its refs stripped): the binding is stale, and the dispatcher revokes it and prepares a fresh one.
+ */
+export function runBindingOwner(
+  item: Pick<Card, 'sessions'> | null | undefined,
+  binding: Pick<FactoryRunBindingRecord, 'role'>,
+): string | undefined {
+  return item?.sessions[binding.role]?.startedBy || undefined;
+}
+
 export interface FactoryRuleIngressRecord {
   id: string;
   orgId: string;
@@ -422,6 +434,11 @@ export interface RevokeStaleFactoryRunBindingsInput {
   now: Date;
   /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
   keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
+  /**
+   * Whether the binding's session still exists; `false` revokes the binding whatever its age. A
+   * lookup that throws keeps it: only a session known to be gone breaks the invariant.
+   */
+  sessionExists?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -2375,19 +2392,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Strip every ref to a retired session; matching happens in app code because
-   * `findMany` cannot reach inside the `sessions` JSON column. Its active run
-   * bindings are revoked too: a binding left on a deleted session sends every
-   * later run of the card to a session nobody owns ("no authenticated session
-   * owner"), while a revoked one lets the next run prepare a fresh session.
+   * Strip every ref to a retired session and revoke its active run bindings, in
+   * one transaction: a binding left on a deleted session sends every later run
+   * of the card to a session nobody owns, while a revoked one lets the next run
+   * prepare a fresh session (the invariant: an active binding always points at an
+   * existing session). The work-items half of `deleteSessionRecord`, which
+   * deletes the session row after it. Matching happens in app code because
+   * `findMany` cannot reach inside the `sessions` JSON column.
    * ponytail: org-wide scan per session delete; JSON-path query if it measures.
    */
   async clearSessionReferences({ orgId, sessionId }: { orgId: string; sessionId: string }): Promise<number> {
-    await this.#db.updateMany(
-      'factory_run_bindings',
-      { org_id: orgId, session_id: sessionId, status: 'active' },
-      { status: 'revoked', revoked_at: new Date() },
-    );
     const rows = await this.#db.findMany<Pick<WorkItemDbRow, 'id' | 'sessions'> & Record<string, unknown>>(
       this.#legacyMode ? WORK_ITEMS_SCHEMA.name : FACTORY_BOARD_ITEMS_SCHEMA.name,
       { org_id: orgId },
@@ -2403,20 +2417,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       rows.push(...legacy.filter(row => !split.has(row.id)));
     }
     const holding = rows.filter(row => Object.values(row.sessions).some(ref => ref.sessionId === sessionId));
-    let cleared = 0;
-    for (const row of holding) {
-      let changed = false;
-      await this.#withTransaction(ops =>
-        this.#cards(ops, { transaction: true }).updateAtomic({ id: row.id }, current => {
+    return this.#withTransaction(async ops => {
+      const now = new Date();
+      await ops.updateMany(
+        'factory_run_bindings',
+        { org_id: orgId, session_id: sessionId, status: 'active' },
+        { status: 'revoked', revoked_at: now },
+      );
+      let cleared = 0;
+      for (const row of holding) {
+        let changed = false;
+        await this.#cards(ops, { transaction: true }).updateAtomic({ id: row.id }, current => {
           const kept = Object.entries(current.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
           if (kept.length === Object.keys(current.sessions).length) return null;
           changed = true;
-          return { sessions: Object.fromEntries(kept), revision: current.revision + 1, updated_at: new Date() };
-        }),
-      );
-      if (changed) cleared += 1;
-    }
-    return cleared;
+          return { sessions: Object.fromEntries(kept), revision: current.revision + 1, updated_at: now };
+        });
+        if (changed) cleared += 1;
+      }
+      return cleared;
+    });
   }
 
   async getByProjectSource({
@@ -3911,9 +3931,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   /**
    * Revoke leaked/legacy active bindings: older than `olderThan` (unless
-   * `keep` vouches for them), or whose work item is gone, malformed, or
-   * already terminal. Terminal-stage cleanup handles bindings go-forward; this
-   * sweep drains anything that slipped past it. Returns the number of bindings revoked.
+   * `keep` vouches for them), whose work item is gone, malformed, or already
+   * terminal, or whose session is gone (the card names no owner for its seat,
+   * or `sessionExists` says so). Terminal-stage cleanup and session deletion
+   * handle bindings go-forward; this sweep drains anything that slipped past
+   * them. Returns the number of bindings revoked.
    */
   async revokeStaleRunBindings(input: RevokeStaleFactoryRunBindingsInput): Promise<number> {
     const bindings = await this.listActiveRunBindings();
@@ -3934,7 +3956,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           !item ||
           item.stages.length !== 1 ||
           this.#isTerminal(item) ||
-          item.factoryProjectId !== binding.factoryProjectId;
+          item.factoryProjectId !== binding.factoryProjectId ||
+          runBindingOwner(item, binding) === undefined;
+      }
+      if (!stale && input.sessionExists) {
+        stale = !(await input.sessionExists(binding).catch(() => true));
       }
       if (!stale) continue;
       const result = await this.revokeRunBinding({

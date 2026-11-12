@@ -22,7 +22,7 @@ import {
 import { normalizeSessionTitle } from '@factory/session';
 import type { FilesystemStorage } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
-import { factoryMemorySettingsUserId } from '@factory/store';
+import { deleteSessionRecord, factoryMemorySettingsUserId } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type {
   ProjectRepository,
@@ -800,8 +800,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             deleteSession: true,
           });
         } else {
-          await options.workItems?.clearSessionReferences({ orgId: session.orgId, sessionId: session.sessionId });
-          await match.sourceControl.sessions.delete(session.id);
+          await deleteSessionRecord({ sourceControl: match.sourceControl, workItems: options.workItems }, session);
           await Promise.resolve(options.onSessionDeleted?.(session.sessionId)).catch((error: unknown) => {
             console.warn('[Factory Sessions] Failed to clean up after deleted session', {
               sessionId: session.sessionId,

@@ -1639,6 +1639,48 @@ describe('deleting a session without a retirement coordinator', () => {
     expect(deleted).toEqual(['session-gone', 'session-cleanup-fails']);
   });
 
+  it("releases the session's cards and run bindings before its row goes", async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    await sourceControl.sessions.create({
+      sessionId: 'session-bound',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-bound',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    const released: Array<{ orgId: string; sessionId: string; rowPresent: boolean }> = [];
+    const workItems = {
+      hasRunBindingForSession: async () => false,
+      clearSessionReferences: vi.fn(async ({ orgId, sessionId }: { orgId: string; sessionId: string }) => {
+        released.push({ orgId, sessionId, rowPresent: (await sourceControl.sessions.getBySessionId(sessionId)) !== null });
+        return 1;
+      }),
+    };
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      buildSourceControlSessionRoutes({
+        auth: fakeRouteAuth(),
+        sourceControls: [sourceControl],
+        projects: seed.projects,
+        memorySettings: seed.memorySettings,
+        workItems,
+      }),
+    );
+
+    const removed = await app.request('/web/user-sessions/session-bound', { method: 'DELETE' });
+
+    expect(removed.status).toBe(200);
+    expect(released).toEqual([{ orgId: 'org-1', sessionId: 'session-bound', rowPresent: true }]);
+    await expect(sourceControl.sessions.getBySessionId('session-bound')).resolves.toBeNull();
+  });
+
   it('tears down a session another harness runs through that harness, not the controller', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     await sourceControl.sessions.create({

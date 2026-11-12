@@ -33,7 +33,7 @@ import { normalizeSessionTitle } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter } from '@factory/feed';
 import type { MemorySettingsStorage } from '@factory/store';
-import { factoryMemorySettingsUserId } from '@factory/store';
+import { deleteSessionRecord, factoryMemorySettingsUserId } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type {
   ProjectRepository,
@@ -1498,8 +1498,7 @@ function buildProjectGitRoutes({
             deleteSession: true,
           });
         } else {
-          await workItems?.clearSessionReferences({ orgId: session.orgId, sessionId: session.sessionId });
-          await github.sourceControlStorage.sessions.delete(session.id);
+          await deleteSessionRecord({ sourceControl: github.sourceControlStorage, workItems }, session);
           void reclaimDeletedSessionSandbox({ session }).catch((error: unknown) => {
             console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
               sessionId: session.sessionId,

@@ -267,6 +267,58 @@ describe('WorkItemsStorage', () => {
     expect(second.binding.status).toBe('active');
   });
 
+  describe('the stale-binding sweep keeps every active binding on an existing session', () => {
+    async function boundCard() {
+      const backend = new LibSQLFactoryStorage({ id: 'work-items-sweep-test', url: ':memory:' });
+      const storage = backend.registerDomain(new WorkItemsStorage());
+      await backend.init();
+      const started = await storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/42', threadId: 'session-1' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-1',
+        kickoffMessage: null,
+      });
+      const status = async () =>
+        (await storage.listRunBindings('org1', 'project1', started.item.id)).find(
+          binding => binding.id === started.binding.id,
+        )?.status;
+      // Fresh bindings only: the age test never fires, so anything revoked is for its session.
+      const sweep = (sessionExists?: () => Promise<boolean>) =>
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() - 60_000),
+          now: new Date(),
+          ...(sessionExists ? { sessionExists } : {}),
+        });
+      return { backend, storage, started, status, sweep };
+    }
+
+    it('revokes a binding whose card no longer names its seat (the session was deleted around it)', async () => {
+      const { backend, started, status, sweep } = await boundCard();
+      // What a session deletion that predates revoking bindings left behind: the ref gone, the binding active.
+      await new Cards(backend.ops).updateAtomic({ id: started.item.id }, () => ({ sessions: {} }));
+
+      await expect(sweep()).resolves.toBe(1);
+      expect(await status()).toBe('revoked');
+    });
+
+    it('revokes a binding whose session is gone, and keeps one whose session lookup fails', async () => {
+      const bound = await boundCard();
+      await expect(bound.sweep(async () => Promise.reject(new Error('harness down')))).resolves.toBe(0);
+      expect(await bound.status()).toBe('active');
+
+      await expect(bound.sweep(async () => true)).resolves.toBe(0);
+      expect(await bound.status()).toBe('active');
+
+      await expect(bound.sweep(async () => false)).resolves.toBe(1);
+      expect(await bound.status()).toBe('revoked');
+    });
+  });
+
   it('lists the cards a session was ever bound to, revoked bindings included', async () => {
     const storage = await makeStorage();
     const start = (kickoffKey: string, sessionId: string, externalId: string) =>

@@ -28,6 +28,7 @@ export * from './model-defaults/base.ts';
 export * from './projects/base.ts';
 export * from './queue-health/base.ts';
 export * from './secret-encryption.ts';
+export * from './session-deletion.ts';
 export * from './skill-overrides/base.ts';
 export * from './source-control/base.ts';
 export * from './source-control/inmemory.ts';

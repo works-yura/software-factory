@@ -11,6 +11,7 @@ import type {
   SourceControlStorageHandle,
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
+import { deleteSessionRecord } from '@factory/store';
 import { LocalFactorySandbox } from './local-factory-sandbox.ts';
 import { requireExec } from './materialization.ts';
 import {
@@ -75,7 +76,7 @@ function isSandboxGoneError(error: unknown): boolean {
 
 export interface RetireSessionInput {
   sourceControl: SourceControlStorageHandle;
-  /** When provided, deleting the session row also strips its work-item refs. */
+  /** When provided, deleting the session row also strips its work-item refs and revokes its run bindings (`deleteSessionRecord`). */
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
   orgId: string;
   sessionId: string;
@@ -287,9 +288,7 @@ export class SessionRetirementCoordinator {
       await this.#invalidate(session);
 
       if (input.deleteSession) {
-        // Refs first: clearing again is a no-op, but refs on a deleted row would dangle forever.
-        await input.workItems?.clearSessionReferences({ orgId: input.orgId, sessionId: input.sessionId });
-        await input.sourceControl.sessions.delete(session.id);
+        await deleteSessionRecord({ sourceControl: input.sourceControl, workItems: input.workItems }, session);
         try {
           await this.#onSessionDeleted?.(session.sessionId);
         } catch (error) {
