@@ -111,7 +111,7 @@ describe('Env files per repository', () => {
     renderSettings();
     await openRepository(user, 'acme/mobile');
 
-    const table = await screen.findByRole('table', { name: 'Env files of acme/mobile' });
+    const table = await screen.findByRole('table', { name: 'Secrets of acme/mobile' });
     expect(within(table).getByText('apps/mobile/.env')).toBeInTheDocument();
     expect(within(table).getByLabelText('apps/mobile/.env stage')).toHaveTextContent('Development');
     expect(within(table).getByLabelText('.env.staging stage')).toHaveTextContent('Staging');
@@ -127,7 +127,7 @@ describe('Env files per repository', () => {
 
     renderSettings();
     await openRepository(user, 'acme/mobile');
-    await user.click(await screen.findByRole('button', { name: 'Add env file to acme/mobile' }));
+    await user.click(await screen.findByRole('button', { name: 'Add secret to acme/mobile' }));
     const dialog = await screen.findByRole('dialog');
     const path = within(dialog).getByRole('textbox', { name: 'Path' });
     await user.type(path, '../.env');
@@ -153,7 +153,7 @@ describe('Env files per repository', () => {
       ]),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    const table = await screen.findByRole('table', { name: 'Env files of acme/mobile' });
+    const table = await screen.findByRole('table', { name: 'Secrets of acme/mobile' });
     expect(await within(table).findByText('ios/Config.xcconfig')).toBeInTheDocument();
     expect(screen.queryByText('API_URL = https://staging')).not.toBeInTheDocument();
   });
@@ -213,11 +213,11 @@ describe('Env files per repository', () => {
     renderSettings();
     await openRepository(user, 'acme/web');
 
-    const table = await screen.findByRole('table', { name: 'Env files of acme/web' });
+    const table = await screen.findByRole('table', { name: 'Secrets of acme/web' });
     expect(within(table).getByText('.env')).toBeInTheDocument();
     expect(within(table).queryByRole('button', { name: '.env actions' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add env file to acme/web' })).toBeDisabled();
-    expect(screen.getByText('Only organization admins can add, view or change env files.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add secret to acme/web' })).toBeDisabled();
+    expect(screen.getByText('Only organization admins can add, view or change secrets.')).toBeInTheDocument();
     expect(requests).toEqual([]);
   });
 
@@ -228,7 +228,7 @@ describe('Env files per repository', () => {
 
     renderSettings();
     await openRepository(user, 'acme/mobile');
-    await user.click(await screen.findByRole('button', { name: 'Add env file to acme/mobile' }));
+    await user.click(await screen.findByRole('button', { name: 'Add secret to acme/mobile' }));
     const dialog = await screen.findByRole('dialog');
     await user.upload(
       within(dialog).getByLabelText('Choose file'),
@@ -258,7 +258,7 @@ describe('Env files per repository', () => {
 
     renderSettings();
     await openRepository(user, 'acme/mobile');
-    await user.click(await screen.findByRole('button', { name: 'Add env file to acme/mobile' }));
+    await user.click(await screen.findByRole('button', { name: 'Add secret to acme/mobile' }));
     const dialog = await screen.findByRole('dialog');
     await user.type(within(dialog).getByRole('textbox', { name: 'Path' }), 'apps/mobile/.env');
     fireEvent.drop(within(dialog).getByRole('group', { name: 'Drop a file here' }), {
@@ -275,14 +275,14 @@ describe('Env files per repository', () => {
 
     renderSettings();
     await openRepository(user, 'acme/mobile');
-    await user.click(await screen.findByRole('button', { name: 'Add env file to acme/mobile' }));
+    await user.click(await screen.findByRole('button', { name: 'Add secret to acme/mobile' }));
     const dialog = await screen.findByRole('dialog');
     await user.upload(
       within(dialog).getByLabelText('Choose file'),
       new File(['x'.repeat(64 * 1024 + 1)], 'big.env', { type: 'text/plain' }),
     );
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('big.env is too large: env files hold at most 64 KB.');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('big.env is too large: a secret is at most 64 KB.');
     expect(within(dialog).getByRole('textbox', { name: 'Path' })).toHaveValue('');
     expect(within(dialog).getByRole('textbox', { name: 'Content' })).toHaveValue('');
     expect(requests).toEqual([]);
