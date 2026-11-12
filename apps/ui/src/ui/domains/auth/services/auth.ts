@@ -95,13 +95,20 @@ export function openGoogleSignIn(googleUrl: string): void {
  * session cookie and sends the browser to `returnTo`; a failure lands back on `/signin` with
  * `?error=<code>`.
  */
-export async function signInWithGoogle(baseUrl: string, returnTo: string): Promise<string> {
+export async function signInWithGoogle(baseUrl: string, returnTo: string, oauthQuery?: string): Promise<string> {
   const errorCallbackURL = `/signin?returnTo=${encodeURIComponent(returnTo)}`;
   const res = await fetch(`${baseUrl}/auth/api/sign-in/social`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ provider: 'google', callbackURL: returnTo, errorCallbackURL, disableRedirect: true }),
+    body: JSON.stringify({
+      provider: 'google',
+      callbackURL: returnTo,
+      errorCallbackURL,
+      disableRedirect: true,
+      // Signing in for an MCP client: after Google, the OAuth provider goes on to the consent page.
+      ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
+    }),
   });
   let data: { url?: string; message?: string } = {};
   try {

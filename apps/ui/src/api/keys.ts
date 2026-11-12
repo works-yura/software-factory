@@ -32,6 +32,7 @@ export const queryKeys = {
   organizations: () => ['organizations'] as const,
   organization: (organizationId: string | undefined) => ['organizations', organizationId ?? null] as const,
   invitation: (invitationId: string) => ['invitation', invitationId] as const,
+  oauthClient: (clientId: string) => ['oauth-client', clientId] as const,
   factories: () => ['factories'] as const,
   boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
   /** Under `boardCatalog`, so invalidating the catalog also refreshes the board. */

@@ -1,12 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router';
+import { Navigate, useLocation, useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { AuthUnavailableError, openGoogleSignIn, redirectToLogin, signInWithGoogle } from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
+import { isSignedOAuthQuery } from '../domains/auth/services/oauth-consent';
 import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +25,7 @@ export function safeReturnTo(raw?: string): string {
 }
 
 /** better-auth deploys sign in only with Google: the button leaves for Google and comes back signed in. */
-function GoogleSignInButton({ returnTo }: { returnTo: string }) {
+function GoogleSignInButton({ returnTo, oauthQuery }: { returnTo: string; oauthQuery?: string }) {
   const { t } = useTranslation('auth');
   const { baseUrl } = useApiConfig();
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ function GoogleSignInButton({ returnTo }: { returnTo: string }) {
     setError(null);
     setPending(true);
     try {
-      openGoogleSignIn(await signInWithGoogle(baseUrl, returnTo));
+      openGoogleSignIn(await signInWithGoogle(baseUrl, returnTo, oauthQuery));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.authenticationFailed'));
       setPending(false);
@@ -60,6 +61,9 @@ export function SignInPage() {
   const { baseUrl } = useApiConfig();
   const auth = useFactoryAuth({ monitorSession: true });
   const [searchParams] = useSearchParams();
+  const { search } = useLocation();
+  // The OAuth provider sends a person here to sign in for an MCP client, with its signed request.
+  const oauthQuery = isSignedOAuthQuery(search.slice(1)) ? search.slice(1) : undefined;
   const [redirecting, setRedirecting] = useState(false);
   const returnTo = safeReturnTo(searchParams.get('returnTo') ?? undefined);
   const authError = searchParams.get('error');
@@ -72,7 +76,7 @@ export function SignInPage() {
   if (auth.isPending || !auth.isFetchedAfterMount) return <AuthPendingSkeleton />;
 
   const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);
-  if (!auth.isFetching && !auth.isError && canReturnToApp) {
+  if (!oauthQuery && !auth.isFetching && !auth.isError && canReturnToApp) {
     return <Navigate to={returnTo} replace />;
   }
 
@@ -124,7 +128,12 @@ export function SignInPage() {
                     {t('welcome.description')}
                   </Txt>
                 </div>
-                <GoogleSignInButton returnTo={returnTo} />
+                {oauthQuery ? (
+                  <Txt as="p" variant="body" tone="muted" className="mb-4">
+                    {t('consent.signInFirst')}
+                  </Txt>
+                ) : null}
+                <GoogleSignInButton returnTo={returnTo} oauthQuery={oauthQuery} />
               </>
             ) : (
               <Button
