@@ -927,11 +927,16 @@ MCP-сервер фабрики (`/web/factory/projects/:projectId/mcp`, OAuth �
   - текст `instructions` для клієнта;
   - подія `factory.activity` (поки лише опитуванням; Claude і ChatGPT її не використовують);
   - картка «MCP-клієнти» в Налаштування → Підключення з URL та кроками для Claude, Claude Code і ChatGPT.
-- **Локальний режим (наш, не з upstream; прибрано разом із local dev auth, ADR-0030):** з `FACTORY_LOCAL_DEV_AUTH=1` ендпоінт працював без OAuth-сервера (`mcp: { tokenless: true }`), бо локальний вхід і так пускав кожен запит з localhost. Запит з іншим Host отримує 401. Підключення Claude Code:
+- **Локальний режим (наш, не з upstream; прибрано разом із local dev auth, ADR-0030):** з `FACTORY_LOCAL_DEV_AUTH=1` ендпоінт працював без OAuth-сервера (`mcp: { tokenless: true }`).
+- **Вхід MCP-клієнтів (ADR-0030, доповнення 3):** сервер з `FACTORY_AUTH=google` сам є OAuth-сервером (better-auth `@better-auth/oauth-provider` під `/auth/api`): реєстрація клієнта без облікового запису (RFC 7591), authorization code + PKCE, вхід — наш Google, згода на сторінці `/oauth/consent`. Підключення Claude Code:
   ```
-  claude mcp add --transport http factory http://localhost:5874/web/factory/projects/<projectId>/mcp
+  # сервер на Mac mini (Tailscale)
+  claude mcp add --transport http factory https://factory.tail5c61c7.ts.net/web/factory/projects/<projectId>/mcp
+  # dev:local на своїй машині
+  claude mcp add --transport http factory-local http://localhost:5874/web/factory/projects/<projectId>/mcp
   ```
-  Claude.ai і ChatGPT до localhost не дістануться: їм потрібен публічний URL і справжній OAuth (WorkOS або Platform).
+  Далі в Claude Code — `/mcp` → `factory` → Authenticate: відкривається браузер, вхід через Google (якщо ще не ввійшли), сторінка «Дозволити доступ до Factory» → «Дозволити»; Claude Code отримує токен сам. `<projectId>` — id Factory (Налаштування → Підключення → MCP-клієнти показує готову адресу). Адреса має бути тією, що в `MASTRACODE_PUBLIC_URL` сервера: метадані й токени видаються для неї, тож до сервера на Tailscale через `localhost` не підключитись.
+  Claude.ai і ChatGPT підключаються так само, але їм потрібна публічна HTTPS-адреса (Tailscale Funnel чи власний домен), бо вони ходять зі своїх серверів.
 - **Як влаштовано:** MCP — окремий канал взаємодії поруч з веб-UI та HTTP API (`@factory/api`). Інструменти ті самі, що в агентів (`createFactoryTools` передає сервер), тож MCP не залежить від рушія агентів і не дає нічого понад права користувача в UI.
 
 ### 17. Чи можна додати дошку конфігом?

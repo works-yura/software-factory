@@ -34,4 +34,11 @@
 - Local dev auth прибрано повністю (`FACTORY_LOCAL_DEV_AUTH`, `FACTORY_LOCAL_DEV_TRUSTED_HOSTS`, `createLocalDevAuth`, MCP без токена `mcp.tokenless`). Сервер із `FACTORY_LOCAL_DEV_AUTH` не стартує й називає причину. Id `factory-local-org` і `factory-local-developer` лишаються константами (`packages/auth/src/existing-ids.ts`): під ними лежать наявні дані. Ключ шифрування дев-сервера на своїй машині — той самий файл `~/.mastracode/factory-local-dev-key`.
 - Тести, що входили як локальний розробник, тепер створюють сесію better-auth прямо в базі сервера (`createTestSession`); у робочий вибір входу на сервері тестовий вхід не потрапляє.
 
+**Доповнення 3 (2026-11-12): MCP-клієнти входять через OAuth на самому Factory.**
+
+- Після прибирання local dev auth зовнішні MCP-клієнти (Claude Code, Cursor) не мали чим входити: upstream очікує зовнішній OAuth-сервер (`mcp.authorizationServers`, AuthKit). Factory тепер сам є OAuth 2.1-сервером на better-auth (`@better-auth/oauth-provider` + `jwt`), без додаткових сервісів: реєстрація клієнта без облікового запису, authorization code + PKCE, вхід — Google, згода на `/oauth/consent`, access token — JWT на 1 год для ресурсу `<origin>/web/factory`, refresh-токени з відкликанням; вихід із Factory відкликає й доступ клієнтів (перевірка сесії `sid`).
+- Організація для токена — як у воротах: активна або найстаріша, `X-Mastra-Organization-Id` — лише своя, чужа Factory — 404/403.
+- Ворота пропускають ендпоінт MCP (він автентифікує сам) і OAuth-документи `/.well-known/*`. Шлях агентних сесій (`x-factory-session-token`) не змінено.
+- Відхилення: клієнт без `application_type` з redirect лише на loopback HTTP реєструється як `native` (RFC 8252), бо інакше better-auth за RFC 7591 вважає його `web` і відмовляє на `http://localhost`.
+
 **Альтернативи.** Лишити Firebase й дописати організації поверх нього — відкинуто: Firebase дає лише попап, а організації, членство й запрошення довелось би писати самим, коли better-auth і адаптер upstream їх уже мають. Запрошення листом — відкинуто: потрібен поштовий сервіс; посилання власник надсилає сам. Email/пароль поруч із Google — відкинуто власником.
