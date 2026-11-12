@@ -7,8 +7,12 @@
 # never sees the crash. This script polls GET /health and, after HEALTH_FAILS failures in a row,
 # stops the whole process group and exits 1; launchd (KeepAlive) starts it again.
 #
+# Before the server it applies the Tailscale side (see ensure_tailscale): the tailnet service people
+# open, and the public webhook paths (Funnel). Both are idempotent, so every start re-applies them
+# and a new machine gets them from this script alone.
+#
 # Settings come from ~/.mastracode/factory-v4/server.env (written by install.sh):
-#   FACTORY_REPO, MASTRACODE_PUBLIC_URL, PORT.
+#   FACTORY_REPO, MASTRACODE_PUBLIC_URL, PORT, TS_SERVICE, FUNNEL_ROUTES.
 
 # launchd starts with a bare PATH: take node and corepack from nvm's default, as a login shell
 # would. Before `set -u`: nvm.sh reads unset variables.
@@ -25,6 +29,11 @@ CONFIG="${HOME}/.mastracode/factory-v4/server.env"
 : "${MASTRACODE_PUBLIC_URL:?set MASTRACODE_PUBLIC_URL in $CONFIG}"
 PORT="${PORT:-5874}"
 export MASTRACODE_PUBLIC_URL PORT
+# Tailnet-only service people open (https://<name>.<tailnet>.ts.net). Empty: none.
+TS_SERVICE="${TS_SERVICE:-}"
+# Public webhook paths on this machine's name, "<public path>=<server path>" separated by spaces.
+# Only these paths are reachable from the internet; everything else answers 404.
+FUNNEL_ROUTES="${FUNNEL_ROUTES:-}"
 
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
 HEALTH_INTERVAL=20   # seconds between checks
@@ -35,6 +44,34 @@ MOUNT_WAIT=300       # seconds to wait for the project's volume
 log() { echo "[watchdog $(date '+%F %T')] $*"; }
 
 command -v corepack >/dev/null || { log "corepack not found on PATH"; exit 1; }
+
+# Runs a command with a time limit: a Tailscale call that waits for an admin approval must not
+# hold the server's start.
+with_timeout() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+
+# The Tailscale side, re-applied on every start. Failures are logged, never fatal: the server
+# still runs on 127.0.0.1 and in the tailnet.
+ensure_tailscale() {
+  command -v tailscale >/dev/null || { log "tailscale CLI not found: skipping service and Funnel"; return; }
+  for (( waited = 0; waited < 60; waited += 5 )); do
+    tailscale status >/dev/null 2>&1 && break
+    sleep 5
+  done
+  local target="http://127.0.0.1:${PORT}"
+  if [ -n "$TS_SERVICE" ]; then
+    with_timeout 20 tailscale serve --bg --service="$TS_SERVICE" --https=443 "$target" >/dev/null 2>&1 \
+      && log "tailscale service $TS_SERVICE -> $target" \
+      || log "tailscale service $TS_SERVICE: not applied (approval pending or Tailscale down)"
+  fi
+  local route path server_path
+  for route in $FUNNEL_ROUTES; do
+    path="${route%%=*}" server_path="${route#*=}"
+    with_timeout 20 tailscale funnel --bg --yes --https=443 --set-path="$path" "${target}${server_path}" >/dev/null 2>&1 \
+      && log "funnel $path -> ${target}${server_path}" \
+      || log "funnel $path: not applied (Funnel not allowed for this machine?)"
+  done
+}
+ensure_tailscale
 
 DIR="$FACTORY_REPO/apps/server"
 for (( waited = 0; waited < MOUNT_WAIT; waited += 5 )); do [ -d "$DIR" ] && break; sleep 5; done

@@ -3,6 +3,7 @@
 #   scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
 # Copies start-server.sh into ~/.mastracode/factory-v4/, writes server.env, renders the plist into
 # ~/Library/LaunchAgents/ and (re)loads it. Rerun after changing start-server.sh or the plist.
+# server.env keeps local edits: a rerun only adds settings it is missing.
 set -euo pipefail
 
 PUBLIC_URL="${1:-}"
@@ -24,6 +25,11 @@ MASTRACODE_PUBLIC_URL="$PUBLIC_URL"
 PORT=5874
 CONF
 fi
+
+# Settings added after the first install: append the defaults a server.env does not have yet.
+add_default() { grep -q "^$1=" "$STATE/server.env" || printf '%s=%s\n' "$1" "$2" >> "$STATE/server.env"; }
+add_default TS_SERVICE '"svc:factory"'
+add_default FUNNEL_ROUTES '"/factory/gitlab=/web/gitlab/webhook /factory/github=/web/github/webhook"'
 
 sed "s|__HOME__|$HOME|g" "$HERE/$LABEL.plist" > "$PLIST"
 plutil -lint "$PLIST" >/dev/null

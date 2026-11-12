@@ -57,13 +57,13 @@ scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
 | Публічна адреса | Куди | Секрет |
 | --- | --- | --- |
 | `https://hab.tail5c61c7.ts.net/factory/gitlab` | `http://127.0.0.1:5874/web/gitlab/webhook` | `GITLAB_WEBHOOK_SECRET` → поле Secret token вебхука в GitLab |
+| `https://hab.tail5c61c7.ts.net/factory/github` | `http://127.0.0.1:5874/web/github/webhook` | `GITHUB_APP_WEBHOOK_SECRET` → Webhook secret GitHub App |
 
-Усе інше на цьому імені (`/`, `/factory`, `/api`, `/web/…`) — 404; UI і API назовні не видно. Обробник відкидає запит без правильного `X-Gitlab-Token` (401). Конфіг зберігає Tailscale, він переживає перезавантаження й не залежить від LaunchAgent. Після перейменування машини Funnel лишається на старому імені: перезапустити `tailscale funnel … --set-path=…` для нового імені й оновити URL у GitLab; запис для старого імені в `tailscale funnel status` нешкідливий (старе ім'я вже не резолвиться).
+Усе інше на цьому імені (`/`, `/factory`, `/api`, `/web/…`) — 404; UI і API назовні не видно. Обробник відкидає запит без правильного `X-Gitlab-Token` (401). **Сервіс і шляхи Funnel застосовує сам `start-server.sh` при кожному старті** (`ensure_tailscale`): список — у `server.env`, `TS_SERVICE` і `FUNNEL_ROUTES` (`"<публічний шлях>=<шлях сервера> …"`). Новий шлях — додати в `FUNNEL_ROUTES` і `launchctl kickstart -k gui/$UID/ai.eclipt.factory`; руками `tailscale funnel` не запускати. Не застосувалось (Funnel не дозволено машині, сервіс чекає підтвердження) — рядок `[watchdog …] funnel …: not applied` у лозі, сервер стартує все одно. Після перейменування машини наступний старт сам відкриє шляхи на новому імені; оновити URL у GitLab і GitHub; запис для старого імені в `tailscale funnel status` нешкідливий (старе ім'я вже не резолвиться).
 
 ```sh
 tailscale funnel status                                  # що відкрито
-tailscale funnel --bg --https=443 --set-path=/factory/github http://127.0.0.1:5874/web/github/webhook   # додати шлях
-tailscale funnel --https=443 --set-path=/factory/gitlab off   # прибрати один шлях
+tailscale funnel --https=443 --set-path=/factory/gitlab off   # прибрати шлях (і з FUNNEL_ROUTES, інакше старт поверне)
 tailscale funnel --https=443 off                              # закрити все
 ```
 
