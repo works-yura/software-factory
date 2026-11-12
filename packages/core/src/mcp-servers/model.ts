@@ -202,6 +202,9 @@ export interface McpServerView {
   callTimeoutMs?: number;
   /** What the last check or session use found; absent until the server was checked or used. */
   health?: McpServerHealth;
+  /** When and by whom it was added (a user id, or `integration:<id>` for a server an integration manages). */
+  createdAt: string;
+  createdBy: string;
   updatedAt: string;
   updatedBy: string;
 }

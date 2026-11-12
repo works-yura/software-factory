@@ -183,6 +183,15 @@ describe('Firebase bindings', () => {
     expect(audits.filter(audit => audit.action === 'factory.observability.mapping_updated')).toHaveLength(3);
   });
 
+  it('records when and by whom a binding was made, keeps it through a rename', async () => {
+    const { json, addAccount } = setup();
+    const accountId = await addAccount();
+    const { binding: saved } = await json('POST', '/web/firebase/bindings', binding(accountId));
+    expect(saved).toMatchObject({ createdAt: expect.any(String), createdBy: expect.any(String) });
+    const renamed = await json<FirebaseStateView>('PUT', `/web/firebase/bindings/${saved.id}`, binding(accountId, { name: 'Syncta prod' }));
+    expect(renamed.bindings).toEqual([expect.objectContaining({ name: 'Syncta prod', createdAt: saved.createdAt, createdBy: saved.createdBy })]);
+  });
+
   it('checks a binding read by read, with its own account, and names the missing role', async () => {
     const { call, json, addAccount } = setup({
       google: { fail: { crashlytics: { status: 403, body: { error: { code: 403, message: 'The caller does not have permission' } } } } },

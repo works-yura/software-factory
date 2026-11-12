@@ -364,6 +364,8 @@ export class McpServersStorage extends FactoryStorageDomain {
       ...(typeof row.call_timeout_ms === 'number' ? { callTimeoutMs: row.call_timeout_ms } : {}),
       ...(row.health ? { health: row.health as McpServerHealth } : {}),
       ...(row.owner ? { owner: mcpServerOwnerSchema.parse(row.owner) } : {}),
+      createdAt: new Date(row.created_at).toISOString(),
+      createdBy: row.created_by,
       updatedAt: new Date(row.updated_at).toISOString(),
       updatedBy: row.updated_by,
     };

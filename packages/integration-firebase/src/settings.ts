@@ -42,6 +42,8 @@ export const googleCloudProjectIdSchema = z
 
 /** What a binding reads: one Google Cloud project's logs, and the crashes of its apps. */
 export const firebaseBindingInputSchema = z.object({
+  /** A name people give the connection; absent shows the project id. */
+  name: z.string().trim().min(1).max(80).optional(),
   factoryProjectId: z.string().min(1).max(128),
   accountId: z.string().min(1).max(64),
   /** Google Cloud / Firebase project id, e.g. `syncta-prod`. Logs are read from it. */
@@ -68,7 +70,12 @@ export const firebaseBindingInputSchema = z.object({
 });
 export type FirebaseBindingInput = z.infer<typeof firebaseBindingInputSchema>;
 
-export const firebaseBindingSchema = firebaseBindingInputSchema.extend({ id: z.string().min(1).max(64) });
+export const firebaseBindingSchema = firebaseBindingInputSchema.extend({
+  id: z.string().min(1).max(64),
+  /** When and by whom the binding was made; absent on bindings saved before it was recorded. */
+  createdAt: z.string().optional(),
+  createdBy: z.string().optional(),
+});
 export type FirebaseBinding = z.infer<typeof firebaseBindingSchema>;
 
 /** One account as lists show it: never the key. */

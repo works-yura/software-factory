@@ -343,10 +343,15 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
       method: 'POST',
       requiresAuth: false,
       handler: handle(async c => {
-        const { orgId } = await caller(c, auth, true);
+        const { orgId, userId } = await caller(c, auth, true);
         const input = await readBody(c, firebaseBindingInputSchema, 'invalid_binding');
         await validBinding(orgId, input);
-        const binding = await saveBinding(storage, orgId, { id: newBindingId(), ...input });
+        const binding = await saveBinding(storage, orgId, {
+          id: newBindingId(),
+          ...input,
+          createdAt: new Date().toISOString(),
+          ...(userId ? { createdBy: userId } : {}),
+        });
         await audit(c, 'mapping_updated', bindingAudit(binding), binding.factoryProjectId);
         await syncManaged(orgId);
         return c.json({ binding, ...(await view(orgId)) });
@@ -360,8 +365,15 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         const bindingId = param(c, 'bindingId');
         const input = await readBody(c, firebaseBindingInputSchema, 'invalid_binding');
         const state = await validBinding(orgId, input);
-        if (!state.bindings.some(binding => binding.id === bindingId)) throw new Refusal(404, { error: 'binding_not_found' });
-        const binding = await saveBinding(storage, orgId, { id: bindingId, ...input });
+        const existing = state.bindings.find(binding => binding.id === bindingId);
+        if (!existing) throw new Refusal(404, { error: 'binding_not_found' });
+        // A change keeps when and by whom the binding was made.
+        const binding = await saveBinding(storage, orgId, {
+          id: bindingId,
+          ...input,
+          ...(existing.createdAt ? { createdAt: existing.createdAt } : {}),
+          ...(existing.createdBy ? { createdBy: existing.createdBy } : {}),
+        });
         await audit(c, 'mapping_updated', bindingAudit(binding), binding.factoryProjectId);
         await syncManaged(orgId);
         return c.json({ binding, ...(await view(orgId)) });
