@@ -19,6 +19,8 @@ import type { Context } from 'hono';
 
 import {
   CONNECTION_LANGUAGES,
+  CONNECTIONS_CONTRACT_VERSION,
+  contractMajor,
   DEFAULT_CONNECTION_PERMISSIONS,
   connectRequestSchema,
   reconnectRequestSchema,
@@ -106,6 +108,11 @@ export const connectionRefused = (
  */
 export interface IntegrationConnections {
   /**
+   * The contract version this connector implements ({@link CONNECTIONS_CONTRACT_VERSION}). The
+   * registry serves only its own major; absent means the version it was built with (first-party).
+   */
+  readonly contractVersion?: string;
+  /**
    * Who may make each change (`member`, `admin`, or one of `policies`); what is left out is an
    * organization admin's ({@link DEFAULT_CONNECTION_PERMISSIONS}). The registry enforces it on every
    * route and turns a refused action, method or setting into `{ reason }` in what it serves: a
@@ -185,6 +192,7 @@ const COPY: ConnectionCopy<{
   listFailed: (error: string) => string;
   organizationWide: string;
   unsupported: string;
+  contract: (version: string, server: string) => string;
 }> = {
   en: {
     unauthorized: 'Sign in to see connections.',
@@ -197,6 +205,7 @@ const COPY: ConnectionCopy<{
     listFailed: error => `Could not read the connections: ${error}`,
     organizationWide: 'The whole organization',
     unsupported: 'This connection cannot do that.',
+    contract: (version, server) => `Built for connections contract ${version}; this server speaks ${server}. Update the connector.`,
   },
   uk: {
     unauthorized: 'Увійдіть, щоб бачити підключення.',
@@ -209,6 +218,7 @@ const COPY: ConnectionCopy<{
     listFailed: error => `Не вдалося прочитати підключення: ${error}`,
     organizationWide: 'Уся організація',
     unsupported: 'Це підключення так не вміє.',
+    contract: (version, server) => `Зроблено для контракту підключень ${version}; сервер говорить ${server}. Оновіть конектор.`,
   },
 };
 
@@ -241,7 +251,16 @@ function splitConnectionId(id: string): { connectorId: string; localId: string }
  */
 export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRoute[] {
   const { auth, connectors, emitAudit } = options;
-  const byId = new Map(connectors.map(connector => [connector.id, connector]));
+  /** Whether the registry speaks the connector's contract major; one that does not is served nowhere, only named. */
+  const speaks = (connector: ConnectorRegistration) =>
+    contractMajor(connector.connections.contractVersion ?? CONNECTIONS_CONTRACT_VERSION) === contractMajor(CONNECTIONS_CONTRACT_VERSION);
+  /** A connector named by its id alone, when it cannot describe itself. */
+  const unnamed = (connector: ConnectorRegistration): ConnectorRef => ({ id: connector.id, name: connector.id, icon: connector.id });
+  const unsupportedFailure = (connector: ConnectorRegistration, language: ConnectionLanguage) => ({
+    connector: unnamed(connector),
+    message: localize(COPY, language).contract(connector.connections.contractVersion ?? '?', CONNECTIONS_CONTRACT_VERSION),
+  });
+  const byId = new Map(connectors.filter(speaks).map(connector => [connector.id, connector]));
 
   const refuse = (c: RouteContext, status: number, body: ConnectionErrorBody) =>
     c.json(body, status as 400 | 401 | 403 | 404 | 409 | 422 | 502 | 503);
@@ -414,19 +433,24 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
         const copy = localize(COPY, language);
         const results = await Promise.all(
           connectors.map(async connector => {
-            const view = await describe(connector, request);
+            if (!speaks(connector)) return { connections: [], failure: unsupportedFailure(connector, language) };
+            let view: ConnectorView | undefined;
             try {
+              view = await describe(connector, request);
               const listed = await connector.connections.list(request);
               const gated = await Promise.all(listed.map(connection => gateActions(connector, request, connection)));
-              return { connections: gated.map(connection => globalView(refOf(view), connection)), failure: undefined };
+              const ref = refOf(view);
+              return { connections: gated.map(connection => globalView(ref, connection)), failure: undefined };
             } catch (error) {
               console.warn(`[factory] ${connector.id} connections could not be listed:`, error);
               const message = copy.listFailed(error instanceof Error ? error.message : String(error));
-              return { connections: [], failure: { connector: refOf(view), message } };
+              // A connector that fails stays apart: named in `failures`, the others still served.
+              return { connections: [], failure: { connector: view ? refOf(view) : unnamed(connector), message } };
             }
           }),
         );
         return c.json({
+          contractVersion: CONNECTIONS_CONTRACT_VERSION,
           connections: results.flatMap(result => result.connections),
           failures: results.flatMap(result => (result.failure ? [result.failure] : [])),
           copy: { organizationWide: copy.organizationWide },
@@ -439,7 +463,24 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       handler: async c => {
         const resolved = await resolve(c);
         if ('response' in resolved) return resolved.response;
-        return c.json({ connectors: await Promise.all(connectors.map(connector => describe(connector, resolved.request))) });
+        const copy = localize(COPY, resolved.language);
+        const failures = connectors.filter(connector => !speaks(connector)).map(connector => unsupportedFailure(connector, resolved.language));
+        const described = await Promise.all(
+          connectors.filter(speaks).map(async connector => {
+            try {
+              return await describe(connector, resolved.request);
+            } catch (error) {
+              console.warn(`[factory] ${connector.id} could not describe itself:`, error);
+              failures.push({ connector: unnamed(connector), message: copy.listFailed(error instanceof Error ? error.message : String(error)) });
+              return undefined;
+            }
+          }),
+        );
+        return c.json({
+          contractVersion: CONNECTIONS_CONTRACT_VERSION,
+          connectors: described.filter((view): view is ConnectorView => view !== undefined),
+          ...(failures.length > 0 ? { failures } : {}),
+        });
       },
     }),
     registerApiRoute('/web/connections', {

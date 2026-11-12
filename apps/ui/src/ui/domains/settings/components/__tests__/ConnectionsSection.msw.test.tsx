@@ -376,6 +376,19 @@ describe('Підключення', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it('says the page needs an update when the server speaks another connections contract major', async () => {
+    useHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/connections`, () =>
+        HttpResponse.json({ contractVersion: '9.0.0', connections: [acmeConnection], failures: [], copy: { organizationWide: 'Whole organization' } }),
+      ),
+    );
+    renderConnections();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This page needs an update');
+    expect(alert).toHaveTextContent('contract 9.0.0');
+  });
+
   it('picks with the keyboard: the search narrows the list, arrows move, Enter opens', async () => {
     useHandlers();
     renderConnections();

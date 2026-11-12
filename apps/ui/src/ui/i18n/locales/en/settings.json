@@ -1457,6 +1457,10 @@
     }
   },
   "connections": {
+    "contractUpdate": {
+      "title": "This page needs an update",
+      "message": "The server speaks connections contract {{server}}; this page knows {{client}}. Reload, or update the Factory app, to see every connection correctly."
+    },
     "title": "Connections",
     "description": "Services and tools this Factory's agents use. Accounts belong to the organization: one can be linked to several Factories.",
     "add": "Add connection",

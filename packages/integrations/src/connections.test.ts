@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
+import { CONNECTIONS_CONTRACT_VERSION } from '@factory/contracts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 import { buildConnectionRoutes, connectionLanguage, connectionOk, connectionRefused } from './connections.ts';
@@ -174,6 +175,46 @@ describe('/web/connections', () => {
     }
     expect((await send('/web/connections/naive%3Aone/settings', json('PATCH', { section: 'import', values: { on: false } }))).status).toBe(200);
     expect(calls).toEqual([]);
+  });
+
+  it('serves only connectors of its contract major, naming the others; a connector that cannot describe itself stays apart', async () => {
+    const calls: Array<{ call: string; request: ConnectionRequest; args: unknown[] }> = [];
+    const future: IntegrationConnections = { ...fakeConnector(calls), contractVersion: '2.0.0' };
+    const minor: IntegrationConnections = { ...fakeConnector(calls), contractVersion: `${CONNECTIONS_CONTRACT_VERSION.split('.')[0]}.99.0` };
+    const broken: IntegrationConnections = {
+      ...fakeConnector(calls),
+      describe: () => {
+        throw new Error('no config');
+      },
+    };
+    const routes = buildConnectionRoutes({
+      auth: fakeRouteAuth(),
+      connectors: [
+        { id: 'future', connections: future },
+        { id: 'minor', connections: minor },
+        { id: 'broken', connections: broken },
+      ],
+    });
+    const send = (path: string, init?: RequestInit) => {
+      const hono = new Hono();
+      hono.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { id: 'u', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(hono as never, routes);
+      return hono.request(path, init);
+    };
+    const methods = (await (await send('/web/connections/methods')).json()) as any;
+    expect(methods.contractVersion).toBe(CONNECTIONS_CONTRACT_VERSION);
+    expect(methods.connectors.map((connector: { id: string }) => connector.id)).toEqual(['minor']);
+    expect(methods.failures.map((failure: { connector: { id: string } }) => failure.connector.id).sort()).toEqual(['broken', 'future']);
+    expect(methods.failures.find((failure: { connector: { id: string } }) => failure.connector.id === 'future').message).toContain('2.0.0');
+
+    const list = (await (await send('/web/connections')).json()) as any;
+    expect(list.contractVersion).toBe(CONNECTIONS_CONTRACT_VERSION);
+    expect(list.connections.map((connection: { id: string }) => connection.id)).toEqual(['minor:one']);
+    expect(list.failures.map((failure: { connector: { id: string } }) => failure.connector.id).sort()).toEqual(['broken', 'future']);
+    expect((await send('/web/connections/future%3Aone/detail')).status).toBe(404);
   });
 
   it('asks a named policy of the connector, per connection', async () => {

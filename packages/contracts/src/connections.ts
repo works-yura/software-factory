@@ -30,6 +30,19 @@ import { z } from 'zod';
 
 export type { AuthFlowStatus, ConnectionField, ToolProviderCapabilities, ToolProviderHealth };
 
+/**
+ * The connections contract's version (semver). Additive changes — a new optional field, a new section
+ * type a client may skip, a new category — raise the minor; removing or changing the meaning of
+ * anything raises the major. The registry serves only connectors of its major (others are named in
+ * `failures`); a client that meets an unknown major says it needs an update instead of guessing.
+ */
+export const CONNECTIONS_CONTRACT_VERSION = '1.2.0';
+
+/** The major of a contract version (`'1.2.0'` → 1); NaN when it is not one. */
+export function contractMajor(version: string): number {
+  return Number.parseInt(version.split('.')[0] ?? '', 10);
+}
+
 /** Languages the server writes connection copy in; anything else falls back to English. */
 export const CONNECTION_LANGUAGES = ['en', 'uk'] as const;
 export type ConnectionLanguage = (typeof CONNECTION_LANGUAGES)[number];
@@ -276,6 +289,8 @@ export interface ConnectionDetailView {
 }
 
 export interface ConnectionsListResponse {
+  /** The contract the server speaks ({@link CONNECTIONS_CONTRACT_VERSION}). */
+  contractVersion: string;
   connections: ConnectionView[];
   /** Connectors whose connections could not be read; the others still show. */
   failures: Array<{ connector: ConnectorRef; message: string }>;
@@ -284,7 +299,10 @@ export interface ConnectionsListResponse {
 }
 
 export interface ConnectorsResponse {
+  contractVersion: string;
   connectors: ConnectorView[];
+  /** Connectors left out: one that could not describe itself, or was built for another contract major. */
+  failures?: Array<{ connector: ConnectorRef; message: string }>;
 }
 
 /**

@@ -1,9 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router';
+
+import { CONNECTIONS_CONTRACT_VERSION, contractMajor } from '@factory/contracts';
 
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { AddConnectionDialog } from './AddConnectionDialog';
@@ -24,6 +27,14 @@ const LEGACY_TABS = new Set(['services', 'mcp']);
 
 /** A connect step the dialog opens straight into (`&step=`): a connector's, or a connection's reconnect. */
 const isStep = (value: string | null): value is Step => Boolean(value?.startsWith('connector:') || value?.startsWith('reconnect:'));
+
+/**
+ * Whether this page understands the server's connections contract: the same major. A server of an
+ * older contract may leave fields out (its `contractVersion` may be missing too, read as 1).
+ */
+function speaksContract(version: string | undefined): boolean {
+  return contractMajor(version ?? '1.0.0') === contractMajor(CONNECTIONS_CONTRACT_VERSION);
+}
 
 /** The `?connection=` link of a connection's page. */
 export const connectionHref = (id: string) => `?${new URLSearchParams({ connection: id }).toString()}`;
@@ -126,6 +137,11 @@ export function ConnectionsSection() {
               {t('intake.retry')}
             </Button>
           </div>
+        )}
+        {sources.connections && !speaksContract(sources.connections.contractVersion) && (
+          <Notice variant="warning" title={t('connections.contractUpdate.title')} role="alert">
+            <Notice.Message>{t('connections.contractUpdate.message', { server: sources.connections.contractVersion, client: CONNECTIONS_CONTRACT_VERSION })}</Notice.Message>
+          </Notice>
         )}
         {(sources.connections?.failures ?? []).map(failure => (
           <Txt key={failure.connector.id} as="p" variant="caption" className="text-destructive-foreground">

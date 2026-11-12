@@ -474,6 +474,7 @@ describe('GithubIntegration: connections through the shared connection routes (A
     expect(JSON.stringify(status)).not.toContain(TOKEN);
     const listed = (await (await t.request('/web/connections')).json()) as any;
     expect(listed).toEqual({
+      contractVersion: expect.any(String),
       connections: [
         expect.objectContaining({
           id: body.connection.id,
