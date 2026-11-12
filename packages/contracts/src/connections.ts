@@ -36,7 +36,7 @@ export type { AuthFlowStatus, ConnectionField, ToolProviderCapabilities, ToolPro
  * anything raises the major. The registry serves only connectors of its major (others are named in
  * `failures`); a client that meets an unknown major says it needs an update instead of guessing.
  */
-export const CONNECTIONS_CONTRACT_VERSION = '1.2.0';
+export const CONNECTIONS_CONTRACT_VERSION = '1.3.0';
 
 /** The major of a contract version (`'1.2.0'` → 1); NaN when it is not one. */
 export function contractMajor(version: string): number {
