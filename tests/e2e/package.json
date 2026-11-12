@@ -11,6 +11,8 @@
   },
   "devDependencies": {
     "@factory/auth-better-auth": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/libsql": "1.29.0",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@playwright/test": "1.61.1",
     "@types/node": "22.20.1",

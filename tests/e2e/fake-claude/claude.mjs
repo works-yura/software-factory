@@ -71,6 +71,8 @@ const VALUE_FLAGS = new Set([
   '--max-turns',
   '--append-system-prompt',
   '--system-prompt',
+  // Like the real CLI: `summarized` asks for thinking summaries instead of empty (signature-only) blocks.
+  '--thinking-display',
 ]);
 const BOOLEAN_FLAGS = new Set(['--verbose', '--include-partial-messages', '--strict-mcp-config', '--continue']);
 const FORBIDDEN_FLAGS = new Set(['--dangerously-skip-permissions', '--allow-dangerously-skip-permissions']);
@@ -133,12 +135,63 @@ function splitTools(value) {
     .filter(Boolean);
 }
 
-async function readStdin() {
+async function readStdin(inputFormat) {
   if (process.stdin.isTTY) return '';
+  if (inputFormat === 'stream-json') return readFirstStreamJsonMessage();
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return Buffer.concat(chunks).toString('utf8');
 }
+
+/**
+ * `--input-format stream-json`: the harness writes the prompt as the first `user` message and keeps
+ * stdin open for the rest of the run (a steer, a control response), like the real CLI expects. The
+ * prompt is that first message's text; later lines are only recorded.
+ */
+function readFirstStreamJsonMessage() {
+  return new Promise((resolvePrompt, rejectPrompt) => {
+    let buffered = '';
+    let prompt;
+    const onLine = line => {
+      if (!line.trim()) return;
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        usageError(`Invalid stream-json input: ${line.slice(0, 200)}`);
+      }
+      if (prompt !== undefined) {
+        laterInputs.push(message);
+        return;
+      }
+      const content = message?.message?.content;
+      prompt =
+        typeof content === 'string'
+          ? content
+          : Array.isArray(content)
+            ? content.map(part => (typeof part?.text === 'string' ? part.text : '')).join('')
+            : '';
+      resolvePrompt(prompt);
+    };
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', chunk => {
+      buffered += chunk;
+      let newline;
+      while ((newline = buffered.indexOf('\n')) !== -1) {
+        onLine(buffered.slice(0, newline));
+        buffered = buffered.slice(newline + 1);
+      }
+    });
+    process.stdin.on('end', () => {
+      if (buffered) onLine(buffered);
+      if (prompt === undefined) resolvePrompt('');
+    });
+    process.stdin.on('error', rejectPrompt);
+  });
+}
+
+/** stream-json messages the harness wrote after the prompt. */
+const laterInputs = [];
 
 // ---------------------------------------------------------------------------
 // Output
@@ -442,7 +495,7 @@ const SCENARIOS = {
 async function main() {
   const started = Date.now();
   const args = parseArgs(process.argv.slice(2));
-  const prompt = args.promptArg && args.promptArg !== '-' ? args.promptArg : await readStdin();
+  const prompt = args.promptArg && args.promptArg !== '-' ? args.promptArg : await readStdin(args.inputFormat);
   if (!prompt.trim()) usageError('Input must be provided either through stdin or as a prompt argument when using --print');
   let settings = {};
   if (args.settings) {

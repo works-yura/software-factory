@@ -61,7 +61,9 @@ test('New Factory wizard: the Claude Code harness offers Claude models, not Mast
   await page.getByRole('option', { name: /Claude Code/ }).click();
 
   await expect(stepTitle(page, 'Choose your codebase')).toBeVisible();
+  // Repositories are picked several at a time now: select the one, then continue with it.
   await page.getByRole('option', { name: new RegExp(projectPath()) }).click();
+  await page.getByRole('option', { name: /^Continue with 1 repository/ }).click();
 
   // The model step for a Claude Code Factory: sign-in status and Claude models only.
   await expect(stepTitle(page, 'Choose your Claude model')).toBeVisible();
@@ -69,7 +71,8 @@ test('New Factory wizard: the Claude Code harness offers Claude models, not Mast
   for (const model of ['Claude Code default', 'Opus', 'Sonnet', 'Haiku']) {
     await expect(page.getByRole('option', { name: new RegExp(`^${model}`) })).toBeVisible();
   }
-  await expect(page.getByText('Uses your `claude` login on this machine.', { exact: false })).toBeVisible();
+  // Turns run only on the organization's Claude sign-ins (the stack wrote one for the e2e person).
+  await expect(page.getByText('Runs on your organization’s Claude Code account.', { exact: false })).toBeVisible();
   // Mastra's provider step would offer provider sign-in and API keys.
   for (const mastraOnly of ['Connect with an API key', 'Search models and providers…', 'API key providers']) {
     await expect(page.getByText(mastraOnly)).toHaveCount(0);
@@ -111,7 +114,7 @@ test('Chat: a Write waiting for permission shows the approval card, and Approve 
   await page.goto(`${baseUrl()}/factories/${anchor.factoryId}/user/threads/${chat.sessionId}`);
   // Sent from the composer, as a person would.
   const composer = page.getByRole('region', { name: 'Thread composer' });
-  await expect(composer.getByText('Claude Code · Haiku')).toBeVisible();
+  await expect(composer.getByRole('button', { name: /^Session model/ })).toContainText('Haiku');
   await composer.getByRole('textbox', { name: 'Message' }).fill('List the work items, then write e2e-proof.txt.');
   await composer.getByRole('button', { name: 'Send message' }).click();
 

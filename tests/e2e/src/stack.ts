@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { createTestSession } from '@factory/auth-better-auth/testing';
 
+import { seedClaudeSignIn } from './claude-sign-in.ts';
 import { registerSession } from './factory-api.ts';
 import { startFakeGitLab, type FakeGitLab } from './fake-gitlab.ts';
 
@@ -268,6 +269,8 @@ export async function startStack(options: StackOptions): Promise<Stack> {
   // Google sign-in is the only sign-in; the e2e person gets a session written straight into the
   // server's auth database (createTestSession), so the Google client below is never called.
   const authSecret = randomBytes(32).toString('base64');
+  // Set explicitly (not the machine key under the scratch HOME) so the e2e can write the Claude sign-in.
+  const credentialKey = randomBytes(32).toString('base64');
 
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -284,6 +287,7 @@ export async function startStack(options: StackOptions): Promise<Stack> {
     GOOGLE_CLIENT_ID: 'factory-e2e',
     GOOGLE_CLIENT_SECRET: 'factory-e2e',
     FACTORY_AUTH_SECRET: authSecret,
+    FACTORY_CREDENTIAL_ENCRYPTION_KEY: credentialKey,
     MASTRACODE_LOCAL_SANDBOX_ROOT: sandboxRoot,
     FACTORY_CLAUDE_CODE_STORE_DIR: join(scratch, 'claude-code-sessions'),
     GITLAB_ACCESS_TOKEN: gitlab.token,
@@ -388,6 +392,21 @@ export async function startStack(options: StackOptions): Promise<Stack> {
     name: 'Factory E2E',
   });
   registerSession(baseUrl, sessionCookie);
+  // The first signed-in request gives the e2e person their organization; Claude Code turns there need a Claude sign-in.
+  const me = await fetch(`${baseUrl}/auth/me`, { headers: { cookie: sessionCookie } });
+  const { user } = (await me.json()) as { user?: { userId?: string; organizationId?: string } };
+  if (!me.ok || !user?.userId || !user.organizationId) {
+    await stop();
+    throw new Error(`The e2e session was not accepted (${me.status}): ${JSON.stringify(user)}`);
+  }
+  if (options.claude === 'fake') {
+    await seedClaudeSignIn({
+      databaseUrl: `file:${databasePath}`,
+      encryptionKey: credentialKey,
+      orgId: user.organizationId,
+      userId: user.userId,
+    });
+  }
 
   return {
     baseUrl,
