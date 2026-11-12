@@ -571,7 +571,7 @@ GitLab суворіший: подія обробляється, лише якщ�
 
 **Зроблено (2026-10-28): ClickUp через polling** — `packages/integration-clickup`, без вебхука.
 
-- **Env:** лише `CLICKUP_API_TOKEN` (personal token `pk_...`) і, за потреби, `CLICKUP_POLL_INTERVAL_SECONDS` (мін. 15, за замовчуванням 60). Без токена інтеграція не підключається.
+- **Env:** лише `CLICKUP_API_TOKEN` (personal token `pk_...`) і, за потреби, `CLICKUP_POLL_INTERVAL_SECONDS` (мін. 15, за замовчуванням 60). Без токена інтеграція не підключається. *Змінено 2026-11-12 ([ADR-0032](adr/0032-integration-tokens-belong-to-organization.md)): токен — організації, його підключає адміністратор у «Підключеннях»; `CLICKUP_API_TOKEN` більше не читається (один раз переноситься в `factory-local-org`).*
 - **Налаштування в UI** (Settings › Intake › ClickUp): стан токена, перемикач синхронізації, вибір Lists, маршрутизація List → фабрика + дошка, маршрути тег → дошка на фабрику, перемикач «Автоматично запускати триаж».
 - **Intake:** `listSources` повертає Lists (`Space / Folder / List`), `listItems`/`listIssues`/`getIssue`, `createComment`, `updateIssue` (статус за типом чи назвою).
 - **Поллер:** нова задача → картка через `upsertLinkedWorkItem` (ідемпотентно, ключ `clickup:task:<id>:created`), джерело `clickup-task`. Дошка: маршрут за тегом, інакше дошка прив'язки List. List без прив'язки й дошки ігнорується. Задача, закрита в ClickUp, переносить картку за `sourceClosed` її дошки. Метадані наявної картки оновлюються.

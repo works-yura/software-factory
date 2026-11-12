@@ -13,11 +13,11 @@
 | Картка й сесія | Тред належить картці задачі. Немає картки, акаунт з іншої організації або на картці немає сесії — Factory пише це в треді | `ConversationRouter` |
 | Голос | Аудіовкладення (`audio/*` або m4a/mp3/ogg/opus/wav/webm/aac/flac, до 25 МБ) транскрибуються через `Transcriber` у Factory картки від імені відправника. Без транскрибера чи при помилці кліп лишається з приміткою | `ConversationRouter#body` |
 | Доставка | `sendMessage` у живу сесію картки (будить сесію); ingress `clickup:message:<id>` — повтор не дублюється | `@factory/runtime` диспетчер |
-| Відповідь | Агент викликає `factory_conversation_reply({ platform, thread, text })`; ClickUp постить відповідь у тред коментаря | `packages/integrations/src/conversation/surface.ts`, `createClickUpChannel` |
+| Відповідь | Агент викликає `factory_conversation_reply({ platform, thread, text })`; ClickUp постить відповідь у тред коментаря токеном організації треду. Тред — `<taskId>:<commentId>:<orgId>`; тред іншої організації інструмент відхиляє, старий `<taskId>:<commentId>` відповідає від організації сесії | `packages/integrations/src/conversation/surface.ts`, `createClickUpChannel` |
 
 ## Що налаштувати
 
-- `CLICKUP_API_TOKEN` — токен **окремого сервісного акаунта** ClickUp (його згадують, щоб покликати агента; його коментарі не будять агента).
+- Токен ClickUp організації (Налаштування › Підключення › ClickUp, підключає адміністратор; [ADR-0032](../../adr/0032-integration-tokens-belong-to-organization.md)) — краще **окремого сервісного акаунта** ClickUp (його згадують, щоб покликати агента; його коментарі не будять агента). У кожної організації свій бот.
 - List задачі має бути у Settings › Intake і прив'язаний до проєкту; задача — мати картку.
 - Публічний URL сервера (`MASTRACODE_PUBLIC_URL`) — для посилання прив'язки.
 

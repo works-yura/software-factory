@@ -88,7 +88,15 @@
 - Стан прив'язки без «Бази» — зберігати результат «Перевірити доступ», як стан MCP-сервера.
 - «Канали» у фільтрі «Додати підключення», коли з'являться канали розмов (ADR-0018).
 - Інтеграція «Бази даних» першої сторони (PostgreSQL, MySQL… через MCP Toolbox під капотом): зараз Toolbox у каталозі належить Google Cloud, інші бази — лише як «Власний сервер MCP».
-- Крок «Підключити ClickUp» з токеном у вікні (зараз ClickUp підключає токен у середовищі сервера, крок лише показує стан).
+
+## Токени інтеграцій (ADR-0032)
+
+Зроблено: ClickUp (токен організації, міграція `integrations.envTokensToOrg.clickup.v1`), перевірка адміністратора для `/web/github/pat`. Лишилось:
+
+- **GitLab прямим токеном** — за рішенням ADR-0032: підключення організації (токен, тип, `baseUrl`) у «Підключення › GitLab» з перевіркою в GitLab; база `GitLabIntegrationBase` бере контексти за організацією (`activeContexts`, `contextById`, `listSources`, `resolveActiveConnectionForHost`, `#contextForReference` зараз без `orgId`); ідентифікатор `gitlab-connection:direct:<orgId>` і міграція збережених встановлень `direct` (`installationExternalId`, посилання на репозиторії, `merge-request-reconciler` з перевагою `direct`); webhook `/web/gitlab/webhook/:orgId` із секретом організації; міграція `integrations.envTokensToOrg.gitlab.v1`; e2e (`tests/e2e/src/stack.ts`) підключає підроблений GitLab через API замість `GITLAB_ACCESS_TOKEN`/`GITLAB_BASE_URL`. Тоді прибрати `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE`, `GITLAB_BASE_URL`, `GITLAB_WEBHOOK_SECRET`.
+- **GitHub режимом токена** — за рішенням ADR-0032: токен організації в `integration_connections`, встановлення `token:<orgId>` замість id акаунта, ланцюжок встановлення → організація → токен у клієнтах, clone/push і `mintInstallationToken`; опитування на кожну організацію (зараз один робітник і `projects[0].orgId`); git-ідентичність із токена організації сесії (зараз на процес); слот `github` (App / Platform / токен) — режим токена як підключення організації за відсутності App; міграція `integrations.envTokensToOrg.github.v1` і прибирання запису-заявки. Тоді прибрати `GITHUB_ACCESS_TOKEN`, `GITHUB_ACCESS_TOKEN_ORG_ID`.
+- `GET /web/github/pat` не каже, чи може людина змінювати токени (`canManage`): учасник бачить кнопки й отримує 403 з поясненням.
+- Коди прив'язки акаунтів (`connect FCT-…`) — у пам'яті одного сервера, спільні для всіх організацій; з токеном на організацію бот у треді — свій, а код — ні (працює, але варто прив'язати код до організації треду).
 
 ## Відомі вади
 

@@ -28,7 +28,7 @@
 | `@factory/integrations` | `packages/integrations` | Integration contract (IntegrationContext, Integration), issue reconcilers, subscription sessions, platform API client and connect routes. |
 | `@factory/integration-github` | `packages/integration-github` | GitHub integration: app or access token (no App), PAT, webhooks, rules, reconcilers, routes, platform-mode adapter. |
 | `@factory/integration-gitlab` | `packages/integration-gitlab` | GitLab integration: API, webhooks, rules, reconcilers, merge requests, routes, platform-mode adapter. |
-| `@factory/integration-clickup` | `packages/integration-clickup` | ClickUp за polling (API-токен у env, без вебхука): Lists і маршрути налаштовуються в Settings › Intake; задачі → картки, закриття → перенесення картки. |
+| `@factory/integration-clickup` | `packages/integration-clickup` | ClickUp за polling (без вебхука): API-токен кожна організація підключає в Налаштування › Підключення (ADR-0032), Lists — маршрути надходження; задачі → картки, закриття → перенесення картки. |
 | **Агент і нагляд** | | |
 | `@factory/harness` | `packages/harness-core` | Agent harness contract: the sessions, runs, events and human gates the runtime drives, independent of any agent framework. |
 | `@factory/harness-mastra` | `packages/harness-mastra` | Mastra harness (implements `@factory/harness` over Mastra Code's AgentController): start coordinator, phase-state processor, agent tools, workspace and skills, environment builds. |
