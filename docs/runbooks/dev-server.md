@@ -50,6 +50,25 @@ scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
 | Tailscale | Login Items (System Settings › General › Login Items); serve-конфіг сервісу зберігається між перезавантаженнями |
 | Google sign-in | клієнт OAuth у Google Console: origin `https://factory.tail5c61c7.ts.net`, redirect URI `https://factory.tail5c61c7.ts.net/auth/api/callback/google` |
 
+### Вебхуки ззовні (Tailscale Funnel)
+
+Сервіс `svc:factory` видно лише в tailnet; GitLab і інші зовнішні сервіси туди не дістануться, а Funnel для сервісів Tailscale не підтримує. Тому назовні відкрито **лише шляхи вебхуків** на імені машини, кожен сервер — під своїм префіксом (`/factory/…`), публічно лише порт 443:
+
+| Публічна адреса | Куди | Секрет |
+| --- | --- | --- |
+| `https://mac-mini.tail5c61c7.ts.net/factory/gitlab` | `http://127.0.0.1:5874/web/gitlab/webhook` | `GITLAB_WEBHOOK_SECRET` → поле Secret token вебхука в GitLab |
+
+Усе інше на цьому імені (`/`, `/factory`, `/api`, `/web/…`) — 404; UI і API назовні не видно. Обробник відкидає запит без правильного `X-Gitlab-Token` (401). Конфіг зберігає Tailscale, він переживає перезавантаження й не залежить від LaunchAgent.
+
+```sh
+tailscale funnel status                                  # що відкрито
+tailscale funnel --bg --https=443 --set-path=/factory/github http://127.0.0.1:5874/web/github/webhook   # додати шлях
+tailscale funnel --https=443 --set-path=/factory/gitlab off   # прибрати один шлях
+tailscale funnel --https=443 off                              # закрити все
+```
+
+Дозвіл на Funnel — у політиці tailnet (`nodeAttrs`, `attr: funnel` для цієї машини). Не відкривати Funnel на весь порт сервера (`/` → `:5874`): тоді UI і API стануть публічними.
+
 `MASTRACODE_PUBLIC_URL` задає `server.env`, не `.env` проєкту: `dev:local` у `package.json` сам ставить `http://localhost:5874`, якщо змінної немає, і це перекриває `.env`. Без неї Google після входу повертає на `localhost`.
 
 Керування (на Mac mini):
