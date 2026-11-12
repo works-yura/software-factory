@@ -1,20 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useQueryClient } from '@tanstack/react-query';
 import { CheckIcon } from 'lucide-react';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { serverReachability } from './serverReachability';
+import { installedServerReachability } from './serverReachability';
 import type { ServerReachability } from './serverReachability';
-
-function useReachability(reachability: ServerReachability) {
-  return useSyncExternalStore(
-    listener => reachability.subscribe(listener),
-    () => reachability.state,
-  );
-}
 
 /** Whole seconds until `at`, ticking each second while `at` is set. */
 function useSecondsUntil(at: number | undefined): number | undefined {
@@ -31,19 +23,20 @@ function useSecondsUntil(at: number | undefined): number | undefined {
 /**
  * Full-width row above every page while the server does not answer (it is restarting, or the
  * connection is gone), with a countdown to the next check and "Try now". When the server answers
- * again it says so for a moment and refreshes the page's data.
+ * again it says so for a moment; the page's queries resume on their own (`bindOnlineManager`).
  */
-export function ServerReachabilityBanner({ reachability = serverReachability() }: { reachability?: ServerReachability }) {
-  const { t } = useTranslation('app');
-  const queryClient = useQueryClient();
-  const state = useReachability(reachability);
-  const seconds = useSecondsUntil(state.status === 'down' ? state.nextCheckAt : undefined);
-  const previous = useRef(state.status);
+export function ServerReachabilityBanner({
+  reachability = installedServerReachability(),
+}: {
+  reachability?: ServerReachability;
+}) {
+  return reachability ? <ReachabilityRow reachability={reachability} /> : null;
+}
 
-  useEffect(() => {
-    if (previous.current === 'down' && state.status === 'back') void queryClient.invalidateQueries();
-    previous.current = state.status;
-  }, [state.status, queryClient]);
+function ReachabilityRow({ reachability }: { reachability: ServerReachability }) {
+  const { t } = useTranslation('app');
+  const state = useSyncExternalStore(reachability.subscribe, reachability.getSnapshot);
+  const seconds = useSecondsUntil(state.status === 'down' ? state.nextCheckAt : undefined);
 
   if (state.status === 'up') return null;
 

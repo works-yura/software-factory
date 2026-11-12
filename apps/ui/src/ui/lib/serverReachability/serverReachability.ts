@@ -1,156 +1,141 @@
+import { onlineManager } from '@tanstack/react-query';
+
 /**
  * Whether the Factory server answers, for the banner shown while it restarts.
  *
- * The page notices the server is gone from its own requests: a same-origin fetch that fails on
- * the network or comes back 502/503/504 (the proxy's answer while nothing listens) makes it ask
- * `GET /health`. Only a failed health check marks the server down, so one dropped request does
- * not raise the banner. While down it polls `/health` with backoff; the first answer marks it
- * back, and listeners (the banner) refresh the page's data.
+ * Detection: the page notices the server is gone from its own requests. A same-origin request
+ * that fails on the network or comes back 502/503/504 (the proxy's answer while nothing
+ * listens) makes it ask `GET /health`; only a failed health check marks the server down, so one
+ * dropped request raises nothing. While down it polls `/health` with backoff.
+ *
+ * Effect: "down" is fed into TanStack Query's `onlineManager`, the library's own switch for
+ * "no network". Queries and mutations pause instead of failing and resume by themselves when
+ * the server answers again, so nothing here refetches by hand.
+ *
+ * Requests are watched by wrapping `fetch` because about half the app's calls (auth, chat
+ * streams, SSE) use `fetch` directly rather than the API client; the wrapper only observes.
  */
 
 export type ServerReachabilityStatus = 'up' | 'down' | 'back';
 
 export interface ServerReachabilityState {
-  status: ServerReachabilityStatus;
+  readonly status: ServerReachabilityStatus;
   /** While down: when the next health check runs (epoch ms), for the countdown. */
-  nextCheckAt?: number;
-  /** While down: whether a health check is running now. */
-  checking: boolean;
+  readonly nextCheckAt?: number;
+  /** While down: a health check is running now. */
+  readonly checking: boolean;
 }
 
 export const HEALTH_PATH = '/health';
-/** Seconds between health checks while down: quick at first, then every 15 s. */
-const BACKOFF_MS = [2_000, 4_000, 8_000, 15_000];
-/** How long the "back" state lasts before the banner goes away. */
-const BACK_MS = 4_000;
+/** Delays between health checks while down: quick at first, then every 15 s. */
+export const HEALTH_BACKOFF_MS = [2_000, 4_000, 8_000, 15_000] as const;
+/** How long "back" is shown before the banner goes away. */
+export const BACK_NOTICE_MS = 4_000;
 const HEALTH_TIMEOUT_MS = 5_000;
 
-type Listener = (state: ServerReachabilityState) => void;
-
-export interface ServerReachabilityOptions {
-  /** The fetch the health check uses: the page's own, before the observer wraps it. */
-  fetchImpl: typeof fetch;
-  baseUrl?: string;
-  now?: () => number;
-  setTimer?: (fn: () => void, ms: number) => unknown;
-  clearTimer?: (id: unknown) => void;
-}
+const UP: ServerReachabilityState = { status: 'up', checking: false };
 
 export class ServerReachability {
-  #state: ServerReachabilityState = { status: 'up', checking: false };
-  readonly #listeners = new Set<Listener>();
-  readonly #options: Required<Omit<ServerReachabilityOptions, 'baseUrl'>> & { baseUrl: string };
+  #state: ServerReachabilityState = UP;
+  readonly #listeners = new Set<() => void>();
+  readonly #healthUrl: string;
+  readonly #fetch: typeof fetch;
   #attempt = 0;
-  #timer: unknown;
-  #probing = false;
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  #probe: Promise<void> | undefined;
 
-  constructor(options: ServerReachabilityOptions) {
-    this.#options = {
-      baseUrl: options.baseUrl ?? '',
-      fetchImpl: options.fetchImpl,
-      now: options.now ?? Date.now,
-      setTimer: options.setTimer ?? ((fn, ms) => setTimeout(fn, ms)),
-      clearTimer: options.clearTimer ?? (id => clearTimeout(id as ReturnType<typeof setTimeout>)),
-    };
+  /** `fetchImpl` is the page's own fetch, taken before `observeFetch` wraps it. */
+  constructor({ fetchImpl, baseUrl = '' }: { fetchImpl: typeof fetch; baseUrl?: string }) {
+    this.#fetch = fetchImpl;
+    this.#healthUrl = `${baseUrl}${HEALTH_PATH}`;
   }
 
   get state(): ServerReachabilityState {
     return this.#state;
   }
 
-  subscribe(listener: Listener): () => void {
+  /** `useSyncExternalStore`-shaped subscription. */
+  readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
-  }
+  };
+
+  readonly getSnapshot = (): ServerReachabilityState => this.#state;
 
   /** A request failed in a way that may mean the server is gone: check before saying so. */
-  reportFailure(): void {
-    if (this.#state.status === 'down') return;
-    void this.#probe();
+  requestFailed(): void {
+    if (this.#state.status !== 'down') void this.#check();
   }
 
-  /** A request got an answer from the server: it is there. */
-  reportSuccess(): void {
-    if (this.#state.status === 'down') void this.#probe();
+  /** A request got an answer while the server was marked down: confirm it is back. */
+  requestSucceeded(): void {
+    if (this.#state.status === 'down') void this.#check();
   }
 
-  /** The banner's "Try now": check at once. */
+  /** "Try now", or the browser coming back online: check at once. */
   checkNow(): void {
-    if (this.#state.status !== 'down') return;
-    this.#clearTimer();
-    void this.#probe();
+    void this.#check();
   }
 
-  async #probe(): Promise<void> {
-    if (this.#probing) return;
-    this.#probing = true;
+  /** One health check at a time; concurrent callers share it. */
+  #check(): Promise<void> {
+    this.#probe ??= this.#runCheck().finally(() => {
+      this.#probe = undefined;
+    });
+    return this.#probe;
+  }
+
+  async #runCheck(): Promise<void> {
+    this.#clearTimer();
     if (this.#state.status === 'down') this.#set({ ...this.#state, checking: true });
-    const ok = await this.#healthy();
-    this.#probing = false;
-    if (ok) {
+    if (await this.#healthy()) {
       if (this.#state.status === 'down') this.#markBack();
-      return;
+    } else {
+      this.#markDown();
     }
-    this.#scheduleNext();
   }
 
   async #healthy(): Promise<boolean> {
-    const controller = typeof AbortController === 'undefined' ? undefined : new AbortController();
-    const timeout = this.#options.setTimer(() => controller?.abort(), HEALTH_TIMEOUT_MS);
     try {
-      const response = await this.#options.fetchImpl(`${this.#options.baseUrl}${HEALTH_PATH}`, {
+      const response = await this.#fetch(this.#healthUrl, {
         cache: 'no-store',
-        signal: controller?.signal,
+        signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
       });
       return response.ok;
     } catch {
       return false;
-    } finally {
-      this.#options.clearTimer(timeout);
     }
   }
 
-  #scheduleNext(): void {
-    const delay = BACKOFF_MS[Math.min(this.#attempt, BACKOFF_MS.length - 1)]!;
+  #markDown(): void {
+    const delay = HEALTH_BACKOFF_MS[Math.min(this.#attempt, HEALTH_BACKOFF_MS.length - 1)]!;
     this.#attempt += 1;
-    this.#clearTimer();
-    this.#set({ status: 'down', checking: false, nextCheckAt: this.#options.now() + delay });
-    this.#timer = this.#options.setTimer(() => {
-      this.#timer = undefined;
-      void this.#probe();
-    }, delay);
+    this.#set({ status: 'down', checking: false, nextCheckAt: Date.now() + delay });
+    this.#timer = setTimeout(() => void this.#check(), delay);
   }
 
   #markBack(): void {
     this.#attempt = 0;
-    this.#clearTimer();
     this.#set({ status: 'back', checking: false });
-    this.#timer = this.#options.setTimer(() => {
-      this.#timer = undefined;
-      if (this.#state.status === 'back') this.#set({ status: 'up', checking: false });
-    }, BACK_MS);
+    this.#timer = setTimeout(() => this.#set(UP), BACK_NOTICE_MS);
   }
 
   #clearTimer(): void {
-    if (this.#timer !== undefined) this.#options.clearTimer(this.#timer);
+    clearTimeout(this.#timer);
     this.#timer = undefined;
   }
 
   #set(state: ServerReachabilityState): void {
     this.#state = state;
-    for (const listener of this.#listeners) listener(state);
+    for (const listener of this.#listeners) listener();
   }
 }
 
-/** Whether a failed or answered request says anything about the Factory server's reachability. */
+/** Whether a request is one of the page's own requests to the Factory server. */
 export function isServerRequest(input: RequestInfo | URL, origin: string): boolean {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  let url: URL;
-  try {
-    url = new URL(raw, origin);
-  } catch {
-    return false;
-  }
+  if (!URL.canParse(raw, origin)) return false;
+  const url = new URL(raw, origin);
   return url.origin === origin && url.pathname !== HEALTH_PATH;
 }
 
@@ -159,13 +144,9 @@ export function isGatewayFailure(status: number): boolean {
   return status === 502 || status === 503 || status === 504;
 }
 
-function isAbort(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
-}
-
 /**
- * Wraps `globalThis.fetch` so every same-origin request reports to `reachability`. The wrapper
- * returns exactly what fetch returns and rethrows what it throws: it only watches.
+ * Wraps `target.fetch` so each same-origin request reports to `reachability`. The wrapper returns
+ * what fetch returns and rethrows what it throws. Returns the undo.
  */
 export function observeFetch(reachability: ServerReachability, target: typeof globalThis = globalThis): () => void {
   const original = target.fetch;
@@ -175,12 +156,13 @@ export function observeFetch(reachability: ServerReachability, target: typeof gl
     try {
       const response = await original.call(target, input, init);
       if (watched) {
-        if (isGatewayFailure(response.status)) reachability.reportFailure();
-        else reachability.reportSuccess();
+        if (isGatewayFailure(response.status)) reachability.requestFailed();
+        else reachability.requestSucceeded();
       }
       return response;
     } catch (error) {
-      if (watched && !isAbort(error)) reachability.reportFailure();
+      const aborted = error instanceof DOMException && error.name === 'AbortError';
+      if (watched && !aborted) reachability.requestFailed();
       throw error;
     }
   };
@@ -190,15 +172,44 @@ export function observeFetch(reachability: ServerReachability, target: typeof gl
   };
 }
 
-let shared: ServerReachability | undefined;
+/**
+ * TanStack Query is "online" while the browser is online and the server is not marked down.
+ * Replaces the library's default listener (browser `online`/`offline` only), keeping its part.
+ */
+export function bindOnlineManager(reachability: ServerReachability): void {
+  onlineManager.setEventListener(setOnline => {
+    const update = () => setOnline(navigator.onLine && reachability.state.status !== 'down');
+    const backOnline = () => {
+      update();
+      reachability.checkNow();
+    };
+    window.addEventListener('online', backOnline);
+    window.addEventListener('offline', update);
+    const unsubscribe = reachability.subscribe(update);
+    return () => {
+      window.removeEventListener('online', backOnline);
+      window.removeEventListener('offline', update);
+      unsubscribe();
+    };
+  });
+}
 
-/** The page's one watcher, created and attached to `fetch` on first use (`main.tsx`). */
-export function serverReachability(): ServerReachability {
-  if (!shared) {
-    const original = globalThis.fetch.bind(globalThis);
-    shared = new ServerReachability({ fetchImpl: original });
-    observeFetch(shared);
-    globalThis.addEventListener?.('online', () => shared?.reportFailure());
+let installed: ServerReachability | undefined;
+
+/**
+ * Creates the page's one watcher and attaches it to `fetch` and TanStack Query. Called once by
+ * the web entry (`main.tsx`); tests and other entries that skip it get no banner and no wrapping.
+ */
+export function installServerReachability(): ServerReachability {
+  if (!installed) {
+    installed = new ServerReachability({ fetchImpl: globalThis.fetch.bind(globalThis) });
+    observeFetch(installed);
+    bindOnlineManager(installed);
   }
-  return shared;
+  return installed;
+}
+
+/** The watcher `installServerReachability` created, if the entry installed one. */
+export function installedServerReachability(): ServerReachability | undefined {
+  return installed;
 }

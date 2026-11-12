@@ -1,3 +1,3 @@
 export { ServerReachabilityBanner } from './ServerReachabilityBanner';
-export { serverReachability } from './serverReachability';
+export { installServerReachability } from './serverReachability';
 export type { ServerReachabilityState, ServerReachabilityStatus } from './serverReachability';

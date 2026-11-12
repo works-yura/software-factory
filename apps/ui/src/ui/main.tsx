@@ -12,7 +12,7 @@ import { ApiConfigProvider } from '../api/config';
 import { LanguageBoundary } from './i18n/LanguageBoundary';
 import { createQueryClient } from '../query-client';
 import { captureInstallPrompt } from './lib/pwa';
-import { serverReachability } from './lib/serverReachability';
+import { installServerReachability } from './lib/serverReachability';
 import { createAppRouter } from './router';
 import './tailwind.css';
 
@@ -22,7 +22,7 @@ captureInstallPrompt();
 
 // Watch the page's own requests from the first one, so a server restart shows a banner
 // (`ServerReachabilityBanner`) instead of requests failing silently.
-serverReachability();
+installServerReachability();
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
 // the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
