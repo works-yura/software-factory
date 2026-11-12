@@ -49,6 +49,18 @@ export class CodexAppServerProcessExitedError extends TaggedCodexError {
   }
 }
 
+/** The process started but never answered `initialize`: a CLI that hangs, or not Codex's app-server. */
+export class CodexAppServerInitializeTimeoutError extends TaggedCodexError<{ command?: string; timeoutMs: number; stderr?: string }> {
+  readonly _tag = 'CodexAppServerInitializeTimeoutError';
+  declare readonly command?: string;
+  declare readonly timeoutMs: number;
+  declare readonly stderr?: string;
+  constructor(fields: { command?: string; timeoutMs: number; stderr?: string }) {
+    const base = `Codex App Server did not answer initialize within ${Math.round(fields.timeoutMs / 1000)}s${fields.command ? ` (${fields.command})` : ''}`;
+    super(fields.stderr ? `${base}: ${fields.stderr}` : `${base}.`, fields);
+  }
+}
+
 export class CodexAppServerProtocolParseError extends TaggedCodexError {
   readonly _tag = 'CodexAppServerProtocolParseError';
   declare readonly operation: CodexAppServerProtocolParseOperation;
@@ -148,6 +160,7 @@ export type CodexAppServerError =
   | CodexAppServerRequestError
   | CodexAppServerSpawnError
   | CodexAppServerProcessExitedError
+  | CodexAppServerInitializeTimeoutError
   | CodexAppServerProtocolParseError
   | CodexAppServerTransportError
   | CodexAppServerInputStreamEndedError;
@@ -157,6 +170,7 @@ export function isCodexAppServerError(error: unknown): error is CodexAppServerEr
     error instanceof CodexAppServerRequestError ||
     error instanceof CodexAppServerSpawnError ||
     error instanceof CodexAppServerProcessExitedError ||
+    error instanceof CodexAppServerInitializeTimeoutError ||
     error instanceof CodexAppServerProtocolParseError ||
     error instanceof CodexAppServerTransportError ||
     error instanceof CodexAppServerInputStreamEndedError

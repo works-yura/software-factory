@@ -6,6 +6,7 @@ import type { Readable, Writable } from 'node:stream';
 import { harnessCommandPath, reportHarnessSpawnFailure, type HarnessCommand } from '@factory/harness/executable';
 
 import {
+  CodexAppServerInitializeTimeoutError,
   CodexAppServerProcessExitedError,
   CodexAppServerRequestError,
   CodexAppServerSpawnError,
@@ -163,6 +164,8 @@ export interface SpawnCodexAppServerInput {
   readonly spawn?: CodexSpawn;
   readonly logger?: (event: CodexAppServerProtocolLogEvent) => void;
   readonly clientInfo?: InitializeParams['clientInfo'];
+  /** How long the process gets to answer `initialize`; past it, it is ended. 30 seconds by default. */
+  readonly initializeTimeoutMs?: number;
 }
 
 export interface CodexAppServerProcess {
@@ -172,7 +175,7 @@ export interface CodexAppServerProcess {
   readonly version: string | undefined;
   readonly pid: number | undefined;
   isAlive(): boolean;
-  /** Ends the process: SIGTERM, then SIGKILL after a grace period. */
+  /** Ends the process and what it started (its process group): SIGTERM, then SIGKILL after a grace period. */
   terminate(): void;
   /** Resolves once the process exited. */
   readonly exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
@@ -180,6 +183,7 @@ export interface CodexAppServerProcess {
 
 const STDERR_TAIL_BYTES = 8 * 1024;
 const FORCE_KILL_AFTER_MS = 2_000;
+export const DEFAULT_CODEX_INITIALIZE_TIMEOUT_MS = 30_000;
 
 /** `codex-cli 0.159.0`, `0.160.0-alpha.1` or a client user agent's `name/0.166.0`. */
 export function parseCodexVersion(userAgent: string): string | undefined {
@@ -191,10 +195,18 @@ export async function spawnCodexAppServer(input: SpawnCodexAppServerInput): Prom
   // A resolver with no `codex` throws its HarnessExecutableUnavailableError here, before any spawn.
   const command = harnessCommandPath(input.command, 'codex');
   const args = ['app-server', ...(input.args ?? [])];
+  // The real CLI leads its own process group, so stopping it also stops the commands it runs; an
+  // injected spawn gets a plain `kill`, since its pid is not ours to signal.
+  const usesNodeSpawn = !input.spawn;
   const spawn = input.spawn ?? (nodeSpawn as CodexSpawn);
   let child: ChildProcessWithoutNullStreams;
   try {
-    child = spawn(command, args, { cwd: input.cwd, env: input.env as NodeJS.ProcessEnv, stdio: 'pipe' } as SpawnOptionsWithoutStdio);
+    child = spawn(command, args, {
+      cwd: input.cwd,
+      env: input.env as NodeJS.ProcessEnv,
+      stdio: 'pipe',
+      ...(usesNodeSpawn ? { detached: true } : {}),
+    } as SpawnOptionsWithoutStdio);
   } catch (cause) {
     reportHarnessSpawnFailure(input.command, cause);
     throw new CodexAppServerSpawnError({ command: `${command} app-server`, cause });
@@ -232,24 +244,54 @@ export async function spawnCodexAppServer(input: SpawnCodexAppServerInput): Prom
     },
     input.logger ? { logger: input.logger } : {},
   );
+  const signal = (sig: NodeJS.Signals) => {
+    if (usesNodeSpawn && child.pid) {
+      try {
+        process.kill(-child.pid, sig);
+        return;
+      } catch {
+        // The group is gone; fall back to the child itself.
+      }
+    }
+    try {
+      child.kill(sig);
+    } catch {
+      // Already exited.
+    }
+  };
   let killTimer: NodeJS.Timeout | undefined;
+  let stopping = false;
   const terminate = () => {
-    if (!alive) return;
+    if (stopping) return;
+    stopping = true;
     client.close();
-    child.kill('SIGTERM');
-    killTimer ??= setTimeout(() => {
-      if (alive) child.kill('SIGKILL');
-    }, FORCE_KILL_AFTER_MS);
+    if (!alive && !usesNodeSpawn) return;
+    // The group too: a command Codex started may outlive it (or ignore SIGTERM).
+    signal('SIGTERM');
+    killTimer = setTimeout(() => signal('SIGKILL'), FORCE_KILL_AFTER_MS);
     killTimer.unref?.();
   };
   void exited.then(() => {
-    if (killTimer) clearTimeout(killTimer);
+    // An injected child has nothing left to kill; a real one's group may still hold what it started.
+    if (killTimer && !usesNodeSpawn) clearTimeout(killTimer);
   });
+  const initializeTimeoutMs = input.initializeTimeoutMs ?? DEFAULT_CODEX_INITIALIZE_TIMEOUT_MS;
+  let initializeTimer: NodeJS.Timeout | undefined;
+  const initializeTimedOut = new Promise<never>((_, reject) => {
+    initializeTimer = setTimeout(() => {
+      const tail = stderr.trim();
+      reject(new CodexAppServerInitializeTimeoutError({ command: `${command} app-server`, timeoutMs: initializeTimeoutMs, ...(tail ? { stderr: tail } : {}) }));
+    }, initializeTimeoutMs);
+    initializeTimer.unref?.();
+  });
+  initializeTimedOut.catch(() => {});
   try {
     const initialize = await Promise.race([
       client.request('initialize', buildCodexInitializeParams(input.clientInfo)),
       spawnFailed,
+      initializeTimedOut,
     ]);
+    clearTimeout(initializeTimer);
     client.notify('initialized');
     return {
       client,
@@ -261,6 +303,7 @@ export async function spawnCodexAppServer(input: SpawnCodexAppServerInput): Prom
       exited,
     };
   } catch (error) {
+    clearTimeout(initializeTimer);
     terminate();
     throw error;
   }

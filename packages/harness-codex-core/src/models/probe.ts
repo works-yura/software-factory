@@ -96,6 +96,8 @@ export async function probeCodex(input: CodexProbeInput): Promise<CodexProbeResu
     cwd: input.cwd,
     env: input.env,
     ...(input.spawn ? { spawn: input.spawn } : {}),
+    // The probe's deadline covers the handshake too: a CLI that never answers must not hang the catalog.
+    initializeTimeoutMs: input.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
   });
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
