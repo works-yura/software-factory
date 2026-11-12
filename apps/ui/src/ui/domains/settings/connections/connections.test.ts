@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_CONNECTION_PERMISSIONS } from '@factory/contracts';
+import { DEFAULT_CONNECTION_PERMISSIONS } from '@factory/contracts/connections';
 import type { ConnectorView } from '@factory/contracts';
 
 import { catalogText, connectionCatalog, filterActivity, filterCatalog } from './connections';

@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
-import { DEFAULT_CONNECTION_PERMISSIONS } from '@factory/contracts';
+import { DEFAULT_CONNECTION_PERMISSIONS } from '@factory/contracts/connections';
 import type { ConnectionView, ConnectorView } from '@factory/contracts';
 
 import type { McpServer } from '../../../services/mcpServers';

@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router';
 
-import { CONNECTIONS_CONTRACT_VERSION, contractMajor } from '@factory/contracts';
+import { CONNECTIONS_CONTRACT_VERSION, contractMajor } from '@factory/contracts/connections';
 
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { AddConnectionDialog } from './AddConnectionDialog';
