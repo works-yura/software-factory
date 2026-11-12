@@ -69,17 +69,17 @@ export function redirectToLogout(baseUrl: string): void {
 }
 
 /**
- * Full-page navigation (to Google, or into the app after sign-in). Service-level
- * (like `redirectToLogin`) because jsdom's `window.location.assign` is
- * unforgeable in tests.
+ * Full-page navigation to Google's sign-in page (the URL `signInWithGoogle` returns), before the
+ * person has signed in. Service-level (like `redirectToLogin`) because jsdom's
+ * `window.location.assign` is unforgeable in tests.
  */
-export function navigateAfterSignIn(url: string): void {
-  window.location.assign(url);
+export function openGoogleSignIn(googleUrl: string): void {
+  window.location.assign(googleUrl);
 }
 
 /**
  * "Sign in with Google" on better-auth: asks the server for Google's sign-in URL, which the page
- * then leaves for (`navigateAfterSignIn`). Google returns to the server's callback, which sets the
+ * then leaves for (`openGoogleSignIn`). Google returns to the server's callback, which sets the
  * session cookie and sends the browser to `returnTo`; a failure lands back on `/signin` with
  * `?error=<code>`.
  */

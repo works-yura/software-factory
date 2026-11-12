@@ -5,7 +5,7 @@ import { Navigate, useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import { navigateAfterSignIn, redirectToLogin, signInWithGoogle } from '../domains/auth/services/auth';
+import { openGoogleSignIn, redirectToLogin, signInWithGoogle } from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
 import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
@@ -34,7 +34,7 @@ function GoogleSignInButton({ returnTo }: { returnTo: string }) {
     setError(null);
     setPending(true);
     try {
-      navigateAfterSignIn(await signInWithGoogle(baseUrl, returnTo));
+      openGoogleSignIn(await signInWithGoogle(baseUrl, returnTo));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.authenticationFailed'));
       setPending(false);

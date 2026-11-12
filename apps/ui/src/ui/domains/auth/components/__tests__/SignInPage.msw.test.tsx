@@ -14,7 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { navigateAfterSignIn, redirectToLogin } from '../../services/auth';
+import { openGoogleSignIn, redirectToLogin } from '../../services/auth';
 import type * as AuthService from '../../services/auth';
 import { createAppRoutes } from '../../../../router';
 import { safeReturnTo, SignInPage } from '../../../../pages/SignInPage';
@@ -27,14 +27,14 @@ import { signedIn, signedOut } from './fixtures/auth';
 // `signInWithGoogle` stay real so MSW sees the actual requests.
 vi.mock('../../services/auth', async importOriginal => {
   const actual = await importOriginal<typeof AuthService>();
-  return { ...actual, redirectToLogin: vi.fn(), navigateAfterSignIn: vi.fn() };
+  return { ...actual, redirectToLogin: vi.fn(), openGoogleSignIn: vi.fn() };
 });
 
 const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 
 afterEach(() => {
   vi.mocked(redirectToLogin).mockClear();
-  vi.mocked(navigateAfterSignIn).mockClear();
+  vi.mocked(openGoogleSignIn).mockClear();
 });
 
 function stubAuthMe(body: Record<string, unknown>) {
@@ -164,7 +164,7 @@ describe('SignInPage', () => {
       await userEvent.click(button);
 
       await waitFor(() =>
-        expect(navigateAfterSignIn).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?client_id=x'),
+        expect(openGoogleSignIn).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?client_id=x'),
       );
       expect(posted).toHaveBeenCalledWith({
         provider: 'google',
@@ -188,7 +188,7 @@ describe('SignInPage', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Provider not found');
-      expect(navigateAfterSignIn).not.toHaveBeenCalled();
+      expect(openGoogleSignIn).not.toHaveBeenCalled();
       expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
     });
 

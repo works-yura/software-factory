@@ -29,16 +29,21 @@ import {
   removeMember,
   setActiveOrganization,
 } from '../../auth/services/organization';
-import type { FullOrganization, OrganizationInvitation, OrganizationMember } from '../../auth/services/organization';
+import type {
+  FullOrganization,
+  OrganizationInvitation,
+  OrganizationMember,
+  OrganizationRole,
+} from '../../auth/services/organization';
 import { SettingsSubsection } from './SettingsSubsection';
 
-const ROLE_BADGE: Record<string, BadgeVariant> = { owner: 'purple', admin: 'info', member: 'neutral' };
+const ROLE_BADGE: Record<OrganizationRole, BadgeVariant> = { owner: 'purple', admin: 'info', member: 'neutral' };
 
-function RoleBadge({ role }: { role: string }) {
+function RoleBadge({ role }: { role: OrganizationRole }) {
   const { t } = useTranslation('settings');
   return (
-    <Badge size="sm" variant={ROLE_BADGE[role] ?? 'neutral'}>
-      {t(`organization.roles.${role}`, { defaultValue: role })}
+    <Badge size="sm" variant={ROLE_BADGE[role]}>
+      {t(`organization.roles.${role}`)}
     </Badge>
   );
 }
@@ -223,6 +228,16 @@ function OrganizationSwitcher({ activeId }: { activeId: string }) {
     onSuccess: () => reloadIntoOrganization(),
   });
 
+  if (organizations.isError) {
+    return (
+      <SettingsSubsection title={t('organization.switcher.title')}>
+        <Notice variant="destructive" role="alert">
+          {t('organization.switcher.loadFailed', { message: errorText(organizations.error) })}
+        </Notice>
+      </SettingsSubsection>
+    );
+  }
+  // One organization (or the list still loading): nothing to switch to.
   if (!organizations.data || organizations.data.length < 2) return null;
 
   return (
@@ -272,7 +287,10 @@ export function OrganizationSection() {
   const available = auth.data?.provider === 'better-auth' && Boolean(organizationId);
   const organization = useQuery({
     queryKey: queryKeys.organization(organizationId),
-    queryFn: () => getOrganization(baseUrl, organizationId!),
+    queryFn: () => {
+      if (!organizationId) throw new Error('No active organization to load');
+      return getOrganization(baseUrl, organizationId);
+    },
     enabled: available,
   });
 

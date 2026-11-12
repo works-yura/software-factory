@@ -1556,7 +1556,8 @@
       "description": "Switch to work in another organization you belong to.",
       "current": "Current",
       "switch": "Switch",
-      "switchNamed": "Switch to {{name}}"
+      "switchNamed": "Switch to {{name}}",
+      "loadFailed": "Could not load your organizations: {{message}}"
     }
   },
   "connections": {

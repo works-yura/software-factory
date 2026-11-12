@@ -20,14 +20,14 @@ export interface OrganizationSummary {
 export interface OrganizationMember {
   id: string;
   userId: string;
-  role: string;
+  role: OrganizationRole;
   user: { id: string; name: string; email: string; image?: string | null };
 }
 
 export interface OrganizationInvitation {
   id: string;
   email: string;
-  role: string;
+  role: OrganizationRole;
   status: string;
   expiresAt: string;
   organizationId: string;
@@ -66,15 +66,22 @@ async function organizationRequest<T>(baseUrl: string, path: string, body?: unkn
     credentials: 'include',
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  let data: unknown = null;
+  const text = await res.text();
+  let data: unknown;
   try {
-    data = await res.json();
+    data = JSON.parse(text);
   } catch {
-    // Empty or non-JSON body.
+    // better-auth answers JSON; anything else (a proxy's HTML page, an empty body) is a failure,
+    // also on a 2xx, so nothing reads it as an empty result.
+    throw new OrganizationRequestError(tk('organization.requestFailed', { status: res.status }), res.status);
   }
   if (!res.ok) {
     const error = (data ?? {}) as { message?: string; code?: string };
-    throw new OrganizationRequestError(error.message || tk('errors.authenticationFailed'), res.status, error.code);
+    throw new OrganizationRequestError(
+      error.message || tk('organization.requestFailed', { status: res.status }),
+      res.status,
+      error.code,
+    );
   }
   return data as T;
 }
@@ -126,14 +133,15 @@ export function isOpenInvitation(invitation: OrganizationInvitation, now = Date.
   return invitation.status === 'pending' && new Date(invitation.expiresAt).getTime() > now;
 }
 
-export function canManageMembers(role: string | undefined): boolean {
+export function canManageMembers(role: OrganizationRole | undefined): boolean {
   return role === 'owner' || role === 'admin';
 }
 
 /**
- * Opens the app afresh in the newly active organization: factories, boards and settings all
- * belong to it, so nothing cached from the previous one may stay on screen. Service-level so tests
- * can replace it (jsdom's `window.location.assign` cannot be spied on).
+ * Opens the app afresh in the newly active organization (after switching or accepting an
+ * invitation): factories, boards and settings all belong to it, so nothing cached from the previous
+ * one may stay on screen. Not for a plain "go home", which is a router navigation. Service-level so
+ * tests can replace it (jsdom's `window.location.assign` cannot be spied on).
  */
 export function reloadIntoOrganization(): void {
   window.location.assign('/');

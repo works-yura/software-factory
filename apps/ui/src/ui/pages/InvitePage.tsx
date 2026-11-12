@@ -6,9 +6,10 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
+import { queryKeys } from '../../api/keys';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../domains/auth/services/auth';
 import {
@@ -17,20 +18,40 @@ import {
   OrganizationRequestError,
   reloadIntoOrganization,
   rejectInvitation,
-  setActiveOrganization,
 } from '../domains/auth/services/organization';
 
+/** better-auth error codes that mean "signed in with another (or an unverified) email". */
 const WRONG_EMAIL_CODES = new Set([
   'YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION',
   'EMAIL_VERIFICATION_REQUIRED_FOR_INVITATION',
   'EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION',
 ]);
 
+/** Expired, cancelled or already used: what `accept-invitation` and `reject-invitation` answer. */
+const NOT_FOUND_CODE = 'INVITATION_NOT_FOUND';
+
+type InvitationProblemKind = 'wrongEmail' | 'notFound' | 'other';
+
+/**
+ * Reads better-auth's error code. `get-invitation` alone answers a missing or expired invitation
+ * with a code-less 400 ("Invitation not found!"), so a 400 without a code is the last resort for
+ * "not found"; any other status or unknown code is shown as it is.
+ */
+function invitationProblemKind(error: unknown): InvitationProblemKind {
+  if (!(error instanceof OrganizationRequestError)) return 'other';
+  if (error.code && WRONG_EMAIL_CODES.has(error.code)) return 'wrongEmail';
+  if (error.code === NOT_FOUND_CODE) return 'notFound';
+  if (!error.code && error.status === 400) return 'notFound';
+  return 'other';
+}
+
 function InvitationProblem({ error, email }: { error: unknown; email: string }) {
   const { t } = useTranslation('auth');
   const { baseUrl } = useApiConfig();
-  const wrongEmail = error instanceof OrganizationRequestError && (error.status === 403 || WRONG_EMAIL_CODES.has(error.code ?? ''));
-  const notFound = error instanceof OrganizationRequestError && error.status === 400;
+  const navigate = useNavigate();
+  const kind = invitationProblemKind(error);
+  const wrongEmail = kind === 'wrongEmail';
+  const notFound = kind === 'notFound';
   const message = wrongEmail
     ? t('invite.wrongEmail', { email })
     : notFound
@@ -54,7 +75,7 @@ function InvitationProblem({ error, email }: { error: unknown; email: string }) 
             {t('invite.signOut')}
           </Button>
         ) : null}
-        <Button onClick={() => reloadIntoOrganization()}>{t('invite.goHome')}</Button>
+        <Button onClick={() => navigate('/')}>{t('invite.goHome')}</Button>
       </div>
     </div>
   );
@@ -63,24 +84,23 @@ function InvitationProblem({ error, email }: { error: unknown; email: string }) 
 /**
  * `/invite/:invitationId` — the link an owner or admin copied and sent. Signed-out visitors are
  * sent to sign in first (the route's guard keeps this path as `returnTo`). Accepting joins the
- * organization as a member and makes it the active one, then opens the app afresh in it.
+ * organization as a member; better-auth makes it the session's active organization in the same
+ * call, and the app opens afresh in it.
  */
 export function InvitePage() {
   const { t } = useTranslation('auth');
   const { invitationId = '' } = useParams();
   const { baseUrl } = useApiConfig();
+  const navigate = useNavigate();
   const auth = useFactoryAuth();
   const email = auth.data?.user?.email ?? '';
   const invitation = useQuery({
-    queryKey: ['invitation', invitationId],
+    queryKey: queryKeys.invitation(invitationId),
     queryFn: () => getInvitation(baseUrl, invitationId),
     retry: false,
   });
   const accept = useMutation({
-    mutationFn: async () => {
-      const accepted = await acceptInvitation(baseUrl, invitationId);
-      await setActiveOrganization(baseUrl, accepted.invitation.organizationId);
-    },
+    mutationFn: () => acceptInvitation(baseUrl, invitationId),
     onSuccess: () => reloadIntoOrganization(),
   });
   const decline = useMutation({ mutationFn: () => rejectInvitation(baseUrl, invitationId) });
@@ -110,7 +130,7 @@ export function InvitePage() {
               {t('invite.declined')}
             </Txt>
             <div>
-              <Button onClick={() => reloadIntoOrganization()}>{t('invite.goHome')}</Button>
+              <Button onClick={() => navigate('/')}>{t('invite.goHome')}</Button>
             </div>
           </div>
         ) : details ? (

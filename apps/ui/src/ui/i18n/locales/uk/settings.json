@@ -1574,7 +1574,8 @@
       "description": "Перейдіть, щоб працювати в іншій організації, де ви є.",
       "current": "Поточна",
       "switch": "Перейти",
-      "switchNamed": "Перейти до {{name}}"
+      "switchNamed": "Перейти до {{name}}",
+      "loadFailed": "Не вдалося завантажити ваші організації: {{message}}"
     }
   },
   "connections": {

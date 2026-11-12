@@ -79,7 +79,7 @@ describe('InvitePage', () => {
     expect(new URLSearchParams(router.state.location.search).get('returnTo')).toBe('/invite/inv-1');
   });
 
-  it('shows who invited whom where, accepts, makes the organization active and opens the app in it', async () => {
+  it('shows who invited whom where, accepts (better-auth makes the organization active) and opens the app in it', async () => {
     signedInAs('bob@example.com');
     const accepted = vi.fn();
     const activated = vi.fn();
@@ -109,7 +109,43 @@ describe('InvitePage', () => {
 
     await waitFor(() => expect(reloadIntoOrganization).toHaveBeenCalled());
     expect(accepted).toHaveBeenCalledWith({ invitationId: 'inv-1' });
-    expect(activated).toHaveBeenCalledWith({ organizationId: 'org-acme' });
+    // accept-invitation already sets the session's active organization; no second call.
+    expect(activated).not.toHaveBeenCalled();
+  });
+
+  it('says an invitation that expired before accepting needs a new link (better-auth code)', async () => {
+    signedInAs('bob@example.com');
+    server.use(
+      http.get(`${ORG_API}/get-invitation`, () => HttpResponse.json(INVITATION)),
+      http.post(`${ORG_API}/accept-invitation`, () =>
+        HttpResponse.json({ code: 'INVITATION_NOT_FOUND', message: 'Invitation not found' }, { status: 400 }),
+      ),
+    );
+    renderInvite();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept and open' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This invitation has expired, was cancelled, or was already used');
+    expect(reloadIntoOrganization).not.toHaveBeenCalled();
+  });
+
+  it('shows any other refusal as it is, without guessing from the status', async () => {
+    signedInAs('bob@example.com');
+    server.use(
+      http.get(`${ORG_API}/get-invitation`, () => HttpResponse.json(INVITATION)),
+      http.post(`${ORG_API}/accept-invitation`, () =>
+        HttpResponse.json(
+          { code: 'ORGANIZATION_MEMBERSHIP_LIMIT_REACHED', message: 'Organization membership limit reached' },
+          { status: 403 },
+        ),
+      ),
+    );
+    renderInvite();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept and open' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not open the invitation: Organization membership limit reached');
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
   });
 
   it('explains a wrong email and offers to sign out to switch accounts', async () => {
@@ -152,12 +188,16 @@ describe('InvitePage', () => {
         return HttpResponse.json({ invitation: { ...INVITATION, status: 'rejected' }, member: null });
       }),
     );
-    renderInvite();
+    const router = renderInvite();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Decline' }));
 
     expect(await screen.findByText('You declined the invitation.')).toBeInTheDocument();
     expect(rejected).toHaveBeenCalledWith({ invitationId: 'inv-1' });
+
+    // Going home stays in the same organization: a router navigation, not a reload.
+    await userEvent.click(screen.getByRole('button', { name: 'Go to Factory' }));
+    await waitFor(() => expect(router.state.location.pathname).not.toBe('/invite/inv-1'));
     expect(reloadIntoOrganization).not.toHaveBeenCalled();
   });
 });

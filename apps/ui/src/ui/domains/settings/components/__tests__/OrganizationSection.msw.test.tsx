@@ -11,7 +11,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { reloadIntoOrganization } from '../../../auth/services/organization';
 import type * as OrganizationService from '../../../auth/services/organization';
-import type { FullOrganization, OrganizationInvitation } from '../../../auth/services/organization';
+import type { FullOrganization, OrganizationInvitation, OrganizationRole } from '../../../auth/services/organization';
 import { OrganizationSection } from '../OrganizationSection';
 
 // jsdom cannot follow a full-page navigation; the reload helper is the boundary.
@@ -61,7 +61,7 @@ beforeEach(() => {
     }),
     http.get(`${ORG_API}/list`, () => HttpResponse.json(organizations)),
     http.post(`${ORG_API}/invite-member`, async ({ request }) => {
-      const body = (await request.json()) as { email: string; role: string; organizationId: string };
+      const body = (await request.json()) as { email: string; role: OrganizationRole; organizationId: string };
       calls.invite(body);
       const invitation: OrganizationInvitation = {
         id: `inv-${body.email.split('@')[0]}`,
@@ -208,6 +208,30 @@ describe('OrganizationSection', () => {
 
     await waitFor(() => expect(reloadIntoOrganization).toHaveBeenCalled());
     expect(calls.setActive).toHaveBeenCalledWith({ organizationId: 'org-ada' });
+  });
+
+  it('says when your organizations cannot be listed instead of hiding the switcher', async () => {
+    server.use(
+      http.get(`${ORG_API}/list`, () => HttpResponse.json({ message: 'Database is unavailable' }, { status: 500 })),
+    );
+    signedInAs('ada');
+    renderWithProviders(<OrganizationSection />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load your organizations: Database is unavailable');
+    // The organization itself still shows.
+    expect(screen.getByTestId('organization-name')).toHaveTextContent('Acme');
+  });
+
+  it('reports a response that is not better-auth JSON as a failed request, not an empty organization', async () => {
+    server.use(
+      http.get(`${ORG_API}/get-full-organization`, () => new HttpResponse('<html>proxy</html>', { status: 200 })),
+    );
+    signedInAs('ada');
+    renderWithProviders(<OrganizationSection />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not load the organization: The organization request failed (200).',
+    );
   });
 
   it('explains that organizations come with Google sign-in on other providers', async () => {
