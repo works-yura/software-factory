@@ -29,7 +29,7 @@ const OPENAI_AUTH_CLAIM = 'https://api.openai.com/auth';
 /** The sign-in no longer works (`refresh_token_expired`, reused, revoked): a person must sign in again. */
 export class CodexSignInExpiredError extends Error {
   constructor(detail: string) {
-    super(`The ChatGPT sign-in for Codex expired or was revoked (${detail}); sign in with ChatGPT again under Settings → Models.`);
+    super(`The ChatGPT sign-in for Codex expired or was revoked (${detail}); sign in with ChatGPT again under Settings → Connections.`);
     this.name = 'CodexSignInExpiredError';
   }
 }

@@ -11,7 +11,6 @@
  */
 import { z } from 'zod';
 import { CLAUDE_CODE_MODELS } from '@factory/harness-claude-code/models/aliases';
-import { FACTORY_HARNESSES } from './github';
 import type { SourceControlRepository } from './github';
 
 export const ONBOARDING_REVIEW_RETURN_KEY = 'mastracode.factory-onboarding.return-to-review';
@@ -74,7 +73,7 @@ const draftSchema = z.preprocess(
   z.object({
     repository: repositorySchema.optional(),
     /** Absent = Mastra (no harness step on servers without Claude Code or Codex). */
-    harness: z.enum(FACTORY_HARNESSES).optional(),
+    harness: z.string().min(1).optional(),
     model: connectionSchema.extend({ modelId: z.string() }).optional(),
     /** The model of a Claude Code or Codex Factory; null = the harness's default, absent = not picked yet. */
     harnessModel: harnessModelSchema.optional(),

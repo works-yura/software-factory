@@ -25,7 +25,7 @@ const REFRESH_TIMEOUT_MS = 15_000;
 /** The sign-in no longer works (`invalid_grant`, revoked, expired): a person must sign in again. */
 export class ClaudeSignInExpiredError extends Error {
   constructor(detail: string) {
-    super(`The Claude sign-in expired or was revoked (${detail}); sign in to Claude again under Settings → Models.`);
+    super(`The Claude sign-in expired or was revoked (${detail}); sign in to Claude again under Settings → Connections.`);
     this.name = 'ClaudeSignInExpiredError';
   }
 }

@@ -55,18 +55,24 @@
     "harness": {
       "group": "Харнес",
       "selected": "Вибрано",
+      "notOffered": "{{name}} не пропонується: {{reason}}",
+      "descriptions": {
+        "mastra": "Будь-яка модель — ключі провайдерів або вхід в акаунт",
+        "claude-code": "Офіційний CLI Claude Code. Працює на вашій підписці Claude або з ключем Anthropic; акаунти підключаються в Налаштування → Підключення.",
+        "codex": "CLI Codex від OpenAI. Працює на входах ChatGPT ваших учасників; підключіть акаунти в Налаштування → Підключення."
+      },
       "mastra": {
         "title": "Mastra",
         "description": "Будь-яка модель — ключі провайдерів або вхід в акаунт"
       },
       "claudeCode": {
         "title": "Claude Code",
-        "description": "Офіційний CLI Claude Code. Працює на вашій підписці Claude або з ключем Anthropic; акаунти додаються в Налаштування → Моделі."
+        "description": "Офіційний CLI Claude Code. Працює на вашій підписці Claude або з ключем Anthropic; акаунти підключаються в Налаштування → Підключення."
       },
       "changeLaterNote": "Харнес можна змінити згодом у Налаштування → Моделі; зміна діє для нових сесій.",
       "codex": {
         "title": "Codex",
-        "description": "CLI Codex від OpenAI. Працює на входах ChatGPT ваших учасників; додайте акаунти в Налаштування → Моделі."
+        "description": "CLI Codex від OpenAI. Працює на входах ChatGPT ваших учасників; підключіть акаунти в Налаштування → Підключення."
       }
     },
     "steps": {

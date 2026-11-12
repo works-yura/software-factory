@@ -186,7 +186,7 @@ describe('createCodexFactoryHarness', () => {
     expect((await registry.describe({ viewer: { userId: 'user-a', orgId: 'org-a' } }))[0]).toMatchObject({
       available: false,
       needsSetup: true,
-      reason: expect.stringContaining('Settings → Models → Codex accounts'),
+      reason: expect.stringContaining('Settings → Connections → Codex'),
     });
     const ready = createHarnessModelRegistry([setup().factory.models]);
     expect((await ready.describe({ viewer: { userId: 'user-a', orgId: 'org-a' } }))[0]).toMatchObject({ available: true });

@@ -3,28 +3,11 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
-  AccountsUsageResponse,
   SessionUsageResponse,
   UsageLimitsResponse,
   UsageSummaryResponse,
   WorkItemsUsageResponse,
 } from '../api/types';
-
-/**
- * Each account's allowance windows (5-hour, weekly, model). Opening the view asks the server to read
- * them from the provider again (`refresh=1`); it does so at most once a minute per account.
- */
-export function useAccountUsageQuery(provider: string, options: { enabled?: boolean } = {}) {
-  const { client } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.accountUsage(provider),
-    queryFn: () =>
-      client.get<AccountsUsageResponse>(`/web/config/providers/${encodeURIComponent(provider)}/accounts/usage?refresh=1`),
-    enabled: options.enabled ?? true,
-    refetchOnMount: 'always',
-    retry: false,
-  });
-}
 
 /** How often a view that shows limits reads them again while it stays open (the stored reading; cheap). */
 export const USAGE_LIMITS_POLL_MS = 60_000;

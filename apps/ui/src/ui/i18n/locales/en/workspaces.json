@@ -55,18 +55,24 @@
     "harness": {
       "group": "Harness",
       "selected": "Selected",
+      "notOffered": "{{name}} isn’t offered: {{reason}}",
+      "descriptions": {
+        "mastra": "Any model — provider keys or sign-in",
+        "claude-code": "The official Claude Code CLI. Runs on your Claude subscription or an Anthropic key; connect accounts in Settings → Connections.",
+        "codex": "OpenAI’s Codex CLI. Runs on your members’ ChatGPT sign-ins; connect accounts in Settings → Connections."
+      },
       "mastra": {
         "title": "Mastra",
         "description": "Any model — provider keys or sign-in"
       },
       "claudeCode": {
         "title": "Claude Code",
-        "description": "The official Claude Code CLI. Runs on your Claude subscription or an Anthropic key; add accounts in Settings → Models."
+        "description": "The official Claude Code CLI. Runs on your Claude subscription or an Anthropic key; connect accounts in Settings → Connections."
       },
       "changeLaterNote": "You can switch the harness later in Settings → Models; the switch applies to new sessions.",
       "codex": {
         "title": "Codex",
-        "description": "OpenAI’s Codex CLI. Runs on your members’ ChatGPT sign-ins; add accounts in Settings → Models."
+        "description": "OpenAI’s Codex CLI. Runs on your members’ ChatGPT sign-ins; connect accounts in Settings → Connections."
       }
     },
     "steps": {

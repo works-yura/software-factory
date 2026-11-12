@@ -51,6 +51,8 @@ export interface ProviderInstanceEntry {
   readonly acceptsHandoff: boolean;
   /** Why it is unavailable, as its facet says. */
   readonly reason?: string | undefined;
+  /** The connector in Settings › Підключення its sessions run on (ADR-0036). */
+  readonly connector?: string | undefined;
   readonly models: ReadonlyArray<ServerProviderModel>;
 }
 
@@ -148,7 +150,8 @@ function toEntry(instance: HarnessModelInstanceInfo): ProviderInstanceEntry {
     instanceId: instance.instanceId,
     driverKind: instance.harnessId,
     displayName,
-    enabled: true,
+    // A harness that runs on connections the viewer lacks is offered nowhere (ADR-0036).
+    enabled: !(instance.connector && !instance.available),
     status: instance.available ? "ready" : "error",
     isAvailable: instance.available,
     needsSetup: instance.needsSetup,
@@ -158,6 +161,7 @@ function toEntry(instance: HarnessModelInstanceInfo): ProviderInstanceEntry {
     appliesToRunningSessions: instance.appliesToRunningSessions ?? false,
     acceptsHandoff: instance.acceptsHandoff ?? false,
     ...(instance.reason ? { reason: instance.reason } : {}),
+    ...(instance.connector ? { connector: instance.connector } : {}),
     // "Default" in the picker is what a session follows: the Factory's default, else the catalog's.
     models: withDefaultMarked(models, factoryDefault ?? catalogDefault),
   };

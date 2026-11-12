@@ -107,6 +107,12 @@ describe('parseUsagePeriod', () => {
   });
 });
 
+/** `/web/usage/limits` keyed by account, as the per-account reads below compare it. */
+const limitsOf = (response: { status: number; body: any }) => ({
+  status: response.status,
+  body: { accounts: Object.fromEntries((response.body.accounts ?? []).map((entry: { accountId: string; usage: unknown }) => [entry.accountId, entry.usage])) },
+});
+
 describe('usage routes', () => {
   it('asks the provider for each sign-in’s windows on refresh, at most once a minute, and keeps the last answer when a probe fails', async () => {
     let answer: AccountUsageLimits = {
@@ -118,28 +124,27 @@ describe('usage routes', () => {
     const { seed, get, addSignIn } = await setup(read);
     const account = await addSignIn('alice@example.com');
 
-    const first = await get('/web/config/providers/anthropic/accounts/usage?refresh=1');
+    const first = await limitsOf(await get('/web/usage/limits?refresh=1'));
     expect(first.status).toBe(200);
     expect(first.body.accounts[account.id]).toMatchObject({ source: 'probe', windows: [{ id: 'five_hour', usedPercent: 42 }] });
     expect(read).toHaveBeenCalledTimes(1);
 
     // Within a minute: the stored answer, marked as not asked again.
-    const again = await get('/web/config/providers/anthropic/accounts/usage?refresh=1');
+    const again = await limitsOf(await get('/web/usage/limits?refresh=1'));
     expect(again.body.accounts[account.id]).toMatchObject({ stale: true, windows: [{ usedPercent: 42 }] });
     expect(read).toHaveBeenCalledTimes(1);
     // Without refresh, nothing is asked.
-    expect((await get('/web/config/providers/anthropic/accounts/usage')).body.accounts[account.id].stale).toBeUndefined();
+    expect(limitsOf(await get('/web/usage/limits')).body.accounts[account.id].stale).toBeUndefined();
 
     await seed.usage.saveAccountLimits('org1', account.id, { ...answer, checkedAt: '2026-11-11T11:00:00.000Z' });
     answer = { checkedAt: now.toISOString(), source: 'probe', windows: [], unavailable: { reason: 'failed', message: 'HTTP 500' } };
-    const failed = await get('/web/config/providers/anthropic/accounts/usage?refresh=1');
+    const failed = await limitsOf(await get('/web/usage/limits?refresh=1'));
     expect(failed.body.accounts[account.id]).toMatchObject({
       stale: true,
       windows: [{ usedPercent: 42 }],
       unavailable: { reason: 'failed', message: 'HTTP 500' },
     });
-    expect((await get('/web/config/providers/openai/accounts/usage')).status).toBe(404);
-    expect((await get('/web/config/providers/anthropic/accounts/usage', null)).status).toBe(401);
+    expect((await get('/web/usage/limits', null)).status).toBe(401);
   });
 
   it('lists every harness’s sign-ins with their windows in one place, and puts right a reading in the wrong unit', async () => {

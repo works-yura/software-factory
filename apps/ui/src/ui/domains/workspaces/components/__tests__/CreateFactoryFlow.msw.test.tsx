@@ -14,6 +14,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, MASTRA_HARNESS } from '@factory/contracts/harnesses';
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
+
 import type { GithubStatus } from '../../services/github';
 import { CreateFactoryWizard } from '../create-factory/CreateFactoryWizard';
 
@@ -671,39 +674,32 @@ function seedDraft(step: 'vcs' | 'model-provider') {
   );
 }
 
-/** Report the Claude Code harness as configured (or not) on this server, and whether it runs on the local login. */
-function serveClaudeCodeFeature(claudeCode: boolean, { claudeSignIn = false } = {}) {
+/** The harnesses this server runs, as `/web/config/features` describes them: Mastra, and Claude Code when configured. */
+function serveClaudeCodeFeature(claudeCode: boolean, extra: HarnessDescriptor[] = []) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-      HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeSignIn }),
+      HttpResponse.json({ knowledge: false, mcp: false, harnesses: [MASTRA_HARNESS, ...(claudeCode ? [CLAUDE_CODE_HARNESS] : []), ...extra] }),
     ),
   );
 }
 
-/** The organization's Claude sign-ins, and pasted tokens left from before (which run nothing). */
-function serveClaudeAccounts(count: number, legacy = 0) {
-  const row = (index: number, old: boolean) => ({
-    id: `acct-${old ? 'old-' : ''}${index}`,
-    label: `Account ${old ? 'old ' : ''}${index}`,
-    kind: old ? 'api_key' : 'claude_login',
-    mine: true,
-    priority: index,
-    status: 'active',
-    hint: '',
-    canManage: true,
-    legacy: old,
-    createdAt: '2026-10-01T10:00:00.000Z',
-  });
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
-      HttpResponse.json({
-        accounts: [
-          ...Array.from({ length: count }, (_, index) => row(index, false)),
-          ...Array.from({ length: legacy }, (_, index) => row(index, true)),
-        ],
-      }),
-    ),
-  );
+/** A harness instance as `/web/config/models` lists it for this person (ADR-0036: unavailable without a connection). */
+function harnessInstance(harness: HarnessDescriptor, options: { available: boolean; reason?: string; models?: Array<{ slug: string; name: string }> }) {
+  return {
+    instanceId: harness.id,
+    harnessId: harness.id,
+    displayName: harness.label,
+    available: options.available,
+    needsSetup: !options.available,
+    ...(options.reason ? { reason: options.reason } : {}),
+    ...(harness.setup.accounts ? { connector: harness.setup.accounts.connector } : {}),
+    defaultModel: null,
+    defaultSelection: null,
+    factoryDefaultSelection: null,
+    catalogDefaultSelection: null,
+    appliesToRunningSessions: false,
+    models: (options.models ?? []).map(model => ({ ...model, isCustom: false, capabilities: null })),
+  };
 }
 
 /** No Mastra provider row is on the Claude Code step. */
@@ -771,12 +767,11 @@ describe('harness step', () => {
     expect(sessionStorage.getItem(HARNESS_KEY)).toBeNull();
   });
 
-  it('offers Codex where the server runs it, and creates on a Codex model with its ChatGPT sign-in', async () => {
+  it('offers Codex where the server runs it and this person has a ChatGPT sign-in, and creates on a Codex model', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-        HttpResponse.json({ knowledge: false, mcp: false, claudeCode: true, codex: true, codexSignIn: true }),
+        HttpResponse.json({ knowledge: false, mcp: false, harnesses: [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS] }),
       ),
-      http.get(`${TEST_BASE_URL}/web/config/providers/openai-codex/accounts`, () => HttpResponse.json({ accounts: [] })),
     );
     sessionStorage.setItem(STEP_KEY, 'harness');
     sessionStorage.setItem(NAME_KEY, 'Mastra');
@@ -787,21 +782,7 @@ describe('harness step', () => {
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
           models: [],
-          instances: [
-            {
-              instanceId: 'codex',
-              harnessId: 'codex',
-              displayName: 'Codex',
-              available: false,
-              needsSetup: true,
-              defaultModel: null,
-              defaultSelection: null,
-              factoryDefaultSelection: null,
-              catalogDefaultSelection: null,
-              appliesToRunningSessions: false,
-              models: [{ slug: 'gpt-test-sol', name: 'GPT Test Sol', isCustom: false, capabilities: null }],
-            },
-          ],
+          instances: [harnessInstance(CODEX_HARNESS, { available: true, models: [{ slug: 'gpt-test-sol', name: 'GPT Test Sol' }] })],
         }),
       ),
     );
@@ -814,8 +795,8 @@ describe('harness step', () => {
     await pickRepositories(user, /octo\/hello/);
 
     expect(await screen.findByLabelText('Choose your Codex model')).toBeInTheDocument();
-    expect(await screen.findByText(/Codex needs a ChatGPT sign-in to run/)).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Sign in with ChatGPT/ })).toBeInTheDocument();
+    // Signing in is a connection now (Settings › Підключення), not a step of creating a Factory.
+    expect(screen.queryByRole('option', { name: /Sign in with ChatGPT/ })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Codex default/ })).toBeInTheDocument();
     expectNoProviderRows();
     await user.click(await screen.findByRole('option', { name: /GPT Test Sol/ }));
@@ -908,88 +889,38 @@ describe('harness step', () => {
     expect(patchedBodies).toEqual([{ instanceId: 'mastra', model: 'anthropic/claude-sonnet-4-5' }]);
   });
 
-  describe('Claude Code sign-in on the model step', () => {
-    it('asks for an account in local development too: the machine’s own claude login is never used', async () => {
-      serveClaudeCodeFeature(true, { claudeSignIn: true });
-      serveClaudeAccounts(0);
-      seedDraft('model-provider');
-      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
-      stubModelStepEndpoints([]);
-
-      renderFlow();
-
-      expect(await screen.findByText(/Claude Code needs a Claude sign-in to run/)).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /Sign in with Claude/ })).toBeInTheDocument();
-      expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
-      expectNoProviderRows();
-    });
-
-    it('says a Claude sign-in is needed when there is none, and offers no token to paste', async () => {
-      serveClaudeCodeFeature(true);
-      serveClaudeAccounts(0);
-      seedDraft('model-provider');
-      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
-      stubModelStepEndpoints([]);
-
-      renderFlow();
-
-      expect(await screen.findByText(/Claude Code needs a Claude sign-in to run\./)).toBeInTheDocument();
-      expect(screen.getByText(/sign in any time in Settings → Models → Claude Code accounts/)).toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: /Add a Claude Code account/ })).not.toBeInTheDocument();
-      expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
-    });
-
-    it('offers signing in with Claude when there is no account, and reports the sign-in', async () => {
-      serveClaudeCodeFeature(true, { claudeSignIn: true });
-      serveClaudeAccounts(0);
-      seedDraft('model-provider');
-      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
-      stubModelStepEndpoints([]);
-      const started: string[] = [];
+  describe('a harness without a connection of this person (ADR-0036)', () => {
+    const noSignIn = 'No Claude sign-in is set for Claude Code. Connect a Claude Code account under Settings → Connections.';
+    const serveUnconnected = () =>
       server.use(
-        http.post(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts/sign-in`, () => {
-          started.push('start');
-          return HttpResponse.json({ signIn: { id: 'flow-1', status: 'pending' } }, { status: 202 });
-        }),
-        http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts/sign-in/:id`, () =>
-          HttpResponse.json({ signIn: { id: 'flow-1', status: 'error', error: 'Claude sign-in did not finish.' } }),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({ models: [], instances: [harnessInstance(CLAUDE_CODE_HARNESS, { available: false, reason: noSignIn })] }),
         ),
       );
-      const user = userEvent.setup();
+
+    it('leaves the harness step out when nothing but Mastra can run', async () => {
+      serveClaudeCodeFeature(true);
+      serveUnconnected();
+      server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
 
       renderFlow();
 
-      await user.click(await screen.findByRole('option', { name: /Sign in with Claude/ }));
-      expect(await screen.findByText('Claude sign-in did not finish.')).toBeInTheDocument();
-      expect(started).toEqual(['start']);
+      expect(await screen.findByRole('list', { name: 'Step 1 of 3' })).toBeInTheDocument();
     });
 
-    it('counts the organization’s sign-ins, leaving old pasted tokens out', async () => {
-      serveClaudeCodeFeature(true, { claudeSignIn: true });
-      serveClaudeAccounts(2, 1);
-      seedDraft('model-provider');
-      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+    it('does not offer it on the harness step, and says why in the server’s words', async () => {
+      serveClaudeCodeFeature(true);
+      serveUnconnected();
+      sessionStorage.setItem(STEP_KEY, 'harness');
+      sessionStorage.setItem(NAME_KEY, 'Mastra');
       stubModelStepEndpoints([]);
+      serveUnconnected();
 
       renderFlow();
 
-      expect(await screen.findByText(/Runs on your organization’s 2 Claude Code accounts\./)).toBeInTheDocument();
-      // Sign-ins already there: no sign-in offered on top of them, and nothing to paste.
-      expect(screen.queryByRole('option', { name: /Sign in with Claude/ })).not.toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: /Add a Claude Code account/ })).not.toBeInTheDocument();
-    });
-
-    it('offers signing in when only old pasted tokens are left', async () => {
-      serveClaudeCodeFeature(true, { claudeSignIn: true });
-      serveClaudeAccounts(0, 2);
-      seedDraft('model-provider');
-      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
-      stubModelStepEndpoints([]);
-
-      renderFlow();
-
-      expect(await screen.findByText(/Claude Code needs a Claude sign-in to run/)).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /Sign in with Claude/ })).toBeInTheDocument();
+      expect(await screen.findByText(`Claude Code isn’t offered: ${noSignIn}`)).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Mastra.*Any model/ })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /Claude Code/ })).not.toBeInTheDocument();
     });
   });
 

@@ -81,7 +81,7 @@ import { ConfigRoutes } from './config.ts';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
 import { createAgentAccountsConnections } from './agent-connections.ts';
-import { CODEX_ACCOUNT_PROVIDER, CredentialAccountRoutes, SIGN_IN_ACCOUNT_PROVIDERS } from './credential-accounts.ts';
+import { SIGN_IN_ACCOUNT_PROVIDERS } from './credential-accounts.ts';
 import type { AccountSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
@@ -993,12 +993,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
-    }).routes(),
-    ...new CredentialAccountRoutes({
-      auth: deps.auth,
-      modelCredentials: deps.domains.modelCredentials,
-      ...(deps.claudeSignIn ? { claudeSignIn: deps.claudeSignIn } : {}),
-      ...(deps.codexSignIn ? { accountSignIn: { [CODEX_ACCOUNT_PROVIDER]: deps.codexSignIn } } : {}),
     }).routes(),
     ...(deps.usage
       ? new UsageRoutes({

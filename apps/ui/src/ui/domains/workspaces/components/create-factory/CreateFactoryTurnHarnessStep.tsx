@@ -2,22 +2,18 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { LogIn, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { CLAUDE_CODE_MODELS } from '@factory/harness-claude-code/models/aliases';
 
-import { ApiRequestError } from '../../../../../api/client';
 import { useModelCatalogQuery } from '../../../../../hooks/useAvailableModels';
-import { useAccountSignIn, useCredentialAccountsQuery } from '../../../../../hooks/useCredentialAccounts';
-import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
+import { useHarnessChoices } from '../../../../../hooks/useHarnessChoices';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import { AccountSignInStatus } from '../../../settings/components/models/accounts/AccountSignIn';
-import { CLAUDE_CODE_ACCOUNTS, CODEX_ACCOUNTS } from '../../../settings/components/models/accounts/harnessAccounts';
-import type { HarnessAccounts } from '../../../settings/components/models/accounts/harnessAccounts';
 import { TURN_HARNESS_TEXT_KEY } from '../../services/turnHarness';
 import type { TurnHarness } from '../../services/turnHarness';
-import { ProviderBrandIcon } from '../ProviderBrandIcon';
+import { useHarness } from '../../../../../hooks/useHarness';
+import { BrandLogo } from '../../../settings/components/connections/ConnectionIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
 export interface CreateFactoryTurnHarnessStepProps {
@@ -36,10 +32,10 @@ interface ModelOption {
   description?: string;
 }
 
-/** The texts under `workspaces:createFactory.<key>` and the accounts each harness's turns run on. */
-const TURN_HARNESS_STEP: Record<TurnHarness, { key: (typeof TURN_HARNESS_TEXT_KEY)[TurnHarness]; accounts: HarnessAccounts }> = {
-  'claude-code': { key: TURN_HARNESS_TEXT_KEY['claude-code'], accounts: CLAUDE_CODE_ACCOUNTS },
-  codex: { key: TURN_HARNESS_TEXT_KEY.codex, accounts: CODEX_ACCOUNTS },
+/** The texts under `workspaces:createFactory.<key>`. */
+const TURN_HARNESS_STEP: Record<TurnHarness, { key: (typeof TURN_HARNESS_TEXT_KEY)[TurnHarness] }> = {
+  'claude-code': { key: TURN_HARNESS_TEXT_KEY['claude-code'] },
+  codex: { key: TURN_HARNESS_TEXT_KEY.codex },
 };
 
 /** The models a new Factory of the harness may start on: Claude Code's CLI aliases, or Codex's catalog. */
@@ -76,6 +72,7 @@ function useModelOptions(harness: TurnHarness): { options: ModelOption[]; loadin
 export function CreateFactoryTurnHarnessStep({ harness, query, saving, error, onPick }: CreateFactoryTurnHarnessStepProps) {
   const { t } = useTranslation('workspaces');
   const { key } = TURN_HARNESS_STEP[harness];
+  const descriptor = useHarness(harness);
   const normalizedQuery = query.trim().toLowerCase();
   const { options, loading } = useModelOptions(harness);
   const models = options.filter(
@@ -100,7 +97,7 @@ export function CreateFactoryTurnHarnessStep({ harness, query, saving, error, on
                   busy && saving.model === option.model ? (
                     <Spinner size="sm" aria-label={t('createFactory.models.creating')} />
                   ) : option.model ? (
-                    <ProviderBrandIcon provider={TURN_HARNESS_STEP[harness].accounts.brand} />
+                    <BrandLogo kind={descriptor.icon} size={16} />
                   ) : (
                     <Sparkles />
                   )
@@ -122,56 +119,20 @@ export function CreateFactoryTurnHarnessStep({ harness, query, saving, error, on
   );
 }
 
-/** How the harness's turns sign in: the members' sign-ins, never the machine's own CLI login. */
-function TurnHarnessSignIn({ harness, disabled }: { harness: TurnHarness; disabled: boolean }) {
+/**
+ * Whether the harness can run for this person (ADR-0036): its accounts are connections, connected in
+ * Settings › Підключення; when it cannot, the server says why. Nothing to sign in to here.
+ */
+function TurnHarnessSignIn({ harness }: { harness: TurnHarness; disabled: boolean }) {
   const { t } = useTranslation('workspaces');
-  const { key, accounts: harnessAccounts } = TURN_HARNESS_STEP[harness];
-  const features = useServerFeatures();
-  const accountsQuery = useCredentialAccountsQuery(harnessAccounts.provider);
-  const signIn = useAccountSignIn(harnessAccounts.provider);
-  // A pasted token or key from before sign-ins runs nothing, so it does not count.
-  const accounts = (accountsQuery.data?.accounts ?? []).filter(account => account.legacy !== true);
-  // With no account yet, signing in is the quickest way to give the Factory its own.
-  const offerSignIn = features.data?.[harnessAccounts.signInFeature] === true && accountsQuery.data !== undefined && accounts.length === 0;
-  const needsSignIn = accountsQuery.error instanceof ApiRequestError && accountsQuery.error.code === 'accounts_need_sign_in';
-
-  let status;
-  if (features.isPending || accountsQuery.isPending) {
-    status = <SkeletonRows label={t(`createFactory.${key}.signIn.loading`)} rows={1} rowClassName="mx-2 my-1 h-8 rounded-xl" />;
-  } else if (accounts.length > 0) {
-    status = (
-      <CreateFactoryPaletteMessage>
-        {t(`createFactory.${key}.signIn.accounts`, { count: accounts.length })} {t(`createFactory.${key}.signIn.addHint`)}
-      </CreateFactoryPaletteMessage>
-    );
-  } else {
-    status = (
-      <CreateFactoryPaletteMessage>
-        {needsSignIn
-          ? t(`createFactory.${key}.signIn.needSignIn`)
-          : `${t(`createFactory.${key}.signIn.none`)} ${t(`createFactory.${key}.signIn.addHint`)}`}
-      </CreateFactoryPaletteMessage>
-    );
-  }
-
+  const { key } = TURN_HARNESS_STEP[harness];
+  const { choices, isPending } = useHarnessChoices();
+  const choice = choices.find(entry => entry.descriptor.id === harness);
+  if (isPending) return <SkeletonRows label={t(`createFactory.${key}.signIn.loading`)} rows={1} rowClassName="mx-2 my-1 h-8 rounded-xl" />;
+  if (!choice || choice.usable) return null;
   return (
     <CommandGroup heading={t(`createFactory.${key}.signIn.heading`)}>
-      {status}
-      {offerSignIn && (
-        <CommandPaletteItem
-          icon={signIn.status === 'pending' ? <Spinner size="sm" aria-hidden /> : <LogIn />}
-          title={t(`createFactory.${key}.signIn.signInWith`)}
-          subtitle={t(`createFactory.${key}.signIn.signInWithDescription`)}
-          value={`${harness}-signin`}
-          disabled={disabled || signIn.status === 'pending'}
-          onSelect={signIn.start}
-        />
-      )}
-      {offerSignIn && (
-        <div className="px-2">
-          <AccountSignInStatus accounts={harnessAccounts} signIn={signIn} />
-        </div>
-      )}
+      <CreateFactoryPaletteMessage>{choice.reason ?? t(`createFactory.${key}.signIn.none`)}</CreateFactoryPaletteMessage>
     </CommandGroup>
   );
 }

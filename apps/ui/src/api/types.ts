@@ -78,49 +78,6 @@ export interface ProvidersResponse {
   orgKeyAdmin?: boolean;
 }
 
-/** One rotation account (`GET /web/config/providers/:provider/accounts`); never the secret. */
-export interface CredentialAccountInfo {
-  id: string;
-  label: string;
-  kind: 'api_key' | 'subscription' | 'claude_login' | 'codex_login';
-  /** The caller's own sign-in. */
-  mine: boolean;
-  priority: number;
-  status: 'active' | 'limited' | 'disabled';
-  limitedUntil?: string;
-  lastError?: string;
-  lastUsedAt?: string;
-  /** Last characters of the secret. */
-  hint: string;
-  canManage: boolean;
-  /** A pasted setup token or API key from before sign-ins: no session uses it, it is listed to be removed. */
-  legacy?: boolean;
-  /** A sign-in that stopped working: its owner signs in again. Absent from older servers. */
-  needsSignIn?: boolean;
-  createdAt: string;
-}
-
-/** A sign-in a person started on this server (`claude auth login`, `codex login`). */
-export interface AccountSignInInfo {
-  id: string;
-  status: 'pending' | 'done' | 'error';
-  error?: string;
-  /** The account the sign-in was filed as, once done. */
-  account?: CredentialAccountInfo;
-}
-
-export interface AccountSignInResponse {
-  signIn: AccountSignInInfo;
-}
-
-export interface CredentialAccountsResponse {
-  accounts: CredentialAccountInfo[];
-}
-
-export interface CredentialAccountResponse {
-  account: CredentialAccountInfo;
-}
-
 export interface CustomProvidersResponse {
   providers: CustomProviderInfo[];
 }
@@ -238,7 +195,6 @@ export type IntakeTriggerKindsInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.inta
 export type IntakeTriggerPreviewInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTriggerPreview.responseSchema>;
 
 export type {
-  AccountsUsageResponse,
   AccountUsageView,
   SessionUsageResponse,
   UsageLimitsAccount,

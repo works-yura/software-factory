@@ -13,7 +13,7 @@ export class CodexCredentialMissingError extends CodexError {
   constructor(orgId: string) {
     super(
       'auth',
-      `No ChatGPT sign-in is set for organization ${orgId}. Sign in with ChatGPT under Settings → Models → Codex accounts to run Codex sessions.`,
+      `No ChatGPT sign-in is set for organization ${orgId}. Sign in with ChatGPT under Settings → Connections → Codex to run Codex sessions.`,
     );
     this.name = 'CodexCredentialMissingError';
   }
@@ -33,13 +33,13 @@ export interface CodexCredentials {
 }
 
 function tokensOf(oauth: SignInOAuth): CodexChatGptTokens {
-  if (!oauth.workspaceId) throw new CodexError('auth', 'The ChatGPT sign-in names no workspace; sign in with ChatGPT again under Settings → Models.');
+  if (!oauth.workspaceId) throw new CodexError('auth', 'The ChatGPT sign-in names no workspace; sign in with ChatGPT again under Settings → Connections.');
   return { accessToken: oauth.accessToken, chatgptAccountId: oauth.workspaceId, ...(oauth.subscriptionType ? { planType: oauth.subscriptionType } : {}) };
 }
 
 /**
  * The credentials every Codex run asks for, on the shared sign-in pool (`createSignInAccountPool`,
- * which Claude Code turns use too): only ChatGPT sign-ins (`codex_login`, Settings → Models) run
+ * which Claude Code turns use too): only ChatGPT sign-ins (`codex_login`, Settings → Connections) run
  * Codex, one of the run owner's, refreshed here under the row lock when due; one that runs out of
  * usage sits out until it resets while the turn goes on with the next; one the token endpoint
  * refuses is turned off. The run's `codex app-server` gets the access token and workspace alone

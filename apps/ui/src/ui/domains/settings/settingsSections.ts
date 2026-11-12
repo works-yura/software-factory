@@ -92,6 +92,15 @@ export function settingsSectionPath(factoryId: string, section: SettingsSection,
   return anchor ? `${path}#${anchor}` : path;
 }
 
+/**
+ * A connector in Settings › Підключення by the id the server gives it: its connections (one opens its
+ * page), or with `connect` the dialog at its connect step (`?add=1&step=connector:<id>`).
+ */
+export function connectorPath(factoryId: string, connector: string, options: { connect?: boolean } = {}): string {
+  const search: Record<string, string> = options.connect ? { add: '1', step: `connector:${connector}` } : { connection: connector };
+  return `${settingsSectionPath(factoryId, 'integrations')}?${new URLSearchParams(search).toString()}`;
+}
+
 /** A link into Settings › Підключення, opening one integration's view when given. */
 export function connectionsPath(factoryId: string, connection?: ConnectionLink): string {
   return `${settingsSectionPath(factoryId, 'integrations')}${connectionsSearch(connection)}`;

@@ -544,12 +544,19 @@
       "description": "What this Factory’s agents run on.",
       "label": "Agents run on",
       "note": "Applies to new sessions; cards already running finish on their harness.",
-      "mastra": "Mastra",
-      "claudeCode": "Claude Code",
-      "claudeUnavailable": "Claude Code isn’t configured on this server.",
-      "codex": "Codex",
-      "codexUnavailable": "Codex isn’t available on this server: install the codex CLI there and run `codex login`.",
-      "changeFailed": "Couldn’t switch the harness"
+      "changeFailed": "Couldn’t switch the harness",
+      "connectHeading": "Harnesses to connect",
+      "notOffered": "{{name}} isn’t offered: no account of yours to run it.",
+      "connect": "Connect {{name}}"
+    },
+    "agentAccounts": {
+      "title": "Accounts",
+      "description": "{{name}} sessions run on the members’ own sign-ins, connected in Connections; a session moves to the next account when one runs out of usage.",
+      "label": "{{name}} accounts",
+      "count_one": "{{count}} account, {{running}} running now",
+      "count_other": "{{count}} accounts, {{running}} running now",
+      "none": "None connected yet.",
+      "manage": "Manage in Connections"
     },
     "agentLanguage": {
       "title": "Agent language",
@@ -644,86 +651,6 @@
     "searchLabel": "Search settings",
     "searchPlaceholder": "Search settings…",
     "noResults": "No settings found."
-  },
-  "accounts": {
-    "kind": {
-      "legacy": "Old token: remove it"
-    },
-    "status": {
-      "active": "Active",
-      "limited": "Limited",
-      "limitedUntil": "Limited until {{time}}",
-      "off": "Off",
-      "needsSignIn": "Sign in again"
-    },
-    "lastUsed": "Last used {{time}}",
-    "neverUsed": "Not used yet",
-    "actionsFor": "Actions for {{label}}",
-    "turnOff": "Turn off",
-    "turnOn": "Turn on",
-    "rename": "Rename",
-    "remove": "Remove",
-    "cancel": "Cancel",
-    "removeTitle": "Remove {{label}}?",
-    "removeDescription": "Sessions stop using this account. Its secret is deleted and can’t be recovered.",
-    "dialog": {
-      "renameTitle": "Rename {{label}}",
-      "label": "Name",
-      "cancel": "Cancel",
-      "save": "Save",
-      "saving": "Saving…"
-    },
-    "errors": {
-      "forbidden": "You can’t change this account.",
-      "failed": "Something went wrong. Try again."
-    },
-    "signIn": {
-      "done": "Signed in as {{label}}."
-    },
-    "harness": {
-      "claudeCode": {
-        "title": "Claude Code accounts",
-        "description": "Claude Code sessions run on Claude sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again.",
-        "loading": "Loading Claude Code accounts",
-        "empty": "No Claude sign-ins yet. Sign in with Claude so Claude Code sessions can run.",
-        "kind": {
-          "mySignIn": "Your Claude sign-in",
-          "memberSignIn": "Member’s Claude sign-in"
-        },
-        "errors": {
-          "needSignIn": "Sign in to an organization to use Claude Code accounts."
-        },
-        "signIn": {
-          "button": "Sign in with Claude",
-          "pending": "Finish signing in on the Claude page that opened in your browser…",
-          "failed": "Claude sign-in failed."
-        },
-        "dialog": {
-          "labelPlaceholder": "e.g. My Max plan"
-        }
-      },
-      "codex": {
-        "title": "Codex accounts",
-        "description": "Codex sessions run on ChatGPT sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again. The server’s own codex login is never used.",
-        "loading": "Loading Codex accounts",
-        "empty": "No ChatGPT sign-ins yet. Sign in with ChatGPT so Codex sessions can run.",
-        "kind": {
-          "mySignIn": "Your ChatGPT sign-in",
-          "memberSignIn": "Member’s ChatGPT sign-in"
-        },
-        "errors": {
-          "needSignIn": "Sign in to an organization to use Codex accounts."
-        },
-        "signIn": {
-          "button": "Sign in with ChatGPT",
-          "pending": "Finish signing in on the ChatGPT page that opened in your browser…",
-          "failed": "ChatGPT sign-in failed."
-        },
-        "dialog": {
-          "labelPlaceholder": "e.g. My Plus plan"
-        }
-      }
-    }
   },
   "intakeRoutes": {
     "title": "Intake routes",

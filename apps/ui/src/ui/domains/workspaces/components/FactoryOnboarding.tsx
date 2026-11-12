@@ -28,7 +28,7 @@ import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep, turnHarnessModelTitle } from './onboarding/OnboardingReviewStep';
 import { isTurnHarness } from '../services/turnHarness';
 import { OnboardingHarnessStep, OnboardingTurnHarnessStep } from './onboarding/OnboardingCommandRows';
-import { useServerFeatures } from '../../../../hooks/useServerFeatures';
+import { useHarnessChoices } from '../../../../hooks/useHarnessChoices';
 import type { FactoryHarness } from '../services/github';
 
 interface StepPreview {
@@ -73,15 +73,14 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
     goTo(returnToReview ? 'review' : next);
     setReturnToReview(false);
   };
-  const features = useServerFeatures();
-  // A Claude Code or Codex pick only counts while the server still runs it.
+  const harnesses = useHarnessChoices();
+  // A pick only counts while the server still runs it and this person can run it (ADR-0036); while that loads, the draft stands.
+  const drafted = harnesses.choices.find(choice => choice.descriptor.id === draft.harness);
   const harness: FactoryHarness =
-    (draft.harness === 'claude-code' && features.data?.claudeCode !== false) || (draft.harness === 'codex' && features.data?.codex !== false)
-      ? draft.harness
-      : 'mastra';
+    draft.harness && (harnesses.isPending || drafted?.usable) ? draft.harness : 'mastra';
   const turn = isTurnHarness(harness) ? harness : undefined;
-  // Only a server that runs Claude Code or Codex offers the harness step; a draft resumed on it keeps it in view.
-  const harnessChoice = features.data?.claudeCode === true || features.data?.codex === true || step === 'harness' || turn !== undefined;
+  // The harness step shows only when there is a choice; a draft resumed on it keeps it in view.
+  const harnessChoice = harnesses.choices.filter(choice => choice.usable).length > 1 || step === 'harness' || turn !== undefined;
   const committedDraft: OnboardingDraft = harnessChoice ? { ...draft, harness } : { ...draft, harness: undefined };
   const steps = onboardingSteps({ harnessChoice });
   const stepIndex = steps.indexOf(step);

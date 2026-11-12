@@ -5,7 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useApiConfig } from '../../../../../api/config';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
-import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
+import { useHarnessChoices } from '../../../../../hooks/useHarnessChoices';
 import { createFactorySteps, useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
 import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
@@ -83,10 +83,11 @@ export function CreateFactoryWizard() {
   const draft = flow.draft;
   // The repository list loads while the name is still being typed, so the next step has rows on arrival.
   const githubStatus = useGithubStatusQuery();
-  const features = useServerFeatures();
-  // Until the server says otherwise there is nothing to choose: Factories run on Mastra.
-  // A draft resumed on the harness step keeps it in view even if the flag is still loading.
-  const harnessChoice = features.data?.claudeCode === true || features.data?.codex === true || draft?.step === 'harness';
+  const harnesses = useHarnessChoices();
+  // Until the server says otherwise there is nothing to choose: Factories run on Mastra. There is a
+  // choice when this person can run more than one harness (ADR-0036); a draft resumed on the harness
+  // step keeps it in view even while that loads.
+  const harnessChoice = harnesses.choices.filter(choice => choice.usable).length > 1 || draft?.step === 'harness';
   const steps = createFactorySteps({ harnessChoice });
   useGithubReposQuery(undefined, draft?.step === 'name' && githubStatus.data?.connected === true);
 
@@ -140,7 +141,7 @@ export function CreateFactoryWizard() {
           <CreateFactoryNameRows
             name={value}
             // Hold the name until the server says whether there is a harness to pick.
-            disabled={features.isPending}
+            disabled={harnesses.isPending}
             onSubmit={name => void flow.submitName(name, { harnessChoice })}
           />
         )}

@@ -143,7 +143,6 @@ export const queryKeys = {
   providers: () => ['providers'] as const,
   credentialAccounts: (provider: string) => ['credential-accounts', provider] as const,
   accountSignIn: (provider: string, id: string | null) => ['account-sign-in', provider, id] as const,
-  accountUsage: (provider: string) => ['account-usage', provider] as const,
   /** Every harness's sign-ins with their allowance windows; `refresh` reads asked the providers again. */
   usageLimits: (refresh: boolean) => ['usage', 'limits', refresh] as const,
   usageSummary: (filter: Record<string, string | undefined>) => ['usage', 'summary', filter] as const,

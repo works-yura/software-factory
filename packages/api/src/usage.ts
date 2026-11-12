@@ -161,8 +161,6 @@ export async function readAccountUsage({
 /**
  * What the Factory's agents spent, for every harness alike (`@factory/harness/usage`):
  *
- *   - `GET /web/config/providers/:provider/accounts/usage[?refresh=1]` each account's allowance
- *     windows; `refresh` asks the provider again for accounts not asked within a minute
  *   - `GET /web/usage/limits[?refresh=1]` every harness's sign-ins with their allowance windows, in
  *     one list (the status line and the Analytics limits card); `refresh` as above
  *   - `GET /web/usage/summary?from&to&factoryProjectId&harnessId&model&accountId` tokens and
@@ -240,18 +238,6 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
 
   #refreshRequested(c: Context): boolean {
     return c.req.query('refresh') === '1' || c.req.query('refresh') === 'true';
-  }
-
-  async #accountsUsage(c: Context): Promise<Response> {
-    const { orgId } = await this.#tenant(c);
-    const provider = c.req.param('provider') ?? '';
-    const facet = this.deps.harnesses.forProvider(provider);
-    if (!facet) throw new Refusal(404, { error: 'unsupported_provider', provider });
-    const read = await this.#readAccounts(orgId, facet, this.#refreshRequested(c));
-    const accounts: Record<string, AccountUsageView> = {};
-    for (const { account, usage } of read) if (usage) accounts[account.id] = usage;
-    const body: AccountsUsageResponse = { accounts };
-    return c.json(body);
   }
 
   async #limits(c: Context): Promise<Response> {
@@ -351,11 +337,6 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
 
   routes(): ApiRoute[] {
     return [
-      registerApiRoute('/web/config/providers/:provider/accounts/usage', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: this.#handle(c => this.#accountsUsage(c)),
-      }),
       registerApiRoute('/web/usage/limits', { method: 'GET', requiresAuth: false, handler: this.#handle(c => this.#limits(c)) }),
       registerApiRoute('/web/usage/summary', { method: 'GET', requiresAuth: false, handler: this.#handle(c => this.#summary(c)) }),
       registerApiRoute('/web/usage/sessions/:sessionId', {

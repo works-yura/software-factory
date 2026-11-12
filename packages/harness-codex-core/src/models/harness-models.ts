@@ -26,7 +26,7 @@ export const CODEX_NOT_INSTALLED_REASON = 'The codex CLI is not installed on thi
 export const CODEX_NEEDS_LOGIN_REASON = 'Codex is not signed in on this server: run `codex login` there.';
 /** Why Codex cannot run for a person without a ChatGPT sign-in of their own (the host's accounts hook says it). */
 export const CODEX_NEEDS_ACCOUNT_REASON =
-  'No ChatGPT sign-in is set for Codex. Sign in with ChatGPT under Settings → Models → Codex accounts to run Codex sessions.';
+  'No ChatGPT sign-in is set for Codex. Sign in with ChatGPT under Settings → Connections → Codex to run Codex sessions.';
 
 const DEFAULT_CATALOG_TTL_MS = 5 * 60_000;
 const FAILED_PROBE_TTL_MS = 30_000;

@@ -6,13 +6,14 @@ import { useTranslation } from 'react-i18next';
 
 import { useFactoryProjectQuery } from '../../../../../../hooks/useFactoryDefaultModel';
 import { useSetFactoryHarnessMutation } from '../../../../../../hooks/useFactoryHarness';
-import { useServerFeatures } from '../../../../../../hooks/useServerFeatures';
+import { useHarnessChoices } from '../../../../../../hooks/useHarnessChoices';
 import { translator } from '../../../../../i18n/t';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { isFactoryHarness } from '../../../../workspaces/services/github';
 import type { FactoryHarness } from '../../../../workspaces/services/github';
 import { useHarness } from '../../../../../../hooks/useHarness';
 import { SettingsSubsection } from '../../SettingsSubsection';
+import { ConnectAgentHint } from './ConnectAgentHint';
 
 const tk = translator('settings');
 
@@ -39,15 +40,16 @@ export function useFactoryHarness(factoryId: string) {
 }
 
 /**
- * Switch between Mastra, Claude Code and Codex. Only new sessions follow: a card
- * already running finishes on the harness it started on.
+ * Switch between the harnesses this server runs, as it describes them. Only harnesses this person
+ * can run are offered (a harness on connections they lack is not, ADR-0036); the Factory's own stays
+ * shown so it can be read. Only new sessions follow: a card already running finishes on the harness
+ * it started on.
  */
 export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
   const { t } = useTranslation('settings');
-  const features = useServerFeatures();
   const { projectQuery, mutation, harness } = useFactoryHarness(factoryId);
-  const claudeAvailable = features.data?.claudeCode === true;
-  const codexAvailable = features.data?.codex === true;
+  const { choices } = useHarnessChoices(factoryId);
+  const offered = choices.filter(choice => choice.usable || choice.descriptor.id === harness);
 
   return (
     <SettingsSubsection scope="factory" title={t('models.harness.title')} description={t('models.harness.description')}>
@@ -69,31 +71,19 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
                 value={harness}
                 disabled={mutation.isPending}
                 onValueChange={next => {
-                  if (next === harness) return;
+                  if (next === harness || !isFactoryHarness(next)) return;
                   mutation
                     .mutateAsync({ harness: next })
                     .catch(error => toast.error(errorMessage(error, tk('models.harness.changeFailed'))));
                 }}
               >
-                <SegmentedControlItem value="mastra">{t('models.harness.mastra')}</SegmentedControlItem>
-                {/* A Factory already on Claude Code keeps the option even where the server lost it. */}
-                <SegmentedControlItem value="claude-code" disabled={!claudeAvailable && harness !== 'claude-code'}>
-                  {t('models.harness.claudeCode')}
-                </SegmentedControlItem>
-                <SegmentedControlItem value="codex" disabled={!codexAvailable && harness !== 'codex'}>
-                  {t('models.harness.codex')}
-                </SegmentedControlItem>
+                {offered.map(choice => (
+                  <SegmentedControlItem key={choice.descriptor.id} value={choice.descriptor.id} disabled={!choice.usable}>
+                    {choice.descriptor.label}
+                  </SegmentedControlItem>
+                ))}
               </SegmentedControl>
-              {features.data && !claudeAvailable && (
-                <Txt as="span" variant="caption" tone="muted">
-                  {t('models.harness.claudeUnavailable')}
-                </Txt>
-              )}
-              {features.data && !codexAvailable && (
-                <Txt as="span" variant="caption" tone="muted">
-                  {t('models.harness.codexUnavailable')}
-                </Txt>
-              )}
+              <ConnectAgentHint factoryId={factoryId} choices={choices} />
             </div>
           )}
         </SettingsRow>

@@ -74,6 +74,11 @@ export interface HarnessModels {
   readonly harnessId: string;
   readonly displayName: string;
   /**
+   * The connector in Settings › Підключення whose connections this harness runs on (ADR-0036: its
+   * members' sign-ins). Absent: it needs none. The UI links "connect an agent" there by this id.
+   */
+  readonly connector?: string;
+  /**
    * Whether this harness runs the session. Asked in registration order; the server's default
    * harness answers true for everything and goes last.
    */
@@ -128,9 +133,13 @@ export interface HarnessModelInstanceInfo {
   instanceId: string;
   harnessId: string;
   displayName: string;
+  /** Usable for the viewer: a harness that is not is offered nowhere (pickers, the harness switch, a new Factory). */
   available: boolean;
   needsSetup: boolean;
+  /** Why not, in words, when unavailable. */
   reason?: string;
+  /** The connector to connect for it to become available (`HarnessModels.connector`). */
+  connector?: string;
   /** The model a new session starts on (`defaultSelection`), when the harness names one. */
   defaultModel: string | null;
   defaultSelection: ModelSelection | null;
@@ -146,4 +155,25 @@ export interface HarnessModelInstanceInfo {
    */
   acceptsHandoff?: boolean;
   models: ServerProviderModel[];
+}
+
+/**
+ * The facet of a harness whose sessions run on connections (ADR-0036): available to a viewer only
+ * when `missing` says nothing is (a sign-in they may use, now or after a reset), and named by its
+ * connector so the UI can send the person there. The facet's own availability is asked first.
+ */
+export function withConnectionAvailability<Models extends HarnessModels>(
+  models: Models,
+  connection: { readonly connector: string; missing?(ctx: HarnessModelContext): Promise<string | undefined> },
+): Models {
+  const inner = models.availability?.bind(models);
+  return Object.assign(Object.create(Object.getPrototypeOf(models) as object) as Models, models, {
+    connector: connection.connector,
+    async availability(ctx: HarnessModelContext): Promise<HarnessModelAvailability> {
+      const own = (await inner?.(ctx)) ?? { available: true };
+      if (!own.available || !connection.missing) return own;
+      const missing = await connection.missing(ctx);
+      return missing ? { available: false, needsSetup: true, reason: missing } : own;
+    },
+  });
 }

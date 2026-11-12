@@ -54,7 +54,7 @@ describe('Codex credentials', () => {
     });
     const codex = createCodexCredentials({ credentials: accounts, now: () => now });
     await expect(codex.credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toBeInstanceOf(CodexCredentialMissingError);
-    await expect(codex.credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toThrow('Settings → Models → Codex accounts');
+    await expect(codex.credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toThrow('Settings → Connections → Codex');
     expect(await codex.usable({ orgId: 'org-1', userId: 'alice' })).toBe(false);
   });
 

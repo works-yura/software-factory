@@ -4,6 +4,8 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { CLAUDE_CODE_HARNESS, MASTRA_HARNESS } from '@factory/contracts/harnesses';
+
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { GithubRepo, FactoryProjectPayload } from '../../services/github';
@@ -611,10 +613,7 @@ describe('harness choice in onboarding', () => {
   function serveClaudeCode(claudeCode: boolean) {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-        HttpResponse.json({ knowledge: false, mcp: false, claudeCode }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
-        HttpResponse.json({ accounts: [] }),
+        HttpResponse.json({ knowledge: false, mcp: false, harnesses: [MASTRA_HARNESS, ...(claudeCode ? [CLAUDE_CODE_HARNESS] : [])] }),
       ),
     );
   }
@@ -636,8 +635,8 @@ describe('harness choice in onboarding', () => {
 
     // Claude Code's sign-in and Claude model rows, no Mastra provider list.
     expect(await screen.findByRole('heading', { name: 'Choose your Claude model.' })).toBeInTheDocument();
-    // No machine login to fall back on: an account is asked for.
-    expect(await screen.findByText(/Claude Code needs a Claude sign-in to run/)).toBeInTheDocument();
+    // Its accounts are connections (Settings › Підключення): nothing to sign in to here, no machine login either.
+    expect(screen.queryByRole('option', { name: /Sign in with Claude/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: /Sonnet/ }));

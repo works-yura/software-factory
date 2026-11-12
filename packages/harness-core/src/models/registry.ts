@@ -49,7 +49,12 @@ export interface HarnessModelRegistry {
 
 /** Describes one facet's instance for `ctx`; a failing catalog lists the instance as unavailable. */
 export async function describeHarnessModels(models: HarnessModels, ctx: HarnessModelContext): Promise<HarnessModelInstanceInfo> {
-  const base = { instanceId: models.instanceId, harnessId: models.harnessId, displayName: models.displayName };
+  const base = {
+    instanceId: models.instanceId,
+    harnessId: models.harnessId,
+    displayName: models.displayName,
+    ...(models.connector ? { connector: models.connector } : {}),
+  };
   try {
     const availability = (await models.availability?.(ctx)) ?? { available: true };
     // The Factory's own default reads even when the harness is unavailable, so Settings still shows it.

@@ -257,13 +257,14 @@ export async function listGithubRepos(
 /** The GitHub source-control integration id registered on the server. */
 const GITHUB_INTEGRATION_ID = 'github';
 
-/** Runtimes a Factory's agents can run on; mirrors `FACTORY_HARNESS_KINDS` in @factory/contracts. */
-export const FACTORY_HARNESSES = ['mastra', 'claude-code', 'codex'] as const;
-
-export type FactoryHarness = (typeof FACTORY_HARNESSES)[number];
+/**
+ * A harness id, as the server names it (`/web/config/features` `harnesses`): the UI keeps no list of
+ * harnesses; what a server runs and what a person may pick is the server's (ADR-0036).
+ */
+export type FactoryHarness = string;
 
 export function isFactoryHarness(value: unknown): value is FactoryHarness {
-  return FACTORY_HARNESSES.some(harness => harness === value);
+  return typeof value === 'string' && value.length > 0;
 }
 
 

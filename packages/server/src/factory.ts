@@ -86,6 +86,7 @@ import {
   createClaudePlanApproval,
   createClaudeCheckoutResolver,
   createLocalCheckoutAttacher,
+  CLAUDE_CODE_NEEDS_ACCOUNT_REASON,
   createClaudeCodeCredentials,
   claudeFactorySkillDirectories,
   createClaudeFactoryHarness,
@@ -112,6 +113,8 @@ import type {
 } from './claude/index.ts';
 import type { ChatTranscriptSession, ClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import type { ModelSelection } from '@factory/harness/models/contracts';
+import { withConnectionAvailability } from '@factory/harness/models/facet';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS } from '@factory/contracts';
 import { chainSessionResolvers, codexAwareModelSelectionReader } from '@factory/harness-codex-ui';
 import { findCodexBinary } from '@factory/harness-codex';
 import type { CodexSession, CodexSessionMode } from '@factory/harness-codex';
@@ -2314,7 +2317,19 @@ export class MastraFactory {
       // model through its harness's facet; its next turn passes the pick to the CLI (`--model`, `--effort`, `--settings`).
       const claudeModels = claudeCode.models;
       if (claudeModels) {
-        harnessModels.register(claudeModels);
+        // Offered only to whoever has a Claude sign-in to run on (ADR-0036); otherwise the UI points at its connector.
+        const claudeUsable = 'usable' in claudeCodeCredentials ? claudeCodeCredentials.usable : undefined;
+        harnessModels.register(
+          withConnectionAvailability(claudeModels, {
+            connector: CLAUDE_CODE_HARNESS.setup.accounts!.connector,
+            ...(claudeUsable
+              ? {
+                  missing: async ctx =>
+                    (await claudeUsable({ orgId: ctx.viewer.orgId, userId: ctx.viewer.userId })) ? undefined : CLAUDE_CODE_NEEDS_ACCOUNT_REASON,
+                }
+              : {}),
+          }),
+        );
         claudeModelSelection = async session => (session instanceof ClaudeCodeSession ? claudeModels.effectiveSelection(session) : null);
         this.#claudeSessionUi.setModelSelectionReader(claudeModelSelection);
       }
@@ -2430,7 +2445,8 @@ export class MastraFactory {
       removeCodexSessionHome = sessionId => codex.removeSessionHome(sessionId);
       // Its models in the picker, Settings and `factory_switch_session_model`, through its facet: `model/list`
       // of the installed CLI, its next turn's `turn/start` carrying the pick (model, effort, service tier).
-      harnessModels.register(codex.models);
+      // Its facet already asks for a ChatGPT sign-in of the viewer's; the connector names where to add one (ADR-0036).
+      harnessModels.register(withConnectionAvailability(codex.models, { connector: CODEX_HARNESS.setup.accounts!.connector }));
       // Its Factory chat is a Codex session too, created when the chat first reaches it (as a Claude Code Factory's).
       const codexSessions = (sessionId: string) => codex.resolveSession(sessionId);
       this.#claudeSessionUi.setSessionResolver(chainSessionResolvers(claudeResolveSession, codexSessions));

@@ -15,7 +15,7 @@ import { CLAUDE_OAUTH_CLIENT_ID, CLAUDE_OAUTH_REFRESH_MARGIN_MS, CLAUDE_OAUTH_TO
 
 describe('Claude Code credentials hook', () => {
   const now = new Date('2026-10-28T12:00:00Z');
-  const missing = 'No Claude sign-in is set for organization org-1. Sign in to Claude under Settings → Models → Claude Code accounts to run Claude Code sessions.';
+  const missing = 'No Claude sign-in is set for organization org-1. Sign in to Claude under Settings → Connections → Claude Code to run Claude Code sessions.';
 
   it('never falls back to the person’s own claude login: with nothing stored it asks for a sign-in', async () => {
     const hook = createClaudeCodeCredentialsHook({ credentials: undefined });

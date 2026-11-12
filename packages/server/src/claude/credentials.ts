@@ -33,7 +33,7 @@ export { DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS };
 export class ClaudeCodeCredentialMissingError extends Error {
   constructor(orgId: string) {
     super(
-      `No Claude sign-in is set for organization ${orgId}. Sign in to Claude under Settings → Models → Claude Code accounts to run Claude Code sessions.`,
+      `No Claude sign-in is set for organization ${orgId}. Sign in to Claude under Settings → Connections → Claude Code to run Claude Code sessions.`,
     );
     this.name = 'ClaudeCodeCredentialMissingError';
   }
@@ -44,13 +44,19 @@ export interface ClaudeCodeCredentials {
   onCredentialFailure: ClaudeCodeCredentialFailureHook;
   /** The account's Claude sign-in, refreshed when due, for reading its usage; `undefined` when there is none. */
   signIn?(orgId: string, accountId: string): Promise<SignInOAuth | undefined>;
+  /** Whether this person has a Claude sign-in a turn could use (now or after a reset). */
+  usable?(tenant: ClaudeCodeCredentialTenant): Promise<boolean>;
 }
+
+/** Why Claude Code cannot run for a person without a Claude sign-in of their own. */
+export const CLAUDE_CODE_NEEDS_ACCOUNT_REASON =
+  'No Claude sign-in is set for Claude Code. Connect a Claude Code account under Settings → Connections to run Claude Code sessions.';
 
 /**
  * The credentials every Claude Code turn asks for, on the shared sign-in pool
  * (`createSignInAccountPool`, which Codex turns use too).
  *
- * - Only Claude sign-ins (`claude_login`, Settings → Models) run Claude Code:
+ * - Only Claude sign-ins (`claude_login`, Settings → Connections) run Claude Code:
  *   the turn gets one of its owner's (see `pickCredentialAccount` for which),
  *   and a sign-in that runs out of usage sits out until it resets while the
  *   turn goes on with the next. Pasted setup tokens and API keys from before
@@ -105,6 +111,7 @@ export function createClaudeCodeCredentials({
     onCredentialFailure: (tenant, { accountId, error }) =>
       pool.onFailure(tenant, { accountId, error: { kind: error.kind, message: error.message, ...(error.resetsAt ? { resetsAt: error.resetsAt } : {}) } }),
     signIn: (orgId, accountId) => pool.signIn(orgId, accountId),
+    usable: tenant => pool.usable(tenant),
   };
 }
 
