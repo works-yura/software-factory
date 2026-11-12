@@ -1696,7 +1696,6 @@
       "google-cloud": "Google Cloud",
       "mcp": "Сервер MCP",
       "clickup": "ClickUp",
-      "github": "GitHub",
       "gitlab": "GitLab"
     },
     "capabilities": {
@@ -1847,7 +1846,6 @@
       "subtitle": {
         "google-cloud": "Логи, креші й база Firestore — лише читання, через сервісний акаунт.",
         "clickup": "Задачі зі списків ClickUp потрапляють на дошки за маршрутами надходження.",
-        "github": "Репозиторії, задачі й pull request'и GitHub.",
         "gitlab": "Репозиторії й задачі GitLab."
       },
       "back": "Назад",
@@ -1898,8 +1896,7 @@
         "tasks": "Задачі",
         "code": "Репозиторії"
       },
-      "googleAccount": "Акаунт Google Cloud",
-      "githubToken": "GitHub · токен"
+      "googleAccount": "Акаунт Google Cloud"
     },
     "listHeading": "Підключення",
     "addShort": "Додати",
@@ -1931,56 +1928,18 @@
       "confirm": "Видалити",
       "done": "Підключення видалено"
     },
-    "organizationNote": "Підключення належать організації: їх бачать усі її Factory. Google Cloud і сервери MCP додатково відкриваються кожній Factory окремо."
-  },
-  "githubConnections": {
-    "tokenTitle": "Підключити GitHub токеном",
-    "tokenSubtitle": "Приватний токен акаунта, що вже має доступ до репозиторіїв. Factory перевіряє його в GitHub і зберігає зашифрованим.",
-    "tokenLabel": "Токен доступу GitHub",
-    "tokenHint": "Classic токен — зі scope repo. Fine-grained — з доступом на читання й запис до Contents, Issues, Pull requests і Commit statuses; ще Workflows, якщо агенти змінюють CI.",
-    "submit": "Підключити",
-    "replace": "Замінити",
-    "cancel": "Скасувати",
-    "connecting": "Підключення…",
-    "connectedTitle": "Підключено @{{account}}",
-    "connectedBody": "Репозиторіїв, до яких є доступ: {{repos}}.",
-    "replacedTitle": "Токен @{{account}} замінено",
-    "adminOnly": "Підключати, замінювати й відключати GitHub може лише адміністратор організації.",
-    "list": "Підключення GitHub",
-    "kindApp": "App",
-    "kindToken": "Токен",
-    "kindEnvToken": "Токен (env сервера)",
-    "repositories": "Репозиторіїв: {{repos}}",
-    "repositoriesUnknown": "Репозиторії не прочитано",
-    "needsAttention": "Потребує уваги",
-    "unknownAccount": "Акаунт невідомий",
-    "manage": "Керувати на GitHub",
-    "replaceToken": "Замінити токен",
-    "disconnect": "Відключити",
-    "disconnectFailed": "Не вдалося відключити",
-    "addMore": "Додати ще",
-    "viaApp": "Через GitHub App",
-    "viaAppHint": "Встановлення App у GitHub-організації потребує схвалення її власника.",
-    "viaToken": "Приватний токен",
-    "none": "GitHub ще не підключено: підключіть через GitHub App або приватним токеном.",
-    "loadFailed": "Не вдалося прочитати підключення GitHub: {{error}}",
-    "remove": {
-      "title": "Видалити підключення «{{name}}»?",
-      "body": "Підключення зникне для всієї організації. Токен буде видалено; App на GitHub лишиться встановленим.",
-      "counting": "Перевіряю, що від нього залежить…",
-      "uncounted": "Не вдалося перевірити, що від нього залежить",
-      "nothing": "Жодна Factory не бере з нього репозиторіїв.",
-      "factories": "Відв'язується від: {{factories}}",
-      "repositories": "Репозиторії:",
-      "moves": "перейде на {{account}} ({{kind}})",
-      "unlinks": "відв'яжеться: Factory перестане бачити цей репозиторій",
-      "kind": {
-        "app": "App",
-        "token": "Токен"
-      },
-      "confirm": "Видалити",
-      "confirmMove": "Видалити й перенести",
-      "confirmUnlink": "Видалити й відв'язати"
+    "organizationNote": "Підключення належать організації: їх бачать усі її Factory. Google Cloud і сервери MCP додатково відкриваються кожній Factory окремо.",
+    "connector": {
+      "reading": "Читаю, що від нього залежить…",
+      "impactFailed": "Не вдалося прочитати, що від нього залежить.",
+      "removeFailed": "Не вдалося видалити",
+      "chooseMethod": "Як підключити?",
+      "open": "Відкрити підключення",
+      "reconnectTitle": "Перепідключити «{{name}}»",
+      "method": "Як підключено",
+      "dependents": "Від нього залежить",
+      "manage": "Керувати деінде",
+      "detailFailed": "Не вдалося прочитати подробиці"
     }
   }
 }

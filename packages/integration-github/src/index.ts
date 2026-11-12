@@ -24,3 +24,4 @@ export * from './webhook.ts';
 export * from './review-status.ts';
 export * from './review-status-comment.ts';
 export * from './review-status-reporter.ts';
+export * from './connections.ts';

@@ -58,7 +58,7 @@ type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor; 
  * A connection Settings › Підключення opens by link (`?connection=`): an integration's own view.
  * The section keeps its `integrations` path, so links made before the one list still land here.
  */
-export type ConnectionLink = 'google-cloud' | 'clickup' | 'github' | 'gitlab';
+export type ConnectionLink = 'google-cloud' | 'clickup' | 'gitlab';
 
 function connectionsSearch(connection?: ConnectionLink): string {
   return connection ? `?${new URLSearchParams({ connection }).toString()}` : '';

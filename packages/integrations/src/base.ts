@@ -35,6 +35,7 @@ import type { SessionRetirementCoordinator } from '@factory/sandbox';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEventRow } from '@factory/store';
 import type { AuditEmitter } from '@factory/feed';
+import type { IntegrationConnections } from './connections.ts';
 import type { ChannelIdentityStorage } from '@factory/store';
 import type { CommentsDomain } from '@factory/feed';
 import type { WorkItemFeedPublisher } from '@factory/feed';
@@ -283,6 +284,13 @@ export interface FactoryIntegration {
    * the result into the server's route table.
    */
   routes(ctx: IntegrationContext): ApiRoute[];
+  /**
+   * The accounts this integration connects, for Settings › Підключення (ADR-0035): connect methods,
+   * each connection's state and allowed actions, removal impact and detail — all as descriptors with
+   * copy in the request's language, served through the shared `/web/connections` routes. Called once
+   * at boot for READY integrations, with the same context as `routes`.
+   */
+  connections?(ctx: IntegrationContext): IntegrationConnections;
   /**
    * Org-scoped agent tools resolved per request (e.g. an issue tracker's tools).
    * Optional capability; the factory merges results into the SDK's async

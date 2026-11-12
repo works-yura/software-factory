@@ -12,13 +12,10 @@ import { useTranslation } from 'react-i18next';
 
 import { useClickUpStatusQuery } from '../../../../../hooks/useClickUp';
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
-import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
 import type { FIRST_PARTY } from '../../connections/connections';
 import type { FirebaseAccount } from '../../services/firebase';
 import { ClickUpService } from '../ClickUpService';
-import { GithubTokenForm } from '../GithubConnections';
-import type { GithubTokenResult } from '../GithubConnections';
 import { GitLabService } from '../SourceControlServices';
 import { ConnectionIcon } from './ConnectionIcon';
 
@@ -32,8 +29,11 @@ export type SourceKind = 'clickup' | 'gitlab';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** The header and footer every connect step shares: logo, «Підключити X», one line; «← Назад» and the step's action. */
-function StepFrame({
+/**
+ * The header and footer every connect step shares: logo, «Підключити X», one line; «← Назад» and
+ * the step's action. A connector the server describes passes its logo key, title and subtitle.
+ */
+export function StepFrame({
   kind,
   children,
   onBack,
@@ -41,7 +41,8 @@ function StepFrame({
   title,
   subtitle,
 }: {
-  kind: FirstParty;
+  /** A first-party kind, or a server connector's logo key (then `title` and `subtitle` are given). */
+  kind: string;
   children: ReactNode;
   onBack: () => void;
   action?: ReactNode;
@@ -54,8 +55,8 @@ function StepFrame({
       <DialogHeader className="flex-row items-start gap-2.5">
         <ConnectionIcon kind={kind} />
         <span className="flex min-w-0 flex-col gap-0.5">
-          <DialogTitle>{title ?? t('connections.connect.title', { name: t(`connections.kinds.${kind}`) })}</DialogTitle>
-          <DialogDescription className="text-body-sm">{subtitle ?? t(`connections.connect.subtitle.${kind}`)}</DialogDescription>
+          <DialogTitle>{title ?? t('connections.connect.title', { name: t(`connections.kinds.${kind as FirstParty}`) })}</DialogTitle>
+          <DialogDescription className="text-body-sm">{subtitle ?? t(`connections.connect.subtitle.${kind as FirstParty}`)}</DialogDescription>
         </span>
       </DialogHeader>
       <DialogBody className="gap-4">{children}</DialogBody>
@@ -71,7 +72,7 @@ function StepFrame({
 }
 
 /** A choice in a step, built like the catalog's rows. */
-function ChoiceRow({ icon, name, detail, onSelect }: { icon: ReactNode; name: string; detail?: string; onSelect: () => void }) {
+export function ChoiceRow({ icon, name, detail, onSelect }: { icon: ReactNode; name: string; detail?: string; onSelect: () => void }) {
   return (
     <li>
       <button
@@ -258,8 +259,7 @@ function useSourceState(kind: SourceKind) {
 /**
  * Connect ClickUp or GitLab: their state at the top — connected (and as what), not yet, or a tinted
  * panel when it could not be read — and their own controls below (GitLab's connect, ClickUp's
- * import switch); «Відкрити налаштування» goes to the connection's page. GitHub has its own entries:
- * the App starts its install flow, the token opens {@link GithubTokenConnect}.
+ * import switch); «Відкрити налаштування» goes to the connection's page.
  */
 export function SourceConnect({
   kind,
@@ -307,54 +307,6 @@ export function SourceConnect({
         </Notice>
       )}
       {!state.pending && !state.error && (kind === 'clickup' ? <ClickUpService /> : <GitLabService />)}
-    </StepFrame>
-  );
-}
-
-/**
- * «GitHub · токен»: paste a private access token; Factory checks it with GitHub and stores it
- * encrypted. A refusal shows why in a tinted panel and tries again; on success the account and how
- * many repositories it reaches, and «Відкрити налаштування» goes to the GitHub page. Only an
- * organization admin connects; anyone else is told so.
- */
-export function GithubTokenConnect({ onBack, onPick }: { onBack: () => void; onPick: (target: ConnectionTarget) => void }) {
-  const { t } = useTranslation('settings');
-  const status = useGithubStatusQuery();
-  const [done, setDone] = useState<GithubTokenResult>();
-  const frame = { kind: 'github' as const, onBack, title: t('githubConnections.tokenTitle'), subtitle: t('githubConnections.tokenSubtitle') };
-  const openSettings = (
-    <Button size="sm" variant="primary" onClick={() => onPick({ connection: 'github' })}>
-      {t('connections.connect.openSettings')}
-    </Button>
-  );
-
-  if (done) {
-    return (
-      <StepFrame {...frame} action={openSettings}>
-        <Notice
-          variant="success"
-          title={t(done.replaced ? 'githubConnections.replacedTitle' : 'githubConnections.connectedTitle', { account: done.connection.accountLogin ?? '' })}
-          role="status"
-        >
-          {done.connection.repositoryCount !== null && (
-            <Notice.Message>{t('githubConnections.connectedBody', { repos: done.connection.repositoryCount })}</Notice.Message>
-          )}
-        </Notice>
-      </StepFrame>
-    );
-  }
-
-  return (
-    <StepFrame {...frame}>
-      {status.isPending ? (
-        <span className="flex items-center gap-2">
-          <Spinner size="sm" aria-hidden />
-        </span>
-      ) : status.data?.canManage === false ? (
-        <Notice variant="info" title={t('githubConnections.adminOnly')} role="status" />
-      ) : (
-        <GithubTokenForm onDone={setDone} />
-      )}
     </StepFrame>
   );
 }

@@ -49,7 +49,8 @@ import type {
   ReadApiInput,
   VersionControl,
 } from '@factory/capabilities';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
+import type { FactoryIntegration, IntegrationConnections, IntegrationContext, IntegrationTools } from '@factory/integrations';
+import { GithubConnections } from './connections.ts';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.ts';
 import { resolveGithubRules } from './default-rules.ts';
 import { attachGithubIssueReconciler } from './issue-reconciler.ts';
@@ -1528,6 +1529,16 @@ export class GithubIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       ingestFactoryEvent,
       sessionRetirement: ctx.sessionRetirement,
+      ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
+    });
+  }
+
+  /** The organization's GitHub connections for Settings › Підключення (ADR-0035). */
+  connections(ctx: IntegrationContext): IntegrationConnections {
+    return new GithubConnections({
+      github: this,
+      projects: ctx.storage.projects,
+      ...(ctx.sessionRetirement ? { sessionRetirement: ctx.sessionRetirement } : {}),
       ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
   }

@@ -1,12 +1,22 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { connectionNavigation } from '../../connections/api';
 import type { McpActivity, McpServer } from '../../services/mcpServers';
-import { FACTORY_ID, firebaseState, managedServer, MCP_BASE, renderConnections, useIntegrationHandlers } from './fixtures/connections';
+import {
+  acmeConnection,
+  acmeConnector,
+  FACTORY_ID,
+  firebaseState,
+  managedServer,
+  MCP_BASE,
+  renderConnections,
+  useIntegrationHandlers,
+} from './fixtures/connections';
 
 const own: McpServer = {
   ...managedServer,
@@ -62,7 +72,7 @@ describe('Підключення', () => {
 
     expect(screen.getByRole('heading', { name: 'Connections', level: 1 })).toBeInTheDocument();
     const list = await rows();
-    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'ClickUp', 'yura', 'Sentry']);
+    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'ClickUp', 'Acme main', 'Sentry']);
     const google = await rowNamed('syncta-57c6a');
     expect(google).toHaveTextContent('Google Cloud');
     expect(google).toHaveTextContent('Syncta');
@@ -78,8 +88,11 @@ describe('Підключення', () => {
     expect(sentry).toHaveTextContent('MCP');
     expect(within(sentry).getByText('Error').closest('[data-state]')).toHaveAttribute('title', expect.stringContaining('The account was refused access'));
     expect(await rowNamed('ClickUp')).toHaveTextContent('eclipt.ai');
-    // GitHub is a row per connection, named by its account until the organization names it.
-    expect(await rowNamed('yura')).toHaveTextContent('GitHub');
+    // A server connector's row is all the server's: its name, account and what it provides.
+    const acme = await rowNamed('Acme main');
+    expect(acme).toHaveTextContent('Acme Cloud');
+    expect(acme).toHaveTextContent('acme-team');
+    expect(within(acme).getByRole('img', { name: 'Tickets' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /^Notes/ })).not.toBeInTheDocument();
   });
 
@@ -223,86 +236,107 @@ describe('Підключення', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('add=1&step=clickup');
   });
 
-  it("lets the organization rename, replace or delete the server's GitHub token connection", async () => {
+  it("offers a server connector's actions as the server decides them, a blocked one with the server's reason", async () => {
     useHandlers();
     renderConnections();
     await rows();
-    await openMenu('yura');
-    // Replacing moves the server's token into the organization's store; deleting shows what moves first.
-    for (const name of ['Rename', /^Reconnect/, /^Delete connection/]) {
+    await openMenu('Acme main');
+    for (const name of ['Rename', 'Reconnect', 'Delete connection']) {
       expect(screen.getByRole('menuitem', { name })).not.toHaveAttribute('aria-disabled', 'true');
     }
+    expect(screen.getByRole('menuitem', { name: 'Manage elsewhere' })).toHaveAccessibleDescription('Acme has no console for keys.');
   });
 
-  it('renames a GitHub App connection, and shows what deleting it moves and unlinks before it deletes', async () => {
+  it("renames a server connection, and shows the server's own words for what deleting it does before it deletes", async () => {
     useHandlers();
     const calls: Array<{ method: string; id: unknown; body?: unknown; confirm?: string | null }> = [];
-    let inUse = 1;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
-        HttpResponse.json({
-          enabled: true,
-          appConfigured: true,
-          connected: true,
-          canManage: true,
-          installations: [
-            { id: 'inst-row-1', installationId: 42, accountLogin: 'eclipt-ai', accountType: 'Organization', kind: 'app', name: null, createdAt: '2026-11-01T10:00:00.000Z', connectedBy: 'user-1', projectConnections: inUse },
-          ],
-          reason: 'ready',
-        }),
-      ),
-      http.patch(`${TEST_BASE_URL}/web/github/installations/:id`, async ({ request, params }) => {
+      http.patch(`${TEST_BASE_URL}/web/connections/:id`, async ({ request, params }) => {
         calls.push({ method: 'PATCH', id: params.id, body: await request.json() });
-        return HttpResponse.json({ id: params.id, name: 'Eclipt GitHub' });
+        return HttpResponse.json({ name: 'Acme prod' });
       }),
-      http.get(`${TEST_BASE_URL}/web/github/connections/:id/usage`, ({ params }) =>
+      http.get(`${TEST_BASE_URL}/web/connections/:id/impact`, () =>
         HttpResponse.json({
-          connection: { id: params.id, kind: 'app', accountLogin: 'eclipt-ai' },
-          factories: inUse
-            ? [
-                { id: 'fp-1', name: 'post-airborne' },
-                { id: 'fp-2', name: 'syncts' },
-              ]
-            : [],
-          repositories: inUse
-            ? [
-                { id: 'r1', slug: 'eclipt-ai/app', externalId: '1', factories: ['post-airborne'], projectRepositoryIds: ['l1'], target: { id: 'inst-token', kind: 'token', accountLogin: 'works-yura' } },
-                { id: 'r2', slug: 'eclipt-ai/site', externalId: '2', factories: ['syncts'], projectRepositoryIds: ['l2'], target: null },
-              ]
-            : [],
+          title: 'Delete «Acme main»?',
+          body: 'Its key is erased for the whole organization.',
+          dependents: [{ label: 'Factory «post-airborne»' }],
+          itemsLabel: 'Projects',
+          items: [
+            { label: 'ACME-web', outcome: 'moves', outcomeLabel: 'Moves to Acme backup' },
+            { label: 'ACME-ops', outcome: 'unlinks', outcomeLabel: 'Unlinked' },
+          ],
+          confirmLabel: 'Delete and unlink',
+          cancelLabel: 'Keep it',
+          requiresConfirm: true,
         }),
       ),
-      http.delete(`${TEST_BASE_URL}/web/github/connections/:id`, ({ params, request }) => {
+      http.delete(`${TEST_BASE_URL}/web/connections/:id`, ({ params, request }) => {
         calls.push({ method: 'DELETE', id: params.id, confirm: new URL(request.url).searchParams.get('confirm') });
-        return HttpResponse.json({ removed: true, moved: [], unlinked: [] });
+        return HttpResponse.json({ removed: true, message: 'Deleted. Moved: 1, unlinked: 1.' });
       }),
     );
     renderConnections();
-    const row = await rowNamed('eclipt-ai');
-    expect(within(row).getByRole('link')).toHaveAttribute('href', expect.stringContaining('connection=github%3A42'));
-    await openMenu('eclipt-ai');
-    expect(screen.getByRole('menuitem', { name: 'Reconnect' })).not.toHaveAttribute('aria-disabled', 'true');
+    const row = await rowNamed('Acme main');
+    expect(within(row).getByRole('link')).toHaveAttribute('href', expect.stringContaining('connection=acme%3Amain'));
+    await openMenu('Acme main');
     await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Name' }));
-    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Eclipt GitHub');
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Acme prod');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', id: 'inst-row-1', body: { name: 'Eclipt GitHub' } }]));
+    await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', id: 'acme:main', body: { name: 'Acme prod' } }]));
 
-    // Before deleting, the dialog says which Factories it is unlinked from and what happens to each repository.
-    await openMenu('eclipt-ai');
+    await openMenu('Acme main');
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete connection' }));
-    const dialog2 = await screen.findByRole('dialog', { name: 'Delete the “eclipt-ai” connection?' });
-    await within(dialog2).findByText('Unlinked from: post-airborne, syncts');
-    const repositories = within(dialog2).getByRole('list', { name: 'Repositories:' });
-    expect(within(repositories).getAllByRole('listitem').map(item => item.textContent)).toEqual([
-      'eclipt-ai/appmoves to @works-yura (Token)',
-      'eclipt-ai/siteis unlinked: Factory stops seeing this repository',
-    ]);
-    // Something is unlinked, so the button says so; nothing was deleted yet.
+    const removal = await screen.findByRole('dialog', { name: 'Delete «Acme main»?' });
+    await within(removal).findByText('Factory «post-airborne»');
+    const items = within(removal).getByRole('list', { name: 'Projects' });
+    expect(within(items).getAllByRole('listitem').map(item => item.textContent)).toEqual(['ACME-webMoves to Acme backup', 'ACME-opsUnlinked']);
+    expect(within(removal).getByRole('button', { name: 'Keep it' })).toBeInTheDocument();
     expect(calls.filter(call => call.method === 'DELETE')).toEqual([]);
-    await userEvent.click(within(dialog2).getByRole('button', { name: 'Delete and unlink' }));
-    await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', id: 'inst-row-1', confirm: '1' }));
+    await userEvent.click(within(removal).getByRole('button', { name: 'Delete and unlink' }));
+    await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', id: 'acme:main', confirm: '1' }));
+    expect(await screen.findByText('Deleted. Moved: 1, unlinked: 1.')).toBeInTheDocument();
+  });
+
+  it("reconnects through the form the connection's reconnect method describes", async () => {
+    useHandlers();
+    const posted: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/connections/:id/reconnect`, async ({ request, params }) => {
+        posted.push({ id: params.id, body: await request.json() });
+        return HttpResponse.json({ type: 'connected', connection: acmeConnection, title: 'Key replaced' });
+      }),
+    );
+    renderConnections();
+    await rows();
+    await openMenu('Acme main');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Reconnect' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reconnect “Acme main”' });
+    expect(screen.getByTestId('search')).toHaveTextContent('step=reconnect%3Aacme%3Amain');
+    await userEvent.type(within(dialog).getByLabelText('Acme API key'), 'acme_new');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Replace key' }));
+    expect(await within(dialog).findByText('Key replaced')).toBeInTheDocument();
+    expect(posted).toEqual([{ id: 'acme:main', body: { input: { key: 'acme_new' } } }]);
+  });
+
+  it("opens a server connection's page: its facts and the sections the server lays out", async () => {
+    useHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, () =>
+        HttpResponse.json({
+          sections: [
+            { type: 'table', title: 'Projects', columns: ['Project', 'Visibility'], rows: [{ cells: ['ACME-web', 'Private'], href: 'https://acme.test/web' }] },
+          ],
+        }),
+      ),
+    );
+    renderConnections('?connection=acme%3Amain');
+    expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('Used by 2 Factories')).toBeInTheDocument();
+    expect(screen.getByText('API key')).toBeInTheDocument();
+    const table = await screen.findByRole('table', { name: 'Projects' });
+    expect(within(table).getByRole('link', { name: 'ACME-web' })).toHaveAttribute('href', 'https://acme.test/web');
   });
 
   it('tells a member the organization’s connections are changed by an admin', async () => {
@@ -329,10 +363,10 @@ describe('Підключення', () => {
     expect(within(integrations).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual([
       'Connect Google Cloud',
       'Connect ClickUp',
-      'Connect GitHub',
-      'Connect GitHub · token',
       'Connect GitLab',
+      'Connect Acme Cloud',
     ]);
+    expect(within(integrations).getByRole('option', { name: 'Connect Acme Cloud' })).toContainElement(within(integrations).getByRole('img', { name: 'Tickets' }));
     expect(within(integrations).queryByText('MCP')).not.toBeInTheDocument();
     expect(within(within(dialog).getByRole('group', { name: 'Other' })).getByRole('option', { name: 'Connect Own MCP server' })).toBeInTheDocument();
     expect(within(dialog).queryByText(/Toolbox/)).not.toBeInTheDocument();
@@ -419,65 +453,65 @@ describe('Підключення', () => {
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=clickup'));
   });
 
-  it('connects GitHub with a token in the dialog: a refused token shows why and tries again, then opens the GitHub page', async () => {
+  it("connects through a server connector's form: asks which way first, says why one is unavailable, shows a refusal on its field", async () => {
     useHandlers();
     const posted: unknown[] = [];
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/token-connections`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/web/connections`, async ({ request }) => {
         posted.push(await request.json());
-        if (posted.length === 1) return HttpResponse.json({ error: 'invalid_token', message: 'GitHub rejected this token (401).' }, { status: 422 });
+        if (posted.length === 1) {
+          return HttpResponse.json({ error: 'invalid_key', message: 'Acme refused the key.', fields: { key: 'Acme refused the key.' } }, { status: 422 });
+        }
         return HttpResponse.json({
-          connection: { id: 'inst-2', kind: 'token', tokenSource: 'stored', installationId: 9, accountLogin: 'client', accountType: 'User', repositoryCount: 3, status: 'ok' },
-          replaced: false,
+          type: 'connected',
+          connection: { ...acmeConnection, id: 'acme:new', label: 'Acme new' },
+          title: 'Acme new is connected',
+          message: 'It reaches 3 projects.',
         });
       }),
     );
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect GitHub · token' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect GitHub with a token' });
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Acme Cloud' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect Acme Cloud' });
+    expect(within(dialog).getByText('Tickets from Acme projects.')).toBeInTheDocument();
+    const methods = within(dialog).getByRole('list', { name: 'How do you connect?' });
+    expect(within(methods).getByRole('button', { name: /Sign in with Acme/ })).toBeDisabled();
+    expect(within(methods).getByRole('button', { name: /Sign in with Acme/ })).toHaveAccessibleDescription('Acme sign-in is off on this server.');
+    await userEvent.click(within(methods).getByRole('button', { name: /API key/ }));
 
-    await userEvent.type(within(dialog).getByLabelText('GitHub access token'), 'ghp_wrong');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
-    const alert = await within(dialog).findByRole('alert');
-    expect(alert).toHaveTextContent("Couldn't connect");
-    expect(alert).toHaveTextContent('GitHub rejected this token (401).');
+    await userEvent.type(within(dialog).getByLabelText('Acme API key'), 'acme_bad');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Connect Acme' }));
+    expect(await within(dialog).findByText('Acme refused the key.')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Acme API key')).toHaveAttribute('aria-invalid', 'true');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
 
-    expect(await within(dialog).findByText('Connected @client')).toBeInTheDocument();
-    expect(within(dialog).getByText('Repositories it can reach: 3.')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Open settings' }));
-    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=github'));
-    expect(posted).toEqual([{ token: 'ghp_wrong' }, { token: 'ghp_wrong' }]);
+    expect(await within(dialog).findByText('Acme new is connected')).toBeInTheDocument();
+    expect(within(dialog).getByText('It reaches 3 projects.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Open the connection' }));
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=acme%3Anew'));
+    expect(posted).toEqual([
+      { connector: 'acme', method: 'key', input: { key: 'acme_bad' } },
+      { connector: 'acme', method: 'key', input: { key: 'acme_bad' } },
+    ]);
   });
 
-  it('offers GitHub through the App only when the server has the App; the token always', async () => {
+  it('opens the URL an authorize method returns', async () => {
     useHandlers();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
-        HttpResponse.json({ enabled: true, appConfigured: false, canManage: true, connected: false, installations: [], reason: 'not_connected' }),
+      http.get(`${TEST_BASE_URL}/web/connections/methods`, () =>
+        HttpResponse.json({ connectors: [{ ...acmeConnector, methods: [{ id: 'sso', label: 'Sign in with Acme', authKind: 'oauth', available: true }] }] }),
       ),
+      http.post(`${TEST_BASE_URL}/web/connections`, () => HttpResponse.json({ type: 'authorize', url: '/auth/acme/start', authId: 'flow-1' })),
     );
+    const assign = vi.spyOn(connectionNavigation, 'assign').mockImplementation(() => {});
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
-    await waitFor(() => expect(within(dialog).getByRole('option', { name: 'Connect GitHub · token' })).toBeInTheDocument());
-    expect(within(dialog).queryByRole('option', { name: 'Connect GitHub' })).not.toBeInTheDocument();
-  });
-
-  it('tells a member that only admins connect GitHub with a token', async () => {
-    useHandlers();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
-        HttpResponse.json({ enabled: true, appConfigured: true, canManage: false, connected: false, installations: [], reason: 'not_connected' }),
-      ),
-    );
-    renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect GitHub · token' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect GitHub with a token' });
-    expect(await within(dialog).findByText('Only organization admins can connect, replace or disconnect GitHub.')).toBeInTheDocument();
-    expect(within(dialog).queryByLabelText('GitHub access token')).not.toBeInTheDocument();
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Acme Cloud' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect Acme Cloud' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(`${TEST_BASE_URL}/auth/acme/start`));
+    assign.mockRestore();
   });
 
   it('picks with the keyboard: the search narrows the list, arrows move, Enter opens', async () => {
@@ -485,14 +519,10 @@ describe('Підключення', () => {
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'git');
-    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual([
-      'Connect GitHub',
-      'Connect GitHub · token',
-      'Connect GitLab',
-    ]);
+    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'cl');
+    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect Google Cloud', 'Connect ClickUp', 'Connect Acme Cloud']);
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
-    expect(await screen.findByRole('dialog', { name: 'Connect GitLab' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Connect Acme Cloud' })).toBeInTheDocument();
   });
 
   it('shows the agents’ calls of the chosen period in a table, filters them, and asks the server for another period', async () => {

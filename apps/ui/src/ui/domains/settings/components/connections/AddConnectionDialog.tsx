@@ -8,31 +8,27 @@ import { ChevronRight, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useApiConfig } from '../../../../../api/config';
 import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
-import { connectGithub } from '../../../workspaces/services/github';
-import { connectionCatalog, filterCatalog, GITHUB_TOKEN_ITEM, linkableAccounts } from '../../connections/connections';
-import type {
-  CatalogCapability,
-  CatalogFilter,
-  CatalogItem,
-  ConnectionKind,
-  ConnectionSources,
-  LinkableAccount,
-} from '../../connections/connections';
+import { connectionCatalog, filterCatalog, linkableAccounts } from '../../connections/connections';
+import type { CatalogFilter, CatalogItem, ConnectionSources, LinkableAccount } from '../../connections/connections';
 import { serverToInput } from '../../services/mcpServers';
 import { localized } from '../mcp-servers/McpCatalogFields';
-import { CapabilityDots, useCatalogDots } from './CapabilityDots';
+import { CapabilityDots, serverDots, useCatalogDots } from './CapabilityDots';
+import type { CapabilityDot } from './CapabilityDots';
 import { ConnectionIcon } from './ConnectionIcon';
-import { GithubTokenConnect, GoogleCloudConnect, SourceConnect } from './ConnectSteps';
-import type { ConnectionTarget, FirstParty } from './ConnectSteps';
+import { ConnectorConnect } from './ConnectorSteps';
+import { GoogleCloudConnect, SourceConnect } from './ConnectSteps';
+import type { ConnectionTarget, FirstParty, SourceKind } from './ConnectSteps';
 
 export type { ConnectionTarget };
 
 const FILTERS: CatalogFilter[] = ['all', 'tools', 'sources'];
 
-/** A connect step the dialog opens in place: a first-party integration's, or GitHub's token. */
-type Step = Exclude<FirstParty, 'github'> | typeof GITHUB_TOKEN_ITEM;
+/**
+ * A connect step the dialog opens in place: a first-party integration's, a server connector's
+ * (`connector:<id>`), or reconnecting a server connection through its method (`reconnect:<id>`).
+ */
+export type Step = FirstParty | `connector:${string}` | `reconnect:${string}`;
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -53,25 +49,25 @@ function CatalogRow({
   name,
   detail,
   mcp,
-  capabilities,
+  dots,
   label,
   trailing,
   onSelect,
   disabled,
 }: {
   value: string;
-  kind: ConnectionKind;
+  /** The logo: a first-party kind, or a connector's logo key. */
+  kind: string;
   name: string;
   detail?: string;
   mcp?: boolean;
-  capabilities: CatalogCapability[];
+  dots: CapabilityDot[];
   label: string;
   trailing: 'add' | 'open';
   onSelect: () => void;
   disabled?: boolean;
 }) {
   const { t } = useTranslation('settings');
-  const dots = useCatalogDots();
   return (
     <CommandItem value={value} onSelect={onSelect} disabled={disabled} aria-label={label} className="group/row">
       <ConnectionIcon kind={kind} />
@@ -93,7 +89,7 @@ function CatalogRow({
             {trailing === 'add' ? <Plus /> : <ChevronRight />}
           </Button>
         </span>
-        <CapabilityDots dots={dots(capabilities)} />
+        <CapabilityDots dots={dots} />
       </span>
     </CommandItem>
   );
@@ -116,33 +112,34 @@ function PickStep({
   onPick: (target: ConnectionTarget) => void;
 }) {
   const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
+  const catalogDots = useCatalogDots();
   const { save } = useMcpServerMutations();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<CatalogFilter>('all');
   const [linking, setLinking] = useState<string>();
 
   const nameOf = (item: CatalogItem) =>
-    item.entry
-      ? localized(item.entry.label)
-      : item.id === 'mcp-custom'
-        ? t('connections.addDialog.customMcp')
-        : item.id === GITHUB_TOKEN_ITEM
-          ? t('connections.addDialog.githubToken')
-          : t(`connections.kinds.${item.kind}`);
+    item.connector
+      ? item.connector.name
+      : item.entry
+        ? localized(item.entry.label)
+        : item.id === 'mcp-custom'
+          ? t('connections.addDialog.customMcp')
+          : t(`connections.kinds.${item.kind as FirstParty}`);
+  const iconOf = (item: CatalogItem) => item.connector?.icon ?? item.kind;
+  const dotsOf = (item: CatalogItem) => (item.connector ? serverDots(item.connector.provides) : catalogDots(item.capabilities));
   const shown = filterCatalog(connectionCatalog(sources), linkableAccounts(factoryId, sources), {
     query,
     filter,
-    textOf: item => `${nameOf(item)} ${item.entry ? localized(item.entry.summary) : ''}`,
+    textOf: item => `${nameOf(item)} ${item.entry ? localized(item.entry.summary) : (item.connector?.description ?? '')}`,
   });
   const integrations = shown.items.filter(item => item.section === 'integrations');
   const other = shown.items.filter(item => item.section === 'other');
 
   const pick = (item: CatalogItem) => {
-    // GitHub through the App is the App's own install flow on GitHub; its token has a step here.
-    if (item.id === GITHUB_TOKEN_ITEM) onConnect(GITHUB_TOKEN_ITEM);
-    else if (item.kind === 'github') connectGithub(baseUrl);
-    else if (item.kind !== 'mcp') onConnect(item.kind);
+    // A connector the server describes opens its methods; a first-party kind its own step.
+    if (item.connector) onConnect(`connector:${item.connector.id}`);
+    else if (item.kind !== 'mcp' && item.kind !== 'connector') onConnect(item.kind);
     else onPick({ connection: item.entry ? `mcp-new:${item.entry.id}` : 'mcp-new:custom' });
   };
 
@@ -213,7 +210,7 @@ function PickStep({
                   name={account.name}
                   detail={account.server ? undefined : t('connections.addDialog.googleAccount')}
                   mcp={account.kind === 'mcp'}
-                  capabilities={['tools']}
+                  dots={catalogDots(['tools'])}
                   label={t('connections.addDialog.link', { name: account.name })}
                   trailing="add"
                   disabled={linking !== undefined}
@@ -228,9 +225,9 @@ function PickStep({
                 <CatalogRow
                   key={item.id}
                   value={item.id}
-                  kind={item.kind}
+                  kind={iconOf(item)}
                   name={nameOf(item)}
-                  capabilities={item.capabilities}
+                  dots={dotsOf(item)}
                   label={t('connections.addDialog.add', { name: nameOf(item) })}
                   trailing={item.connected ? 'open' : 'add'}
                   onSelect={() => pick(item)}
@@ -244,10 +241,10 @@ function PickStep({
                 <CatalogRow
                   key={item.id}
                   value={item.id}
-                  kind={item.kind}
+                  kind={iconOf(item)}
                   name={nameOf(item)}
                   mcp
-                  capabilities={item.capabilities}
+                  dots={dotsOf(item)}
                   label={t('connections.addDialog.add', { name: nameOf(item) })}
                   trailing="add"
                   onSelect={() => pick(item)}
@@ -264,9 +261,9 @@ function PickStep({
 /**
  * «Додати підключення»: one dialog for picking and connecting. Step one lists what can be added; a
  * first-party integration opens its connect step in the same dialog (Google Cloud: an account and
- * its key; ClickUp, GitLab: their state and controls; «GitHub · токен»: the token). «GitHub» (the
- * server's GitHub App) starts the App's install flow on GitHub; an MCP server or an organization
- * account goes straight to its page.
+ * its key; ClickUp, GitLab: their state and controls); a connector the server describes opens its
+ * methods (a form, or a redirect to the provider); an MCP server or an organization account goes
+ * straight to its page. «Перепідключити» on a server connection opens here at its reconnect method.
  */
 export function AddConnectionDialog({
   open,
@@ -281,7 +278,7 @@ export function AddConnectionDialog({
   sources: ConnectionSources;
   onPick: (target: ConnectionTarget) => void;
   onClose: () => void;
-  /** Open straight into one connect step («Перепідключити»): ClickUp, GitLab, Google Cloud, or GitHub's token. */
+  /** Open straight into one connect step («Перепідключити»): ClickUp, GitLab, Google Cloud, or a server connection's. */
   initialStep?: Step;
 }) {
   const [chosen, setStep] = useState<Step>();
@@ -299,14 +296,50 @@ export function AddConnectionDialog({
       <DialogContent size="md" className={CONNECT_DIALOG_SHELL}>
         {step === 'google-cloud' ? (
           <GoogleCloudConnect accounts={sources.firebase?.accounts ?? []} onBack={back} onPick={onPick} />
-        ) : step === GITHUB_TOKEN_ITEM ? (
-          <GithubTokenConnect onBack={back} onPick={onPick} />
+        ) : step?.startsWith('connector:') || step?.startsWith('reconnect:') ? (
+          <ServerStep step={step as `connector:${string}` | `reconnect:${string}`} sources={sources} onBack={back} onPick={onPick} />
         ) : step ? (
-          <SourceConnect kind={step} onBack={back} onPick={onPick} />
+          <SourceConnect kind={step as SourceKind} onBack={back} onPick={onPick} />
         ) : (
           <PickStep factoryId={factoryId} sources={sources} onConnect={setStep} onPick={onPick} />
         )}
       </DialogContent>
     </Dialog>
   );
+}
+
+/** A server connector's connect step, or a server connection's reconnect step; gone from the server: back to the list. */
+function ServerStep({
+  step,
+  sources,
+  onBack,
+  onPick,
+}: {
+  step: `connector:${string}` | `reconnect:${string}`;
+  sources: ConnectionSources;
+  onBack: () => void;
+  onPick: (target: ConnectionTarget) => void;
+}) {
+  const { t } = useTranslation('settings');
+  if (step.startsWith('reconnect:')) {
+    const id = step.slice('reconnect:'.length);
+    const view = sources.connections?.connections.find(candidate => candidate.id === id);
+    const action = view?.actions.reconnect;
+    if (!view || !action || !('method' in action)) return null;
+    const connector = sources.connectors?.find(candidate => candidate.id === view.connector.id);
+    return (
+      <ConnectorConnect
+        key={step}
+        connector={{ ...view.connector, ...(connector?.description ? { description: connector.description } : {}) }}
+        methods={[action.method]}
+        reconnect={id}
+        title={t('connections.connector.reconnectTitle', { name: view.label })}
+        onBack={onBack}
+        onPick={onPick}
+      />
+    );
+  }
+  const connector = sources.connectors?.find(candidate => `connector:${candidate.id}` === step);
+  if (!connector) return null;
+  return <ConnectorConnect key={step} connector={connector} methods={connector.methods} onBack={onBack} onPick={onPick} />;
 }

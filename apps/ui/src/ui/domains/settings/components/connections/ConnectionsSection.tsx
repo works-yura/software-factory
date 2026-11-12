@@ -5,25 +5,28 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router';
 
-import { factoryConnections, GITHUB_TOKEN_ITEM } from '../../connections/connections';
+import { factoryConnections } from '../../connections/connections';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { AddConnectionDialog } from './AddConnectionDialog';
+import type { Step } from './AddConnectionDialog';
 import type { ConnectionTarget } from './ConnectSteps';
 import { ConnectionActivity } from './ConnectionActivity';
 import { ConnectionDetail } from './ConnectionDetail';
 import { ConnectionList } from './ConnectionList';
-import type { ReconnectStep } from './ConnectionList';
 import { useConnectionSources } from './useConnectionSources';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** Links from before the one list (`?tab=services&service=clickup`, `?tab=mcp`) land on the same thing now. */
-const LEGACY_SERVICES = new Set(['google-cloud', 'clickup', 'github', 'gitlab']);
+const LEGACY_SERVICES = new Set(['google-cloud', 'clickup', 'gitlab']);
 const LEGACY_TABS = new Set(['services', 'mcp']);
 
-/** A connect step «Перепідключити» opens straight into (`&step=`). */
-const isStep = (value: string | null): value is ReconnectStep =>
-  value === 'clickup' || value === 'gitlab' || value === 'google-cloud' || value === GITHUB_TOKEN_ITEM;
+/** A connect step «Перепідключити» opens straight into (`&step=`): a first-party kind's, or a server connection's. */
+const isStep = (value: string | null): value is Step =>
+  value === 'clickup' ||
+  value === 'gitlab' ||
+  value === 'google-cloud' ||
+  Boolean(value?.startsWith('connector:') || value?.startsWith('reconnect:'));
 
 /** The `?connection=` link of a connection's page. */
 export const connectionHref = (id: string) => `?${new URLSearchParams({ connection: id }).toString()}`;
@@ -72,8 +75,10 @@ export function ConnectionsSection() {
     });
 
   const rows = factoryConnections(factoryId, sources);
+  // `?connection=<connector>` (an older link to a connector's page) opens the list it is part of now.
+  const connectorLink = open !== null && !rows.some(row => row.id === open) && (sources.connectors ?? []).some(connector => connector.id === open);
 
-  if (open) {
+  if (open && !connectorLink) {
     if (pending) return <SkeletonRows label={t('connections.loading')} rows={3} />;
     const account = params.get('account');
     return (
@@ -103,12 +108,17 @@ export function ConnectionsSection() {
         {errors.map(failure => (
           <div key={failure.kind} className="flex flex-wrap items-center justify-between gap-2">
             <Txt as="p" variant="caption" className="text-destructive-foreground">
-              {t(`connections.kinds.${failure.kind}`)}: {errorMessage(failure.error)}
+              {failure.kind === 'connections' ? t('connections.title') : t(`connections.kinds.${failure.kind}`)}: {errorMessage(failure.error)}
             </Txt>
             <Button size="sm" variant="ghost" onClick={failure.retry}>
               {t('intake.retry')}
             </Button>
           </div>
+        ))}
+        {(sources.connections?.failures ?? []).map(failure => (
+          <Txt key={failure.connector.id} as="p" variant="caption" className="text-destructive-foreground">
+            {failure.connector.name}: {failure.message}
+          </Txt>
         ))}
         {pending ? (
           <SkeletonRows label={t('connections.loading')} rows={3} />
@@ -136,7 +146,7 @@ export function ConnectionsSection() {
       <ConnectionActivity factoryId={factoryId} />
       <AddConnectionDialog
         open={adding}
-        {...(isStep(params.get('step')) ? { initialStep: params.get('step') as ReconnectStep } : {})}
+        {...(isStep(params.get('step')) ? { initialStep: params.get('step') as Step } : {})}
         factoryId={factoryId}
         sources={sources}
         onClose={() =>

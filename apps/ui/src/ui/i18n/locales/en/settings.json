@@ -1668,7 +1668,6 @@
       "google-cloud": "Google Cloud",
       "mcp": "MCP server",
       "clickup": "ClickUp",
-      "github": "GitHub",
       "gitlab": "GitLab"
     },
     "capabilities": {
@@ -1811,7 +1810,6 @@
       "subtitle": {
         "google-cloud": "Logs, crashes and the Firestore database — read-only, through a service account.",
         "clickup": "Tasks from ClickUp Lists land on boards by the intake routes.",
-        "github": "GitHub repositories, issues and pull requests.",
         "gitlab": "GitLab repositories and issues."
       },
       "back": "Back",
@@ -1862,8 +1860,7 @@
         "tasks": "Tasks",
         "code": "Repositories"
       },
-      "googleAccount": "Google Cloud account",
-      "githubToken": "GitHub · token"
+      "googleAccount": "Google Cloud account"
     },
     "listHeading": "Connections",
     "addShort": "Add",
@@ -1893,56 +1890,18 @@
       "confirm": "Delete",
       "done": "Connection deleted"
     },
-    "organizationNote": "Connections belong to the organization: all its Factories see them. Google Cloud and MCP servers are also opened to each Factory separately."
-  },
-  "githubConnections": {
-    "tokenTitle": "Connect GitHub with a token",
-    "tokenSubtitle": "A private token of an account that already has access to the repositories. Factory checks it with GitHub and stores it encrypted.",
-    "tokenLabel": "GitHub access token",
-    "tokenHint": "Classic token — with the repo scope. Fine-grained — with read and write access to Contents, Issues, Pull requests and Commit statuses; plus Workflows if agents change CI.",
-    "submit": "Connect",
-    "replace": "Replace",
-    "cancel": "Cancel",
-    "connecting": "Connecting…",
-    "connectedTitle": "Connected @{{account}}",
-    "connectedBody": "Repositories it can reach: {{repos}}.",
-    "replacedTitle": "Token of @{{account}} replaced",
-    "adminOnly": "Only organization admins can connect, replace or disconnect GitHub.",
-    "list": "GitHub connections",
-    "kindApp": "App",
-    "kindToken": "Token",
-    "kindEnvToken": "Token (server env)",
-    "repositories": "Repositories: {{repos}}",
-    "repositoriesUnknown": "Repositories not read",
-    "needsAttention": "Needs attention",
-    "unknownAccount": "Unknown account",
-    "manage": "Manage on GitHub",
-    "replaceToken": "Replace token",
-    "disconnect": "Disconnect",
-    "disconnectFailed": "Couldn't disconnect",
-    "addMore": "Add another",
-    "viaApp": "Through the GitHub App",
-    "viaAppHint": "Installing the App on a GitHub organization needs its owner's approval.",
-    "viaToken": "Private token",
-    "none": "GitHub is not connected yet: connect it through the GitHub App or with a private token.",
-    "loadFailed": "Couldn't read the GitHub connections: {{error}}",
-    "remove": {
-      "title": "Delete the “{{name}}” connection?",
-      "body": "The connection goes for the whole organization. Its token is deleted; the App stays installed on GitHub.",
-      "counting": "Checking what depends on it…",
-      "uncounted": "Could not check what depends on it",
-      "nothing": "No Factory takes repositories from it.",
-      "factories": "Unlinked from: {{factories}}",
-      "repositories": "Repositories:",
-      "moves": "moves to {{account}} ({{kind}})",
-      "unlinks": "is unlinked: Factory stops seeing this repository",
-      "kind": {
-        "app": "App",
-        "token": "Token"
-      },
-      "confirm": "Delete",
-      "confirmMove": "Delete and move",
-      "confirmUnlink": "Delete and unlink"
+    "organizationNote": "Connections belong to the organization: all its Factories see them. Google Cloud and MCP servers are also opened to each Factory separately.",
+    "connector": {
+      "reading": "Reading what depends on it…",
+      "impactFailed": "Couldn't read what depends on it.",
+      "removeFailed": "Couldn't delete",
+      "chooseMethod": "How do you connect?",
+      "open": "Open the connection",
+      "reconnectTitle": "Reconnect “{{name}}”",
+      "method": "How it connects",
+      "dependents": "Depends on it",
+      "manage": "Manage elsewhere",
+      "detailFailed": "Couldn't read the details"
     }
   }
 }

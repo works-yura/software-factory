@@ -365,19 +365,22 @@ describe('GithubIntegration: polling for token connections', () => {
   });
 });
 
-describe('GithubIntegration: token connections through the routes', () => {
+describe('GithubIntegration: connections through the shared connection routes (ADR-0035)', () => {
   async function app(options: { config?: GithubIntegrationConfig; routes: Record<string, unknown>; admin?: boolean }) {
     const { Hono } = await import('hono');
     const { mountApiRoutes } = await import('@factory/http/testing');
+    const { buildConnectionRoutes } = await import('@factory/integrations');
     const github = fakeGithub(options.routes);
     const audits: Array<{ action: string; metadata: unknown }> = [];
     const seeded = await createFactoryStorageForTests();
     const integration = new GithubIntegration({ ...options.config, fetchImpl: github.fetchImpl });
-    const routes = integration.routes({
-      auth: fakeRouteAuth({ isOrganizationAdmin: async () => options.admin ?? true }),
+    const auth = fakeRouteAuth({ isOrganizationAdmin: async () => options.admin ?? true });
+    const emitAudit = async ({ input }: { input: { action: string; metadata?: unknown } }) => void audits.push(input as never);
+    const context = {
+      auth,
       sandbox: (() => ({})) as never,
       stateSigner: createStateSigner('secret'),
-      hooks: { emitAudit: async ({ input }: { input: { action: string; metadata: unknown } }) => void audits.push(input) },
+      hooks: { emitAudit },
       storage: {
         generic: seeded.integrations.forIntegration('github'),
         sourceControl: seeded.sourceControl.forIntegration('github'),
@@ -385,7 +388,11 @@ describe('GithubIntegration: token connections through the routes', () => {
         intake: seeded.intake,
         memorySettings: { get: async () => null },
       },
-    } as never);
+    } as never;
+    const routes = [
+      ...integration.routes(context),
+      ...buildConnectionRoutes({ auth, connectors: [{ id: 'github', connections: integration.connections(context) }], emitAudit: emitAudit as never }),
+    ];
     integration.versionControl.initialize({ storage: seeded.sourceControl.forIntegration('github') });
     const request = (path: string, init?: RequestInit, orgId = 'org-1') => {
       const hono = new Hono();
@@ -396,23 +403,63 @@ describe('GithubIntegration: token connections through the routes', () => {
       mountApiRoutes(hono as never, routes);
       return hono.request(path, init);
     };
-    const json = (method: string, body: unknown) => ({
+    const json = (method: string, body: unknown, headers: Record<string, string> = {}) => ({
       method,
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body),
     });
-    return { integration, request, json, audits, github, projects: seeded.projects, storage: seeded.sourceControl.forIntegration('github'), settings: seeded.integrations.forIntegration('github') };
+    const connect = (token: unknown, orgId?: string) =>
+      request('/web/connections', json('POST', { connector: 'github', method: 'token', input: token === undefined ? {} : { token } }), orgId);
+    const path = (id: string, suffix = '') => `/web/connections/${encodeURIComponent(`github:${id}`)}${suffix}`;
+    return { integration, request, json, connect, path, audits, github, projects: seeded.projects, storage: seeded.sourceControl.forIntegration('github'), settings: seeded.integrations.forIntegration('github') };
   }
+  const localId = (connection: { id: string }) => connection.id.slice('github:'.length);
+
+  it('describes its two ways in: the App only with an App on the server, the token as a form', async () => {
+    const t = await app({ routes: {} });
+    const body = (await (await t.request('/web/connections/methods')).json()) as any;
+    expect(body.connectors).toEqual([
+      expect.objectContaining({
+        id: 'github',
+        name: 'GitHub',
+        icon: 'github',
+        category: 'sources',
+        capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true, supportsRevoke: false },
+        methods: [
+          expect.objectContaining({ id: 'app', authKind: 'oauth', available: { reason: expect.stringContaining('no GitHub App') } }),
+          expect.objectContaining({ id: 'token', authKind: 'apiKey', available: true, fields: [expect.objectContaining({ name: 'token', type: 'secret', required: true })] }),
+        ],
+      }),
+    ]);
+    const uk = (await (await t.request('/web/connections/methods', { headers: { 'accept-language': 'uk-UA,uk;q=0.9' } })).json()) as any;
+    expect(uk.connectors[0].methods[1]).toMatchObject({ label: 'Токен доступу', submitLabel: 'Підключити' });
+    // Without an App there is no install flow.
+    expect((await t.request('/web/connections', t.json('POST', { connector: 'github', method: 'app' }))).status).toBe(409);
+    expect((await t.request('/auth/github/connect')).headers.get('location')).toBe('/?github=no_app');
+  });
 
   it('connects a token: checks it, stores it encrypted for the org, never returns it', async () => {
     const t = await app({ routes: { 'GET /user': account, 'GET /user/repos': [repo(1), repo(2)] } });
 
-    const res = await t.request('/web/github/token-connections', t.json('POST', { token: ` ${TOKEN} ` }));
+    const res = await t.connect(` ${TOKEN} `);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body).toEqual({
-      connection: expect.objectContaining({ kind: 'token', tokenSource: 'stored', installationId: 4242, accountLogin: 'Yura', repositoryCount: 2 }),
-      replaced: false,
+      type: 'connected',
+      connection: expect.objectContaining({
+        id: expect.stringMatching(/^github:/),
+        connector: { id: 'github', name: 'GitHub', icon: 'github' },
+        label: 'Yura',
+        status: 'active',
+        displayName: null,
+        accountLabel: 'Yura',
+        accountDetail: 'User',
+        method: 'Token',
+        state: { tone: 'ok', label: 'Connected' },
+        scope: 'organization',
+      }),
+      title: '@Yura is connected',
+      message: 'It reaches 2 repositories.',
     });
     expect(JSON.stringify(body)).not.toContain(TOKEN);
     expect(t.github.calls.every(call => call.authorization === `token ${TOKEN}`)).toBe(true);
@@ -425,32 +472,49 @@ describe('GithubIntegration: token connections through the routes', () => {
     const status = await (await t.request('/web/github/status')).json();
     expect(status).toMatchObject({ appConfigured: false, connected: true, installations: [expect.objectContaining({ kind: 'token', tokenSource: 'stored' })] });
     expect(JSON.stringify(status)).not.toContain(TOKEN);
-    const listed = await (await t.request('/web/github/connections')).json();
+    const listed = (await (await t.request('/web/connections')).json()) as any;
     expect(listed).toEqual({
-      appConfigured: false,
-      canManage: true,
-      connections: [expect.objectContaining({ kind: 'token', repositoryCount: 2, status: 'ok' })],
+      connections: [
+        expect.objectContaining({
+          id: body.connection.id,
+          actions: { rename: true, reconnect: { method: expect.objectContaining({ id: 'token', authKind: 'apiKey', submitLabel: 'Replace token' }) }, remove: true },
+        }),
+      ],
+      failures: [],
+      copy: { organizationWide: 'The whole organization' },
     });
     // Another org does not see it.
-    expect((await (await t.request('/web/github/status', undefined, 'org-2')).json()) as any).toMatchObject({ connected: false });
+    expect(((await (await t.request('/web/connections', undefined, 'org-2')).json()) as any).connections).toEqual([]);
   });
 
-  it('explains a token GitHub refuses, and stores nothing', async () => {
+  it('explains a token GitHub refuses, on its field, and stores nothing', async () => {
     const t = await app({ routes: { 'GET /user': { status: 401, body: { message: 'Bad credentials' } } } });
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const res = await t.request('/web/github/token-connections', t.json('POST', { token: 'ghp_bad' }));
+    const res = await t.connect('ghp_bad');
     expect(res.status).toBe(422);
-    expect(await res.json()).toMatchObject({ error: 'invalid_token' });
+    expect(await res.json()).toMatchObject({ error: 'invalid_token', fields: { token: expect.stringContaining('rejected this token (401)') } });
     expect(await t.storage.installations.list({ orgId: 'org-1' })).toEqual([]);
-    expect((await t.request('/web/github/token-connections', t.json('POST', {}))).status).toBe(422);
+    expect((await t.connect(undefined)).status).toBe(422);
   });
 
-  it('lets only organization admins connect, replace or disconnect', async () => {
+  it('lets only organization admins connect, replace or delete, and tells a member why', async () => {
     const t = await app({ routes: { 'GET /user': account }, admin: false });
-    expect((await t.request('/web/github/token-connections', t.json('POST', { token: TOKEN }))).status).toBe(403);
-    expect((await t.request('/web/github/token-connections/x', t.json('PUT', { token: TOKEN }))).status).toBe(403);
-    expect((await t.request('/web/github/connections/x', { method: 'DELETE' })).status).toBe(403);
-    expect((await (await t.request('/web/github/status')).json()) as any).toMatchObject({ canManage: false });
+    const row = await t.storage.installations.upsert({ orgId: 'org-1', connectedByUserId: 'u', externalId: '4242', accountName: 'Yura', providerMetadata: { auth: 'token' } });
+    expect((await t.connect(TOKEN)).status).toBe(403);
+    expect((await t.request(t.path(row.id, '/reconnect'), t.json('POST', { input: { token: TOKEN } }))).status).toBe(403);
+    expect((await t.request(t.path(row.id), t.json('PATCH', { name: 'x' }))).status).toBe(403);
+    expect((await t.request(t.path(row.id), { method: 'DELETE' })).status).toBe(403);
+    const [listed] = ((await (await t.request('/web/connections')).json()) as any).connections;
+    const reason = { reason: 'Only organization admins change connections.' };
+    expect(listed.actions).toEqual({ rename: reason, reconnect: reason, remove: reason });
+  });
+
+  it('renames a connection for the organization; empty goes back to the account', async () => {
+    const t = await app({ routes: { 'GET /user': account, 'GET /user/repos': [repo(1)] } });
+    const { connection } = (await (await t.connect(TOKEN)).json()) as any;
+    expect(await (await t.request(t.path(localId(connection)), t.json('PATCH', { name: 'Main' }))).json()).toEqual({ name: 'Main' });
+    expect(((await (await t.request('/web/connections')).json()) as any).connections[0].label).toBe('Main');
+    expect(await (await t.request(t.path(localId(connection)), t.json('PATCH', { name: '' }))).json()).toEqual({ name: 'Yura' });
   });
 
   it('replaces the token of the same account, refuses another account, and moves a legacy row to a stored token', async () => {
@@ -461,28 +525,30 @@ describe('GithubIntegration: token connections through the routes', () => {
     });
     // The legacy row the former token mode registered: no metadata, the env account's id.
     const legacy = await t.storage.installations.upsert({ orgId: 'org-1', connectedByUserId: 'u', externalId: '4242', accountName: 'Yura' });
-    expect(((await (await t.request('/web/github/status')).json()) as any).installations).toEqual([
-      expect.objectContaining({ id: legacy.id, kind: 'token', tokenSource: 'env' }),
+    expect(((await (await t.request('/web/connections')).json()) as any).connections).toEqual([
+      expect.objectContaining({ id: `github:${legacy.id}`, method: 'Server token', state: { tone: 'ok', label: 'From the server environment' } }),
     ]);
 
-    const replaced = await t.request(`/web/github/token-connections/${legacy.id}`, t.json('PUT', { token: 'ghp_new' }));
+    const replaced = await t.request(t.path(legacy.id, '/reconnect'), t.json('POST', { input: { token: 'ghp_new' } }));
     expect(replaced.status).toBe(200);
-    expect(await replaced.json()).toMatchObject({ connection: { id: legacy.id, tokenSource: 'stored' }, replaced: true });
+    expect(await replaced.json()).toMatchObject({ type: 'connected', connection: { id: `github:${legacy.id}`, method: 'Token' }, title: 'The token of @Yura is replaced' });
     expect(await t.integration.mintInstallationToken(4242)).toBe('ghp_new');
 
     user = { id: 9, login: 'someone-else', type: 'User' };
-    const mismatch = await t.request(`/web/github/token-connections/${legacy.id}`, t.json('PUT', { token: 'ghp_other' }));
+    const mismatch = await t.request(t.path(legacy.id, '/reconnect'), t.json('POST', { input: { token: 'ghp_other' } }));
     expect(mismatch.status).toBe(422);
     expect(await mismatch.json()).toMatchObject({ error: 'account_mismatch' });
     expect(await t.integration.mintInstallationToken(4242)).toBe('ghp_new');
-    expect((await t.request('/web/github/token-connections/missing', t.json('PUT', { token: 'ghp_x' }))).status).toBe(404);
+    expect((await t.request(t.path('missing', '/reconnect'), t.json('POST', { input: { token: 'ghp_x' } }))).status).toBe(404);
   });
 
-  it('disconnects an unused token connection straight away', async () => {
+  it('deletes an unused token connection straight away', async () => {
     const t = await app({ routes: { 'GET /user': account, 'GET /user/repos': [repo(1)] } });
-    const { connection } = (await (await t.request('/web/github/token-connections', t.json('POST', { token: TOKEN }))).json()) as any;
-    const removed = await t.request(`/web/github/connections/${connection.id}`, { method: 'DELETE' });
-    expect(await removed.json()).toEqual({ removed: true, moved: [], unlinked: [] });
+    const { connection } = (await (await t.connect(TOKEN)).json()) as any;
+    const impact = (await (await t.request(t.path(localId(connection), '/impact'))).json()) as any;
+    expect(impact).toMatchObject({ title: 'Delete «Yura»?', dependents: [], items: [], confirmLabel: 'Delete', requiresConfirm: false });
+    const removed = await t.request(t.path(localId(connection)), { method: 'DELETE' });
+    expect(await removed.json()).toEqual({ removed: true, message: 'The connection is deleted.' });
     expect(await t.storage.installations.list({ orgId: 'org-1' })).toEqual([]);
     expect(await t.integration.tokens.hasStoredToken('org-1', 4242)).toBe(false);
     expect(t.audits.at(-1)).toMatchObject({ action: 'factory.integration.connection_removed', metadata: { account: 'Yura', kind: 'token' } });
@@ -499,13 +565,13 @@ describe('GithubIntegration: token connections through the routes', () => {
             call.authorization === 'token ghp_client' ? [repo(1, 'acme/app')] : [repo(1, 'acme/app'), repo(2, 'client/site')],
         },
       });
-      const yura = ((await (await t.request('/web/github/token-connections', t.json('POST', { token: 'ghp_yura' }))).json()) as any).connection;
-      const client = ((await (await t.request('/web/github/token-connections', t.json('POST', { token: 'ghp_client' }))).json()) as any).connection;
+      const yura = ((await (await t.connect('ghp_yura')).json()) as any).connection;
+      const client = ((await (await t.connect('ghp_client')).json()) as any).connection;
       const project = await t.projects.create({ orgId: 'org-1', userId: 'u', input: { name: 'post-airborne' } });
       const projectConnection = await t.storage.connections.create({
         orgId: 'org-1',
         factoryProjectId: project.id,
-        installationId: yura.id,
+        installationId: localId(yura),
         createdByUserId: 'u',
       });
       const links: Record<string, string> = {};
@@ -515,7 +581,7 @@ describe('GithubIntegration: token connections through the routes', () => {
       ] as const) {
         const repository = await t.storage.repositories.upsert({
           orgId: 'org-1',
-          input: { installationId: yura.id, externalId, slug, defaultBranch: 'main' },
+          input: { installationId: localId(yura), externalId, slug, defaultBranch: 'main' },
         });
         links[slug] = (
           await t.storage.projectRepositories.link({
@@ -528,50 +594,52 @@ describe('GithubIntegration: token connections through the routes', () => {
           })
         ).id;
       }
-      return { t, yura, client, project, links };
+      return { t, yura: localId(yura), client: localId(client), project, links };
     }
 
-    it('previews which Factories and repositories move to another connection or get unlinked', async () => {
-      const { t, yura, client, project } = await used();
-      const res = await t.request(`/web/github/connections/${yura.id}/usage`);
+    it('says which Factories depend on it and, per repository, whether it moves or is unlinked', async () => {
+      const { t, yura } = await used();
+      const res = await t.request(t.path(yura, '/impact'));
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
-        connection: expect.objectContaining({ id: yura.id, kind: 'token', accountLogin: 'Yura' }),
-        factories: [{ id: project.id, name: 'post-airborne' }],
-        repositories: [
-          expect.objectContaining({ slug: 'acme/app', factories: ['post-airborne'], target: { id: client.id, kind: 'token', accountLogin: 'client-bot' } }),
-          expect.objectContaining({ slug: 'client/site', factories: ['post-airborne'], target: null }),
+        title: 'Delete «Yura»?',
+        body: expect.any(String),
+        dependents: [{ label: 'Factory «post-airborne»' }],
+        itemsLabel: 'Repositories',
+        items: [
+          { label: 'acme/app', outcome: 'moves', outcomeLabel: 'Moves to @client-bot · token' },
+          { label: 'client/site', outcome: 'unlinks', outcomeLabel: 'Unlinked: Factory stops seeing it' },
         ],
+        confirmLabel: 'Delete and unlink',
+        cancelLabel: 'Cancel',
+        requiresConfirm: true,
       });
+      const listed = ((await (await t.request('/web/connections')).json()) as any).connections;
+      expect(listed.find((connection: any) => connection.id === `github:${yura}`)).toMatchObject({ dependents: 'Used by 1 Factory' });
     });
 
-    it('refuses without confirmation, returning the same usage', async () => {
+    it('refuses without confirmation, returning the same impact', async () => {
       const { t, yura } = await used();
-      const refused = await t.request(`/web/github/connections/${yura.id}`, { method: 'DELETE' });
+      const refused = await t.request(t.path(yura), { method: 'DELETE' });
       expect(refused.status).toBe(409);
       expect(await refused.json()).toMatchObject({
         error: 'connection_in_use',
-        projectConnections: 1,
-        usage: { repositories: [expect.objectContaining({ slug: 'acme/app' }), expect.objectContaining({ slug: 'client/site', target: null })] },
+        impact: { items: [expect.objectContaining({ label: 'acme/app' }), expect.objectContaining({ label: 'client/site', outcome: 'unlinks' })] },
       });
-      expect(await t.storage.installations.get({ orgId: 'org-1', id: yura.id })).not.toBeNull();
+      expect(await t.storage.installations.get({ orgId: 'org-1', id: yura })).not.toBeNull();
     });
 
     it('on confirmation moves what another connection reaches, unlinks the rest, and deletes the connection and its token', async () => {
       const { t, yura, client, project, links } = await used();
-      const res = await t.request(`/web/github/connections/${yura.id}?confirm=1`, { method: 'DELETE' });
+      const res = await t.request(t.path(yura, '?confirm=1'), { method: 'DELETE' });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        removed: true,
-        moved: [{ slug: 'acme/app', to: { id: client.id, kind: 'token', accountLogin: 'client-bot' } }],
-        unlinked: ['client/site'],
-      });
-      expect(await t.storage.installations.get({ orgId: 'org-1', id: yura.id })).toBeNull();
+      expect(await res.json()).toEqual({ removed: true, message: 'The connection is deleted. Moved: 1, unlinked: 1.' });
+      expect(await t.storage.installations.get({ orgId: 'org-1', id: yura })).toBeNull();
       expect(await t.integration.tokens.hasStoredToken('org-1', 4242)).toBe(false);
       const moved = await t.storage.projectRepositories.get({ orgId: 'org-1', id: links['acme/app']! });
       expect(await t.storage.connections.get({ orgId: 'org-1', id: moved!.connectionId })).toMatchObject({
         factoryProjectId: project.id,
-        installationId: client.id,
+        installationId: client,
       });
       expect(await t.storage.projectRepositories.get({ orgId: 'org-1', id: links['client/site']! })).toBeNull();
       expect(t.audits.at(-1)).toMatchObject({
@@ -581,27 +649,30 @@ describe('GithubIntegration: token connections through the routes', () => {
     });
 
     it('lets only organization admins delete', async () => {
-      const { t, yura } = await used();
-      void t;
+      const { yura } = await used();
       const member = await app({ routes: { 'GET /user': account }, admin: false });
-      expect((await member.request(`/web/github/connections/${yura.id}?confirm=1`, { method: 'DELETE' })).status).toBe(403);
+      expect((await member.request(member.path(yura, '?confirm=1'), { method: 'DELETE' })).status).toBe(403);
     });
+  });
+
+  it('shows the repositories a connection reaches on its detail page', async () => {
+    const t = await app({ routes: { 'GET /user': account, 'GET /user/repos': [repo(1, 'acme/app')] } });
+    const { connection } = (await (await t.connect(TOKEN)).json()) as any;
+    const detail = (await (await t.request(t.path(localId(connection), '/detail'))).json()) as any;
+    expect(detail.sections).toEqual([
+      expect.objectContaining({ type: 'table', title: 'Repositories', rows: [{ cells: ['acme/app', 'Private'], href: 'https://github.com/acme/app' }] }),
+    ]);
+    expect((await t.request(t.path('missing', '/detail'))).status).toBe(404);
   });
 
   it('keeps two organizations with tokens of one account apart in storage', async () => {
     const t = await app({ routes: { 'GET /user': account, 'GET /user/repos': [repo(1)] } });
-    await t.request('/web/github/token-connections', t.json('POST', { token: 'ghp_org1' }));
-    await t.request('/web/github/token-connections', t.json('POST', { token: 'ghp_org2' }), 'org-2');
+    await t.connect('ghp_org1');
+    await t.connect('ghp_org2', 'org-2');
     const org2 = (await t.storage.installations.list({ orgId: 'org-2' }))[0]!;
-    await t.request(`/web/github/connections/${org2.id}`, { method: 'DELETE' }, 'org-2');
+    await t.request(t.path(org2.id), { method: 'DELETE' }, 'org-2');
     // Org 1's connection still works with its own token.
     expect(await t.integration.tokens.hasStoredToken('org-1', 4242)).toBe(true);
     expect(await t.integration.mintInstallationToken(4242)).toBe('ghp_org1');
-  });
-
-  it('has no App install flow without an App', async () => {
-    const t = await app({ routes: {} });
-    const res = await t.request('/auth/github/connect');
-    expect(res.headers.get('location')).toBe('/?github=no_app');
   });
 });

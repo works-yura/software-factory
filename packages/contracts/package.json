@@ -16,6 +16,7 @@
     "@factory/harness": "workspace:*",
     "@factory/store": "workspace:*",
     "@mastra/code-sdk": "1.18.0",
+    "@mastra/core": "1.82.0",
     "zod": "catalog:"
   },
   "devDependencies": {

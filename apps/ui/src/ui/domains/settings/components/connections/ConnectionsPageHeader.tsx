@@ -10,7 +10,7 @@ import { factoryConnections } from '../../connections/connections';
 import { settingsSectionPath } from '../../settingsSections';
 import { localized } from '../mcp-servers/McpCatalogFields';
 import { ConnectionIcon } from './ConnectionIcon';
-import { HealthBadge } from './ConnectionList';
+import { HealthBadge, useRowKind } from './ConnectionList';
 import { useConnectionSources } from './useConnectionSources';
 
 /**
@@ -25,6 +25,7 @@ export function ConnectionsPageHeader() {
   const [params, setParams] = useSearchParams();
   const isMobile = useIsMobile(640);
   const { sources } = useConnectionSources();
+  const kindOf = useRowKind();
   const open = params.get('connection');
   const titleId = useId();
   // The sidebar's phone breakpoint: there the mobile header names the page instead.
@@ -68,8 +69,11 @@ export function ConnectionsPageHeader() {
   const row = factoryConnections(factoryId, sources).find(candidate => candidate.id === open);
   const entryId = open.startsWith('mcp-new:') ? open.slice('mcp-new:'.length) : undefined;
   const entry = entryId ? sources.mcp?.catalog.find(candidate => candidate.id === entryId) : undefined;
-  const kind = row?.kind ?? (open.startsWith('mcp') ? 'mcp' : (open as 'google-cloud' | 'clickup' | 'github' | 'gitlab'));
-  const name = row?.title ?? (entry ? localized(entry.label) : entryId ? t('connections.detail.newMcp') : t(`connections.kinds.${kind}`, { defaultValue: t('connections.title') }));
+  const kind = open.startsWith('mcp') ? 'mcp' : (open as 'google-cloud' | 'clickup' | 'gitlab');
+  const icon = row ? kindOf(row).icon : kind;
+  const name =
+    row?.title ??
+    (entry ? localized(entry.label) : entryId ? t('connections.detail.newMcp') : t(`connections.kinds.${kind}`, { defaultValue: t('connections.title') }));
 
   return (
     <PageHeader>
@@ -80,7 +84,7 @@ export function ConnectionsPageHeader() {
         </Link>
       </PageHeader.Eyebrow>
       <PageHeader.Icon>
-        <ConnectionIcon kind={kind} />
+        <ConnectionIcon kind={icon} />
       </PageHeader.Icon>
       {title(name)}
       {row && (

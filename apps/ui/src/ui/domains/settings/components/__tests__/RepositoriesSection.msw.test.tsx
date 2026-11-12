@@ -103,7 +103,7 @@ describe('Repositories settings', () => {
     expect(screen.queryByRole('button', { name: 'Connect another GitLab account' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Connections' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/integrations?connection=github`,
+      `/factories/${FACTORY_ID}/settings/integrations`,
     );
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
@@ -147,7 +147,7 @@ describe('Repositories settings', () => {
     expect(screen.getByText(/GitHub and GitLab are connected under Connections/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Connections' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/integrations?connection=github`,
+      `/factories/${FACTORY_ID}/settings/integrations`,
     );
   });
 

@@ -17,7 +17,14 @@ import {
   reviewedChangeRequest,
 } from '@factory/core';
 import type { BoardRegistry, InstalledBoard, IntakeRoutesReader } from '@factory/core';
-import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '@factory/integrations';
+import { buildConnectionRoutes } from '@factory/integrations';
+import type {
+  ConnectorRegistration,
+  FactoryIntegration,
+  IntegrationConnections,
+  IntegrationContext,
+  IntegrationHooks,
+} from '@factory/integrations';
 import { getGithubFeatureDiagnostics } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { MaterializeError } from '@factory/sandbox';
@@ -209,6 +216,30 @@ export interface FactoryApiRoutesDeps {
 }
 
 const REPEAT_UNAVAILABLE_LOG_MS = 5 * 60_000;
+
+/**
+ * An integration's connections facet that waits for the integration's storage first, as its routes
+ * do: an integration not ready yet fails its calls (the list names it), and the rest keep working.
+ */
+function guardConnections(registration: IntegrationRegistration, facet: IntegrationConnections): IntegrationConnections {
+  if (registration.ready) return facet;
+  const ready = <Args extends unknown[], Result>(call: (...args: Args) => Promise<Result>) =>
+    async (...args: Args): Promise<Result> => {
+      await registration.ensureReady();
+      return call(...args);
+    };
+  return {
+    describe: request => facet.describe(request),
+    list: ready(request => facet.list(request)),
+    connect: ready((request, method, input) => facet.connect(request, method, input)),
+    ...(facet.reconnect ? { reconnect: ready((request, id, input) => facet.reconnect!(request, id, input)) } : {}),
+    ...(facet.rename ? { rename: ready((request, id, name) => facet.rename!(request, id, name)) } : {}),
+    ...(facet.removalImpact ? { removalImpact: ready((request, id) => facet.removalImpact!(request, id)) } : {}),
+    ...(facet.remove ? { remove: ready((request, id, options) => facet.remove!(request, id, options)) } : {}),
+    ...(facet.unlink ? { unlink: ready((request, id) => facet.unlink!(request, id)) } : {}),
+    ...(facet.detail ? { detail: ready((request, id) => facet.detail!(request, id)) } : {}),
+  };
+}
 
 function guardIntegrationRoutes({
   integration,
@@ -746,6 +777,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
 
+  const connectors: ConnectorRegistration[] = [];
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
@@ -760,7 +792,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       },
       integration.id,
     );
-    return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
+    const routes = guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
+    if (integration.connections) {
+      connectors.push({ id: integration.id, connections: guardConnections(registration, integration.connections(context)) });
+    }
+    return routes;
   });
   // Session persistence belongs to the linked source-control provider, not to
   // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
@@ -938,6 +974,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
     ...providerRoutes,
+    // Settings › Підключення: every integration's connections through one registry (ADR-0035).
+    ...buildConnectionRoutes({ auth: deps.auth, connectors, emitAudit }),
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady

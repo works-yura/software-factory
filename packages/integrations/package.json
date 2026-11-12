@@ -16,6 +16,7 @@
   "dependencies": {
     "@factory/auth": "workspace:*",
     "@factory/capabilities": "workspace:*",
+    "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
     "@factory/credentials": "workspace:*",
     "@factory/feed": "workspace:*",

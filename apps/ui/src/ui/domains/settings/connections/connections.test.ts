@@ -8,6 +8,33 @@ import type { FirebaseState } from '../services/firebase';
 import type { McpServer, McpServersState } from '../services/mcpServers';
 import { connectionCatalog, connectionHealth, factoryConnections, filterActivity, filterCatalog, linkableAccounts } from './connections';
 import type { ConnectionState } from './connections';
+import type { ConnectionView, ConnectorView } from '@factory/contracts';
+
+/** A connector this page knows nothing about: everything it shows comes from these descriptors. */
+const fakeView = (id: string, overrides: Partial<ConnectionView> = {}): ConnectionView => ({
+  id: `acme:${id}`,
+  connector: { id: 'acme', name: 'Acme Cloud', icon: 'acme' },
+  label: `Acme ${id}`,
+  status: 'active',
+  displayName: null,
+  accountLabel: null,
+  provides: [{ key: 'tasks', label: 'Tickets' }],
+  state: { tone: 'ok', label: 'Live' },
+  scope: 'organization',
+  actions: { rename: true, remove: true },
+  ...overrides,
+});
+const fakeConnector: ConnectorView = {
+  id: 'acme',
+  name: 'Acme Cloud',
+  icon: 'acme',
+  description: 'Tickets from Acme.',
+  category: 'sources',
+  provides: [{ key: 'tasks', label: 'Tickets' }],
+  capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true },
+  methods: [{ id: 'key', label: 'API key', authKind: 'apiKey', fields: [], available: true }],
+};
+const listed = (...connections: ConnectionView[]) => ({ connections, failures: [], copy: { organizationWide: 'Everyone' } });
 
 describe('filterActivity', () => {
   const calls = [
@@ -29,28 +56,19 @@ describe('filterActivity', () => {
 });
 
 describe('organization connections', () => {
-  it('give ClickUp, GitHub and GitLab rename, reconnect and delete where their credential lives, or say why not', () => {
+  it('give ClickUp and GitLab rename, reconnect and delete where their credential lives, or say why not; a server connector says its own', () => {
     const rows = factoryConnections('syncts', {
       clickup: { configured: true, connected: true, workspaces: ['Eclipt'], intervalSeconds: 60, canManage: true, name: 'Eclipt', connectedAt: '2026-11-01T00:00:00.000Z', connectedBy: 'u1' },
-      github: {
-        enabled: true,
-        connected: true,
-        canManage: true,
-        installations: [
-          { id: 'row-1', installationId: 1, accountLogin: 'eclipt-ai', accountType: 'Organization', kind: 'app', name: null, createdAt: '2026-11-02T00:00:00.000Z', connectedBy: 'u2' },
-          { id: 'row-2', installationId: 2, accountLogin: 'yura', accountType: 'User', kind: 'token', tokenSource: 'stored', name: 'Personal', createdAt: '2026-11-03T00:00:00.000Z', connectedBy: 'u2' },
-        ],
-      } as never,
       gitlab: { enabled: true, configured: true, mode: 'direct', reauthRequired: false },
+      connections: listed(fakeView('1', { createdAt: '2026-11-02T00:00:00.000Z', createdBy: 'u2', actions: { rename: { reason: 'Admins only' } } })),
     });
-    expect(rows.map(row => [row.id, row.title, row.scope, row.orgActions])).toEqual([
+    expect(rows.map(row => [row.id, row.title, row.scope, row.orgActions ?? row.view?.actions])).toEqual([
       ['clickup', 'Eclipt', 'organization', { rename: true, reconnect: true, remove: true }],
-      ['github:1', 'eclipt-ai', 'organization', { rename: true, reconnect: true, remove: true }],
-      ['github:2', 'Personal', 'organization', { rename: true, reconnect: true, remove: true }],
       ['gitlab', 'GitLab', 'organization', { rename: 'env', reconnect: 'env', remove: 'env' }],
+      ['acme:1', 'Acme 1', 'organization', { rename: { reason: 'Admins only' } }],
     ]);
     expect(rows[0]).toMatchObject({ createdAt: '2026-11-01T00:00:00.000Z', createdBy: 'u1' });
-    expect(rows[1]).toMatchObject({ installationId: 'row-1', createdBy: 'u2' });
+    expect(rows[2]).toMatchObject({ kind: 'connector', createdBy: 'u2' });
   });
 });
 
@@ -127,12 +145,8 @@ describe('factoryConnections', () => {
     firebase,
     mcp,
     clickup: { configured: true, connected: true, workspaces: ['Eclipt'], intervalSeconds: 60 },
-    github: {
-      enabled: true,
-      connected: true,
-      installations: [{ id: 'inst-1', installationId: 4242, accountLogin: 'yura', accountType: 'User', kind: 'token', tokenSource: 'env' }],
-    },
     gitlab: { enabled: true, configured: false, reauthRequired: false },
+    connections: listed(fakeView('4242', { accountLabel: 'yura', status: 'needs_reauth', state: { tone: 'warning', label: 'Needs a look' } })),
   });
 
   it("lists the Factory's Google Cloud, then organization-wide sources, then MCP servers", () => {
@@ -141,15 +155,15 @@ describe('factoryConnections', () => {
       ['google-cloud:b-2', 'google-cloud', 'factory'],
       ['mcp:srv-toolbox', 'google-cloud', 'factory'],
       ['clickup', 'clickup', 'organization'],
-      ['github:4242', 'github', 'organization'],
+      ['acme:4242', 'connector', 'organization'],
       ['mcp:srv-sentry', 'mcp', 'factory'],
     ]);
   });
 
-  it("lets an admin replace or remove the server's GitHub token like any other connection", () => {
-    const github = rows.find(row => row.id === 'github:4242');
-    expect(github?.state).toBe('env');
-    expect(github?.orgActions).toMatchObject({ reconnect: true, remove: true });
+  it("takes a server connector's row from its view: title, account and the tone as the health verdict", () => {
+    const acme = rows.find(row => row.id === 'acme:4242');
+    expect(acme).toMatchObject({ title: 'Acme 4242', account: { name: 'yura' }, state: 'needs_auth', capabilities: [] });
+    expect(connectionHealth(acme!.state)).toBe('warning');
   });
 
   it("folds a binding's «База» server into the binding's row and takes its health", () => {
@@ -170,26 +184,6 @@ describe('factoryConnections', () => {
     expect(rows[5]).toMatchObject({ kind: 'mcp', title: 'Sentry', mcp: true });
   });
 
-  it('marks a connection the environment makes', () => {
-    expect(rows[4]).toMatchObject({ kind: 'github', state: 'env', account: { name: 'yura' } });
-  });
-
-  it('lists GitHub as one row per connection of either kind, and flags the one that needs attention', () => {
-    const rows = factoryConnections('syncts', {
-      github: {
-        enabled: true,
-        connected: true,
-        installations: [
-          { id: 'inst-1', installationId: 1, accountLogin: 'eclipt', accountType: 'Organization', kind: 'app' },
-          { id: 'inst-2', installationId: 2, accountLogin: 'client', accountType: 'User', kind: 'token', tokenSource: 'stored', needsAttention: true },
-        ],
-      },
-    });
-    expect(rows.map(row => [row.id, row.account?.name, row.state, row.githubAuth])).toEqual([
-      ['github:1', 'eclipt', 'connected', 'app'],
-      ['github:2', 'client', 'error', 'token'],
-    ]);
-  });
 });
 
 describe('linkableAccounts', () => {
@@ -203,42 +197,24 @@ describe('linkableAccounts', () => {
 
 describe('connectionCatalog', () => {
   it('offers first-party integrations, then third-party and own MCP servers under «Інше»; never an entry an integration runs', () => {
-    expect(connectionCatalog({ firebase, mcp }).map(item => [item.id, item.section, item.mcp])).toEqual([
+    expect(connectionCatalog({ firebase, mcp, connectors: [fakeConnector] }).map(item => [item.id, item.section, item.mcp])).toEqual([
       ['google-cloud', 'integrations', false],
       ['clickup', 'integrations', false],
-      ['github-token', 'integrations', false],
       ['gitlab', 'integrations', false],
+      ['connector:acme', 'integrations', false],
       ['mcp-entry:weather', 'other', true],
       ['mcp-custom', 'other', true],
     ]);
   });
 });
 
-describe('connectionCatalog › GitHub', () => {
-  it('offers the GitHub App only when the server has one, and the token always', () => {
-    const ids = (appConfigured: boolean) =>
-      connectionCatalog({ github: { enabled: true, appConfigured, connected: false, installations: [] } })
-        .filter(item => item.kind === 'github')
-        .map(item => [item.id, item.connected]);
-    expect(ids(true)).toEqual([
-      ['github', false],
-      ['github-token', false],
-    ]);
-    expect(ids(false)).toEqual([['github-token', false]]);
-  });
-
-  it('offers no GitHub when the server has it off', () => {
-    expect(connectionCatalog({ github: { enabled: false, connected: false, installations: [] } }).some(item => item.kind === 'github')).toBe(false);
-  });
-});
-
 describe('filterCatalog', () => {
-  const items = connectionCatalog({ firebase, mcp });
+  const items = connectionCatalog({ firebase, mcp, connectors: [fakeConnector] });
   const text = (item: { id: string }) => item.id;
 
   it('narrows by category: sources leave out tools and accounts', () => {
     const result = filterCatalog(items, linkableAccounts('syncts', { firebase, mcp }), { query: '', filter: 'sources', textOf: text });
-    expect(result.items.map(item => item.id)).toEqual(['clickup', 'github-token', 'gitlab']);
+    expect(result.items.map(item => item.id)).toEqual(['clickup', 'gitlab', 'connector:acme']);
     expect(result.accounts).toEqual([]);
   });
 

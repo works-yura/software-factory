@@ -3,13 +3,17 @@
  *
  * Two levels, as the stores already keep them:
  * - **Organization** — accounts and servers: Google Cloud service-account keys, MCP servers, the
- *   ClickUp token, the GitHub App, GitLab connections.
+ *   ClickUp token, GitLab connections, and every connector the server describes.
  * - **Factory** — a link to one of them: a Google Cloud binding (this Factory reads that project
  *   through that account), an MCP server's access entry for this Factory. «Відв'язати» drops the
  *   link and keeps the organization's account for other Factories.
  *
- * ClickUp, GitHub and GitLab are connected for the whole organization; a Factory has no link of its
- * own to drop (its intake routes and repositories say what it uses), so their rows say so.
+ * ClickUp and GitLab are connected for the whole organization; a Factory has no link of its own to
+ * drop (its intake routes and repositories say what it uses), so their rows say so.
+ *
+ * Connectors the server describes (ADR-0035) arrive as {@link ConnectionView}s from
+ * `/web/connections` — name, logo key, state, actions and every string — and become rows of kind
+ * `connector` with no provider knowledge here. The kinds below are the ones not moved yet.
  *
  * First-party integrations show what they give agents, never how they run: an MCP catalog entry an
  * integration runs under the hood (`entry.integration`, e.g. MCP Toolbox for Google Cloud's «База»)
@@ -21,16 +25,19 @@
  * integration-specific branching beyond its detail views.
  */
 
+import type { ConnectionsListResponse, ConnectionView, ConnectorView } from '@factory/contracts';
 import type { McpCatalogEntry } from '@factory/core';
 import { mcpServerState } from '@factory/core';
 
 import type { ClickUpStatus } from '../../factory/services/clickup';
 import type { GitLabStatus } from '../../factory/services/gitlab';
-import type { GithubStatus } from '../../workspaces/services/github';
 import type { FirebaseAccount, FirebaseBinding, FirebaseState } from '../services/firebase';
 import type { McpServer, McpServersState } from '../services/mcpServers';
 
-export type ConnectionKind = 'google-cloud' | 'mcp' | 'clickup' | 'github' | 'gitlab';
+export type ConnectionKind = 'google-cloud' | 'mcp' | 'clickup' | 'gitlab';
+
+/** A row's kind: one the page still builds itself, or `connector` — described by the server. */
+export type RowKind = ConnectionKind | 'connector';
 
 /** The add catalog's filter: tools agents call, and sources that bring work and code. */
 export type ConnectionCategory = 'tools' | 'sources';
@@ -52,15 +59,11 @@ export const CONNECTION_KINDS: Record<ConnectionKind, ConnectionKindDescriptor> 
   'google-cloud': { kind: 'google-cloud', category: 'tools', mcp: false, organizationWide: false, capabilities: ['tools'] },
   mcp: { kind: 'mcp', category: 'tools', mcp: true, organizationWide: false, capabilities: ['tools'] },
   clickup: { kind: 'clickup', category: 'sources', mcp: false, organizationWide: true, capabilities: ['tasks'] },
-  github: { kind: 'github', category: 'sources', mcp: false, organizationWide: true, capabilities: ['code', 'tasks'] },
   gitlab: { kind: 'gitlab', category: 'sources', mcp: false, organizationWide: true, capabilities: ['code', 'tasks'] },
 };
 
 /** First-party integrations, the order «Додати підключення» lists them in. */
-export const FIRST_PARTY: ReadonlyArray<Exclude<ConnectionKind, 'mcp'>> = ['google-cloud', 'clickup', 'github', 'gitlab'];
-
-/** The catalog entry that connects GitHub with a personal access token (`github` is the GitHub App). */
-export const GITHUB_TOKEN_ITEM = 'github-token';
+export const FIRST_PARTY: ReadonlyArray<Exclude<ConnectionKind, 'mcp'>> = ['google-cloud', 'clickup', 'gitlab'];
 
 /** What a connection lets agents do, as the row lists it. */
 export type ConnectionCapability =
@@ -90,7 +93,7 @@ export type ConnectionState =
 export interface ConnectionRow {
   /** Stable key, also the `?connection=` value that opens it. */
   id: string;
-  kind: ConnectionKind;
+  kind: RowKind;
   /** A name the person gave, or the project/server it reaches. */
   title: string;
   mcp: boolean;
@@ -108,21 +111,17 @@ export interface ConnectionRow {
   createdAt?: string;
   createdBy?: string;
   /** What «Перейменувати» renames: the binding's own name, the server's label, or an organization connection's name. */
-  rename?: 'binding' | 'server' | 'clickup' | 'github';
-  /** The GitHub installation row a GitHub connection is (its rename and removal address). */
-  installationId?: string;
-  /** How a GitHub connection authenticates: the App, or a token. */
-  githubAuth?: 'app' | 'token';
-  /** GitHub: Factory project connections still using its repositories (removal waits for them). */
-  projectConnections?: number;
+  rename?: 'binding' | 'server' | 'clickup';
   /** An organization connection's own actions, each either available or why not (shown, never hidden). */
   orgActions?: OrgActions;
+  /** A connection the server describes (kind `connector`): its name, logo, state, actions and copy. */
+  view?: ConnectionView;
 }
 
 /** Why an organization connection's action cannot be taken here; the menu says it under the item. */
 export type OrgActionBlock = 'env' | 'admin' | 'platform';
 
-/** «Перейменувати», «Перепідключити», «Видалити підключення» for ClickUp, GitHub, GitLab: `true`, or the reason not. */
+/** «Перейменувати», «Перепідключити», «Видалити підключення» for ClickUp, GitLab: `true`, or the reason not. */
 export interface OrgActions {
   rename: true | OrgActionBlock;
   reconnect: true | OrgActionBlock;
@@ -133,8 +132,11 @@ export interface ConnectionSources {
   firebase?: FirebaseState;
   mcp?: McpServersState;
   clickup?: ClickUpStatus;
-  github?: GithubStatus;
   gitlab?: GitLabStatus;
+  /** Every connection the server's connectors describe (`/web/connections`). */
+  connections?: ConnectionsListResponse;
+  /** The server's connectors and their connect methods (`/web/connections/methods`). */
+  connectors?: ConnectorView[];
 }
 
 export const connectionId = {
@@ -191,7 +193,9 @@ export function serverIntegration(server: McpServer, catalog: readonly McpCatalo
   if (server.owner?.integration === GOOGLE_CLOUD_OWNER) return 'google-cloud';
   if (server.launch.transport !== 'catalog') return undefined;
   const entryId = server.launch.entry;
-  return catalog.find(entry => entry.id === entryId)?.integration;
+  const integration = catalog.find(entry => entry.id === entryId)?.integration;
+  // A catalog entry of a connector the server describes is that connector's business, not a kind here.
+  return integration && integration in CONNECTION_KINDS ? (integration as Exclude<ConnectionKind, 'mcp'>) : undefined;
 }
 
 function mcpRows(factoryId: string, mcp: McpServersState, firebase: FirebaseState | undefined): ConnectionRow[] {
@@ -227,16 +231,15 @@ function mcpRows(factoryId: string, mcp: McpServersState, firebase: FirebaseStat
 }
 
 /**
- * The organization's ClickUp, GitHub and GitLab connections — the organization's, not a Factory's:
- * every Factory sees them. ClickUp is the organization's token; GitHub one row per installation
- * (the App on an account, or the server's token); GitLab the Mastra Platform connections, or the
- * server's own token. What can be renamed, reconnected and removed follows where the credential
- * lives: a token in the server's environment is changed there, a GitHub App installation on GitHub,
- * a Platform connection on Mastra Platform.
+ * The organization's ClickUp and GitLab connections — the organization's, not a Factory's: every
+ * Factory sees them. ClickUp is the organization's token; GitLab the Mastra Platform connections,
+ * or the server's own token. What can be renamed, reconnected and removed follows where the
+ * credential lives: a token in the server's environment is changed there, a Platform connection on
+ * Mastra Platform.
  */
 function sourceRows(sources: ConnectionSources): ConnectionRow[] {
   const rows: ConnectionRow[] = [];
-  const { clickup, github, gitlab } = sources;
+  const { clickup, gitlab } = sources;
   if (clickup?.configured) {
     const admin = clickup.canManage !== false || 'admin';
     rows.push({
@@ -255,38 +258,6 @@ function sourceRows(sources: ConnectionSources): ConnectionRow[] {
       ...(clickup.connectedBy ? { createdBy: clickup.connectedBy } : {}),
       orgActions: { rename: admin, reconnect: admin, remove: admin },
     });
-  }
-  const installations = github?.installations ?? [];
-  if (github?.connected || installations.length > 0) {
-    const admin = github?.canManage !== false || 'admin';
-    // One row per connection (an account): the App on it, or a token — stored by the organization,
-    // or the server's legacy GITHUB_ACCESS_TOKEN.
-    for (const installation of installations) {
-      const fromEnv = installation.kind === 'token' && installation.tokenSource === 'env';
-      rows.push({
-        id: `github:${installation.installationId}`,
-        kind: 'github',
-        title: installation.name ?? installation.accountLogin ?? 'GitHub',
-        mcp: false,
-        ...(installation.accountLogin ? { account: { name: installation.accountLogin, ...(installation.accountType ? { detail: installation.accountType } : {}) } } : {}),
-        capabilities: [{ key: 'repositories' }, { key: 'tasks' }],
-        state: installation.needsAttention ? 'error' : fromEnv ? 'env' : 'connected',
-        scope: 'organization',
-        githubAuth: installation.kind === 'token' ? 'token' : 'app',
-        ...(installation.projectConnections !== undefined ? { projectConnections: installation.projectConnections } : {}),
-        ...(installation.id ? { rename: 'github' as const, installationId: installation.id } : {}),
-        ...(installation.createdAt ? { createdAt: installation.createdAt } : {}),
-        ...(installation.connectedBy ? { createdBy: installation.connectedBy } : {}),
-        orgActions: {
-          rename: installation.id ? admin : 'env',
-          // The App is re-authorized on GitHub; a token — stored, or the server's legacy one — is replaced in
-          // the token step, which moves a server token into the organization's encrypted store.
-          reconnect: admin,
-          // The server refuses (409) while projects still use the connection's repositories, and says so.
-          remove: installation.id ? admin : 'env',
-        },
-      });
-    }
   }
   if (gitlab?.configured) {
     const direct = gitlab.mode === 'direct';
@@ -310,26 +281,52 @@ function sourceRows(sources: ConnectionSources): ConnectionRow[] {
   return rows;
 }
 
-/** Everything the Factory connects to: Google Cloud, ClickUp, GitHub, GitLab, then MCP servers. */
+/** The row's state word for the health verdict: the server's tone, in the page's states. */
+const TONE_STATE: Record<ConnectionView['state']['tone'], ConnectionState> = {
+  ok: 'connected',
+  warning: 'needs_auth',
+  error: 'error',
+  idle: 'unchecked',
+};
+
+/** A connection the server describes, as a row: everything it shows comes from the view. */
+export function connectorRow(view: ConnectionView): ConnectionRow {
+  return {
+    id: view.id,
+    kind: 'connector',
+    title: view.label,
+    mcp: view.mcp === true,
+    ...(view.accountLabel ? { account: { name: view.accountLabel, ...(view.accountDetail ? { detail: view.accountDetail } : {}) } } : {}),
+    capabilities: [],
+    state: TONE_STATE[view.state.tone],
+    scope: view.scope,
+    ...(view.createdAt ? { createdAt: view.createdAt } : {}),
+    ...(view.createdBy ? { createdBy: view.createdBy } : {}),
+    view,
+  };
+}
+
+/** Everything the Factory connects to: Google Cloud, ClickUp, GitLab, the server's connectors, then MCP servers. */
 export function factoryConnections(factoryId: string, sources: ConnectionSources): ConnectionRow[] {
   const servers = sources.mcp?.servers ?? [];
-  const order: ConnectionKind[] = ['google-cloud', 'clickup', 'github', 'gitlab', 'mcp'];
+  const order: RowKind[] = ['google-cloud', 'clickup', 'gitlab', 'connector', 'mcp'];
   // First-party integrations first, MCP servers last; within a kind, the order each source gives.
   return [
     ...(sources.firebase ? googleCloudRows(factoryId, sources.firebase, servers) : []),
     ...(sources.mcp ? mcpRows(factoryId, sources.mcp, sources.firebase) : []),
     ...sourceRows(sources),
+    ...(sources.connections?.connections ?? []).map(connectorRow),
   ]
     .map((row, index) => ({ row, index }))
     .sort((left, right) => order.indexOf(left.row.kind) - order.indexOf(right.row.kind) || left.index - right.index)
     .map(({ row }) => row);
 }
 
-/** One entry of «Додати підключення»: a first-party integration, a third-party MCP server, or an own one. */
+/** One entry of «Додати підключення»: a first-party integration, a connector the server describes, an MCP server. */
 export interface CatalogItem {
-  /** `google-cloud`, `clickup`, `github` (the GitHub App), `github-token`, `gitlab`, `mcp-entry:<id>`, `mcp-custom`. */
+  /** `google-cloud`, `clickup`, `gitlab`, `connector:<id>`, `mcp-entry:<id>`, `mcp-custom`. */
   id: string;
-  kind: ConnectionKind;
+  kind: RowKind;
   category: ConnectionCategory;
   /** Listed under «Інше»: MCP servers, third-party or own. */
   section: 'integrations' | 'other';
@@ -337,6 +334,8 @@ export interface CatalogItem {
   capabilities: CatalogCapability[];
   /** A third-party MCP catalog entry; first-party names come from the kind. */
   entry?: McpCatalogEntry;
+  /** A connector the server describes: its name, logo, capabilities and connect methods. */
+  connector?: ConnectorView;
   /** Already connected for the organization — opening shows it. */
   connected: boolean;
 }
@@ -345,14 +344,12 @@ export function connectionCatalog(sources: ConnectionSources): CatalogItem[] {
   const connected: Record<(typeof FIRST_PARTY)[number], boolean> = {
     'google-cloud': Boolean(sources.firebase?.accounts.length),
     clickup: Boolean(sources.clickup?.connected),
-    // GitHub can always take one more connection (another App installation or token), so its entries add.
-    github: false,
     gitlab: Boolean(sources.gitlab?.configured),
   };
   // Entries an integration runs under the hood are that integration's business, not a choice.
   const thirdParty = (sources.mcp?.catalog ?? []).filter(entry => !entry.integration);
-  const firstParty = (kind: (typeof FIRST_PARTY)[number], id: string = kind): CatalogItem => ({
-    id,
+  const firstParty = (kind: (typeof FIRST_PARTY)[number]): CatalogItem => ({
+    id: kind,
     kind,
     category: CONNECTION_KINDS[kind].category,
     section: 'integrations',
@@ -360,13 +357,22 @@ export function connectionCatalog(sources: ConnectionSources): CatalogItem[] {
     capabilities: CONNECTION_KINDS[kind].capabilities,
     connected: connected[kind],
   });
+  // A connector can always take one more connection (another account), so its entry adds.
+  const connectors = (sources.connectors ?? []).map(
+    (connector): CatalogItem => ({
+      id: `connector:${connector.id}`,
+      kind: 'connector',
+      category: connector.category,
+      section: connector.mcp ? 'other' : 'integrations',
+      mcp: connector.mcp === true,
+      capabilities: [],
+      connector,
+      connected: false,
+    }),
+  );
   return [
-    // GitHub is two ways in: through the server's GitHub App (only when the server has one), or a personal access token.
-    ...FIRST_PARTY.flatMap(kind =>
-      kind !== 'github'
-        ? [firstParty(kind)]
-        : [...(sources.github?.appConfigured ? [firstParty('github')] : []), ...(sources.github?.enabled !== false ? [firstParty('github', GITHUB_TOKEN_ITEM)] : [])],
-    ),
+    ...FIRST_PARTY.map(kind => firstParty(kind)),
+    ...connectors,
     ...thirdParty.map(entry => ({
       id: `mcp-entry:${entry.id}`,
       kind: 'mcp' as const,

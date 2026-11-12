@@ -3,14 +3,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
-import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { settingsSectionPath } from '../settingsSections';
-import { GithubConnectionsList } from './GithubConnections';
-import { GithubPatBlock } from './GithubPatBlock';
 import { ProviderConnectControl } from './PlatformProviderConnections';
-import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
 /** «Which repositories this Factory works in» stays a Factory setting: a line back to Репозиторії. */
 function RepositoriesLink() {
@@ -24,30 +20,6 @@ function RepositoriesLink() {
         {t('integrations.openRepositories')}
       </Link>
     </Txt>
-  );
-}
-
-/**
- * Settings › Підключення › GitHub: every GitHub connection of the organization (through the GitHub
- * App or a private token, side by side) with its actions and «Додати ще», the person's own GitHub
- * account, and the org's tokens for the `gh` CLI.
- */
-export function GitHubService() {
-  const status = useGithubStatusQuery().data;
-  const connected = status?.connected === true;
-
-  return (
-    <>
-      <GithubConnectionsList />
-      {connected && (
-        <>
-          {/* The person's own GitHub account links through the App's OAuth, so only with an App. */}
-          {status?.appConfigured !== false && <UserGithubConnectionRow />}
-          <GithubPatBlock />
-        </>
-      )}
-      <RepositoriesLink />
-    </>
   );
 }
 

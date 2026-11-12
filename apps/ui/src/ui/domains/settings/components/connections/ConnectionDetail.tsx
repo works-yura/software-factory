@@ -22,8 +22,9 @@ import { McpServerEditor } from '../mcp-servers/McpServerEditor';
 import type { McpServerSection, McpServerStart } from '../mcp-servers/McpServerEditor';
 import { McpServerHealthLine, mcpErrorText } from '../mcp-servers/McpServerInspect';
 import { SettingsSubsection } from '../SettingsSubsection';
-import { GitHubService, GitLabService } from '../SourceControlServices';
+import { GitLabService } from '../SourceControlServices';
 import { ConnectionActivity } from './ConnectionActivity';
+import { ConnectorDetailSections } from './ConnectorDetail';
 import { HealthBadge, useRenameConnection } from './ConnectionList';
 import { TimeAgo } from './TimeAgo';
 
@@ -56,7 +57,7 @@ function NameRow({ row }: { row: ConnectionRow }) {
   const next = name.trim();
   return (
     <SettingsRow label={t('connections.detail.name')}>
-      {row.rename && (!row.orgActions || row.orgActions.rename === true) ? (
+      {(row.view ? row.view.actions.rename === true : row.rename && (!row.orgActions || row.orgActions.rename === true)) ? (
         <form
           className="flex w-full items-center justify-end gap-2"
           onSubmit={event => {
@@ -84,6 +85,8 @@ function Overview({ row, factoryId }: { row: ConnectionRow; factoryId: string })
   const failure = health && (row.state === 'error' || row.state === 'needs_auth') ? mcpErrorText(t, health.errorKind, health.error) : undefined;
   const connectionId = row.binding?.id ?? row.server?.id ?? row.id;
   const by = who(row.createdBy);
+  const view = row.view;
+  const stateMessage = view ? view.state.message : failure;
   return (
     <SettingsContainer>
       <NameRow row={row} />
@@ -93,6 +96,16 @@ function Overview({ row, factoryId }: { row: ConnectionRow; factoryId: string })
           {row.account?.detail && <span className="text-meta text-muted-foreground truncate">{row.account.detail}</span>}
         </span>
       </SettingsRow>
+      {view?.method && (
+        <SettingsRow label={t('connections.connector.method')}>
+          <span className="text-body-sm text-foreground">{view.method}</span>
+        </SettingsRow>
+      )}
+      {view?.dependents && (
+        <SettingsRow label={t('connections.connector.dependents')}>
+          <span className="text-body-sm text-foreground">{view.dependents}</span>
+        </SettingsRow>
+      )}
       <SettingsRow label={t('connections.detail.created')}>
         <span className="text-body-sm text-foreground flex items-center gap-1.5">
           {row.createdAt ? <TimeAgo value={row.createdAt} /> : <span className="text-muted-foreground">{t('connections.detail.notRecorded')}</span>}
@@ -104,10 +117,14 @@ function Overview({ row, factoryId }: { row: ConnectionRow; factoryId: string })
           <TimeAgo value={health.checkedAt} className="text-body-sm text-foreground" />
         </SettingsRow>
       )}
-      <SettingsRow label={t('connections.detail.state')} description={failure}>
+      <SettingsRow label={t('connections.detail.state')} {...(stateMessage ? { description: stateMessage } : {})}>
         <span className="flex items-center gap-2">
           <HealthBadge row={row} />
-          {row.state !== 'ok' && row.state !== 'connected' && <span className="text-body-sm text-muted-foreground">{t(`connections.states.${row.state}`)}</span>}
+          {view ? (
+            view.state.tone !== 'ok' && <span className="text-body-sm text-muted-foreground">{view.state.label}</span>
+          ) : (
+            row.state !== 'ok' && row.state !== 'connected' && <span className="text-body-sm text-muted-foreground">{t(`connections.states.${row.state}`)}</span>
+          )}
         </span>
       </SettingsRow>
       <SettingsRow label={t('connections.detail.id')}>
@@ -207,15 +224,11 @@ export function ConnectionDetail({
         }
       : undefined);
   const sourceKind =
-    listed && (listed.kind === 'clickup' || listed.kind === 'github' || listed.kind === 'gitlab')
-      ? listed.kind
-      : id === 'clickup' || id === 'github' || id === 'gitlab'
-        ? id
-        : undefined;
+    listed && (listed.kind === 'clickup' || listed.kind === 'gitlab') ? listed.kind : id === 'clickup' || id === 'gitlab' ? id : undefined;
 
   if (!row && sourceKind) {
     // An organization-wide source not connected yet (from its connect step or an old link): its own controls.
-    return <Plain>{sourceKind === 'clickup' ? <ClickUpService /> : sourceKind === 'github' ? <GitHubService /> : <GitLabService />}</Plain>;
+    return <Plain>{sourceKind === 'clickup' ? <ClickUpService /> : <GitLabService />}</Plain>;
   }
   if (!row) {
     return (
@@ -251,14 +264,20 @@ export function ConnectionDetail({
     editor('config')
   ) : sourceKind === 'clickup' ? (
     <ClickUpService />
-  ) : sourceKind === 'github' ? (
-    <GitHubService />
   ) : sourceKind === 'gitlab' ? (
     <GitLabService />
   ) : null;
 
   const tabs: Array<{ value: DetailTab; content: ReactNode }> = [
-    { value: 'overview', content: <Overview row={row} factoryId={factoryId} /> },
+    {
+      value: 'overview',
+      content: (
+        <>
+          <Overview row={row} factoryId={factoryId} />
+          {row.view && <ConnectorDetailSections id={row.view.id} />}
+        </>
+      ),
+    },
     ...(server ? [{ value: 'activity' as const, content: <ConnectionActivity factoryId={factoryId} serverId={server.id} heading={false} /> }] : []),
     ...(server && !row.managed ? [{ value: 'access' as const, content: editor('access') }] : []),
     ...(server ? [{ value: 'tools' as const, content: editor('tools') }] : []),

@@ -9,3 +9,4 @@ export * from './reconciliation-config.ts';
 export * from './subscription-session.ts';
 export * from './observability-tools.ts';
 export * from './conversation/index.ts';
+export * from './connections.ts';

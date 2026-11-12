@@ -53,9 +53,11 @@ export const queryKeys = {
     ['factory', 'sandbox-envs', factoryProjectId ?? null] as const,
   factorySandboxEnvFiles: (factoryProjectId: string | undefined) =>
     ['factory', 'sandbox-env-files', factoryProjectId ?? null] as const,
+  connections: (factoryProjectId: string) => ['connections', 'list', factoryProjectId] as const,
+  connectors: () => ['connections', 'connectors'] as const,
+  connectionDetail: (id: string) => ['connections', 'detail', id] as const,
+  connectionImpact: (id: string) => ['connections', 'impact', id] as const,
   githubStatus: () => ['github', 'status'] as const,
-  githubConnections: () => ['github', 'connections'] as const,
-  githubConnectionUsage: (id: string) => ['github', 'connections', id, 'usage'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (projectRepositoryIds: readonly string[], label?: string) =>

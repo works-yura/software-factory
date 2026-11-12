@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
+import type { ConnectionsListResponse, ConnectionView, ConnectorView } from '@factory/contracts';
+
 import type { FirebaseState } from '../../../services/firebase';
 import type { McpServer } from '../../../services/mcpServers';
 import { ConnectionsPageHeader } from '../../connections/ConnectionsPageHeader';
@@ -41,10 +43,61 @@ export const managedServer: McpServer = {
 };
 
 /**
- * The integrations' state around the MCP servers a test brings: one Google Cloud binding (or
- * none), ClickUp connected, GitHub through a token from the environment (the App available), GitLab not set up, no activity.
+ * A connector the UI has never heard of. Two ways in: an API key form, and a sign-in redirect the
+ * server says is unavailable here. Proves the page holds no provider knowledge.
  */
-export function useIntegrationHandlers(options: { firebase?: FirebaseState } = {}) {
+export const acmeConnector: ConnectorView = {
+  id: 'acme',
+  name: 'Acme Cloud',
+  icon: 'acme',
+  description: 'Tickets from Acme projects.',
+  category: 'sources',
+  provides: [{ key: 'tasks', label: 'Tickets' }],
+  capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true },
+  methods: [
+    {
+      id: 'key',
+      label: 'API key',
+      description: 'A key from Acme’s settings.',
+      authKind: 'apiKey',
+      fields: [{ name: 'key', displayName: 'Acme API key', type: 'secret', description: 'Starts with acme_.', required: true }],
+      submitLabel: 'Connect Acme',
+      available: true,
+    },
+    { id: 'sso', label: 'Sign in with Acme', authKind: 'oauth', available: { reason: 'Acme sign-in is off on this server.' } },
+  ],
+};
+
+export const acmeConnection: ConnectionView = {
+  id: 'acme:main',
+  connector: { id: 'acme', name: 'Acme Cloud', icon: 'acme' },
+  label: 'Acme main',
+  status: 'active',
+  displayName: 'Acme main',
+  accountLabel: 'acme-team',
+  accountDetail: 'Team',
+  method: 'API key',
+  provides: [{ key: 'tasks', label: 'Tickets' }],
+  state: { tone: 'ok', label: 'Live' },
+  scope: 'organization',
+  createdAt: '2026-11-01T10:00:00.000Z',
+  dependents: 'Used by 2 Factories',
+  actions: {
+    rename: true,
+    reconnect: { method: { ...acmeConnector.methods[0]!, submitLabel: 'Replace key' } },
+    remove: true,
+    manageExternally: { reason: 'Acme has no console for keys.' },
+  },
+};
+
+/**
+ * The integrations' state around the MCP servers a test brings: one Google Cloud binding (or
+ * none), ClickUp connected, GitLab not set up, one connection of a FAKE server connector (Acme Cloud —
+ * the page must render it from the server's descriptors alone), no activity.
+ */
+export function useIntegrationHandlers(
+  options: { firebase?: FirebaseState; connections?: ConnectionsListResponse; connectors?: ConnectorView[] } = {},
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'syncts', repositories: [] }] }),
@@ -56,25 +109,8 @@ export function useIntegrationHandlers(options: { firebase?: FirebaseState } = {
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({ config: { github: { enabled: false, sourceIds: null }, gitlab: { enabled: false, sourceIds: null }, clickup: { enabled: true, sourceIds: null } } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
-      HttpResponse.json({
-        enabled: true,
-        appConfigured: true,
-        canManage: true,
-        connected: true,
-        installations: [{ id: 'inst-env', installationId: 4242, accountLogin: 'yura', accountType: 'User', kind: 'token', tokenSource: 'env' }],
-        reason: 'ready',
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/connections`, () =>
-      HttpResponse.json({
-        appConfigured: true,
-        canManage: true,
-        connections: [
-          { id: 'inst-env', kind: 'token', tokenSource: 'env', installationId: 4242, accountLogin: 'yura', accountType: 'User', repositoryCount: 7, status: 'ok' },
-        ],
-      }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/connections`, () => HttpResponse.json(options.connections ?? { connections: [acmeConnection], failures: [], copy: { organizationWide: 'Whole organization' } })),
+    http.get(`${TEST_BASE_URL}/web/connections/methods`, () => HttpResponse.json({ connectors: options.connectors ?? [acmeConnector] })),
     http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' })),
     http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/projects`, () => HttpResponse.json({ items: [{ value: 'syncta-57c6a' }] })),
     http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/databases`, () => HttpResponse.json({ items: [{ value: '(default)' }] })),

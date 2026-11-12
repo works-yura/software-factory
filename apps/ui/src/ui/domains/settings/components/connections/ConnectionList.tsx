@@ -3,36 +3,43 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Table } from '@mastra/playground-ui/components/Table';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { ArrowUpRight, Ellipsis, Pencil, RefreshCw, Trash2, Unlink } from 'lucide-react';
+import { ArrowUpRight, Ellipsis, ExternalLink, Pencil, RefreshCw, Trash2, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-
 import { useApiConfig } from '../../../../../api/config';
-import { queryKeys } from '../../../../../api/keys';
 import { useClickUpConnectionMutations, useClickUpUsageQuery } from '../../../../../hooks/useClickUp';
+import { useReconnect, useUnlinkConnection, useUpdateConnection } from '../../../../../hooks/useConnections';
 import { useFactoriesQuery } from '../../../../../hooks/useFactories';
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
 import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
+import { connectionNavigation, connectionRedirectUrl } from '../../connections/api';
 import { connectionHealth } from '../../connections/connections';
-import { GITHUB_TOKEN_ITEM } from '../../connections/connections';
-import type { ConnectionRow, ConnectionSources, OrgActionBlock } from '../../connections/connections';
-
-/** A connect step «Перепідключити» opens: ClickUp's, GitLab's, Google Cloud's, or GitHub's token. */
-export type ReconnectStep = 'clickup' | 'gitlab' | 'google-cloud' | typeof GITHUB_TOKEN_ITEM;
+import type { ConnectionKind, ConnectionRow, ConnectionSources, OrgActions } from '../../connections/connections';
 import type { FirebaseBinding, FirebaseBindingInput } from '../../services/firebase';
 import { serverToInput } from '../../services/mcpServers';
-import { manageGithubConnection, renameGithubInstallation } from '../../../workspaces/services/github';
-import { RemoveGithubConnectionDialog } from './RemoveGithubConnectionDialog';
 import { RemoveAccountDialog } from '../GoogleCloudService';
 import { mcpErrorText } from '../mcp-servers/McpServerInspect';
-import { CapabilityDots, useConnectionDots } from './CapabilityDots';
+import type { Step } from './AddConnectionDialog';
+import { CapabilityDots, serverDots, useConnectionDots } from './CapabilityDots';
 import { ConfirmDialog, RenameDialog } from './ConnectionDialogs';
 import { ConnectionIcon } from './ConnectionIcon';
+import { RemoveConnectionDialog } from './RemoveConnectionDialog';
 import { TimeAgo } from './TimeAgo';
+
+/** A connect step «Перепідключити» opens: a first-party kind's, or a server connection's (`reconnect:<id>`). */
+export type ReconnectStep = Step;
+
+/** The integration's name and logo key for a row: the server's for a connector, the kind's otherwise. */
+export function useRowKind() {
+  const { t } = useTranslation('settings');
+  return (row: ConnectionRow) => ({
+    name: row.view ? row.view.connector.name : t(`connections.kinds.${row.kind as ConnectionKind}`),
+    icon: row.view ? row.view.connector.icon : row.kind,
+  });
+}
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -48,12 +55,7 @@ export function useRenameConnection() {
   const mcp = useMcpServerMutations();
   const firebase = useFirebaseMutations();
   const clickup = useClickUpConnectionMutations();
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const github = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => renameGithubInstallation(baseUrl, id, name),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
-  });
+  const update = useUpdateConnection();
   const rename = (row: ConnectionRow, name: string, onDone?: () => void) => {
     const options = {
       onSuccess: () => {
@@ -62,24 +64,31 @@ export function useRenameConnection() {
       },
       onError: (error: unknown) => toast.error(errorMessage(error)),
     };
-    if (row.rename === 'binding' && row.binding) firebase.saveBinding.mutate({ ...bindingInput(row.binding), name, id: row.binding.id }, options);
+    if (row.view) update.mutate({ id: row.view.id, label: name }, options);
+    else if (row.rename === 'binding' && row.binding) firebase.saveBinding.mutate({ ...bindingInput(row.binding), name, id: row.binding.id }, options);
     else if (row.rename === 'server' && row.server) mcp.save.mutate({ ...serverToInput(row.server), label: name, id: row.server.id }, options);
     else if (row.rename === 'clickup') clickup.rename.mutate(name, options);
-    else if (row.rename === 'github' && row.installationId) github.mutate({ id: row.installationId, name }, options);
   };
-  return { rename, pending: mcp.save.isPending || firebase.saveBinding.isPending || clickup.rename.isPending || github.isPending };
+  return {
+    rename,
+    pending: mcp.save.isPending || firebase.saveBinding.isPending || clickup.rename.isPending || update.isPending,
+  };
 }
 
 /** A row's state, said only when something needs attention: a dot and a word. */
 export function AttentionMark({ row }: { row: ConnectionRow }) {
   const { t } = useTranslation('settings');
-  const health = connectionHealth(row.state);
+  const health = row.view ? row.view.state.tone : connectionHealth(row.state);
   if (health === 'ok' || health === 'idle') return null;
-  const failure = row.server?.health && health === 'error' ? mcpErrorText(t, row.server.health.errorKind, row.server.health.error) : undefined;
+  const failure = row.view
+    ? row.view.state.message
+    : row.server?.health && health === 'error'
+      ? mcpErrorText(t, row.server.health.errorKind, row.server.health.error)
+      : undefined;
   return (
-    <span className="text-meta text-muted-foreground flex shrink-0 items-center gap-1.5" title={failure} data-state={row.state}>
+    <span className="text-meta text-muted-foreground flex shrink-0 items-center gap-1.5" title={failure} data-state={row.view?.state.tone ?? row.state}>
       <span aria-hidden className={`inline-block size-1.5 rounded-full ${health === 'error' ? 'bg-red-500' : 'bg-amber-500'}`} />
-      {t(`connections.states.${row.state}`)}
+      {row.view ? row.view.state.label : t(`connections.states.${row.state}`)}
     </span>
   );
 }
@@ -87,7 +96,7 @@ export function AttentionMark({ row }: { row: ConnectionRow }) {
 /** The health badge a connection's header carries: «Активне», «Помилка», «Потребує уваги», «Не перевірено». */
 export function HealthBadge({ row }: { row: ConnectionRow }) {
   const { t } = useTranslation('settings');
-  const health = connectionHealth(row.state);
+  const health = row.view ? row.view.state.tone : connectionHealth(row.state);
   const variant = health === 'ok' ? 'success' : health === 'error' ? 'destructive' : health === 'warning' ? 'warning' : 'neutral';
   return (
     <Badge size="sm" variant={variant} emphasis="subtle">
@@ -96,33 +105,116 @@ export function HealthBadge({ row }: { row: ConnectionRow }) {
   );
 }
 
-export type PendingAction = { kind: 'rename' | 'unlink' | 'delete' | 'delete-account' | 'remove-org'; row: ConnectionRow };
+export type PendingAction = {
+  kind: 'rename' | 'unlink' | 'delete' | 'delete-account' | 'remove-org' | 'remove-connector' | 'unlink-connector';
+  row: ConnectionRow;
+};
 
 /**
  * A menu item an organization connection cannot take here: the item stays disabled (dimmed by the
  * kit), and the reason is a separate line under it at normal muted contrast, read out as the item's
  * description — so it is legible, not dimmed with the item.
  */
-function BlockedItem({ icon: Icon, label, reason, variant }: { icon: LucideIcon; label: string; reason: OrgActionBlock; variant?: 'destructive' }) {
-  const { t } = useTranslation('settings');
+function BlockedItem({ icon: Icon, label, reason, variant }: { icon: LucideIcon; label: string; reason: string; variant?: 'destructive' }) {
   const reasonId = useId();
   return (
     <>
-      <DropdownMenu.Item disabled {...(variant ? { variant } : {})} data-blocked={reason} aria-describedby={reasonId}>
+      <DropdownMenu.Item disabled {...(variant ? { variant } : {})} data-blocked aria-describedby={reasonId}>
         <Icon aria-hidden />
         {label}
       </DropdownMenu.Item>
       <div id={reasonId} role="none" className="text-meta text-muted-foreground -mt-1 pr-2 pb-1.5 pl-8 whitespace-normal">
-        {t(`connections.blocks.${reason}`)}
+        {reason}
       </div>
     </>
   );
 }
 
 /**
- * ClickUp, GitHub and GitLab belong to the organization: their menu renames, reconnects and removes
- * the organization's connection. An action the credential's home decides elsewhere (the server's
- * environment, GitHub, Mastra Platform) stays in the menu, disabled, saying where.
+ * The menu of a connection the server describes: each action the server lists, enabled or — with
+ * the server's reason under it — disabled. «Перепідключити» starts a redirect method at once and
+ * opens a form method in «Додати підключення».
+ */
+function ConnectorRowActions({
+  row,
+  onOpen,
+  onPending,
+  onReconnect,
+}: {
+  row: ConnectionRow;
+  onOpen: () => void;
+  onPending: (pending: PendingAction) => void;
+  onReconnect: (step: ReconnectStep) => void;
+}) {
+  const { t } = useTranslation('settings');
+  const { baseUrl } = useApiConfig();
+  const reconnect = useReconnect();
+  const view = row.view!;
+  const { actions } = view;
+  const startReconnect = () => {
+    const action = actions.reconnect;
+    if (!action || !('method' in action)) return;
+    if ((action.method.fields ?? []).length > 0) {
+      onReconnect(`reconnect:${view.id}`);
+      return;
+    }
+    reconnect.mutate(
+      { id: view.id, input: {} },
+      {
+        onSuccess: result => {
+          if (result.type === 'authorize') connectionNavigation.assign(connectionRedirectUrl(baseUrl, result.url));
+        },
+        onError: error => toast.error(errorMessage(error)),
+      },
+    );
+  };
+  const item = (
+    action: true | { reason: string } | undefined,
+    icon: LucideIcon,
+    label: string,
+    onSelect: () => void,
+    variant?: 'destructive',
+  ) => {
+    if (!action) return null;
+    if (action !== true) return <BlockedItem icon={icon} label={label} reason={action.reason} {...(variant ? { variant } : {})} />;
+    const Icon = icon;
+    return (
+      <DropdownMenu.Item onSelect={onSelect} {...(variant ? { variant } : {})}>
+        <Icon aria-hidden />
+        {label}
+      </DropdownMenu.Item>
+    );
+  };
+  const reconnectAction = actions.reconnect ? ('method' in actions.reconnect ? true : actions.reconnect) : undefined;
+  const manage = actions.manageExternally;
+  return (
+    <DropdownMenu.Content align="end" className="w-72">
+      <DropdownMenu.Item onSelect={onOpen}>
+        <ArrowUpRight aria-hidden />
+        {t('connections.actions.open')}
+      </DropdownMenu.Item>
+      {item(actions.rename, Pencil, t('connections.actions.rename'), () => onPending({ kind: 'rename', row }))}
+      {item(reconnectAction, RefreshCw, t('connections.actions.reconnect'), startReconnect)}
+      {manage &&
+        ('url' in manage ? (
+          <DropdownMenu.Item onSelect={() => window.open(manage.url, '_blank', 'noopener')}>
+            <ExternalLink aria-hidden />
+            {manage.label}
+          </DropdownMenu.Item>
+        ) : (
+          <BlockedItem icon={ExternalLink} label={t('connections.connector.manage')} reason={manage.reason} />
+        ))}
+      {item(actions.unlink, Unlink, t('connections.actions.unlink'), () => onPending({ kind: 'unlink-connector', row }))}
+      {(actions.remove || actions.unlink) && <DropdownMenu.Separator />}
+      {item(actions.remove, Trash2, t('connections.actions.deleteConnection'), () => onPending({ kind: 'remove-connector', row }), 'destructive')}
+    </DropdownMenu.Content>
+  );
+}
+
+/**
+ * ClickUp and GitLab belong to the organization: their menu renames, reconnects and removes the
+ * organization's connection. An action the credential's home decides elsewhere (the server's
+ * environment, Mastra Platform) stays in the menu, disabled, saying where.
  */
 function OrgRowActions({
   row,
@@ -136,15 +228,9 @@ function OrgRowActions({
   onReconnect: (step: ReconnectStep) => void;
 }) {
   const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
   const actions = row.orgActions!;
-  // GitHub: the App is re-authorized on GitHub, a stored token is replaced in its token step.
-  const reconnect = () =>
-    row.kind === 'github'
-      ? row.githubAuth === 'token'
-        ? onReconnect(GITHUB_TOKEN_ITEM)
-        : manageGithubConnection(baseUrl)
-      : onReconnect(row.kind as ReconnectStep);
+  const reconnect = () => onReconnect(row.kind as ReconnectStep);
+  const blocked = (reason: Exclude<OrgActions[keyof OrgActions], true>) => t(`connections.blocks.${reason}`);
   return (
     <DropdownMenu.Content align="end" className="w-72">
       <DropdownMenu.Item onSelect={onOpen}>
@@ -157,7 +243,7 @@ function OrgRowActions({
           {t('connections.actions.rename')}
         </DropdownMenu.Item>
       ) : (
-        <BlockedItem icon={Pencil} label={t('connections.actions.rename')} reason={actions.rename} />
+        <BlockedItem icon={Pencil} label={t('connections.actions.rename')} reason={blocked(actions.rename)} />
       )}
       {actions.reconnect === true ? (
         <DropdownMenu.Item onSelect={reconnect}>
@@ -165,7 +251,7 @@ function OrgRowActions({
           {t('connections.actions.reconnect')}
         </DropdownMenu.Item>
       ) : (
-        <BlockedItem icon={RefreshCw} label={t('connections.actions.reconnect')} reason={actions.reconnect} />
+        <BlockedItem icon={RefreshCw} label={t('connections.actions.reconnect')} reason={blocked(actions.reconnect)} />
       )}
       <DropdownMenu.Separator />
       {actions.remove === true ? (
@@ -174,7 +260,7 @@ function OrgRowActions({
           {t('connections.actions.deleteConnection')}
         </DropdownMenu.Item>
       ) : (
-        <BlockedItem icon={Trash2} label={t('connections.actions.deleteConnection')} reason={actions.remove} variant="destructive" />
+        <BlockedItem icon={Trash2} label={t('connections.actions.deleteConnection')} reason={blocked(actions.remove)} variant="destructive" />
       )}
     </DropdownMenu.Content>
   );
@@ -182,29 +268,6 @@ function OrgRowActions({
 
 /** «Видалити підключення» for ClickUp: the token goes for the whole organization; what stops is counted from the Factories' routes. */
 function RemoveOrgConnection({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
-  if (row.kind === 'github') return <RemoveGithubConnection row={row} onClose={onClose} />;
-  return <RemoveClickUp row={row} onClose={onClose} />;
-}
-
-/**
- * «Видалити підключення» for one GitHub connection: the organization's App installation or token
- * goes. The dialog first says which Factories and repositories depend on it and what happens to
- * each (moves to another connection, or is unlinked), then deletes on confirmation.
- */
-function RemoveGithubConnection({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
-  const { t } = useTranslation('settings');
-  return (
-    <RemoveGithubConnectionDialog
-      id={row.installationId!}
-      name={row.title}
-      onClose={onClose}
-      onRemoved={() => toast.success(t('connections.removeOrg.done'))}
-    />
-  );
-}
-
-/** «Видалити підключення» for ClickUp: the token goes for the whole organization; what stops is counted from the Factories' routes. */
-function RemoveClickUp({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
   const { t } = useTranslation('settings');
   const usage = useClickUpUsageQuery(true);
   const { disconnect } = useClickUpConnectionMutations();
@@ -239,7 +302,7 @@ function RemoveClickUp({ row, onClose }: { row: ConnectionRow; onClose: () => vo
 
 /**
  * The «⋯» menu: rename, reconnect, unlink from this Factory, and — after a separator — delete,
- * as far as the row's kind allows. ClickUp, GitHub and GitLab are the organization's: only «Відкрити».
+ * as far as the row's kind allows. Organization connections and server connectors have menus of their own.
  */
 export function RowActions({
   row,
@@ -272,7 +335,9 @@ export function RowActions({
       >
         <Ellipsis aria-hidden />
       </DropdownMenu.Trigger>
-      {row.orgActions ? (
+      {row.view ? (
+        <ConnectorRowActions row={row} onOpen={onOpen} onPending={onPending} onReconnect={onReconnect} />
+      ) : row.orgActions ? (
         <OrgRowActions row={row} onOpen={onOpen} onPending={onPending} onReconnect={onReconnect} />
       ) : (
       <DropdownMenu.Content align="end" className="w-60">
@@ -344,6 +409,7 @@ export function PendingDialog({
   const mcp = useMcpServerMutations();
   const firebase = useFirebaseMutations();
   const { rename, pending: renaming } = useRenameConnection();
+  const unlink = useUnlinkConnection();
   const factories = useFactoriesQuery().data ?? [];
   const { row } = pending;
   const done = (message: string) => ({
@@ -355,6 +421,29 @@ export function PendingDialog({
   });
 
   if (pending.kind === 'remove-org') return <RemoveOrgConnection row={row} onClose={onClose} />;
+  if (pending.kind === 'remove-connector' && row.view) return <RemoveConnectionDialog id={row.view.id} onClose={onClose} />;
+  if (pending.kind === 'unlink-connector' && row.view) {
+    const id = row.view.id;
+    return (
+      <ConfirmDialog
+        title={t('connections.unlink.title', { name: row.title })}
+        body={t('connections.unlink.bindingBody')}
+        confirm={t('connections.unlink.confirm')}
+        cancel={t('connections.unlink.cancel')}
+        pending={unlink.isPending}
+        onClose={onClose}
+        onConfirm={() =>
+          unlink.mutate(id, {
+            onSuccess: result => {
+              toast.success(result.message);
+              onClose();
+            },
+            onError: error => toast.error(errorMessage(error)),
+          })
+        }
+      />
+    );
+  }
   if (pending.kind === 'rename') {
     return <RenameDialog name={row.title} pending={renaming} onClose={onClose} onSave={name => rename(row, name, onClose)} />;
   }
@@ -410,11 +499,12 @@ export function PendingDialog({
 
 /** Integration: the logo in its 32px slot and the integration's name. */
 function IntegrationCell({ row }: { row: ConnectionRow }) {
-  const { t } = useTranslation('settings');
+  const kindOf = useRowKind();
+  const kind = kindOf(row);
   return (
     <span className="flex min-w-0 items-center gap-2.5">
-      <ConnectionIcon kind={row.kind} />
-      <span className="text-foreground truncate">{t(`connections.kinds.${row.kind}`)}</span>
+      <ConnectionIcon kind={kind.icon} />
+      <span className="text-foreground truncate">{kind.name}</span>
     </span>
   );
 }
@@ -440,14 +530,18 @@ export function ConnectionList({
   canEditMcp: boolean;
   hrefOf: (id: string) => string;
   onOpen: (id: string) => void;
-  /** «Перепідключити» ClickUp or GitLab: their connect step in «Додати підключення». */
+  /** «Перепідключити» with a form: the connect step in «Додати підключення». */
   onReconnect: (step: ReconnectStep) => void;
 }) {
   const { t } = useTranslation('settings');
-  const dots = useConnectionDots();
+  const connectionDots = useConnectionDots();
+  const dots = (row: ConnectionRow) => (row.view ? serverDots(row.view.provides) : connectionDots(row.capabilities));
+  const kindOf = useRowKind();
+  const organizationWide = sources.connections?.copy.organizationWide;
   const isMobile = useIsMobile(640);
   const [pending, setPending] = useState<PendingAction>();
-  const accountOf = (row: ConnectionRow) => row.account?.name ?? (row.scope === 'organization' ? t('connections.organizationWide') : '—');
+  const accountOf = (row: ConnectionRow) =>
+    row.account?.name ?? (row.scope === 'organization' ? (row.view && organizationWide ? organizationWide : t('connections.organizationWide')) : '—');
 
   return (
     <>
@@ -455,7 +549,7 @@ export function ConnectionList({
         <ul aria-label={t('connections.listLabel')} className="bg-surface-panel shadow-raised flex flex-col gap-px rounded-xl p-1">
           {rows.map(row => (
             <li key={row.id} data-testid="connection-row" className="hover:bg-fill-subtle relative flex items-start gap-2.5 rounded-lg px-2 py-2">
-              <ConnectionIcon kind={row.kind} />
+              <ConnectionIcon kind={kindOf(row).icon} />
               <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <Link to={hrefOf(row.id)} className="text-body-sm text-foreground flex min-h-8 items-center gap-2 after:absolute after:inset-0">
                   <span className="truncate">{row.title}</span>
@@ -466,10 +560,10 @@ export function ConnectionList({
                   )}
                 </Link>
                 <span className="text-meta text-muted-foreground truncate">
-                  {t(`connections.kinds.${row.kind}`)} · {accountOf(row)}
+                  {kindOf(row).name} · {accountOf(row)}
                 </span>
                 <span className="flex flex-wrap items-center gap-2">
-                  <CapabilityDots dots={dots(row.capabilities)} />
+                  <CapabilityDots dots={dots(row)} />
                   <AttentionMark row={row} />
                 </span>
               </span>
@@ -514,7 +608,7 @@ export function ConnectionList({
                   <span title={row.account?.detail}>{accountOf(row)}</span>
                 </Table.Cell>
                 <Table.Cell>
-                  <CapabilityDots dots={dots(row.capabilities)} />
+                  <CapabilityDots dots={dots(row)} />
                 </Table.Cell>
                 <Table.Cell>{row.createdAt ? <TimeAgo value={row.createdAt} /> : <span className="text-muted-foreground">—</span>}</Table.Cell>
                 <Table.Cell align="end">
