@@ -18,6 +18,18 @@ const tk = translator('auth');
  * API client and `use-fs`.
  */
 
+/**
+ * The server could not check the session (its auth provider or database failed): 503
+ * `auth_unavailable`. Not "signed out" — the SPA shows an unavailable state with a retry, never the
+ * sign-in page.
+ */
+export class AuthUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthUnavailableError';
+  }
+}
+
 export interface FactoryAuthState {
   /** Whether the server has web auth configured (any provider). */
   authEnabled: boolean;
@@ -112,6 +124,9 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
   }
   if (res.status === 401 || res.status === 403) {
     return { authEnabled: true, authenticated: false };
+  }
+  if (res.status === 503) {
+    throw new AuthUnavailableError(tk('errors.authUnavailable'));
   }
   if (!res.ok) {
     throw new Error(tk('errors.authCheckFailed', { status: res.status }));

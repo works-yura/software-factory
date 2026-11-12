@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  AUTH_UNAVAILABLE_BODY,
   FACTORY_INTERACTIVE_KEY,
   createFactoryInteractiveMarker,
   ensureFactoryAuthUser,
@@ -356,14 +357,56 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('treats a thrown provider error as unauthenticated and logs it', async () => {
+  it('answers 503 auth_unavailable, not 401, when the provider cannot check the session, and logs it', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    mockAuthenticate.mockRejectedValue(new Error('boom'));
+    mockAuthenticate.mockRejectedValue(new Error('db down'));
     const { app } = buildApp();
 
     const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('5');
+    expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('sso-fake could not check the session of GET /web/projects'),
+      expect.any(Error),
+    );
+    error.mockRestore();
+  });
+
+  it('serves a self-reloading 503 page instead of the sign-in redirect to a browser navigation', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockAuthenticate.mockRejectedValue(new Error('db down'));
+    const { app } = buildApp();
+
+    const res = await app.request('/factories/f1', { headers: { Accept: 'text/html' } });
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Location')).toBeNull();
+    expect(res.headers.get('Content-Type')).toContain('text/html');
+    expect(await res.text()).toContain('http-equiv="refresh"');
+    error.mockRestore();
+  });
+
+  it('still answers 401 for a missing session (the provider returned null)', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
+
     expect(res.status).toBe(401);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('sso-fake failed to authenticate GET /web/projects'), expect.any(Error));
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+  });
+
+  it('/auth/me answers 503 auth_unavailable when the provider cannot check the session', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockAuthenticate.mockRejectedValue(new Error('db down'));
+    const { app } = buildApp();
+
+    const res = await app.request('/auth/me');
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
     error.mockRestore();
   });
 
@@ -878,7 +921,7 @@ describe('org-tenant identity', () => {
     const me = await app.request('/auth/me');
 
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: 'auth_unavailable' });
+    expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
     expect(handler).not.toHaveBeenCalled();
     expect(me.status).toBe(503);
     expect(error).toHaveBeenCalledWith(expect.stringContaining('user user_err'), expect.any(Error));
@@ -904,12 +947,39 @@ describe('isOrganizationAdmin', () => {
     expect(mockIsOrganizationAdmin).toHaveBeenCalledWith('org_a', 'user_1');
   });
 
-  it('denies and logs when the provider check fails', async () => {
+  it('answers 503 auth_unavailable and logs when the provider check fails', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockIsOrganizationAdmin.mockRejectedValue(new Error('db down'));
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', organizationId: 'org_a' });
+    const provider = activeProvider();
+    const app = new Hono();
+    app.get('/web/admin', async c => c.json({ admin: await isOrganizationAdmin(provider, c, 'org_a') }));
 
-    expect(await adminCheck()).toBe(false);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('user user_1 administers organization org_a'), expect.any(Error));
+    const res = await app.request('/web/admin');
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('user user_1 administers organization org_a (GET /web/admin)'),
+      expect.any(Error),
+    );
+    error.mockRestore();
+  });
+
+  it('a route resolving the user itself (ensureFactoryAuthUser) also answers 503 when the provider fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockAuthenticate.mockRejectedValue(new Error('db down'));
+    const provider = activeProvider();
+    const app = new Hono();
+    app.get('/web/thing', async c => {
+      const user = await ensureFactoryAuthUser(provider, c);
+      return user ? c.json({ ok: true }) : c.json({ error: 'unauthorized' }, 401);
+    });
+
+    const res = await app.request('/web/thing');
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
     error.mockRestore();
   });
 });

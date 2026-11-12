@@ -75,6 +75,29 @@ describe('Factory gate on the Google provider', () => {
     expect(await isAdmin(carol, orgId)).toBe(false);
   });
 
+  it('answers 503 auth_unavailable on /web/* and /auth/me (not 401) while memberships cannot be read', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const ada = await google.signIn(ADA);
+    await tenant(ada);
+    vi.setSystemTime(Date.now() + 61_000); // past the membership cache
+    const ctx = await google.auth.$context;
+    const findMany = vi.spyOn(ctx.adapter, 'findMany').mockRejectedValue(new Error('database is locked'));
+    const findOne = vi.spyOn(ctx.adapter, 'findOne').mockRejectedValue(new Error('database is locked'));
+
+    const res = await web('/web/whoami', ada);
+    const me = await app.request('/auth/me', { headers: { cookie: ada } });
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'auth_unavailable' });
+    expect(me.status).toBe(503);
+    expect(await me.json()).toMatchObject({ error: 'auth_unavailable' });
+
+    findMany.mockRestore();
+    findOne.mockRestore();
+    expect((await web('/web/whoami', ada)).status).toBe(200);
+    error.mockRestore();
+  });
+
   it('takes a removed member out of the organization on /web/* once the membership cache expires', async () => {
     const { orgId, ada, carol } = await organization();
     expect(await tenant(carol)).toMatchObject({ orgId });

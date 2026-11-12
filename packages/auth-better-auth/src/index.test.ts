@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import { memoryAdapter } from 'better-auth/adapters/memory';
 import { makeSignature } from 'better-auth/crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -377,9 +378,8 @@ describe('MastraAuthBetterAuth', () => {
         } as any,
       });
 
-      const result = await auth.authenticateToken('test-token', mockRawRequest());
+      await expect(auth.authenticateToken('test-token', mockRawRequest())).rejects.toThrow('db down');
 
-      expect(result).toBeNull();
       // The user's other membership is never consulted as a substitute.
       expect(findMany).not.toHaveBeenCalled();
       expect(error).toHaveBeenCalledWith(expect.stringContaining(`user ${mockUser.id} (active organization: org_chosen)`), expect.any(Error));
@@ -423,9 +423,7 @@ describe('MastraAuthBetterAuth', () => {
         } as any,
       });
 
-      const result = await auth.authenticateToken('test-token', mockRawRequest());
-
-      expect(result).toBeNull();
+      await expect(auth.authenticateToken('test-token', mockRawRequest())).rejects.toThrow('db down');
       expect(error).toHaveBeenCalledWith(expect.stringContaining(`user ${mockUser.id}`), expect.any(Error));
       error.mockRestore();
     });
@@ -441,7 +439,7 @@ describe('MastraAuthBetterAuth', () => {
       context.catch(() => {});
       const auth = new MastraAuthBetterAuth({ auth: { ...mockAuth, $context: context } as any });
 
-      expect(await auth.authenticateToken('', mockRawRequest())).toBeNull();
+      await expect(auth.authenticateToken('', mockRawRequest())).rejects.toThrow('db unreachable');
       error.mockRestore();
       warn.mockRestore();
     });
@@ -457,18 +455,27 @@ describe('MastraAuthBetterAuth', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null and log when getSession throws an error', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      mockAuth.api.getSession.mockRejectedValue(new Error('Session expired'));
+    it('throws and logs when getSession fails (the host answers 503, not sign-in)', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockAuth.api.getSession.mockRejectedValue(new Error('database is locked'));
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      const result = await auth.authenticateToken('expired-token', mockRawRequest());
 
-      expect(result).toBeNull();
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Could not verify the session'), expect.any(Error));
-      warn.mockRestore();
+      await expect(auth.authenticateToken('a-token', mockRawRequest())).rejects.toThrow('database is locked');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('Could not read the session'), expect.any(Error));
+      error.mockRestore();
+    });
+
+    it('should return null when better-auth rejects the session itself (4xx)', async () => {
+      mockAuth.api.getSession.mockRejectedValue(new APIError('UNAUTHORIZED', { message: 'Session expired' }));
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+
+      expect(await auth.authenticateToken('expired-token', mockRawRequest())).toBeNull();
     });
 
     it('should return null when session is missing user', async () => {
@@ -641,6 +648,7 @@ describe('MastraAuthBetterAuth', () => {
           secret,
           authCookies: { sessionToken: { name: 'better-auth.session_token' } },
           internalAdapter: { findUserById: vi.fn() },
+          adapter: { findMany: vi.fn(async () => []) },
         }),
       };
       authWithContext.api.getSession.mockResolvedValue({
@@ -668,6 +676,7 @@ describe('MastraAuthBetterAuth', () => {
           secret,
           authCookies: { sessionToken: { name: 'better-auth.session_token' } },
           internalAdapter: { findUserById: vi.fn() },
+          adapter: { findMany: vi.fn(async () => []) },
         }),
       };
       authWithContext.api.getSession.mockResolvedValue({
@@ -693,6 +702,7 @@ describe('MastraAuthBetterAuth', () => {
           secret,
           authCookies: { sessionToken: { name: '__Secure-better-auth.session_token' } },
           internalAdapter: { findUserById: vi.fn() },
+          adapter: { findMany: vi.fn(async () => []) },
         }),
       };
       authWithContext.api.getSession.mockResolvedValue({

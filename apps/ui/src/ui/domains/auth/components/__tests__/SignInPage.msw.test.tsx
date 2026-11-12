@@ -100,7 +100,7 @@ describe('SignInPage', () => {
     it.each([undefined, signedIn])(
       'stays on sign-in after a failed check and offers a retry (cache: %j)',
       async cachedAuth => {
-        server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 503 })));
+        server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 500 })));
         const router = renderCachedSignIn(cachedAuth);
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to check your sign-in status');
@@ -112,6 +112,14 @@ describe('SignInPage', () => {
         expect(router.state.location.pathname).toBe('/signin');
       },
     );
+  });
+
+  it('says Factory is unavailable (a server problem, not your sign-in) when /auth/me answers 503', async () => {
+    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json({ error: 'auth_unavailable' }, { status: 503 })));
+    renderSignIn();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('this is a server problem, not your sign-in');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
   it('renders the agent factory welcome message without a separate page header', async () => {

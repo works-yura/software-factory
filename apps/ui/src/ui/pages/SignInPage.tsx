@@ -5,7 +5,7 @@ import { Navigate, useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import { openGoogleSignIn, redirectToLogin, signInWithGoogle } from '../domains/auth/services/auth';
+import { AuthUnavailableError, openGoogleSignIn, redirectToLogin, signInWithGoogle } from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
 import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
@@ -108,7 +108,7 @@ export function SignInPage() {
             {auth.isError ? (
               <div role="alert" className="space-y-3">
                 <Txt as="p" variant="body" tone="muted">
-                  {t('failure.statusUnavailable')}
+                  {auth.error instanceof AuthUnavailableError ? t('guards.unavailableBody') : t('failure.statusUnavailable')}
                 </Txt>
                 <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
                   {t('failure.tryAgain')}

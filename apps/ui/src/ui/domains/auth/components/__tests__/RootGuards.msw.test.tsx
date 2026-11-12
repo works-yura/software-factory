@@ -107,12 +107,37 @@ describe('Factory session expiry', () => {
     await waitFor(() => expect(outage).toHaveBeenCalled());
     await waitForMutationsIdle(client);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    // 503 is "Factory unavailable", not "signed out": a banner over the page, the draft stays.
+    expect(await screen.findByRole('alert')).toHaveTextContent('Factory is temporarily unavailable');
     expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft);
     expect(draft).toHaveValue('Keep this draft');
 
     server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 401 })));
     returnToTab();
     expect(await screen.findByRole('alertdialog', { name: 'Session expired' })).toBeInTheDocument();
+  });
+
+  it('shows "temporarily unavailable" with a retry, not the sign-in page, when the first check answers 503', async () => {
+    let available = false;
+    server.use(
+      http.get(AUTH_ME_URL, () =>
+        available
+          ? HttpResponse.json(signedIn)
+          : HttpResponse.json({ error: 'auth_unavailable', message: 'Factory could not check your access right now.' }, { status: 503 }),
+      ),
+    );
+    const { router } = renderApp();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Factory is temporarily unavailable');
+    expect(alert).toHaveTextContent('this is a server problem, not your sign-in');
+    expect(router.state.location.pathname).toBe('/factories/factory-1/work');
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+
+    available = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('textbox', { name: 'Draft' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/factory-1/work');
   });
 
   it('sends an initially signed-out visitor to sign-in without an expiry dialog', async () => {

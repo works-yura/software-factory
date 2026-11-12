@@ -757,8 +757,10 @@ export class MastraAuthBetterAuth
    * are signed before being passed to Better Auth as a session cookie,
    * matching the bearer plugin's semantics.
    *
-   * A session whose organizations cannot be read is refused (null, logged):
-   * the request must not run in another organization than the one asked for.
+   * `null` means no valid session. When the session or the user's
+   * organizations cannot be read (database down), it logs and throws instead:
+   * the host answers 503 rather than sending the person to sign in, and the
+   * request never runs in another organization than the one asked for.
    *
    * @param token - The bearer token (session token) to authenticate
    * @param request - The request containing headers
@@ -785,8 +787,10 @@ export class MastraAuthBetterAuth
         headers,
       });
     } catch (error) {
-      console.warn('[BetterAuth] Could not verify the session; the request is treated as signed out.', error);
-      return null;
+      // better-auth rejecting the session itself (4xx) is "not signed in".
+      if (error instanceof APIError && error.statusCode < 500) return null;
+      console.error('[BetterAuth] Could not read the session; the request cannot be authenticated now.', error);
+      throw error;
     }
 
     if (!result || !result.session || !result.user) {
@@ -815,7 +819,7 @@ export class MastraAuthBetterAuth
           'the request is refused instead of running in another organization.',
         error,
       );
-      return null;
+      throw error;
     }
 
     return {

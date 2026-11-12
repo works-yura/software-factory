@@ -251,25 +251,76 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
 }
 
 /**
- * Resolve the authenticated user for a request via the provider. Never throws:
- * ordinary invalid/expired sessions resolve to `null`, and so does a provider
- * that throws (fail closed: signed out), with the error logged.
+ * The auth provider could not answer (its database or identity service failed),
+ * which is not the same as "signed out": requests are refused with 503
+ * {@link AUTH_UNAVAILABLE_BODY}, never sent to sign in. Providers signal it by
+ * throwing from `authenticateToken`, `ensureOrganization` or
+ * `isOrganizationAdmin`; a missing or invalid session is `null`, not a throw.
+ */
+export class AuthUnavailableError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'AuthUnavailableError';
+  }
+}
+
+/** What every 503 for an unavailable auth provider answers (gate, `/auth/me`, routes). */
+export const AUTH_UNAVAILABLE_BODY = {
+  error: 'auth_unavailable',
+  message: 'Factory could not check your access right now. Try again in a moment.',
+} as const;
+
+const AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS = '5';
+
+function authUnavailableResponse(): Response {
+  return Response.json(AUTH_UNAVAILABLE_BODY, {
+    status: 503,
+    headers: { 'Retry-After': AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS },
+  });
+}
+
+/**
+ * A browser opening a page gets a small page instead of JSON; it reloads itself, and the SPA's
+ * own unavailable screen takes over once the page loads.
+ */
+function authUnavailablePage(): Response {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="${AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS}"><title>Factory</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:20vh auto;padding:0 1rem"><h1>Factory тимчасово недоступна</h1><p>Не вдалося перевірити ваш доступ. Сторінка оновиться сама.</p><p lang="en">Factory could not check your access right now. This page reloads by itself.</p></body></html>`;
+  return new Response(html, {
+    status: 503,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS },
+  });
+}
+
+function authUnavailableException(error: AuthUnavailableError): HTTPException {
+  return new HTTPException(503, { res: authUnavailableResponse(), cause: error });
+}
+
+function describeRequest(raw: Request): string {
+  return `${raw.method} ${new URL(raw.url).pathname}`;
+}
+
+/**
+ * Resolve the authenticated user for a request via the provider: `null` for a
+ * missing or invalid session. A provider that throws could not check the
+ * session at all — logged with the request and thrown as
+ * {@link AuthUnavailableError} (503), never read as signed out.
  */
 async function authenticateRequest(
   provider: IMastraAuthProvider,
   token: string,
   raw: Request,
 ): Promise<FactoryAuthUser | null> {
+  let result: unknown;
   try {
-    const result = await provider.authenticateToken(token, raw);
-    return toFactoryAuthUser(result);
+    result = await provider.authenticateToken(token, raw);
   } catch (error) {
     console.error(
-      `[auth] Provider ${provider.name ?? 'unknown'} failed to authenticate ${raw.method} ${new URL(raw.url).pathname}; the request is treated as signed out.`,
+      `[auth] Provider ${provider.name ?? 'unknown'} could not check the session of ${describeRequest(raw)}; answering 503 auth_unavailable.`,
       error,
     );
-    return null;
+    throw new AuthUnavailableError(`Provider ${provider.name ?? 'unknown'} could not check the session`, { cause: error });
   }
+  return toFactoryAuthUser(result);
 }
 
 /**
@@ -282,7 +333,7 @@ async function authenticateRequest(
  * provider that throws fails the request with 503 (logged): running it
  * without the org would key its rows to the personal `user:<id>` scope instead.
  */
-async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUser): Promise<void> {
+async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUser, raw: Request): Promise<void> {
   if (getFactoryAuthOrgId(user)) return;
   if (!isOrganizationsProvider(provider)) return;
   const userId = getFactoryAuthUserId(user);
@@ -291,11 +342,11 @@ async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUse
   try {
     orgId = await provider.ensureOrganization(userId);
   } catch (error) {
-    console.error(`[auth] Could not resolve the organization of user ${userId}; the request is refused.`, error);
-    throw new HTTPException(503, {
-      res: Response.json({ error: 'auth_unavailable' }, { status: 503 }),
-      cause: error,
-    });
+    console.error(
+      `[auth] Provider ${provider.name ?? 'unknown'} could not resolve the organization of user ${userId} for ${describeRequest(raw)}; answering 503 auth_unavailable.`,
+      error,
+    );
+    throw new AuthUnavailableError(`Could not resolve the organization of user ${userId}`, { cause: error });
   }
   if (orgId) user.organizationId = orgId;
 }
@@ -331,7 +382,7 @@ async function applyRequestedOrganization(
 ): Promise<boolean> {
   const requested = (token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined) || bearerTokenOrgClaim(token);
   if (requested) return selectRequestedOrganization(user, requested);
-  await ensureUserOrg(provider, user);
+  await ensureUserOrg(provider, user, c.req.raw);
   return true;
 }
 
@@ -376,10 +427,10 @@ export async function isOrganizationAdmin(
     return await provider.isOrganizationAdmin(organizationId, userId);
   } catch (error) {
     console.error(
-      `[auth] Could not check whether user ${userId} administers organization ${organizationId}; denied.`,
+      `[auth] Provider ${provider.name ?? 'unknown'} could not check whether user ${userId} administers organization ${organizationId} (${describeRequest(c.req.raw)}); answering 503 auth_unavailable.`,
       error,
     );
-    return false;
+    throw authUnavailableException(new AuthUnavailableError('Could not check the organization role', { cause: error }));
   }
 }
 
@@ -432,13 +483,20 @@ export async function ensureFactoryAuthUser(
   if (!provider) return undefined;
 
   const token = getBearerToken(c.req.header('Authorization'));
-  const user = await authenticateRequest(provider, token, c.req.raw);
-  // Routes declared `requiresAuth: false` skip the gate, so this is their only
-  // authentication — forward a renewed session cookie from here too.
-  forwardPendingResponseHeaders(provider, c);
-  if (!user) return undefined;
-
-  if (!(await applyRequestedOrganization(provider, c, token, user))) {
+  let user: FactoryAuthUser | null;
+  let allowed: boolean;
+  try {
+    user = await authenticateRequest(provider, token, c.req.raw);
+    // Routes declared `requiresAuth: false` skip the gate, so this is their only
+    // authentication — forward a renewed session cookie from here too.
+    forwardPendingResponseHeaders(provider, c);
+    if (!user) return undefined;
+    allowed = await applyRequestedOrganization(provider, c, token, user);
+  } catch (error) {
+    if (error instanceof AuthUnavailableError) throw authUnavailableException(error);
+    throw error;
+  }
+  if (!allowed) {
     throw new HTTPException(403, { message: 'organization_forbidden' });
   }
 
@@ -470,6 +528,15 @@ function isNavigationRequest(path: string, accept: string | undefined): boolean 
  * itself rather than reading a value the gate would have stashed.
  */
 async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<Response> {
+  try {
+    return await authMeResponse(provider, c);
+  } catch (error) {
+    if (error instanceof AuthUnavailableError) return authUnavailableResponse();
+    throw error;
+  }
+}
+
+async function authMeResponse(provider: IMastraAuthProvider, c: Context): Promise<Response> {
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
   // Provider identity for the SPA: `/signin` renders the hosted-login button
@@ -485,7 +552,7 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
   }
   // Resolve the org the same way gated requests do (providers cache, so this
   // is a lookup — not a create — after first bootstrap).
-  await ensureUserOrg(provider, user);
+  await ensureUserOrg(provider, user, c.req.raw);
   return c.json({
     authenticated: true,
     telemetryEnabled: isFactoryTelemetryEnabled(provider.name),
@@ -886,17 +953,26 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     }
 
     const token = getBearerToken(c.req.header('Authorization'));
-    // A slow verification here delays EVERY protected request — surface
-    // outliers so auth-backend latency is attributable from server logs.
-    const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
-      authenticateRequest(provider, token, c.req.raw),
-    );
-    forwardPendingResponseHeaders(provider, c);
-
-    if (user) {
+    let user: FactoryAuthUser | null;
+    let allowed = false;
+    try {
+      // A slow verification here delays EVERY protected request — surface
+      // outliers so auth-backend latency is attributable from server logs.
+      user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
+        authenticateRequest(provider, token, c.req.raw),
+      );
+      forwardPendingResponseHeaders(provider, c);
       // Without a requested org, no-org accounts get a bootstrapped personal org
       // so the org id resolves on this request (see ensureFactoryAuthUser).
-      if (!(await applyRequestedOrganization(provider, c, token, user))) {
+      if (user) allowed = await applyRequestedOrganization(provider, c, token, user);
+    } catch (error) {
+      if (!(error instanceof AuthUnavailableError)) throw error;
+      // The provider could not answer: not "signed out", so no sign-in redirect.
+      return isNavigationRequest(path, c.req.header('Accept')) ? authUnavailablePage() : authUnavailableResponse();
+    }
+
+    if (user) {
+      if (!allowed) {
         return c.json({ error: 'organization_forbidden' }, 403);
       }
       c.set(FACTORY_AUTH_USER_KEY, user);
