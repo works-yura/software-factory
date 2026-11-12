@@ -389,7 +389,7 @@ describe('mountFactoryAuth gate (enabled)', () => {
     error.mockRestore();
   });
 
-  it("lets an agent session's MCP call through to the MCP route, which checks its session token itself", async () => {
+  it('leaves the MCP endpoint and OAuth discovery to their routes, which authenticate (and challenge) callers themselves', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
@@ -397,14 +397,15 @@ describe('mountFactoryAuth gate (enabled)', () => {
       method: 'POST',
       headers: { Accept: 'application/json', [FACTORY_SESSION_TOKEN_HEADER]: 'fst1.token' },
     });
-    const person = await app.request('/web/factory/projects/p1/mcp', { method: 'POST', headers: { Accept: 'application/json' } });
+    const client = await app.request('/web/factory/projects/p1/mcp', { method: 'POST', headers: { Accept: 'application/json' } });
+    const resourceMetadata = await app.request('/.well-known/oauth-protected-resource/web/factory/projects/p1/mcp');
     const elsewhere = await app.request('/web/factory/projects/p1/work-items', {
       headers: { Accept: 'application/json', [FACTORY_SESSION_TOKEN_HEADER]: 'fst1.token' },
     });
 
     expect(agent.status).toBe(200);
-    expect(mockAuthenticate).toHaveBeenCalledTimes(2);
-    expect(person.status).toBe(401);
+    expect(client.status).toBe(200);
+    expect(resourceMetadata.status).toBe(200);
     expect(elsewhere.status).toBe(401);
   });
 

@@ -38,7 +38,7 @@ import { ClickUpIntegration } from '@factory/integration-clickup';
 import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { createGoogleAuth } from './google/google-auth';
+import { createGoogleAuth, googleMcpConfig } from './google/google-auth';
 // Local development: the machine's credential key and a vector store without Postgres.
 import { createLocalVector, ownMachineCredentialKey } from './local';
 
@@ -365,6 +365,8 @@ export const factory = new MastraFactory({
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
+  // MCP clients (Claude Code, Cursor) sign in with OAuth on this server itself (Google sign-in).
+  ...(googleAuthEnabled ? { mcp: googleMcpConfig() } : {}),
   sandbox,
   // Factories created with `harness: 'claude-code'` run their agents on the
   // `claude` CLI, each session in its own config dir, signed in only with the

@@ -2897,6 +2897,7 @@ export class MastraFactory {
                 auth: routeAuth,
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,
+                ...(mcpConfig && mcpConfig.resource ? { resource: mcpConfig.resource } : {}),
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
                 tools: {

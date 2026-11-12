@@ -31,6 +31,14 @@ const memoryDb = () => ({
     organization: [],
     member: [],
     invitation: [],
+    // The MCP authorization server (oauthProvider + jwt).
+    jwks: [],
+    oauthClient: [],
+    oauthRefreshToken: [],
+    oauthAccessToken: [],
+    oauthConsent: [],
+    oauthResource: [],
+    oauthClientResource: [],
   }),
 });
 

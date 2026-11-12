@@ -24,10 +24,12 @@ import { LibsqlDialect } from '@libsql/kysely-libsql';
 
 import { betterAuth } from 'better-auth';
 import type { Auth, BetterAuthOptions, Session, User } from 'better-auth';
-import { APIError } from 'better-auth/api';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { makeSignature } from 'better-auth/crypto';
 import { getMigrations } from 'better-auth/db/migration';
-import { organization } from 'better-auth/plugins';
+import { jwt, organization } from 'better-auth/plugins';
+import { verifyJwsAccessToken } from 'better-auth/oauth2';
+import { oauthProvider } from '@better-auth/oauth-provider';
 
 type BetterAuthContext = Awaited<Auth['$context']>;
 
@@ -53,6 +55,26 @@ export interface BetterAuthUser {
    */
   session: Session & { activeOrganizationId?: string | null };
   user: User;
+  /**
+   * Every organization the user belongs to, for requests that bring a token
+   * (an MCP client's access token): the host honors an
+   * `X-Mastra-Organization-Id` header only for one of these.
+   */
+  organizationMembershipIds?: string[];
+}
+
+type JwksFetch = Parameters<typeof verifyJwsAccessToken>[1]['jwksFetch'];
+
+/** An OAuth access token (a JWS: three dot-separated parts); session tokens have at most two. */
+function isOAuthAccessToken(token: string): boolean {
+  return token.split('.').length === 3;
+}
+
+/** A token that is simply not valid (bad signature, expired, wrong audience) — not a server failure. */
+function isRejectedToken(error: unknown): boolean {
+  if (error instanceof APIError) return error.statusCode < 500;
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && code.startsWith('ERR_J');
 }
 
 /**
@@ -89,6 +111,29 @@ export interface GoogleClientOptions {
   clientId: string;
   clientSecret: string;
 }
+
+/**
+ * The protected resource every Factory's MCP endpoint belongs to
+ * (`<publicUrl>/web/factory/projects/<id>/mcp` sits under it): the audience of
+ * the OAuth access tokens MCP clients get. One resource for all Factories, so a
+ * client signs in once per server, not per Factory; which Factory and
+ * organization a call reaches is decided per request, like the web UI.
+ */
+export function factoryMcpResource(publicUrl: string): string {
+  return `${publicUrl.replace(/\/+$/, '')}/web/factory`;
+}
+
+/** The OAuth authorization server's issuer: better-auth under `/auth/api`. */
+export function factoryAuthorizationServer(publicUrl: string): string {
+  return `${publicUrl.replace(/\/+$/, '')}/auth/api`;
+}
+
+/** Where the OAuth provider sends a person to sign in, and to allow an MCP client. */
+export const OAUTH_LOGIN_PAGE = '/signin';
+export const OAUTH_CONSENT_PAGE = '/oauth/consent';
+
+/** How long an MCP client's access token lasts; it renews with its refresh token. */
+export const OAUTH_ACCESS_TOKEN_EXPIRES_IN_SECONDS = 60 * 60;
 
 /** How long an invitation link stays valid. */
 export const INVITATION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
@@ -172,7 +217,9 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
       accountLinking: { enabled: true, trustedProviders: ['google'], updateUserInfoOnLink: true },
     },
     disabledPaths: DISABLED_PATHS,
+    ...(config.publicUrl ? { hooks: { before: loopbackClientsAreNative } } : {}),
     plugins: [
+      ...(config.publicUrl ? mcpAuthorizationServerPlugins(config.publicUrl) : []),
       organization({
         // Personal organizations are created by this provider (ensureOrganization);
         // nobody creates further ones through the API.
@@ -204,6 +251,57 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
     ...(crossSite ? { advanced: { defaultCookieAttributes: { sameSite: 'none', secure: true } } } : {}),
   };
 }
+
+/**
+ * Factory as the OAuth 2.1 authorization server for MCP clients (Claude Code,
+ * Cursor): authorization code + PKCE, dynamic client registration (RFC 7591)
+ * without a prior account, RFC 8414 metadata, refresh tokens and revocation.
+ * Signing in is the Google sign-in (`/signin`), and the person allows the
+ * client on the consent page. Access tokens are JWTs for the
+ * {@link factoryMcpResource} audience; `authenticateToken` verifies them.
+ */
+function mcpAuthorizationServerPlugins(publicUrl: string): NonNullable<BetterAuthOptions['plugins']> {
+  const resource = factoryMcpResource(publicUrl);
+  return [
+    jwt({ jwt: { issuer: factoryAuthorizationServer(publicUrl) } }),
+    oauthProvider({
+      loginPage: OAUTH_LOGIN_PAGE,
+      consentPage: OAUTH_CONSENT_PAGE,
+      allowDynamicClientRegistration: true,
+      allowUnauthenticatedClientRegistration: true,
+      clientRegistrationRequirePKCE: true,
+      resources: [{ identifier: resource, name: 'Factory MCP' }],
+      clientRegistrationDefaultResources: [resource],
+      clientRegistrationAllowedResources: [resource],
+      accessTokenExpiresIn: OAUTH_ACCESS_TOKEN_EXPIRES_IN_SECONDS,
+    }),
+  ];
+}
+
+function isHttpLoopbackUri(uri: unknown): boolean {
+  if (typeof uri !== 'string') return false;
+  try {
+    const url = new URL(uri);
+    return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * MCP clients on the person's machine (Claude Code, Cursor) register with an
+ * `http://localhost:<port>/callback` redirect and no `application_type`, which
+ * RFC 7591 defaults to `web` — and a web client may not redirect to loopback.
+ * They are native apps (RFC 8252 §7.3), so a registration whose redirects are
+ * all HTTP loopback and that names no type is registered as `native`.
+ */
+const loopbackClientsAreNative = createAuthMiddleware(async ctx => {
+  if (ctx.path !== '/oauth2/register') return;
+  const body = ctx.body as { application_type?: unknown; redirect_uris?: unknown } | undefined;
+  if (!body || body.application_type !== undefined || !Array.isArray(body.redirect_uris)) return;
+  if (body.redirect_uris.length === 0 || !body.redirect_uris.every(isHttpLoopbackUri)) return;
+  return { context: { body: { ...body, application_type: 'native' } } };
+});
 
 /**
  * How long a resolved `userId → orgId` mapping (and a confirmed membership)
@@ -300,6 +398,10 @@ export class MastraAuthBetterAuth
   #orgCache = new ExpiringMap<string>();
   /** `userId|orgId` pairs confirmed as memberships (positive results only), same TTL. */
   #membershipCache = new ExpiringMap<true>();
+  /** `userId → every orgId`, for token requests that name an organization; same TTL. */
+  #membershipsCache = new ExpiringMap<string[]>();
+  /** Where the access-token signing keys are cached between verifications. */
+  readonly #jwksCacheKey = {};
 
   /** @internal Test hook: current org-cache cardinality. */
   get orgCacheSize(): number {
@@ -767,7 +869,103 @@ export class MastraAuthBetterAuth
    * @returns The authenticated user and session, or null if authentication fails
    */
   async authenticateToken(token: string, request: MastraAuthRequest): Promise<BetterAuthUser | null> {
-    let result: { session: BetterAuthUser['session']; user: User } | null;
+    const result = isOAuthAccessToken(token)
+      ? await this.#sessionForAccessToken(token)
+      : await this.#sessionForCookie(token, request);
+    if (!result || !result.session || !result.user) {
+      return null;
+    }
+
+    // Better-auth sets `activeOrganizationId` only through the organization
+    // plugin (`set-active`, accepting an invitation). Resolve a default from
+    // the user's existing memberships when the session has none, or names one
+    // the user has since been removed from (read-only; the session row is not
+    // mutated). See mastra-ai/mastra#21481.
+    const userId = result.user.id;
+    let session: BetterAuthUser['session'] = result.session;
+    const active = session.activeOrganizationId;
+    let organizationMembershipIds: string[] | undefined;
+    try {
+      if (active && !(await this.#isMember(userId, active))) {
+        session = { ...session, activeOrganizationId: null };
+      }
+      if (!session.activeOrganizationId) {
+        const organizationId = await this.#resolveActiveOrganizationId(userId);
+        if (organizationId) session = { ...session, activeOrganizationId: organizationId };
+      }
+      if (isOAuthAccessToken(token)) organizationMembershipIds = await this.#memberOrganizationIds(userId);
+    } catch (error) {
+      console.error(
+        `[BetterAuth] Could not read the organizations of user ${userId} (active organization: ${active ?? 'none'}); ` +
+          'the request is refused instead of running in another organization.',
+        error,
+      );
+      throw error;
+    }
+
+    return {
+      session,
+      user: result.user,
+      ...(organizationMembershipIds ? { organizationMembershipIds } : {}),
+    };
+  }
+
+  /** Every organization the user belongs to (cached like the default organization). */
+  async #memberOrganizationIds(userId: string): Promise<string[] | undefined> {
+    const cached = this.#membershipsCache.get(userId);
+    if (cached) return cached;
+    const ctx = await this.getAuthContext();
+    if (!ctx) return undefined; // e.g. a partial mock without `$context`
+    const memberships = await ctx.adapter.findMany<MemberRow>({ model: 'member', where: [{ field: 'userId', value: userId }] });
+    const ids = memberships.flatMap(m => (m.organizationId ? [m.organizationId] : []));
+    this.#membershipsCache.set(userId, ids);
+    return ids;
+  }
+
+  /**
+   * An MCP client's OAuth access token (`oauthProvider`, see
+   * {@link factoryMcpResource}): a JWS for this server's MCP resource, signed
+   * with its JWKS, naming the user (`sub`) and the browser session they
+   * allowed the client from (`sid`). That session must still be live: signing
+   * out revokes the client's access too (and an access token expires within
+   * an hour anyway; refresh tokens are revoked at `/oauth2/revoke`). An invalid
+   * token is `null`; a server failure throws (503 at the host).
+   */
+  async #sessionForAccessToken(token: string): Promise<{ session: BetterAuthUser['session']; user: User } | null> {
+    await this.#ensureDbReady();
+    const baseURL = (this.auth.options as BetterAuthOptions).baseURL;
+    // Without a public URL the provider runs no authorization server, so it issued no access tokens.
+    if (typeof baseURL !== 'string') return null;
+    const jwksFetch: JwksFetch = async () =>
+      (await (this.auth.api as unknown as { getJwks(): Promise<Awaited<ReturnType<Exclude<JwksFetch, string>>>> }).getJwks());
+    let payload: { sub?: unknown; sid?: unknown };
+    try {
+      payload = await verifyJwsAccessToken(token, {
+        jwksFetch,
+        jwksCacheKey: this.#jwksCacheKey,
+        verifyOptions: { audience: factoryMcpResource(baseURL), issuer: factoryAuthorizationServer(baseURL) },
+      });
+    } catch (error) {
+      if (isRejectedToken(error)) return null;
+      console.error('[BetterAuth] Could not verify an OAuth access token; the request cannot be authenticated now.', error);
+      throw error;
+    }
+    if (typeof payload.sub !== 'string' || typeof payload.sid !== 'string') return null;
+    const ctx = await this.#requireAuthContext();
+    const session = await ctx.adapter.findOne<BetterAuthUser['session']>({
+      model: 'session',
+      where: [{ field: 'id', value: payload.sid }],
+    });
+    if (!session || session.userId !== payload.sub || new Date(session.expiresAt).getTime() <= Date.now()) return null;
+    const user = await ctx.internalAdapter.findUserById(payload.sub);
+    return user ? { session, user } : null;
+  }
+
+  /** The browser's session cookie, or a session token sent as a bearer token. */
+  async #sessionForCookie(
+    token: string,
+    request: MastraAuthRequest,
+  ): Promise<{ session: BetterAuthUser['session']; user: User } | null> {
     try {
       await this.#ensureDbReady();
 
@@ -783,7 +981,7 @@ export class MastraAuthBetterAuth
       // better-auth ignores the Authorization header — it only reads from Cookie.
       await this.ensureSessionCookie(headers, token);
 
-      result = await this.auth.api.getSession({
+      return await this.auth.api.getSession({
         headers,
       });
     } catch (error) {
@@ -792,40 +990,6 @@ export class MastraAuthBetterAuth
       console.error('[BetterAuth] Could not read the session; the request cannot be authenticated now.', error);
       throw error;
     }
-
-    if (!result || !result.session || !result.user) {
-      return null;
-    }
-
-    // Better-auth sets `activeOrganizationId` only through the organization
-    // plugin (`set-active`, accepting an invitation). Resolve a default from
-    // the user's existing memberships when the session has none, or names one
-    // the user has since been removed from (read-only; the session row is not
-    // mutated). See mastra-ai/mastra#21481.
-    const userId = result.user.id;
-    let session: BetterAuthUser['session'] = result.session;
-    const active = session.activeOrganizationId;
-    try {
-      if (active && !(await this.#isMember(userId, active))) {
-        session = { ...session, activeOrganizationId: null };
-      }
-      if (!session.activeOrganizationId) {
-        const organizationId = await this.#resolveActiveOrganizationId(userId);
-        if (organizationId) session = { ...session, activeOrganizationId: organizationId };
-      }
-    } catch (error) {
-      console.error(
-        `[BetterAuth] Could not read the organizations of user ${userId} (active organization: ${active ?? 'none'}); ` +
-          'the request is refused instead of running in another organization.',
-        error,
-      );
-      throw error;
-    }
-
-    return {
-      session,
-      user: result.user,
-    };
   }
 
   /**

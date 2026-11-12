@@ -47,6 +47,14 @@ export interface FactoryMcpConfig {
    * without one, since clients would have nowhere to sign in.
    */
   authorizationServers?: string[];
+  /**
+   * The resource identifier (RFC 8707/9728) the metadata names and access
+   * tokens carry as their audience. Defaults to the endpoint's own URL. A
+   * Factory that is its own authorization server names one resource for all
+   * its Factories (`<origin>/web/factory`), a path prefix of every endpoint,
+   * so a client signs in once per server.
+   */
+  resource?: string;
 }
 
 /**
@@ -77,6 +85,8 @@ export interface FactoryMcpRoutesDeps {
   auth: RouteAuth;
   publicOrigin: string;
   authorizationServers: string[];
+  /** See {@link FactoryMcpConfig.resource}; the endpoint's URL when unset. */
+  resource?: string;
   projects: Pick<FactoryProjectsStorage, 'get'>;
   /** Source-control handles a connector session can be filed under, tried in order. */
   sourceControls: readonly SourceControlStorageHandle[];
@@ -482,7 +492,7 @@ export function buildFactoryMcpRoutes(deps: FactoryMcpRoutesDeps): ApiRoute[] {
       handler: c => {
         const mcpPath = new URL(c.req.url).pathname.slice(PROTECTED_RESOURCE_PREFIX.length);
         return c.json({
-          resource: `${deps.publicOrigin}${mcpPath}`,
+          resource: deps.resource ?? `${deps.publicOrigin}${mcpPath}`,
           authorization_servers: deps.authorizationServers,
           bearer_methods_supported: ['header'],
           resource_name: 'Factory',

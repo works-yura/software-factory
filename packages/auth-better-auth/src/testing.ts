@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from 'node:crypto';
+
 import { createClient } from '@libsql/client';
 import { LibsqlDialect } from '@libsql/kysely-libsql';
 import { betterAuth } from 'better-auth';
@@ -5,7 +7,7 @@ import type { Auth, BetterAuthOptions } from 'better-auth';
 import { makeSignature } from 'better-auth/crypto';
 import { getMigrations } from 'better-auth/db/migration';
 
-import { factoryBetterAuthOptions, MastraAuthBetterAuth } from './index';
+import { factoryBetterAuthOptions, factoryMcpResource, MastraAuthBetterAuth, OAUTH_CONSENT_PAGE } from './index';
 
 /**
  * Tests only: the options Factory actually runs on (`factoryBetterAuthOptions`)
@@ -164,4 +166,79 @@ export async function createTestSession(options: {
   } finally {
     client.close();
   }
+}
+
+/** What an MCP client ends up with after signing in through Factory's OAuth server. */
+export interface TestMcpClientGrant {
+  clientId: string;
+  accessToken: string;
+  refreshToken?: string;
+}
+
+/**
+ * Tests only: what Claude Code does to connect, against the real OAuth provider — register a public
+ * client with a loopback redirect, authorization code + PKCE for the Factory MCP resource, the
+ * consent the person gives on the consent page, and the token exchange. `cookie` is the person's
+ * signed-in session (the sign-in step itself is `signIn`).
+ */
+export async function connectTestMcpClient(google: TestGoogleAuth, cookie: string): Promise<TestMcpClientGrant> {
+  const call = (path: string, init: RequestInit = {}) =>
+    google.provider.handleAuthRequest(new Request(`${TEST_ORIGIN}${path}`, { redirect: 'manual', ...init }));
+  const redirectUri = 'http://localhost:33418/callback';
+  const resource = factoryMcpResource(TEST_ORIGIN);
+
+  const registered = await call('/auth/api/oauth2/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: TEST_ORIGIN },
+    body: JSON.stringify({
+      client_name: 'Claude Code',
+      redirect_uris: [redirectUri],
+      token_endpoint_auth_method: 'none',
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+    }),
+  });
+  if (registered.status !== 201) throw new Error(`register answered ${registered.status}: ${await registered.text()}`);
+  const { client_id: clientId } = (await registered.json()) as { client_id: string };
+
+  const verifier = randomBytes(32).toString('base64url');
+  const query = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+    code_challenge_method: 'S256',
+    scope: 'openid profile email offline_access',
+    state: 'test-state',
+    resource,
+  });
+  const authorized = await call(`/auth/api/oauth2/authorize?${query}`, { headers: { cookie } });
+  const consentPage = new URL(authorized.headers.get('location') ?? '', TEST_ORIGIN);
+  if (consentPage.pathname !== OAUTH_CONSENT_PAGE) {
+    throw new Error(`authorize answered ${authorized.status} → ${consentPage.href}`);
+  }
+  const consented = await call('/auth/api/oauth2/consent', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: TEST_ORIGIN, cookie },
+    body: JSON.stringify({ accept: true, oauth_query: consentPage.search.slice(1) }),
+  });
+  const { url } = (await consented.json()) as { url?: string };
+  const code = url ? new URL(url).searchParams.get('code') : null;
+  if (!code) throw new Error(`consent answered ${consented.status} without a code`);
+
+  const token = await call('/auth/api/oauth2/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      code_verifier: verifier,
+      resource,
+    }),
+  });
+  if (token.status !== 200) throw new Error(`token answered ${token.status}: ${await token.text()}`);
+  const body = (await token.json()) as { access_token: string; refresh_token?: string };
+  return { clientId, accessToken: body.access_token, ...(body.refresh_token ? { refreshToken: body.refresh_token } : {}) };
 }

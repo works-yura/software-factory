@@ -206,6 +206,9 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown; image?: unknown };
     const session = record.session as { activeOrganizationId?: unknown };
     if (typeof user.id !== 'string') return null;
+    const membershipIds = Array.isArray(record.organizationMembershipIds)
+      ? record.organizationMembershipIds.filter((id): id is string => typeof id === 'string')
+      : undefined;
     return {
       id: user.id,
       email: typeof user.email === 'string' ? user.email : undefined,
@@ -214,6 +217,8 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
       avatarUrl:
         typeof user.avatarUrl === 'string' ? user.avatarUrl : typeof user.image === 'string' ? user.image : undefined,
       organizationId: typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
+      // The provider lists the user's organizations for token requests, so a client may name one of them.
+      ...(membershipIds ? { organizationMembershipIds: membershipIds } : {}),
     };
   }
 
@@ -650,10 +655,27 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
 
   if (isAuthHttpHandler(provider)) {
     routes.push({
-      path: '/auth/api/*',
+      path: `${PROVIDER_API_BASE}/*`,
       method: 'ALL',
       handler: c => provider.handleAuthRequest(c.req.raw),
     });
+    // An authorization server whose issuer is `<origin>/auth/api` (better-auth's OAuth provider for
+    // MCP clients) publishes its metadata under that path; RFC 8414 clients look for it at
+    // `/.well-known/<document>/auth/api`, and some at the root. Both answer with the provider's.
+    for (const document of ['oauth-authorization-server', 'openid-configuration']) {
+      for (const path of [`/.well-known/${document}${PROVIDER_API_BASE}`, `/.well-known/${document}`]) {
+        routes.push({
+          path,
+          method: 'GET',
+          handler: c =>
+            provider.handleAuthRequest(
+              new Request(new URL(`${PROVIDER_API_BASE}/.well-known/${document}`, c.req.url), {
+                headers: c.req.raw.headers,
+              }),
+            ),
+        });
+      }
+    }
   }
 
   if (isSSOProvider(provider)) {
@@ -878,11 +900,23 @@ const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/c
 export const FACTORY_SESSION_TOKEN_HEADER = 'x-factory-session-token';
 
 /**
- * A Factory's MCP endpoint (`FACTORY_MCP_PATH` in `@factory/mcp`). Agent sessions the Factory runs
- * itself (the `claude` and `codex` CLIs) call it with a session token and no sign-in session; the
- * route verifies the token and never falls through to the signed-in-person path.
+ * A Factory's MCP endpoint (`FACTORY_MCP_PATH` in `@factory/mcp`). It authenticates every caller
+ * itself: agent sessions the Factory runs (the `claude` and `codex` CLIs) by their session token,
+ * MCP clients (Claude Code, Cursor) by their OAuth access token through the provider, with the
+ * same organization checks as the gate. A caller without either gets the route's 401 with a
+ * `WWW-Authenticate` header naming the OAuth metadata, which is how a client learns to sign in.
  */
 const FACTORY_MCP_ENDPOINT = /^\/web\/factory\/projects\/[^/]+\/mcp$/;
+
+/**
+ * OAuth discovery documents MCP clients read before they have a token: the protected-resource
+ * metadata (RFC 9728) and the authorization server's (RFC 8414 / OpenID), at the root and at the
+ * issuer's path.
+ */
+const OAUTH_DISCOVERY = /^\/\.well-known\/(oauth-protected-resource|oauth-authorization-server|openid-configuration)(\/.*)?$/;
+
+/** The provider's own HTTP surface; an issuer there publishes its metadata under it. */
+const PROVIDER_API_BASE = '/auth/api';
 
 // Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
 // so a future route under the same prefix does not inherit the pass.
@@ -937,10 +971,12 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && SIGNATURE_VERIFYING_CHANNEL_WEBHOOK.test(path)) {
       return next();
     }
-    // An agent session's MCP call authenticates by its session token, which the MCP route checks
-    // itself (a bad token is a 401 there). Only that endpoint, and only with the header: people
-    // calling it still pass the gate.
-    if (FACTORY_MCP_ENDPOINT.test(path) && c.req.header(FACTORY_SESSION_TOKEN_HEADER) !== undefined) {
+    // The MCP endpoint authenticates its callers itself (see FACTORY_MCP_ENDPOINT).
+    if (FACTORY_MCP_ENDPOINT.test(path)) {
+      return next();
+    }
+    // OAuth discovery is public: clients read it to find where to sign in.
+    if (c.req.method === 'GET' && OAUTH_DISCOVERY.test(path)) {
       return next();
     }
     // The Slack account-linking deep link and the Sign-in-with-Slack OIDC

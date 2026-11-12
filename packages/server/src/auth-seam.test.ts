@@ -266,7 +266,17 @@ describe('buildAuthRoutes', () => {
   it('derives handler routes plus /auth/me for an HTTP-handler-shaped provider', () => {
     const routes = buildAuthRoutes(fakeProvider(httpHandlerCapability()));
     const paths = routes.map(r => r.path);
-    expect(paths).toEqual(['/auth/api/*', '/auth/login', '/auth/logout', '/auth/me']);
+    expect(paths).toEqual([
+      '/auth/api/*',
+      // The provider's OAuth server metadata, where MCP clients look for it (RFC 8414 path and root).
+      '/.well-known/oauth-authorization-server/auth/api',
+      '/.well-known/oauth-authorization-server',
+      '/.well-known/openid-configuration/auth/api',
+      '/.well-known/openid-configuration',
+      '/auth/login',
+      '/auth/logout',
+      '/auth/me',
+    ]);
     expect(routes.every(r => r.requiresAuth === false)).toBe(true);
   });
 

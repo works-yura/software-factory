@@ -374,6 +374,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
       await import('./index.js');
 
       expect(factoryConfigs[0]?.auth).toMatchObject({ name: 'better-auth' });
+      // MCP clients sign in with OAuth on this server itself.
+      expect(factoryConfigs[0]?.mcp).toEqual({
+        authorizationServers: ['http://localhost:5874/auth/api'],
+        resource: 'http://localhost:5874/web/factory',
+      });
     });
 
     it('refuses the removed local dev auth by name', { timeout: 60_000 }, async () => {

@@ -1,4 +1,4 @@
-import { MastraAuthBetterAuth } from '@factory/auth-better-auth';
+import { factoryAuthorizationServer, factoryMcpResource, MastraAuthBetterAuth } from '@factory/auth-better-auth';
 
 /** better-auth refuses shorter secrets; checking here names the setting instead. */
 const MIN_SECRET_LENGTH = 32;
@@ -26,4 +26,16 @@ export function createGoogleAuth(): MastraAuthBetterAuth {
     'the browser-facing origin; Google redirects back to <MASTRACODE_PUBLIC_URL>/auth/api/callback/google.',
   );
   return new MastraAuthBetterAuth({ secret, google: { clientId, clientSecret } });
+}
+
+/**
+ * The Factory MCP endpoint's OAuth: this server is the authorization server (better-auth's OAuth
+ * provider under `/auth/api`), and one resource covers every Factory's endpoint. MCP clients such
+ * as Claude Code discover both from the endpoint's 401, register themselves, and send the person
+ * through Google sign-in and the consent page. Read after `createGoogleAuth`, which requires
+ * MASTRACODE_PUBLIC_URL.
+ */
+export function googleMcpConfig(): { authorizationServers: string[]; resource: string } {
+  const publicUrl = required('MASTRACODE_PUBLIC_URL', 'the browser-facing origin MCP clients reach this server at.');
+  return { authorizationServers: [factoryAuthorizationServer(publicUrl)], resource: factoryMcpResource(publicUrl) };
 }
