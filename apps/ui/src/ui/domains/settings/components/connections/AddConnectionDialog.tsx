@@ -17,8 +17,7 @@ import { CapabilityDots, serverDots, useCatalogDots } from './CapabilityDots';
 import type { CapabilityDot } from './CapabilityDots';
 import { ConnectionIcon } from './ConnectionIcon';
 import { ConnectorConnect } from './ConnectorSteps';
-import { GoogleCloudConnect } from './ConnectSteps';
-import type { ConnectionTarget, FirstParty } from './ConnectSteps';
+import type { ConnectionTarget } from './ConnectSteps';
 
 export type { ConnectionTarget };
 
@@ -28,7 +27,7 @@ const FILTERS: CatalogFilter[] = ['all', 'tools', 'sources'];
  * A connect step the dialog opens in place: a first-party integration's, a server connector's
  * (`connector:<id>`), or reconnecting a server connection through its method (`reconnect:<id>`).
  */
-export type Step = FirstParty | `connector:${string}` | `reconnect:${string}`;
+export type Step = `connector:${string}` | `reconnect:${string}`;
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -97,8 +96,8 @@ function CatalogRow({
 
 /**
  * Step one, as Mastra's «Add connection to project»: the kit's command list with search and the
- * type filter on one line, then the organization's accounts this Factory can link, the first-party
- * integrations, and «Інше» — MCP servers, third-party or own. Keyboard: arrows move, Enter picks.
+ * type filter on one line, then the organization's MCP servers this Factory can link, the
+ * connectors the server describes, and «Інше» — MCP servers, third-party or own. Keyboard: arrows move, Enter picks.
  */
 function PickStep({
   factoryId,
@@ -123,9 +122,7 @@ function PickStep({
       ? item.connector.name
       : item.entry
         ? localized(item.entry.label)
-        : item.id === 'mcp-custom'
-          ? t('connections.addDialog.customMcp')
-          : t(`connections.kinds.${item.kind as FirstParty}`);
+        : t('connections.addDialog.customMcp');
   const iconOf = (item: CatalogItem) => item.connector?.icon ?? item.kind;
   const dotsOf = (item: CatalogItem) => (item.connector ? serverDots(item.connector.provides) : catalogDots(item.capabilities));
   const shown = filterCatalog(connectionCatalog(sources), linkableAccounts(factoryId, sources), {
@@ -137,17 +134,12 @@ function PickStep({
   const other = shown.items.filter(item => item.section === 'other');
 
   const pick = (item: CatalogItem) => {
-    // A connector the server describes opens its methods; a first-party kind its own step.
+    // A connector the server describes opens its methods; an MCP entry its own page.
     if (item.connector) onConnect(`connector:${item.connector.id}`);
-    else if (item.kind !== 'mcp' && item.kind !== 'connector') onConnect(item.kind);
     else onPick({ connection: item.entry ? `mcp-new:${item.entry.id}` : 'mcp-new:custom' });
   };
 
   const link = (account: LinkableAccount) => {
-    if (!account.server) {
-      onPick({ connection: 'google-cloud', account: account.targetId });
-      return;
-    }
     const server = sources.mcp?.servers.find(candidate => candidate.id === account.targetId);
     if (!server) return;
     setLinking(account.id);
@@ -208,7 +200,6 @@ function PickStep({
                   value={account.id}
                   kind={account.kind}
                   name={account.name}
-                  detail={account.server ? undefined : t('connections.addDialog.googleAccount')}
                   mcp={account.kind === 'mcp'}
                   dots={catalogDots(['tools'])}
                   label={t('connections.addDialog.link', { name: account.name })}
@@ -260,10 +251,8 @@ function PickStep({
 
 /**
  * «Додати підключення»: one dialog for picking and connecting. Step one lists what can be added; a
- * first-party integration opens its connect step in the same dialog (Google Cloud: an account and
- * its key); a connector the server describes opens its
- * methods (a form, or a redirect to the provider); an MCP server or an organization account goes
- * straight to its page. «Перепідключити» on a server connection opens here at its reconnect method.
+ * connector the server describes opens its methods in the same dialog (a form, a redirect, or a
+ * provider session); an MCP server goes straight to its page. «Перепідключити» on a server connection opens here at its reconnect method.
  */
 export function AddConnectionDialog({
   open,
@@ -278,7 +267,7 @@ export function AddConnectionDialog({
   sources: ConnectionSources;
   onPick: (target: ConnectionTarget) => void;
   onClose: () => void;
-  /** Open straight into one connect step («Перепідключити»): Google Cloud, or a server connection's. */
+  /** Open straight into one connect step: a connector's, or a server connection's reconnect. */
   initialStep?: Step;
 }) {
   const [chosen, setStep] = useState<Step>();
@@ -294,9 +283,7 @@ export function AddConnectionDialog({
       }}
     >
       <DialogContent size="md" className={CONNECT_DIALOG_SHELL}>
-        {step === 'google-cloud' ? (
-          <GoogleCloudConnect accounts={sources.firebase?.accounts ?? []} onBack={back} onPick={onPick} />
-        ) : step?.startsWith('connector:') || step?.startsWith('reconnect:') ? (
+        {step?.startsWith('connector:') || step?.startsWith('reconnect:') ? (
           <ServerStep step={step as `connector:${string}` | `reconnect:${string}`} sources={sources} onBack={back} onPick={onPick} />
         ) : (
           <PickStep factoryId={factoryId} sources={sources} onConnect={setStep} onPick={onPick} />

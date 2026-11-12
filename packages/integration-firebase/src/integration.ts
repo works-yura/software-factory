@@ -5,12 +5,13 @@ import type { CredentialProvider } from '@factory/capabilities';
 import type { ManagedMcpServerSpec } from '@factory/core';
 
 import { createObservabilityTools } from '@factory/integrations';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
+import type { FactoryIntegration, IntegrationConnections, IntegrationContext, IntegrationTools } from '@factory/integrations';
 import type { IntegrationStorageHandle } from '@factory/store';
 
 import { googleCloudAccountProvider } from './credentials.ts';
 import { managedDatabaseServers } from './managed-mcp.ts';
 import { buildFirebaseRoutes } from './routes.ts';
+import { GoogleCloudConnections } from './connections.ts';
 import type { FetchLike } from './service-account.ts';
 import { FIREBASE_INTEGRATION_ID, readFirebaseState } from './settings.ts';
 import { FirebaseObservabilityProvider } from './source.ts';
@@ -62,6 +63,16 @@ export class FirebaseIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildFirebaseRoutes({
       auth: ctx.auth,
+      storage: ctx.storage.generic,
+      projects: ctx.storage.projects,
+      ...(ctx.hooks ? { hooks: ctx.hooks } : {}),
+      ...(this.#options.fetch ? { fetch: this.#options.fetch } : {}),
+    });
+  }
+
+  /** The Factory's Google Cloud bindings for Settings › Підключення (ADR-0035). */
+  connections(ctx: IntegrationContext): IntegrationConnections {
+    return new GoogleCloudConnections({
       storage: ctx.storage.generic,
       projects: ctx.storage.projects,
       ...(ctx.hooks ? { hooks: ctx.hooks } : {}),

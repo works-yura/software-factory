@@ -11,15 +11,11 @@ import { Link } from 'react-router';
 
 import { useApiConfig } from '../../../../../api/config';
 import { useReconnect, useUnlinkConnection, useUpdateConnection } from '../../../../../hooks/useConnections';
-import { useFactoriesQuery } from '../../../../../hooks/useFactories';
-import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
 import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
 import { finishAuthorize } from '../../connections/api';
 import { connectionHealth } from '../../connections/connections';
 import type { ConnectionKind, ConnectionRow, ConnectionSources } from '../../connections/connections';
-import type { FirebaseBinding, FirebaseBindingInput } from '../../services/firebase';
 import { serverToInput } from '../../services/mcpServers';
-import { RemoveAccountDialog } from '../GoogleCloudService';
 import { mcpErrorText } from '../mcp-servers/McpServerInspect';
 import type { Step } from './AddConnectionDialog';
 import { CapabilityDots, serverDots, useConnectionDots } from './CapabilityDots';
@@ -28,7 +24,7 @@ import { ConnectionIcon } from './ConnectionIcon';
 import { RemoveConnectionDialog } from './RemoveConnectionDialog';
 import { TimeAgo } from './TimeAgo';
 
-/** A connect step «Перепідключити» opens: a first-party kind's, or a server connection's (`reconnect:<id>`). */
+/** A connect step «Перепідключити» opens: a server connection's (`reconnect:<id>`). */
 export type ReconnectStep = Step;
 
 /** The integration's name and logo key for a row: the server's for a connector, the kind's otherwise. */
@@ -42,17 +38,10 @@ export function useRowKind() {
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** A binding as its save takes it: its fields without the id and what the server records. */
-export function bindingInput(binding: FirebaseBinding): FirebaseBindingInput {
-  const { id: _id, createdAt: _createdAt, createdBy: _createdBy, ...input } = binding;
-  return input;
-}
-
-/** Renames what a row's «Перейменувати» names: a binding's own name, or a server's label. */
+/** Renames what a row's «Перейменувати» names: a connector's connection, or a server's label. */
 export function useRenameConnection() {
   const { t } = useTranslation('settings');
   const mcp = useMcpServerMutations();
-  const firebase = useFirebaseMutations();
   const update = useUpdateConnection();
   const rename = (row: ConnectionRow, name: string, onDone?: () => void) => {
     const options = {
@@ -63,12 +52,11 @@ export function useRenameConnection() {
       onError: (error: unknown) => toast.error(errorMessage(error)),
     };
     if (row.view) update.mutate({ id: row.view.id, label: name }, options);
-    else if (row.rename === 'binding' && row.binding) firebase.saveBinding.mutate({ ...bindingInput(row.binding), name, id: row.binding.id }, options);
     else if (row.rename === 'server' && row.server) mcp.save.mutate({ ...serverToInput(row.server), label: name, id: row.server.id }, options);
   };
   return {
     rename,
-    pending: mcp.save.isPending || firebase.saveBinding.isPending || update.isPending,
+    pending: mcp.save.isPending || update.isPending,
   };
 }
 
@@ -103,7 +91,7 @@ export function HealthBadge({ row }: { row: ConnectionRow }) {
 }
 
 export type PendingAction = {
-  kind: 'rename' | 'unlink' | 'delete' | 'delete-account' | 'remove-connector' | 'unlink-connector';
+  kind: 'rename' | 'unlink' | 'delete' | 'remove-connector' | 'unlink-connector';
   row: ConnectionRow;
 };
 
@@ -235,9 +223,8 @@ export function RowActions({
   const { t } = useTranslation('settings');
   const { reconnect } = useMcpServerMutations();
   const server = row.server;
-  // A server people made (not one an integration manages): theirs to unlink and delete.
-  const ownServer = Boolean(server && !row.managed && canEditMcp);
-  const destructive = ownServer || (row.kind === 'google-cloud' && row.accountId);
+  // A server people made: theirs to unlink and delete.
+  const ownServer = Boolean(server && canEditMcp);
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -258,7 +245,7 @@ export function RowActions({
           <ArrowUpRight aria-hidden />
           {t('connections.actions.open')}
         </DropdownMenu.Item>
-        {row.rename && (row.rename === 'binding' || canEditMcp) && (
+        {row.rename && canEditMcp && (
           <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>
             <Pencil aria-hidden />
             {t('connections.actions.rename')}
@@ -281,23 +268,17 @@ export function RowActions({
             {t('connections.actions.reconnect')}
           </DropdownMenu.Item>
         )}
-        {(ownServer || row.binding) && (
+        {ownServer && (
           <DropdownMenu.Item onSelect={() => onPending({ kind: 'unlink', row })}>
             <Unlink aria-hidden />
             {t('connections.actions.unlink')}
           </DropdownMenu.Item>
         )}
-        {destructive && <DropdownMenu.Separator />}
+        {ownServer && <DropdownMenu.Separator />}
         {ownServer && (
           <DropdownMenu.Item variant="destructive" onSelect={() => onPending({ kind: 'delete', row })}>
             <Trash2 aria-hidden />
             {t('connections.actions.deleteConnection')}
-          </DropdownMenu.Item>
-        )}
-        {row.kind === 'google-cloud' && row.accountId && (
-          <DropdownMenu.Item variant="destructive" onSelect={() => onPending({ kind: 'delete-account', row })}>
-            <Trash2 aria-hidden />
-            {t('connections.actions.deleteAccount')}
           </DropdownMenu.Item>
         )}
       </DropdownMenu.Content>
@@ -320,10 +301,8 @@ export function PendingDialog({
 }) {
   const { t } = useTranslation('settings');
   const mcp = useMcpServerMutations();
-  const firebase = useFirebaseMutations();
   const { rename, pending: renaming } = useRenameConnection();
   const unlink = useUnlinkConnection();
-  const factories = useFactoriesQuery().data ?? [];
   const { row } = pending;
   const done = (message: string) => ({
     onSuccess: () => {
@@ -359,31 +338,17 @@ export function PendingDialog({
   if (pending.kind === 'rename') {
     return <RenameDialog name={row.title} pending={renaming} onClose={onClose} onSave={name => rename(row, name, onClose)} />;
   }
-  if (pending.kind === 'delete-account') {
-    const account = sources.firebase?.accounts.find(candidate => candidate.id === row.accountId);
-    if (!account) return null;
-    return (
-      <RemoveAccountDialog
-        account={account}
-        bindings={(sources.firebase?.bindings ?? []).filter(binding => account.bindingIds.includes(binding.id))}
-        factoryName={id => factories.find(factory => factory.id === id)?.name ?? id}
-        onClose={onClose}
-      />
-    );
-  }
   if (pending.kind === 'unlink') {
     return (
       <ConfirmDialog
         title={t('connections.unlink.title', { name: row.title })}
-        body={row.binding ? t('connections.unlink.bindingBody') : t('connections.unlink.mcpBody')}
+        body={t('connections.unlink.mcpBody')}
         confirm={t('connections.unlink.confirm')}
         cancel={t('connections.unlink.cancel')}
-        pending={mcp.save.isPending || firebase.removeBinding.isPending}
+        pending={mcp.save.isPending}
         onClose={onClose}
         onConfirm={() =>
-          row.binding
-            ? firebase.removeBinding.mutate(row.binding.id, done(t('connections.unlink.done')))
-            : row.server &&
+          row.server &&
               mcp.save.mutate(
                 {
                   ...serverToInput(row.server),

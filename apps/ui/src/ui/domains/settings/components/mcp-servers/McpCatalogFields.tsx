@@ -13,7 +13,7 @@ import { useMcpDiscovery } from '../../../../../hooks/useMcpServers';
 import { currentLanguage } from '../../../../i18n';
 import { DiscoveredChoice } from '../DiscoveredChoice';
 import type { McpCredentialOption, McpCredentialRef } from '../../services/mcpServers';
-import { AccountKeyDialog } from '../GoogleCloudService';
+import { AccountKeyDialog } from './AccountKeyDialog';
 
 /** A catalog text in the person's language. */
 export const localized = (text: McpLocalized) => (currentLanguage() === 'uk' ? text.uk : text.en);

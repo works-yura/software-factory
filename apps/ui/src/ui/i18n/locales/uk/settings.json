@@ -1244,24 +1244,8 @@
   "observability": {
     "requestFailed": "Запит не вдався (HTTP {{status}}).",
     "cancel": "Скасувати",
-    "platforms": {
-      "android": "Android",
-      "ios": "iOS",
-      "web": "Web"
-    },
-    "source": {
-      "firebase": "Firebase",
-      "checking": "Завантажую акаунти…",
-      "ready": "Агенти читають логи сервера (Cloud Logging) і креші застосунків (Crashlytics) прив’язаних проєктів Google Cloud, лише читання. Ключі зашифровані й агентам не потрапляють.",
-      "notConnected": "Логи сервера й креші застосунків для агентів, лише читання. Додайте сервісний акаунт Google Cloud, потім прив’яжіть Factory до його проєктів Google Cloud.",
-      "accountsCount_one": "{{count}} акаунт",
-      "accountsCount_few": "{{count}} акаунти",
-      "accountsCount_many": "{{count}} акаунтів",
-      "accountsCount_other": "{{count}} акаунта"
-    },
     "key": {
       "addTitle": "Новий акаунт Google Cloud",
-      "replaceTitle": "Новий ключ для «{{name}}»",
       "roles": "У проєкті Google Cloud створіть сервісний акаунт лише з роллю Logs Viewer (roles/logging.viewer), а для крешів — ще Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer); увімкніть Firebase Crashlytics API; створіть JSON-ключ і вставте його сюди. Кроки: docs/runbooks/firebase-observability.md.",
       "nameLabel": "Назва акаунта",
       "namePlaceholder": "Назва, напр. Syncta (інакше — проєкт Google Cloud із ключа)",
@@ -1271,89 +1255,7 @@
       "save": "Зберегти ключ"
     },
     "accounts": {
-      "title": "Акаунти Google Cloud",
-      "add": "Додати акаунт",
-      "none": "Ще немає жодного акаунта. Додайте сервісний акаунт Google Cloud з ролями лише на читання.",
-      "usedBy_one": "{{count}} прив’язка",
-      "usedBy_few": "{{count}} прив’язки",
-      "usedBy_many": "{{count}} прив’язок",
-      "usedBy_other": "{{count}} прив’язки",
-      "unused": "не використовується",
-      "name": "Назва",
-      "nameHint": "Як цей акаунт називати в списках, напр. «Syncta».",
-      "rename": "Перейменувати",
-      "key": "Ключ",
-      "keyValue": "{{email}} · ключ із проєкту Google Cloud {{project}}",
-      "replace": "Замінити ключ",
-      "disconnect": "Відключити",
-      "disconnectAria": "Відключити акаунт {{name}}",
-      "usedIn": "Використовується в",
-      "usedInNone": "Жодна прив’язка не читає через цей акаунт.",
-      "confirmTitle": "Відключити «{{name}}»?",
-      "confirmBody": "Ці прив’язки читають через цей акаунт і будуть видалені разом із ним; агенти їхніх Factory перестануть бачити ці логи й креші.",
-      "confirmList": "Прив’язки, що видаляться разом з акаунтом",
-      "confirm": "Відключити разом із прив’язками",
-      "saved": "Акаунт збережено",
-      "removed": "Акаунт відключено"
-    },
-    "bindings": {
-      "heading": "Прив’язки",
-      "add": "Додати прив’язку",
-      "none": "Жодна Factory ще не читає логи чи креші. Прив’язка: Factory → акаунт → проєкт Google Cloud.",
-      "needsAccount": "Спершу додайте акаунт Google Cloud.",
-      "title": "{{factory}} → {{project}}",
-      "newTitle": "Нова прив’язка",
-      "notSaved": "не збережено",
-      "logsOn": "логи",
-      "apps_one": "{{count}} застосунок",
-      "apps_few": "{{count}} застосунки",
-      "apps_many": "{{count}} застосунків",
-      "apps_other": "{{count}} застосунку",
-      "nothingRead": "нічого не читається",
-      "noAccount": "без акаунта",
-      "factory": "Factory",
-      "factoryHint": "Чиї агенти отримають ці логи й креші.",
-      "pickFactory": "Виберіть Factory",
-      "account": "Акаунт Google Cloud",
-      "accountHint": "Через який сервісний акаунт читати цей проєкт.",
-      "pickAccount": "Виберіть акаунт",
-      "projectId": "ID проєкту Google Cloud",
-      "projectIdHint": "Напр. syncta-57c6a — пропонується проєкт, з якого ключ акаунта. Логи читаються з нього.",
-      "projectNumber": "Номер проєкту Google Cloud",
-      "projectNumberHint": "Firebase › Налаштування проєкту › Номер проєкту. Crashlytics адресує проєкт за ним.",
-      "logs": "Логи сервера",
-      "logsHint": "Cloud Functions, Cloud Run, Hosting та інше з Cloud Logging.",
-      "crashes": "Креші застосунків",
-      "crashesHint": "Crashlytics для застосунків нижче (Android та iOS; у веб-застосунків крешів немає).",
-      "appsTitle": "Застосунки (креші)",
-      "addApp": "Додати застосунок",
-      "noApps": "Немає застосунків: креші не читаються.",
-      "appId": "Firebase App ID {{number}}",
-      "platform": "Платформа застосунку {{number}}",
-      "appLabel": "Назва застосунку {{number}}",
-      "appLabelPlaceholder": "Назва (необов’язково)",
-      "removeApp": "Прибрати застосунок {{number}}",
-      "remove": "Прибрати",
-      "save": "Зберегти",
-      "saved": "Прив’язку збережено",
-      "removeBinding": "Видалити прив’язку",
-      "removeAria": "Видалити прив’язку {{title}}",
-      "database": "База (Firestore)",
-      "databaseHint": "Агенти читають Firestore цього проєкту, лише читання, якщо в акаунта лише роль Cloud Datastore Viewer. Що можуть інструменти бази, налаштовується на сторінці цього підключення.",
-      "databaseId": "База Firestore",
-      "databaseIdHint": "Порожньо — база (default).",
-      "databaseOn": "база"
-    },
-    "check": {
-      "run": "Перевірити доступ",
-      "running": "Перевіряю…",
-      "results": "Результат перевірки",
-      "ok": "Є доступ",
-      "failed": "Немає доступу",
-      "logs": "Логи проєкту Google Cloud {{target}}",
-      "crashes": "Креші застосунку {{target}}",
-      "missingRole": "Бракує ролі {{role}}.",
-      "database": "База {{target}}"
+      "saved": "Акаунт збережено"
     }
   },
   "boards": {
@@ -1652,7 +1554,6 @@
     "mcpBadge": "MCP",
     "organizationWide": "Уся організація",
     "kinds": {
-      "google-cloud": "Google Cloud",
       "mcp": "Сервер MCP"
     },
     "capabilities": {
@@ -1685,11 +1586,9 @@
       "menu": "Дії для {{name}}",
       "open": "Відкрити",
       "rename": "Перейменувати",
-      "renameAccount": "Перейменувати акаунт",
       "reconnect": "Перепідключити",
       "unlink": "Відв'язати від Factory",
       "delete": "Видалити з організації",
-      "deleteAccount": "Видалити акаунт з організації",
       "deleteConnection": "Видалити підключення"
     },
     "rename": {
@@ -1722,12 +1621,8 @@
     "back": "Усі підключення",
     "detail": {
       "account": "Акаунт",
-      "database": "База (Firestore)",
-      "databaseHint": "Що агенти можуть робити з базою і чи маскувати персональні дані. Проєкт задає прив'язка вище.",
       "notFound": "Такого підключення вже немає: його відв'язали чи видалили.",
       "newMcp": "Новий сервер MCP",
-      "diagnostics": "Діагностика",
-      "transport": "Під капотом: {{transport}} · сервер {{server}}",
       "back": "Підключення",
       "tabs": {
         "label": "Розділи підключення",
@@ -1735,8 +1630,7 @@
         "activity": "Активність",
         "access": "Доступ",
         "tools": "Інструменти",
-        "settings": "Налаштування",
-        "diagnostics": "Діагностика"
+        "settings": "Налаштування"
       },
       "name": "Назва",
       "save": "Зберегти",
@@ -1800,26 +1694,13 @@
     },
     "connect": {
       "title": "Підключити {{name}}",
-      "subtitle": {
-        "google-cloud": "Логи, креші й база Firestore — лише читання, через сервісний акаунт."
-      },
       "back": "Назад",
       "retry": "Спробувати знову",
       "continue": "Продовжити",
       "errorTitle": "Не вдалося підключити",
-      "chooseAccount": "Через який акаунт читати?",
-      "newKey": "Новий сервісний ключ",
-      "newKeyHint": "Вставте JSON ключа сервісного акаунта або виберіть файл.",
-      "keyName": "Назва акаунта",
-      "keyNamePlaceholder": "Наприклад, Syncta",
-      "key": "Ключ (JSON)",
       "pickFile": "Вибрати файл",
-      "roles": "Потрібні ролі лише на читання: Logs Viewer, Firebase Crashlytics Viewer, Cloud Datastore Viewer.",
       "submit": "Підключити",
-      "connecting": "Підключаю…",
-      "successTitle": "Акаунт «{{name}}» додано",
-      "successBody": "Тепер виберіть проєкт Google Cloud, який читатиме ця Factory.",
-      "bindProject": "Вибрати проєкт"
+      "connecting": "Підключаю…"
     },
     "addDialog": {
       "title": "Додати підключення",
@@ -1846,8 +1727,7 @@
         "tools": "Інструменти для агентів",
         "tasks": "Задачі",
         "code": "Репозиторії"
-      },
-      "googleAccount": "Акаунт Google Cloud"
+      }
     },
     "listHeading": "Підключення",
     "addShort": "Додати",
@@ -1876,7 +1756,8 @@
       "authorized": {
         "completed": "{{name}} підключено",
         "pending": "{{name}} ще підтверджує вхід; підключення з’явиться в списку за мить."
-      }
+      },
+      "mcpPending": "Сервер бази налаштовується; він з’явиться тут за мить."
     }
   }
 }

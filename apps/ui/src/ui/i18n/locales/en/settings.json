@@ -1232,22 +1232,8 @@
   "observability": {
     "requestFailed": "Request failed (HTTP {{status}}).",
     "cancel": "Cancel",
-    "platforms": {
-      "android": "Android",
-      "ios": "iOS",
-      "web": "Web"
-    },
-    "source": {
-      "firebase": "Firebase",
-      "checking": "Loading accounts…",
-      "ready": "Agents read server logs (Cloud Logging) and app crashes (Crashlytics) of the bound Google Cloud projects, read-only. Keys are encrypted and never reach an agent.",
-      "notConnected": "Server logs and app crashes for agents, read-only. Add a Google Cloud service account, then bind Factories to its Google Cloud projects.",
-      "accountsCount_one": "{{count}} account",
-      "accountsCount_other": "{{count}} accounts"
-    },
     "key": {
       "addTitle": "New Google Cloud account",
-      "replaceTitle": "New key for «{{name}}»",
       "roles": "In the Google Cloud project, create a service account with only Logs Viewer (roles/logging.viewer) and, for crashes, Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer); enable the Firebase Crashlytics API; create a JSON key and paste it here. Steps: docs/runbooks/firebase-observability.md.",
       "nameLabel": "Account name",
       "namePlaceholder": "Name, e.g. Syncta (default: the key’s Google Cloud project)",
@@ -1257,85 +1243,7 @@
       "save": "Save key"
     },
     "accounts": {
-      "title": "Google Cloud accounts",
-      "add": "Add account",
-      "none": "No account yet. Add a Google Cloud service account with read-only roles.",
-      "usedBy_one": "{{count}} binding",
-      "usedBy_other": "{{count}} bindings",
-      "unused": "not used",
-      "name": "Name",
-      "nameHint": "How this account is called in lists, e.g. «Syncta».",
-      "rename": "Rename",
-      "key": "Key",
-      "keyValue": "{{email}} · key from Google Cloud project {{project}}",
-      "replace": "Replace key",
-      "disconnect": "Disconnect",
-      "disconnectAria": "Disconnect account {{name}}",
-      "usedIn": "Used in",
-      "usedInNone": "No binding reads through this account.",
-      "confirmTitle": "Disconnect «{{name}}»?",
-      "confirmBody": "These bindings read through this account and are removed with it; their Factories’ agents stop seeing these logs and crashes.",
-      "confirmList": "Bindings removed with the account",
-      "confirm": "Disconnect with its bindings",
-      "saved": "Account saved",
-      "removed": "Account disconnected"
-    },
-    "bindings": {
-      "heading": "Bindings",
-      "add": "Add binding",
-      "none": "No Factory reads logs or crashes yet. A binding: Factory → account → Google Cloud project.",
-      "needsAccount": "Add a Google Cloud account first.",
-      "title": "{{factory}} → {{project}}",
-      "newTitle": "New binding",
-      "notSaved": "not saved",
-      "logsOn": "logs",
-      "apps_one": "{{count}} app",
-      "apps_other": "{{count}} apps",
-      "nothingRead": "nothing read",
-      "noAccount": "no account",
-      "factory": "Factory",
-      "factoryHint": "Whose agents get these logs and crashes.",
-      "pickFactory": "Choose a Factory",
-      "account": "Google Cloud account",
-      "accountHint": "Which service account reads this project.",
-      "pickAccount": "Choose an account",
-      "projectId": "Google Cloud project ID",
-      "projectIdHint": "E.g. syncta-57c6a — the account’s own project is proposed. Logs are read from it.",
-      "projectNumber": "Google Cloud project number",
-      "projectNumberHint": "Firebase › Project settings › Project number. Crashlytics addresses the project by it.",
-      "logs": "Server logs",
-      "logsHint": "Cloud Functions, Cloud Run, Hosting and the rest of Cloud Logging.",
-      "crashes": "App crashes",
-      "crashesHint": "Crashlytics for the apps below (Android and iOS apps; web apps have no crashes).",
-      "appsTitle": "Apps (crashes)",
-      "addApp": "Add app",
-      "noApps": "No apps: crashes are not read.",
-      "appId": "Firebase App ID {{number}}",
-      "platform": "Platform of app {{number}}",
-      "appLabel": "Name of app {{number}}",
-      "appLabelPlaceholder": "Name (optional)",
-      "removeApp": "Remove app {{number}}",
-      "remove": "Remove",
-      "save": "Save",
-      "saved": "Binding saved",
-      "removeBinding": "Remove binding",
-      "removeAria": "Remove binding {{title}}",
-      "database": "Database (Firestore)",
-      "databaseHint": "Agents read this project’s Firestore, read-only when the account has only Cloud Datastore Viewer. What the database tools may do is set on this connection’s page.",
-      "databaseId": "Firestore database",
-      "databaseIdHint": "Empty for the (default) database.",
-      "databaseOn": "database"
-    },
-    "check": {
-      "run": "Check access",
-      "running": "Checking…",
-      "results": "Check results",
-      "ok": "Access",
-      "failed": "No access",
-      "logs": "Logs of Google Cloud project {{target}}",
-      "crashes": "Crashes of app {{target}}",
-      "missingRole": "Missing role {{role}}.",
-      "database": "Database {{target}}"
+      "saved": "Account saved"
     }
   },
   "boards": {
@@ -1624,7 +1532,6 @@
     "mcpBadge": "MCP",
     "organizationWide": "Whole organization",
     "kinds": {
-      "google-cloud": "Google Cloud",
       "mcp": "MCP server"
     },
     "capabilities": {
@@ -1653,11 +1560,9 @@
       "menu": "Actions for {{name}}",
       "open": "Open",
       "rename": "Rename",
-      "renameAccount": "Rename account",
       "reconnect": "Reconnect",
       "unlink": "Unlink from Factory",
       "delete": "Delete from organization",
-      "deleteAccount": "Remove account from organization",
       "deleteConnection": "Delete connection"
     },
     "rename": {
@@ -1688,12 +1593,8 @@
     "back": "All connections",
     "detail": {
       "account": "Account",
-      "database": "Database (Firestore)",
-      "databaseHint": "What agents may do with the database and whether personal data is masked. The binding above sets the project.",
       "notFound": "This connection is gone: it was unlinked or deleted.",
       "newMcp": "New MCP server",
-      "diagnostics": "Diagnostics",
-      "transport": "Under the hood: {{transport}} · server {{server}}",
       "back": "Connections",
       "tabs": {
         "label": "Connection sections",
@@ -1701,8 +1602,7 @@
         "activity": "Activity",
         "access": "Access",
         "tools": "Tools",
-        "settings": "Settings",
-        "diagnostics": "Diagnostics"
+        "settings": "Settings"
       },
       "name": "Name",
       "save": "Save",
@@ -1764,26 +1664,13 @@
     },
     "connect": {
       "title": "Connect {{name}}",
-      "subtitle": {
-        "google-cloud": "Logs, crashes and the Firestore database — read-only, through a service account."
-      },
       "back": "Back",
       "retry": "Try again",
       "continue": "Continue",
       "errorTitle": "Couldn't connect",
-      "chooseAccount": "Which account reads it?",
-      "newKey": "New service account key",
-      "newKeyHint": "Paste the service account key JSON or pick the file.",
-      "keyName": "Account name",
-      "keyNamePlaceholder": "For example, Syncta",
-      "key": "Key (JSON)",
       "pickFile": "Pick a file",
-      "roles": "Read-only roles needed: Logs Viewer, Firebase Crashlytics Viewer, Cloud Datastore Viewer.",
       "submit": "Connect",
-      "connecting": "Connecting…",
-      "successTitle": "Account “{{name}}” added",
-      "successBody": "Now pick the Google Cloud project this Factory reads.",
-      "bindProject": "Pick a project"
+      "connecting": "Connecting…"
     },
     "addDialog": {
       "title": "Add connection",
@@ -1810,8 +1697,7 @@
         "tools": "Tools for agents",
         "tasks": "Tasks",
         "code": "Repositories"
-      },
-      "googleAccount": "Google Cloud account"
+      }
     },
     "listHeading": "Connections",
     "addShort": "Add",
@@ -1840,7 +1726,8 @@
       "authorized": {
         "completed": "{{name}} is connected",
         "pending": "{{name}} is still confirming the sign-in; the connection appears in the list in a moment."
-      }
+      },
+      "mcpPending": "The database server is being set up; it appears here in a moment."
     }
   }
 }

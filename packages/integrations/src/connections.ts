@@ -38,6 +38,7 @@ import type {
 } from '@factory/contracts';
 import type { AuditEmitter } from '@factory/feed';
 import type { RouteAuth } from '@factory/http';
+import type { AuditAction } from '@factory/store';
 
 export type * from '@factory/contracts/connections';
 
@@ -53,8 +54,11 @@ export interface ConnectionRequest {
   language: ConnectionLanguage;
   /** The Factory whose page asks; Factory-scoped connections are listed for it. */
   factoryProjectId?: string;
-  /** Records an audit event for this request, targeting the connector. Never throws. */
-  audit(action: ConnectionAuditAction, metadata: Record<string, unknown>): void;
+  /**
+   * Records an audit event for this request, targeting the connector: a short integration action
+   * (`factory.integration.<action>`), or a full action of another namespace. Never throws.
+   */
+  audit(action: ConnectionAuditAction | AuditAction, metadata: Record<string, unknown>, options?: { factoryProjectId?: string }): void;
 }
 
 /** A connector as it describes itself; the registry adds its id. */
@@ -231,12 +235,13 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       admin,
       language,
       ...(factoryProjectId ? { factoryProjectId } : {}),
-      audit: (action, metadata) =>
+      audit: (action, metadata, options) =>
         void Promise.resolve(
           emitAudit?.({
             context: c,
             input: {
-              action: `factory.integration.${action}` as const,
+              action: action.startsWith('factory.') ? (action as AuditAction) : (`factory.integration.${action}` as AuditAction),
+              ...(options?.factoryProjectId ? { factoryProjectId: options.factoryProjectId } : {}),
               targets: [{ type: 'integration', id: connectorId ?? 'connections' }],
               metadata,
             },

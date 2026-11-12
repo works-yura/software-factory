@@ -45,7 +45,9 @@ export interface ConnectionBlocked {
  * `secret` (never shown back), `textarea`, and `file` (a picked file read into the value).
  */
 export interface ConnectFormField extends Omit<ConnectionField, 'type'> {
-  type: ConnectionField['type'] | 'secret' | 'textarea' | 'file';
+  type: ConnectionField['type'] | 'secret' | 'textarea' | 'file' | 'select';
+  /** `select`: the choices, by value. */
+  options?: Array<{ value: string; label: string }>;
   placeholder?: string;
   /** `file`: the picker's accept list (`application/json,.json`). */
   accept?: string;
@@ -88,6 +90,8 @@ export interface ConnectorRef {
 export interface ConnectorView extends ConnectorRef {
   /** One line under the connect step's title (`ToolProviderInfo.description`). */
   description?: string;
+  /** Other names older links use for it (`?connection=<alias>` opens it like its id). */
+  aliases?: string[];
   /** The catalog's filter: tools agents call, or sources that bring work and code. */
   category: 'tools' | 'sources';
   /** Runs as a third-party MCP server (the row and catalog show the badge). */
@@ -175,12 +179,10 @@ export interface RemovalImpact {
 }
 
 /**
- * A setting of a connection, shown on its page: a {@link ConnectFormField} with its current value,
- * plus `select` (its `options`). `disabled` says why it cannot be changed here.
+ * A setting of a connection, shown on its page: a {@link ConnectFormField} with its current value.
+ * `disabled` says why it cannot be changed here.
  */
-export interface ConnectionSettingField extends Omit<ConnectFormField, 'type'> {
-  type: ConnectFormField['type'] | 'select';
-  options?: Array<{ value: string; label: string }>;
+export interface ConnectionSettingField extends ConnectFormField {
   value: string | boolean | null;
   disabled?: ConnectionBlocked;
 }
@@ -210,6 +212,18 @@ export type ConnectionDetailSection =
       columns: string[];
       rows: Array<{ cells: string[]; href?: string }>;
       empty?: string;
+    }
+  | {
+      /**
+       * The one exception to "descriptors only" (ADR-0035): an editor too rich to describe — the MCP
+       * server editor (transport, access by Factory and session kind, per-tool policy). `component`
+       * names it (`mcp-server`), `params` say which (`serverId`, or `owner` + `key` for a managed one).
+       */
+      type: 'custom';
+      component: 'mcp-server';
+      title?: string;
+      description?: string;
+      params: Record<string, string>;
     }
   | {
       type: 'notice';

@@ -1,9 +1,8 @@
 /**
- * Firebase's HTTP surface under `/web/firebase`:
- * - accounts — the org's Google Cloud service accounts (a key uploaded once, never sent back);
- * - bindings — which Factory reads which Google Cloud project through which account;
- * - a check per binding that names the missing role or API.
- * Writes are an organization admin's call once auth is on.
+ * Firebase's HTTP surface under `/web/firebase`: the organization's Google Cloud accounts as read
+ * (`status`) and added from an MCP server's form (a key uploaded once, never sent back). Bindings —
+ * connecting, settings, the access check, unlinking and removal — are the connections facet
+ * (`connections.ts`, ADR-0035). Writes are an organization admin's call once auth is on.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
@@ -16,24 +15,11 @@ import type { RouteAuth } from '@factory/http';
 import type { IntegrationHooks } from '@factory/integrations';
 import type { FactoryProjectsStorage, IntegrationStorageHandle } from '@factory/store';
 
-import { listFirestoreDatabases, listGoogleCloudProjects } from './discovery.ts';
 import { FIRESTORE_API, GoogleApiClient } from './google-api.ts';
 import { ServiceAccountKeyError, ServiceAccountTokens, parseServiceAccountKey } from './service-account.ts';
 import type { FetchLike, ServiceAccountKey } from './service-account.ts';
-import {
-  deleteAccount,
-  deleteBinding,
-  firebaseBindingInputSchema,
-  newBindingId,
-  readAccountKey,
-  readFirebaseState,
-  readsCrashes,
-  readsDatabase,
-  renameAccount,
-  saveAccount,
-  saveBinding,
-} from './settings.ts';
-import type { FirebaseAccount, FirebaseBinding, FirebaseBindingInput, FirebaseState } from './settings.ts';
+import { readFirebaseState, readsCrashes, readsDatabase, saveAccount } from './settings.ts';
+import type { FirebaseAccount, FirebaseBinding, FirebaseState } from './settings.ts';
 import { FirebaseObservabilitySource } from './source.ts';
 
 export interface FirebaseRoutesOptions {
@@ -68,11 +54,6 @@ export interface FirebaseStateView {
 
 const accountNameSchema = z.string().trim().min(1).max(80);
 const addAccountSchema = z.object({ name: accountNameSchema.optional(), serviceAccountJson: z.string().min(2).max(20_000) });
-const updateAccountSchema = z
-  .object({ name: accountNameSchema.optional(), serviceAccountJson: z.string().min(2).max(20_000).optional() })
-  .refine(body => body.name !== undefined || body.serviceAccountJson !== undefined, 'Send a new name or a new key.');
-const checkBodySchema = z.object({ binding: firebaseBindingInputSchema });
-const idSchema = z.string().min(1).max(64);
 
 class Refusal extends Error {
   readonly status: 400 | 401 | 403 | 404 | 409 | 422;
@@ -128,11 +109,6 @@ async function readBody<S extends z.ZodType>(c: Context, schema: S, error: strin
   return parsed.data;
 }
 
-function param(c: Context, name: string): string {
-  const parsed = idSchema.safeParse(c.req.param(name));
-  if (!parsed.success) throw new Refusal(400, { error: `invalid_${name}` });
-  return parsed.data;
-}
 
 export function stateView(state: FirebaseState): FirebaseStateView {
   return {
@@ -199,7 +175,7 @@ export function firestoreReader(key: ServiceAccountKey, fetch?: FetchLike): { li
 }
 
 export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] {
-  const { auth, storage, projects, hooks } = options;
+  const { auth, storage, hooks } = options;
   const now = options.now ?? (() => new Date());
 
   const audit = async (
@@ -219,33 +195,6 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
     });
 
   const view = async (orgId: string) => stateView(await readFirebaseState(storage, orgId));
-  /** «База» bindings are MCP servers the factory manages: bring them in line after any change. */
-  const syncManaged = async (orgId: string) => {
-    await hooks?.onManagedMcpServersChanged?.(orgId);
-  };
-
-  /** A binding the org may save: its Factory is the org's, its account exists, its apps are unique. */
-  const validBinding = async (orgId: string, input: FirebaseBindingInput) => {
-    if (!(await projects.get({ orgId, id: input.factoryProjectId }))) throw new Refusal(404, { error: 'factory_not_found' });
-    const state = await readFirebaseState(storage, orgId);
-    if (!state.accounts.some(account => account.id === input.accountId)) {
-      throw new Refusal(422, { error: 'account_not_found', message: 'Choose one of the Google Cloud accounts.' });
-    }
-    const appIds = input.apps.map(app => app.appId);
-    if (new Set(appIds).size !== appIds.length) throw new Refusal(422, { error: 'invalid_binding', message: 'An app is listed twice.' });
-    return state;
-  };
-
-  const bindingAudit = (binding: FirebaseBinding) => ({
-    bindingId: binding.id,
-    accountId: binding.accountId,
-    projectId: binding.projectId,
-    logs: binding.logs,
-    crashes: binding.crashes,
-    apps: binding.apps.map(app => app.appId),
-    database: readsDatabase(binding),
-  });
-
   return [
     registerApiRoute('/web/firebase/status', {
       method: 'GET',
@@ -265,145 +214,6 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         const account = await saveAccount(storage, orgId, userId, { name: body.name ?? key.project_id, key });
         await audit(c, 'connected', { accountId: account.id, name: account.name, clientEmail: account.clientEmail, projectId: account.projectId, keyId: account.keyId });
         return c.json({ account, ...(await view(orgId)) });
-      }),
-    }),
-    // What the account can see, for the binding form's project and database choices. Read-only;
-    // a refusal comes back as `denied` with what is still known (the key's project, `(default)`).
-    registerApiRoute('/web/firebase/accounts/:accountId/projects', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId } = await caller(c, auth, false);
-        const key = await readAccountKey(storage, orgId, param(c, 'accountId'));
-        if (!key) throw new Refusal(404, { error: 'account_not_found' });
-        return c.json(await listGoogleCloudProjects(key, options.fetch ? { fetch: options.fetch } : {}));
-      }),
-    }),
-    registerApiRoute('/web/firebase/accounts/:accountId/databases', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId } = await caller(c, auth, false);
-        const key = await readAccountKey(storage, orgId, param(c, 'accountId'));
-        if (!key) throw new Refusal(404, { error: 'account_not_found' });
-        const project = c.req.query('project')?.trim() || key.project_id;
-        if (project.length > 128) throw new Refusal(400, { error: 'invalid_project' });
-        return c.json(await listFirestoreDatabases(key, project, options.fetch ? { fetch: options.fetch } : {}));
-      }),
-    }),
-    registerApiRoute('/web/firebase/accounts/:accountId', {
-      method: 'PUT',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId, userId } = await caller(c, auth, true);
-        const accountId = param(c, 'accountId');
-        const body = await readBody(c, updateAccountSchema, 'invalid_body');
-        const current = (await readFirebaseState(storage, orgId)).accounts.find(account => account.id === accountId);
-        if (!current) throw new Refusal(404, { error: 'account_not_found' });
-        const name = body.name ?? current.name;
-        const account = body.serviceAccountJson
-          ? await saveAccount(storage, orgId, userId, { accountId, name, key: parseKey(body.serviceAccountJson) })
-          : await renameAccount(storage, orgId, accountId, name);
-        if (!account) throw new Refusal(404, { error: 'account_not_found' });
-        await audit(c, 'connected', {
-          accountId,
-          name,
-          clientEmail: account.clientEmail,
-          projectId: account.projectId,
-          keyId: account.keyId,
-          replacedKey: body.serviceAccountJson !== undefined,
-        });
-        return c.json({ account, ...(await view(orgId)) });
-      }),
-    }),
-    registerApiRoute('/web/firebase/accounts/:accountId', {
-      method: 'DELETE',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId } = await caller(c, auth, true);
-        const accountId = param(c, 'accountId');
-        const state = await readFirebaseState(storage, orgId);
-        const used = state.bindings.filter(binding => binding.accountId === accountId);
-        // Bindings stop reading when their account goes: the person confirms that, it never happens by surprise.
-        if (used.length > 0 && c.req.query('withBindings') !== 'true') {
-          throw new Refusal(409, {
-            error: 'account_in_use',
-            message: 'Bindings read through this account; confirm to remove them with it.',
-            bindings: used.map(binding => ({ id: binding.id, factoryProjectId: binding.factoryProjectId, projectId: binding.projectId })),
-          });
-        }
-        const removed = await deleteAccount(storage, orgId, accountId);
-        if (!removed) throw new Refusal(404, { error: 'account_not_found' });
-        await audit(c, 'disconnected', { accountId, removedBindings: removed.removedBindings });
-        await syncManaged(orgId);
-        return c.json(await view(orgId));
-      }),
-    }),
-    registerApiRoute('/web/firebase/bindings', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId, userId } = await caller(c, auth, true);
-        const input = await readBody(c, firebaseBindingInputSchema, 'invalid_binding');
-        await validBinding(orgId, input);
-        const binding = await saveBinding(storage, orgId, {
-          id: newBindingId(),
-          ...input,
-          createdAt: new Date().toISOString(),
-          ...(userId ? { createdBy: userId } : {}),
-        });
-        await audit(c, 'mapping_updated', bindingAudit(binding), binding.factoryProjectId);
-        await syncManaged(orgId);
-        return c.json({ binding, ...(await view(orgId)) });
-      }),
-    }),
-    registerApiRoute('/web/firebase/bindings/:bindingId', {
-      method: 'PUT',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId } = await caller(c, auth, true);
-        const bindingId = param(c, 'bindingId');
-        const input = await readBody(c, firebaseBindingInputSchema, 'invalid_binding');
-        const state = await validBinding(orgId, input);
-        const existing = state.bindings.find(binding => binding.id === bindingId);
-        if (!existing) throw new Refusal(404, { error: 'binding_not_found' });
-        // A change keeps when and by whom the binding was made.
-        const binding = await saveBinding(storage, orgId, {
-          id: bindingId,
-          ...input,
-          ...(existing.createdAt ? { createdAt: existing.createdAt } : {}),
-          ...(existing.createdBy ? { createdBy: existing.createdBy } : {}),
-        });
-        await audit(c, 'mapping_updated', bindingAudit(binding), binding.factoryProjectId);
-        await syncManaged(orgId);
-        return c.json({ binding, ...(await view(orgId)) });
-      }),
-    }),
-    registerApiRoute('/web/firebase/bindings/:bindingId', {
-      method: 'DELETE',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId } = await caller(c, auth, true);
-        const bindingId = param(c, 'bindingId');
-        const existing = (await readFirebaseState(storage, orgId)).bindings.find(binding => binding.id === bindingId);
-        if (!existing || !(await deleteBinding(storage, orgId, bindingId))) throw new Refusal(404, { error: 'binding_not_found' });
-        await audit(c, 'mapping_updated', { bindingId, removed: true, projectId: existing.projectId }, existing.factoryProjectId);
-        await syncManaged(orgId);
-        return c.json(await view(orgId));
-      }),
-    }),
-    registerApiRoute('/web/firebase/bindings/check', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: handle(async c => {
-        const { orgId } = await caller(c, auth, true);
-        const { binding } = await readBody(c, checkBodySchema, 'invalid_binding');
-        await validBinding(orgId, binding);
-        const key = await readAccountKey(storage, orgId, binding.accountId);
-        if (!key) throw new Refusal(422, { error: 'account_not_found', message: 'Choose one of the Google Cloud accounts.' });
-        const source = new FirebaseObservabilitySource({ key, binding, ...(options.fetch ? { fetch: options.fetch } : {}), now });
-        const checks = await checkFirebaseAccess(source, binding, now(), firestoreReader(key, options.fetch));
-        return c.json({ ok: checks.length > 0 && checks.every(check => check.ok), checks });
       }),
     }),
   ];

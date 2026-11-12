@@ -25,7 +25,6 @@ const LEGACY_TABS = new Set(['services', 'mcp']);
 
 /** A connect step «Перепідключити» opens straight into (`&step=`): a first-party kind's, or a server connection's. */
 const isStep = (value: string | null): value is Step =>
-  value === 'google-cloud' ||
   Boolean(value?.startsWith('connector:') || value?.startsWith('reconnect:'));
 
 /** The `?connection=` link of a connection's page. */
@@ -62,9 +61,11 @@ export function ConnectionsSection() {
   const open = params.get('connection');
   const rows = factoryConnections(factoryId ?? '', sources);
   // `?connection=<connector>` (a link to a connector, not one connection) becomes its only connection, else the list.
-  const connectorLink =
-    open !== null && !rows.some(row => row.id === open) && (sources.connectors ?? []).some(connector => connector.id === open);
-  const ofConnector = connectorLink ? rows.filter(row => row.view?.connector.id === open) : [];
+  const linked = open !== null && !rows.some(row => row.id === open)
+    ? (sources.connectors ?? []).find(connector => connector.id === open || connector.aliases?.includes(open))
+    : undefined;
+  const connectorLink = linked !== undefined;
+  const ofConnector = linked ? rows.filter(row => row.view?.connector.id === linked.id) : [];
   const resolvedLink = connectorLink && !pending ? (ofConnector.length === 1 ? ofConnector[0]!.id : '') : undefined;
   useEffect(() => {
     if (resolvedLink === undefined) return;
@@ -86,21 +87,16 @@ export function ConnectionsSection() {
     setParams(current => {
       const next = new URLSearchParams(current);
       for (const key of ['connection', 'account', 'add', 'step', 'view']) next.delete(key);
-      if (target) {
-        next.set('connection', target.connection);
-        if (target.account) next.set('account', target.account);
-      }
+      if (target) next.set('connection', target.connection);
       return next;
     });
 
   if (open && !connectorLink) {
     if (pending) return <SkeletonRows label={t('connections.loading')} rows={3} />;
-    const account = params.get('account');
     return (
       <ConnectionDetail
         key={open}
         id={open}
-        {...(account ? { linkAccountId: account } : {})}
         factoryId={factoryId}
         rows={rows}
         sources={sources}

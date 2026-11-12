@@ -9,6 +9,7 @@ import { useConnectionDetail } from '../../../../../hooks/useConnections';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { SettingsSubsection } from '../SettingsSubsection';
 import { ConnectorSettings } from './ConnectorSettings';
+import { McpServerSection } from './McpServerSection';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -40,6 +41,8 @@ function Section({ connectionId, section }: { connectionId: string; section: Con
   const body =
     section.type === 'settings' ? (
       <ConnectorSettings connectionId={connectionId} section={section} />
+    ) : section.type === 'custom' ? (
+      <McpServerSection params={section.params} />
     ) : section.type === 'facts' ? (
       <SettingsContainer>
         {section.rows.map(row => (

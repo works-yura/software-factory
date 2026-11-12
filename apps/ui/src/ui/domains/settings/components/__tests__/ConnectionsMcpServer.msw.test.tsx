@@ -10,7 +10,7 @@ import toolboxManifest from '../../../../../../../../packages/server/src/mcp-ser
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { McpServer } from '../../services/mcpServers';
-import { firebaseState, managedServer, renderConnections, useIntegrationHandlers } from './fixtures/connections';
+import { managedServer, renderConnections, useIntegrationHandlers } from './fixtures/connections';
 
 const BASE = `${TEST_BASE_URL}/web/mcp-servers`;
 const toolbox = mcpCatalogEntry(toolboxManifest, toolboxOverlay);
@@ -37,10 +37,10 @@ const stored: McpServer = {
 
 const discoveries: Array<{ from: string; context: Record<string, string> }> = [];
 
-function useHandlers(servers: McpServer[] = [], canEdit = true, firebase: typeof firebaseState = { accounts: [], bindings: [] }) {
+function useHandlers(servers: McpServer[] = [], canEdit = true) {
   const writes: Array<{ method: string; url: string; body: any }> = [];
   discoveries.length = 0;
-  useIntegrationHandlers({ firebase });
+  useIntegrationHandlers();
   server.use(
     http.get(BASE, () =>
       HttpResponse.json({
@@ -263,23 +263,26 @@ describe('Підключення: MCP servers', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
-  it('shows the «База» Google Cloud manages on its binding’s page: config and access read-only, tool policy editable, no delete', async () => {
-    const writes = useHandlers([{ ...managedServer, health: undefined }], true, firebaseState);
-    await render('?connection=google-cloud:bnd-1&view=settings');
+  it("shows a server an integration manages inside that connection's page: config read-only, tool policy editable, no access or delete", async () => {
+    const writes = useHandlers([{ ...managedServer, health: undefined }], true);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, () =>
+        HttpResponse.json({
+          sections: [{ type: 'custom', component: 'mcp-server', title: 'Database tools', params: { owner: 'firebase', key: 'bnd-1' } }],
+        }),
+      ),
+    );
+    await render('?connection=acme%3Amain');
 
-    expect(await screen.findByRole('heading', { name: 'Database (Firestore)' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'What to connect' })).toBeDisabled();
-    // A managed server has no «Access» tab and nothing to delete; how it runs is only under «Diagnostics».
-    expect(screen.queryByRole('tab', { name: 'Access' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Database tools' })).toBeInTheDocument();
+    expect(await screen.findByRole('combobox', { name: 'What to connect' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/MCP Toolbox|@toolbox-sdk/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Diagnostics' }));
-    expect(await screen.findByText(/Under the hood: MCP · @toolbox-sdk\/server/)).toBeInTheDocument();
+    expect(screen.queryByText('Who has access')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Tools' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Check' }));
     await pick('Policy for delete_documents', 'Forbidden');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const saves = screen.getAllByRole('button', { name: 'Save' });
+    await userEvent.click(saves.at(-1)!);
     await waitFor(() => expect(writes.at(-1)?.body.toolPolicies).toEqual({ default: 'allow', tools: { delete_documents: 'deny' } }));
   });
 

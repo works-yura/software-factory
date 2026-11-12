@@ -11,7 +11,6 @@ import {
   acmeConnection,
   acmeConnector,
   FACTORY_ID,
-  firebaseState,
   managedServer,
   MCP_BASE,
   renderConnections,
@@ -31,7 +30,7 @@ const own: McpServer = {
 const elsewhere: McpServer = { ...own, id: 'srv-notes', name: 'notes', label: 'Notes', assignments: [{ factoryProjectId: 'other-factory' }], health: undefined };
 
 function useHandlers(options: { activity?: McpActivity } = {}) {
-  useIntegrationHandlers({ firebase: firebaseState });
+  useIntegrationHandlers();
   const writes: Array<{ method: string; url: string; body: unknown }> = [];
   server.use(
     http.get(MCP_BASE, () => HttpResponse.json({ servers: [managedServer, own, elsewhere], catalog: [], credentials: {}, canEdit: true })),
@@ -48,10 +47,6 @@ function useHandlers(options: { activity?: McpActivity } = {}) {
       writes.push({ method: 'RECONNECT', url: request.url, body: null });
       return HttpResponse.json({ status: { connected: true, toolCount: 3, tools: [], checkedAt: 'now' } });
     }),
-    http.delete(`${TEST_BASE_URL}/web/firebase/bindings/:id`, ({ request }) => {
-      writes.push({ method: 'DELETE', url: request.url, body: null });
-      return HttpResponse.json({ accounts: firebaseState.accounts, bindings: [] });
-    }),
     ...(options.activity ? [http.get(`${MCP_BASE}/activity`, () => HttpResponse.json(options.activity))] : []),
   );
   return writes;
@@ -66,23 +61,14 @@ async function openMenu(name: string) {
 }
 
 describe('Підключення', () => {
-  it("lists the Factory's connections in one table: Google Cloud with its «База», organization-wide sources, MCP servers last by badge; never another Factory's", async () => {
+  it("lists the Factory's connections in one table: the server's connectors, then MCP servers by badge; never another Factory's, never a server an integration runs", async () => {
     useHandlers();
     renderConnections();
 
     expect(screen.getByRole('heading', { name: 'Connections', level: 1 })).toBeInTheDocument();
     const list = await rows();
-    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'Acme main', 'Sentry']);
-    const google = await rowNamed('syncta-57c6a');
-    expect(google).toHaveTextContent('Google Cloud');
-    expect(google).toHaveTextContent('Syncta');
-    // Capabilities are icons, each named.
-    expect(within(google).getByRole('img', { name: 'Logs' })).toBeInTheDocument();
-    expect(within(google).getByRole('img', { name: 'Database' })).toBeInTheDocument();
-    // A first-party integration says what it gives, never how it runs; a working one says nothing about its state.
-    expect(google).not.toHaveTextContent('MCP');
-    expect(google).not.toHaveTextContent('Working');
-    // The «База» server is the binding's, not a row of its own.
+    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['Acme main', 'Sentry']);
+    // A server an integration runs under the hood (Google Cloud's «База») is part of that connection, not a row.
     expect(screen.queryByRole('link', { name: /^Firestore syncta-57c6a/ })).not.toBeInTheDocument();
     const sentry = await rowNamed('Sentry');
     expect(sentry).toHaveTextContent('MCP');
@@ -92,28 +78,31 @@ describe('Підключення', () => {
     expect(acme).toHaveTextContent('Acme Cloud');
     expect(acme).toHaveTextContent('acme-team');
     expect(within(acme).getByRole('img', { name: 'Tickets' })).toBeInTheDocument();
+    // A working connection says nothing about its state; it is not an MCP server.
+    expect(acme).not.toHaveTextContent('MCP');
+    expect(acme).not.toHaveTextContent('Live');
     expect(screen.queryByRole('link', { name: /^Notes/ })).not.toBeInTheDocument();
   });
 
-  it("names the binding's creation and lets it be renamed on «Overview», keeping its settings", async () => {
+  it("names a server connection's creation and lets it be renamed on «Overview»", async () => {
     useHandlers();
     const saved: unknown[] = [];
     server.use(
-      http.put(`${TEST_BASE_URL}/web/firebase/bindings/:id`, async ({ request }) => {
+      http.patch(`${TEST_BASE_URL}/web/connections/:id`, async ({ request }) => {
         saved.push(await request.json());
-        return HttpResponse.json(firebaseState);
+        return HttpResponse.json({ name: 'Acme prod' });
       }),
     );
-    renderConnections('?connection=google-cloud:bnd-1');
-    expect(await screen.findByRole('heading', { name: 'syncta-57c6a', level: 1 })).toBeInTheDocument();
+    renderConnections('?connection=acme%3Amain');
+    expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connections' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/settings/integrations`);
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Overview', 'Activity', 'Tools', 'Settings', 'Diagnostics']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Overview']);
     const name = screen.getByRole('textbox', { name: 'Name' });
     await userEvent.clear(name);
-    await userEvent.type(name, 'Syncta prod');
+    await userEvent.type(name, 'Acme prod');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(saved).toEqual([expect.objectContaining({ name: 'Syncta prod', projectId: 'syncta-57c6a', logs: true, database: { enabled: true } })]));
+    await waitFor(() => expect(saved).toEqual([{ name: 'Acme prod' }]));
   });
 
   it('opens a row as its own view in the URL and comes back to the list', async () => {
@@ -124,7 +113,7 @@ describe('Підключення', () => {
     expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('link', { name: 'Connections' }));
     expect(screen.getByTestId('search')).toBeEmptyDOMElement();
-    expect(await rows()).toHaveLength(3);
+    expect(await rows()).toHaveLength(2);
   });
 
   it("saves a server connection's setting the moment its switch changes", async () => {
@@ -168,11 +157,14 @@ describe('Підключення', () => {
     expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
   });
 
-  it('lands links from before the one list on the same thing', async () => {
+  it('lands links from before the one list on the same thing, by a connector’s id or an older name of it', async () => {
     useHandlers();
-    renderConnections('?tab=services&service=google-cloud');
-    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=google-cloud'));
-    expect(await screen.findByRole('button', { name: 'Add account' })).toBeInTheDocument();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/connections/methods`, () => HttpResponse.json({ connectors: [{ ...acmeConnector, aliases: ['acme-legacy'] }] })),
+    );
+    renderConnections('?tab=services&service=acme-legacy');
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=acme%3Amain'));
+    expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
   });
 
   it("unlinks an MCP server from this Factory only, keeping the others' access", async () => {
@@ -186,16 +178,6 @@ describe('Підключення', () => {
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toMatchObject({ method: 'PUT', url: expect.stringContaining('/srv-sentry'), body: { assignments: [{ factoryProjectId: 'other-factory' }] } });
-  });
-
-  it("unlinks a Google Cloud project by removing the binding, not the account", async () => {
-    const writes = useHandlers();
-    renderConnections();
-    await rows();
-    await openMenu('syncta-57c6a');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Unlink from Factory' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Unlink' }));
-    await waitFor(() => expect(writes).toEqual([expect.objectContaining({ method: 'DELETE', url: expect.stringContaining('/web/firebase/bindings/bnd-1') })]));
   });
 
   it('renames, reconnects and deletes an own MCP server from its menu', async () => {
@@ -352,7 +334,6 @@ describe('Підключення', () => {
 
     const integrations = within(dialog).getByRole('group', { name: 'Integrations' });
     expect(within(integrations).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual([
-      'Connect Google Cloud',
       'Connect Acme Cloud',
     ]);
     expect(within(integrations).getByRole('option', { name: 'Connect Acme Cloud' })).toContainElement(within(integrations).getByRole('img', { name: 'Tickets' }));
@@ -363,7 +344,6 @@ describe('Підключення', () => {
     // Sources leave out tools and the organization's accounts.
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Sources' }));
     expect(within(dialog).queryByRole('group', { name: 'Organization accounts' })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole('button', { name: 'Connect Google Cloud' })).not.toBeInTheDocument();
     expect(within(dialog).getByRole('option', { name: 'Connect Acme Cloud' })).toBeInTheDocument();
   });
 
@@ -382,148 +362,14 @@ describe('Підключення', () => {
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=mcp%3Asrv-notes'));
   });
 
-  it('links a Google Cloud account by opening a new binding through it for this Factory', async () => {
-    useHandlers();
-    renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.click(within(dialog).getByRole('option', { name: 'Link Syncta' }));
-
-    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=google-cloud&account=acc-1'));
-    expect(await screen.findByRole('combobox', { name: 'Google Cloud account' })).toHaveTextContent('Syncta');
-    expect(screen.getByRole('combobox', { name: 'Factory' })).toHaveTextContent('syncts');
-  });
-
-  it('connects Google Cloud in the dialog: a refused key shows why and tries again, then goes on to pick the project', async () => {
-    useHandlers();
-    const posted: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/firebase/accounts`, async ({ request }) => {
-        posted.push(await request.json());
-        if (posted.length === 1) return HttpResponse.json({ error: 'invalid_key', message: 'The key has no client_email.' }, { status: 422 });
-        return HttpResponse.json({
-          account: { id: 'acc-2', name: 'BookFate', clientEmail: 'f@bookfate.iam.gserviceaccount.com', projectId: 'bookfate', keyId: 'k', bindingIds: [] },
-          ...firebaseState,
-        });
-      }),
-    );
-    renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Google Cloud' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect Google Cloud' });
-
-    // The organization already has an account: pick it, or add a new key.
-    await userEvent.click(within(dialog).getByRole('button', { name: /New service account key/ }));
-    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Key (JSON)' }), '{{"type":"service_account"}');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
-
-    const alert = await within(dialog).findByRole('alert');
-    expect(alert).toHaveTextContent("Couldn't connect");
-    expect(alert).toHaveTextContent('The key has no client_email.');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
-
-    expect(await within(dialog).findByText('Account “BookFate” added')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Pick a project' }));
-    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=google-cloud&account=acc-2'));
-    expect(posted).toHaveLength(2);
-  });
-
-  it("connects through a server connector's form: asks which way first, says why one is unavailable, shows a refusal on its field", async () => {
-    useHandlers();
-    const posted: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/connections`, async ({ request }) => {
-        posted.push(await request.json());
-        if (posted.length === 1) {
-          return HttpResponse.json({ error: 'invalid_key', message: 'Acme refused the key.', fields: { key: 'Acme refused the key.' } }, { status: 422 });
-        }
-        return HttpResponse.json({
-          type: 'connected',
-          connection: { ...acmeConnection, id: 'acme:new', label: 'Acme new' },
-          title: 'Acme new is connected',
-          message: 'It reaches 3 projects.',
-        });
-      }),
-    );
-    renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Acme Cloud' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect Acme Cloud' });
-    expect(within(dialog).getByText('Tickets from Acme projects.')).toBeInTheDocument();
-    const methods = within(dialog).getByRole('list', { name: 'How do you connect?' });
-    expect(within(methods).getByRole('button', { name: /Sign in with Acme/ })).toBeDisabled();
-    expect(within(methods).getByRole('button', { name: /Sign in with Acme/ })).toHaveAccessibleDescription('Acme sign-in is off on this server.');
-    await userEvent.click(within(methods).getByRole('button', { name: /API key/ }));
-
-    await userEvent.type(within(dialog).getByLabelText('Acme API key'), 'acme_bad');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Connect Acme' }));
-    expect(await within(dialog).findByText('Acme refused the key.')).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Acme API key')).toHaveAttribute('aria-invalid', 'true');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
-
-    expect(await within(dialog).findByText('Acme new is connected')).toBeInTheDocument();
-    expect(within(dialog).getByText('It reaches 3 projects.')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Open the connection' }));
-    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=acme%3Anew'));
-    expect(posted).toEqual([
-      { connector: 'acme', method: 'key', input: { key: 'acme_bad' } },
-      { connector: 'acme', method: 'key', input: { key: 'acme_bad' } },
-    ]);
-  });
-
-  it('runs a provider session an authorize method returns here, then waits for the account to be active', async () => {
-    useHandlers();
-    const asked: string[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/connections/methods`, () =>
-        HttpResponse.json({ connectors: [{ ...acmeConnector, methods: [{ id: 'sso', label: 'Sign in with Acme', authKind: 'oauth', available: true }] }] }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/connections`, () =>
-        HttpResponse.json({ type: 'authorize', authId: 'acct-9', session: { provider: 'nango', token: 'tok', integrationId: 'acme' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/connections/authorizations/:authId`, ({ params, request }) => {
-        asked.push(`${params.authId}:${new URL(request.url).searchParams.get('connector')}`);
-        return HttpResponse.json({ status: 'completed' });
-      }),
-    );
-    const run = vi.spyOn(connectionNavigation, 'runSession').mockResolvedValue();
-    renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Acme Cloud' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect Acme Cloud' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
-    expect(await within(dialog).findByText('Acme Cloud is connected')).toBeInTheDocument();
-    expect(run).toHaveBeenCalledWith({ provider: 'nango', token: 'tok', integrationId: 'acme' }, 'acct-9');
-    expect(asked).toEqual(['acct-9:acme']);
-    run.mockRestore();
-  });
-
-  it('opens the URL an authorize method returns', async () => {
-    useHandlers();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/connections/methods`, () =>
-        HttpResponse.json({ connectors: [{ ...acmeConnector, methods: [{ id: 'sso', label: 'Sign in with Acme', authKind: 'oauth', available: true }] }] }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/connections`, () => HttpResponse.json({ type: 'authorize', url: '/auth/acme/start', authId: 'flow-1' })),
-    );
-    const assign = vi.spyOn(connectionNavigation, 'assign').mockImplementation(() => {});
-    renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Acme Cloud' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect Acme Cloud' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
-    await waitFor(() => expect(assign).toHaveBeenCalledWith(`${TEST_BASE_URL}/auth/acme/start`));
-    assign.mockRestore();
-  });
-
   it('picks with the keyboard: the search narrows the list, arrows move, Enter opens', async () => {
     useHandlers();
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'cl');
-    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect Google Cloud', 'Connect Acme Cloud']);
-    await userEvent.keyboard('{ArrowDown}{Enter}');
+    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'cloud');
+    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect Acme Cloud']);
+    await userEvent.keyboard('{Enter}');
     expect(await screen.findByRole('dialog', { name: 'Connect Acme Cloud' })).toBeInTheDocument();
   });
 

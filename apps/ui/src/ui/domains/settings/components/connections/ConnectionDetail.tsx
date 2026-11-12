@@ -10,31 +10,24 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
-import { useFactoriesQuery } from '../../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
-import { serverIntegration } from '../../connections/connections';
 import type { ConnectionRow, ConnectionSources } from '../../connections/connections';
 import type { McpServer, McpServersState } from '../../services/mcpServers';
-import { AccountCard, BindingCard, draftOf, GoogleCloudService } from '../GoogleCloudService';
 import { McpServerEditor } from '../mcp-servers/McpServerEditor';
 import type { McpServerSection, McpServerStart } from '../mcp-servers/McpServerEditor';
-import { McpServerHealthLine, mcpErrorText } from '../mcp-servers/McpServerInspect';
-import { SettingsSubsection } from '../SettingsSubsection';
+import { mcpErrorText } from '../mcp-servers/McpServerInspect';
 import { ConnectionActivity } from './ConnectionActivity';
 import { ConnectorDetailSections } from './ConnectorDetail';
 import { HealthBadge, useRenameConnection } from './ConnectionList';
 import { TimeAgo } from './TimeAgo';
 
-/** Where a stored server starts its form from: its catalog entry, or an own server. */
-export function mcpStartOf(server: McpServer, catalog: readonly McpCatalogEntry[]): McpServerStart {
-  const entry = server.launch.transport === 'catalog' ? catalog.find(candidate => candidate.id === (server.launch as { entry: string }).entry) : undefined;
-  return entry ? { kind: 'catalog', entry } : { kind: 'custom' };
-}
+export { mcpStartOf } from './mcpStart';
+import { mcpStartOf } from './mcpStart';
 
-type DetailTab = 'overview' | 'activity' | 'access' | 'tools' | 'settings' | 'diagnostics';
+type DetailTab = 'overview' | 'activity' | 'access' | 'tools' | 'settings';
 
-/** «Хто»: a member's name, «вами», the integration that manages it, or nothing when unknown. */
+/** «Хто»: a member's name, «вами», or nothing when unknown. */
 function useWho(factoryId: string) {
   const { t } = useTranslation('settings');
   const me = useFactoryAuth().data?.user?.userId;
@@ -42,7 +35,6 @@ function useWho(factoryId: string) {
   return (userId: string | undefined) => {
     if (!userId) return undefined;
     if (userId === me) return t('connections.detail.byYou');
-    if (userId.startsWith('integration:')) return t('connections.kinds.google-cloud');
     return members.find(member => member.id === userId)?.name;
   };
 }
@@ -81,7 +73,7 @@ function Overview({ row, factoryId }: { row: ConnectionRow; factoryId: string })
   const who = useWho(factoryId);
   const health = row.server?.health;
   const failure = health && (row.state === 'error' || row.state === 'needs_auth') ? mcpErrorText(t, health.errorKind, health.error) : undefined;
-  const connectionId = row.binding?.id ?? row.server?.id ?? row.id;
+  const connectionId = row.server?.id ?? row.id;
   const by = who(row.createdBy);
   const view = row.view;
   const stateMessage = view ? view.state.message : failure;
@@ -135,26 +127,7 @@ function Overview({ row, factoryId }: { row: ConnectionRow; factoryId: string })
   );
 }
 
-/**
- * «Діагностика»: how a first-party capability runs under the hood (the MCP package, its version and
- * the server's identifier) and its last check — for when something does not work.
- */
-function Diagnostics({ server, catalog }: { server: McpServer; catalog: readonly McpCatalogEntry[] }) {
-  const { t } = useTranslation('settings');
-  const entry = server.launch.transport === 'catalog' ? catalog.find(candidate => candidate.id === (server.launch as { entry: string }).entry) : undefined;
-  const transport = entry ? `MCP · ${entry.package.identifier} ${entry.package.version}` : 'MCP';
-  return (
-    <SettingsContainer>
-      <SettingsRow label={t('connections.detail.tabs.diagnostics')} description={t('connections.detail.transport', { transport, server: server.name })}>
-        <Txt as="span" variant="caption" tone="muted">
-          <McpServerHealthLine server={server} />
-        </Txt>
-      </SettingsRow>
-    </SettingsContainer>
-  );
-}
-
-/** Pages without tabs: the organization's Google Cloud accounts, a new MCP server, an organization-wide source opened by link. */
+/** Pages without tabs: a new MCP server. */
 function Plain({ children }: { children: ReactNode }) {
   return <div className="flex min-w-0 flex-col gap-5">{children}</div>;
 }
@@ -166,13 +139,11 @@ function Plain({ children }: { children: ReactNode }) {
  */
 export function ConnectionDetail({
   id,
-  linkAccountId,
   factoryId,
   rows,
   sources,
 }: {
   id: string;
-  linkAccountId?: string;
   factoryId: string;
   rows: readonly ConnectionRow[];
   sources: ConnectionSources;
@@ -180,17 +151,8 @@ export function ConnectionDetail({
 }) {
   const { t } = useTranslation('settings');
   const [params, setParams] = useSearchParams();
-  const factories = (useFactoriesQuery().data ?? []).map(factory => ({ id: factory.id, name: factory.name }));
-  const factoryName = (factoryProjectId: string) => factories.find(factory => factory.id === factoryProjectId)?.name ?? factoryProjectId;
   const mcp: McpServersState | undefined = sources.mcp;
 
-  if (id === 'google-cloud') {
-    return (
-      <Plain>
-        <GoogleCloudService factoryId={factoryId} {...(linkAccountId ? { linkAccountId } : {})} />
-      </Plain>
-    );
-  }
   if (id.startsWith('mcp-new:') && mcp) {
     const entryId = id.slice('mcp-new:'.length);
     const entry = mcp.catalog.find(candidate => candidate.id === entryId);
@@ -211,9 +173,9 @@ export function ConnectionDetail({
     (orphan && mcp
       ? {
           id,
-          kind: serverIntegration(orphan, mcp.catalog) ?? 'mcp',
+          kind: 'mcp',
           title: orphan.label,
-          mcp: !serverIntegration(orphan, mcp.catalog),
+          mcp: true,
           capabilities: [],
           state: orphan.enabled ? (orphan.health?.state ?? 'unchecked') : 'disabled',
           scope: 'factory',
@@ -230,30 +192,11 @@ export function ConnectionDetail({
   }
 
   const server = row.server;
-  const internal = server && mcp ? serverIntegration(server, mcp.catalog) : undefined;
   const editor = (section: McpServerSection) =>
     server && mcp ? (
-      <McpServerEditor key={`${server.id}:${server.updatedAt}:${section}`} server={server} start={mcpStartOf(server, mcp.catalog)} state={mcp} onSaved={() => {}} embedded={Boolean(internal)} section={section} />
+      <McpServerEditor key={`${server.id}:${server.updatedAt}:${section}`} server={server} start={mcpStartOf(server, mcp.catalog)} state={mcp} onSaved={() => {}} section={section} />
     ) : null;
-  const account = row.binding ? sources.firebase?.accounts.find(candidate => candidate.id === row.accountId) : undefined;
-
-  const settings: ReactNode = row.binding ? (
-    <>
-      <BindingCard stored={row.binding} draft={draftOf(row.binding)} accounts={sources.firebase?.accounts ?? []} factories={factories} defaultOpen />
-      {account && (
-        <SettingsSubsection title={t('connections.detail.account')}>
-          <AccountCard account={account} bindings={sources.firebase?.bindings ?? []} factoryName={factoryName} />
-        </SettingsSubsection>
-      )}
-      {server && (
-        <SettingsSubsection title={t('connections.detail.database')} description={t('connections.detail.databaseHint')}>
-          {editor('config')}
-        </SettingsSubsection>
-      )}
-    </>
-  ) : server ? (
-    editor('config')
-  ) : null;
+  const settings: ReactNode = server ? editor('config') : null;
 
   const tabs: Array<{ value: DetailTab; content: ReactNode }> = [
     {
@@ -266,10 +209,9 @@ export function ConnectionDetail({
       ),
     },
     ...(server ? [{ value: 'activity' as const, content: <ConnectionActivity factoryId={factoryId} serverId={server.id} heading={false} /> }] : []),
-    ...(server && !row.managed ? [{ value: 'access' as const, content: editor('access') }] : []),
+    ...(server ? [{ value: 'access' as const, content: editor('access') }] : []),
     ...(server ? [{ value: 'tools' as const, content: editor('tools') }] : []),
     ...(settings ? [{ value: 'settings' as const, content: settings }] : []),
-    ...(server && internal && mcp ? [{ value: 'diagnostics' as const, content: <Diagnostics server={server} catalog={mcp.catalog} /> }] : []),
   ];
   const requested = params.get('view') as DetailTab | null;
   const current = tabs.some(tab => tab.value === requested) ? (requested as DetailTab) : 'overview';

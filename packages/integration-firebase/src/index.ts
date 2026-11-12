@@ -10,3 +10,4 @@ export * from './service-account.ts';
 export * from './settings.ts';
 export * from './source.ts';
 export * from './managed-mcp.ts';
+export * from './connections.ts';

@@ -102,49 +102,6 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 
-export const fetchFirebaseState = (baseUrl: string) => request<FirebaseState>(baseUrl, '/web/firebase/status');
-
 /** Answers with the whole state and the account it added. */
 export const addFirebaseAccount = (baseUrl: string, input: { serviceAccountJson: string; name?: string }) =>
   request<FirebaseState & { account: FirebaseAccount }>(baseUrl, '/web/firebase/accounts', json('POST', input));
-
-export const updateFirebaseAccount = (baseUrl: string, accountId: string, input: { serviceAccountJson?: string; name?: string }) =>
-  request<FirebaseState>(baseUrl, `/web/firebase/accounts/${encodeURIComponent(accountId)}`, json('PUT', input));
-
-/** Removes an account; `withBindings` also removes the bindings that read through it (else the server refuses). */
-export const removeFirebaseAccount = (baseUrl: string, accountId: string, withBindings: boolean) =>
-  request<FirebaseState>(
-    baseUrl,
-    `/web/firebase/accounts/${encodeURIComponent(accountId)}${withBindings ? '?withBindings=true' : ''}`,
-    json('DELETE'),
-  );
-
-/** Saves a new binding (no `id`) or replaces binding `id`. */
-export const saveFirebaseBinding = (baseUrl: string, binding: FirebaseBindingInput & { id?: string }) => {
-  const { id, ...input } = binding;
-  return id
-    ? request<FirebaseState>(baseUrl, `/web/firebase/bindings/${encodeURIComponent(id)}`, json('PUT', input))
-    : request<FirebaseState>(baseUrl, '/web/firebase/bindings', json('POST', input));
-};
-
-export const removeFirebaseBinding = (baseUrl: string, bindingId: string) =>
-  request<FirebaseState>(baseUrl, `/web/firebase/bindings/${encodeURIComponent(bindingId)}`, json('DELETE'));
-
-export const checkFirebaseBinding = (baseUrl: string, binding: FirebaseBindingInput) =>
-  request<FirebaseCheckResult>(baseUrl, '/web/firebase/bindings/check', json('POST', { binding }));
-
-/** What an account can see, for the binding form: its projects, and a project's Firestore databases. */
-export interface FirebaseDiscovery {
-  items: Array<{ value: string; label?: string; detail?: string }>;
-  default?: string;
-  denied?: { role?: string; message: string };
-}
-
-export const fetchFirebaseProjects = (baseUrl: string, accountId: string) =>
-  request<FirebaseDiscovery>(baseUrl, `/web/firebase/accounts/${encodeURIComponent(accountId)}/projects`);
-
-export const fetchFirebaseDatabases = (baseUrl: string, accountId: string, projectId: string) =>
-  request<FirebaseDiscovery>(
-    baseUrl,
-    `/web/firebase/accounts/${encodeURIComponent(accountId)}/databases?project=${encodeURIComponent(projectId)}`,
-  );

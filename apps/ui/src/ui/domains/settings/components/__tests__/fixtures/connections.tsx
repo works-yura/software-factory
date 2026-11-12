@@ -6,7 +6,6 @@ import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import type { ConnectionsListResponse, ConnectionView, ConnectorView } from '@factory/contracts';
 
-import type { FirebaseState } from '../../../services/firebase';
 import type { McpServer } from '../../../services/mcpServers';
 import { ConnectionsPageHeader } from '../../connections/ConnectionsPageHeader';
 import { ConnectionsSection } from '../../connections/ConnectionsSection';
@@ -14,14 +13,6 @@ import { ConnectionsSection } from '../../connections/ConnectionsSection';
 export const FACTORY_ID = 'factory-1';
 export const MCP_BASE = `${TEST_BASE_URL}/web/mcp-servers`;
 
-export const firebaseState: FirebaseState = {
-  accounts: [
-    { id: 'acc-1', name: 'Syncta', clientEmail: 'factory@syncta-57c6a.iam.gserviceaccount.com', projectId: 'syncta-57c6a', keyId: 'k', bindingIds: ['bnd-1'] },
-  ],
-  bindings: [
-    { id: 'bnd-1', factoryProjectId: FACTORY_ID, accountId: 'acc-1', projectId: 'syncta-57c6a', logs: true, crashes: false, apps: [], database: { enabled: true } },
-  ],
-};
 
 /** Google Cloud's «База» for `bnd-1`, as the server lists it. */
 export const managedServer: McpServer = {
@@ -91,18 +82,14 @@ export const acmeConnection: ConnectionView = {
 };
 
 /**
- * The integrations' state around the MCP servers a test brings: one Google Cloud binding (or
- * none), one connection of a FAKE server connector (Acme Cloud —
+ * The integrations' state around the MCP servers a test brings: one connection of a FAKE server connector (Acme Cloud —
  * the page must render it from the server's descriptors alone), no activity.
  */
-export function useIntegrationHandlers(
-  options: { firebase?: FirebaseState; connections?: ConnectionsListResponse; connectors?: ConnectorView[] } = {},
-) {
+export function useIntegrationHandlers(options: { connections?: ConnectionsListResponse; connectors?: ConnectorView[] } = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'syncts', repositories: [] }] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/firebase/status`, () => HttpResponse.json(options.firebase ?? { accounts: [], bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/clickup/status`, () =>
       HttpResponse.json({ configured: true, connected: true, workspaces: ['eclipt.ai'], intervalSeconds: 60 }),
     ),
@@ -112,8 +99,6 @@ export function useIntegrationHandlers(
     http.get(`${TEST_BASE_URL}/web/connections`, () => HttpResponse.json(options.connections ?? { connections: [acmeConnection], failures: [], copy: { organizationWide: 'Whole organization' } })),
     http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, () => HttpResponse.json({ sections: [] })),
     http.get(`${TEST_BASE_URL}/web/connections/methods`, () => HttpResponse.json({ connectors: options.connectors ?? [acmeConnector] })),
-    http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/projects`, () => HttpResponse.json({ items: [{ value: 'syncta-57c6a' }] })),
-    http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/databases`, () => HttpResponse.json({ items: [{ value: '(default)' }] })),
     http.get(`${MCP_BASE}/activity`, () => HttpResponse.json({ since: '2026-11-11T12:00:00.000Z', total: 0, errors: 0, calls: [], truncated: false })),
   );
 }

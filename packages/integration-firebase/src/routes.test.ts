@@ -8,6 +8,9 @@ import type { TestAuthUser } from '@factory/http/testing';
 
 import { FirebaseIntegration } from './integration.ts';
 import { buildFirebaseRoutes } from './routes.ts';
+import { buildConnectionRoutes } from '@factory/integrations';
+import { GoogleCloudConnections } from './connections.ts';
+import { newBindingId, saveBinding } from './settings.ts';
 import type { FirebaseStateView } from './routes.ts';
 import { fakeGoogle, fakeServiceAccountKey, memoryIntegrationStorage } from './testing.ts';
 
@@ -33,26 +36,31 @@ function setup(options: { user?: TestAuthUser | null; isAdmin?: boolean; google?
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(
-    app,
-    buildFirebaseRoutes({
-      auth: fakeRouteAuth({ isOrganizationAdmin: async () => options.isAdmin ?? true }),
-      storage,
-      projects: { get: async ({ orgId, id }) => (orgId === 'org-1' && FACTORIES.has(id) ? ({ id } as never) : null) },
-      hooks: {
-        emitAudit: async ({ input }) => void audits.push({ action: input.action, ...(input.metadata ? { metadata: input.metadata } : {}) }),
-        onManagedMcpServersChanged: async orgId => void managedSyncs.push(orgId),
-      },
-      fetch: google.fetch,
-      now: () => OBSERVABILITY_CONTRACT_NOW,
-    }),
-  );
+  const auth = fakeRouteAuth({ isOrganizationAdmin: async () => options.isAdmin ?? true });
+  const projects = { get: async ({ orgId, id }: { orgId: string; id: string }) => (orgId === 'org-1' && FACTORIES.has(id) ? ({ id, name: id } as never) : null) };
+  const hooks = {
+    emitAudit: async ({ input }: { input: { action: string; metadata?: Record<string, unknown> } }) =>
+      void audits.push({ action: input.action, ...(input.metadata ? { metadata: input.metadata } : {}) }),
+    onManagedMcpServersChanged: async (orgId: string) => void managedSyncs.push(orgId),
+  };
+  mountApiRoutes(app, buildFirebaseRoutes({ auth, storage, projects, hooks: hooks as never, fetch: google.fetch, now: () => OBSERVABILITY_CONTRACT_NOW }));
+  const facet = new GoogleCloudConnections({ storage, projects, hooks: hooks as never, fetch: google.fetch, now: () => OBSERVABILITY_CONTRACT_NOW });
+  mountApiRoutes(app, buildConnectionRoutes({ auth, connectors: [{ id: 'google-cloud', connections: facet }], emitAudit: hooks.emitAudit as never }));
   const call = (method: string, path: string, body?: unknown) =>
     app.request(path, { method, ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
   const json = async <T = any>(method: string, path: string, body?: unknown): Promise<T> => (await call(method, path, body)).json() as Promise<T>;
   const addAccount = async (key = syncta(), name?: string) =>
     (await json<{ account: { id: string } }>('POST', '/web/firebase/accounts', { serviceAccountJson: JSON.stringify(key), ...(name ? { name } : {}) })).account.id;
-  return { storage, google, audits, call, json, addAccount, managedSyncs };
+  /** Connects through the facet for `factory`: a new key, or an account the organization has. */
+  const connect = (input: Record<string, string>, method = 'key', factory = 'factory-1') =>
+    call('POST', `/web/connections?factoryProjectId=${factory}`, { connector: 'google-cloud', method, input });
+  const connected = async (input: Record<string, string>, method = 'key', factory = 'factory-1') =>
+    ((await (await connect(input, method, factory)).json()) as any).connection.id.slice('google-cloud:'.length) as string;
+  const path = (id: string, suffix = '', factory = 'factory-1') => `/web/connections/${encodeURIComponent(`google-cloud:${id}`)}${suffix}${suffix.includes('?') ? '&' : '?'}factoryProjectId=${factory}`;
+  /** Writes a binding straight into storage, for tests about what bindings do rather than how they are made. */
+  const bind = (accountId: string, overrides: Record<string, unknown> = {}) =>
+    saveBinding(storage, 'org-1', { id: newBindingId(), ...binding(accountId), ...overrides } as never);
+  return { storage, google, audits, call, json, addAccount, managedSyncs, connect, connected, path, bind };
 }
 
 const binding = (accountId: string, overrides: Record<string, unknown> = {}) => ({
@@ -90,23 +98,26 @@ describe('Firebase accounts', () => {
     expect(await json('GET', '/web/firebase/status')).toEqual(state);
   });
 
-  it('replaces one account\'s key and renames another without touching the rest', async () => {
-    const { json, storage, addAccount } = setup();
-    const first = await addAccount(syncta());
-    const second = await addAccount(bookfate());
-    await json('PUT', `/web/firebase/accounts/${first}`, { serviceAccountJson: JSON.stringify(fakeServiceAccountKey({ private_key_id: 'key-2' })) });
-    const renamed = await json<FirebaseStateView>('PUT', `/web/firebase/accounts/${second}`, { name: 'BookFate' });
-    expect(renamed.accounts.map(account => [account.name, account.keyId])).toEqual([
+  it('replaces an account\'s key and renames another without touching the rest', async () => {
+    const { call, json, storage, connected, path } = setup();
+    const first = await connected({ serviceAccountJson: JSON.stringify(syncta()) });
+    const second = await connected({ serviceAccountJson: JSON.stringify(bookfate()), projectId: 'bookfate-prod' });
+    const replaced = await call('POST', path(first, '/reconnect'), { input: { serviceAccountJson: JSON.stringify(fakeServiceAccountKey({ private_key_id: 'key-2' })) } });
+    expect(replaced.status).toBe(200);
+    expect((await call('PATCH', path(second, '/settings'), { section: 'account', values: { name: 'BookFate' } })).status).toBe(200);
+    const state = await json<FirebaseStateView>('GET', '/web/firebase/status');
+    expect(state.accounts.map(account => [account.name, account.keyId])).toEqual([
       ['syncta-prod', 'key-2'],
       ['BookFate', 'key-bf'],
     ]);
-    expect((storage.rows.connections.get('org-1')!.data as any).accounts[second].serviceAccount.client_email).toBe(
+    const secondAccount = state.bindings.find(binding => binding.id === second)!.accountId;
+    expect((storage.rows.connections.get('org-1')!.data as any).accounts[secondAccount].serviceAccount.client_email).toBe(
       'factory@bookfate-prod.iam.gserviceaccount.com',
     );
   });
 
   it('refuses a file that is not a service account key without repeating it, and a foreign token_uri', async () => {
-    const { call } = setup();
+    const { call, connect } = setup();
     const response = await call('POST', '/web/firebase/accounts', { serviceAccountJson: '{"type":"authorized_user","secret":"s3cr3t"}' });
     expect(response.status).toBe(422);
     const text = await response.text();
@@ -114,104 +125,105 @@ describe('Firebase accounts', () => {
     expect(text).not.toContain('s3cr3t');
     const evil = JSON.stringify(fakeServiceAccountKey({ token_uri: 'https://evil.example.com/token' }));
     expect((await call('POST', '/web/firebase/accounts', { serviceAccountJson: evil })).status).toBe(422);
+    const refused = await connect({ serviceAccountJson: '{"type":"authorized_user","secret":"s3cr3t"}' });
+    expect(refused.status).toBe(422);
+    const body = await refused.text();
+    expect(body).toMatch(/serviceAccountJson/);
+    expect(body).not.toContain('s3cr3t');
   });
 
-  it('will not remove an account its bindings read through unless asked to remove them too', async () => {
-    const { call, json, addAccount, audits } = setup();
-    const accountId = await addAccount();
-    const other = await addAccount(bookfate());
-    const { binding: kept } = await json('POST', '/web/firebase/bindings', binding(other, { projectId: 'bookfate-prod', factoryProjectId: 'factory-2' }));
-    await json('POST', '/web/firebase/bindings', binding(accountId));
-
-    const refused = await call('DELETE', `/web/firebase/accounts/${accountId}`);
+  it('deletes an account only after naming every binding that goes with it', async () => {
+    const { call, json, connected, path, audits } = setup();
+    const kept = await connected({ serviceAccountJson: JSON.stringify(bookfate()), projectId: 'bookfate-prod' }, 'key', 'factory-2');
+    const first = await connected({ serviceAccountJson: JSON.stringify(syncta()) });
+    const impact = await json('GET', path(first, '/impact'));
+    expect(impact).toMatchObject({ items: [{ label: 'syncta-prod — Factory «factory-1»', outcome: 'deleted' }], requiresConfirm: true });
+    const refused = await call('DELETE', path(first));
     expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({ error: 'account_in_use', bindings: [{ factoryProjectId: 'factory-1', projectId: 'syncta-prod' }] });
-
-    const state = await json<FirebaseStateView>('DELETE', `/web/firebase/accounts/${accountId}?withBindings=true`);
-    expect(state.accounts.map(account => account.id)).toEqual([other]);
-    expect(state.bindings.map(binding => binding.id)).toEqual([kept.id]);
+    expect(await refused.json()).toMatchObject({ error: 'account_in_use', impact: { items: [expect.objectContaining({ outcome: 'deleted' })] } });
+    expect((await call('DELETE', path(first, '?confirm=1'))).status).toBe(200);
+    const state = await json<FirebaseStateView>('GET', '/web/firebase/status');
+    expect(state.bindings.map(binding => binding.id)).toEqual([kept]);
     expect(audits.at(-1)).toMatchObject({ action: 'factory.observability.disconnected' });
   });
 
   it('lets only an organization admin change accounts or bindings', async () => {
-    const { call } = setup({ isAdmin: false });
+    const { call, connect } = setup({ isAdmin: false });
     expect((await call('POST', '/web/firebase/accounts', { serviceAccountJson: JSON.stringify(syncta()) })).status).toBe(403);
-    expect((await call('POST', '/web/firebase/bindings', binding('acc-x'))).status).toBe(403);
+    expect((await connect({ serviceAccountJson: JSON.stringify(syncta()) })).status).toBe(403);
     expect((await call('GET', '/web/firebase/status')).status).toBe(200);
+    expect((await call('GET', '/web/connections?factoryProjectId=factory-1')).status).toBe(200);
   });
 });
 
-describe('Firebase bindings', () => {
-  it('binds one Factory to several Google Cloud projects through different accounts', async () => {
-    const { json, addAccount } = setup();
-    const synctaAccount = await addAccount(syncta());
+describe('Google Cloud connections (ADR-0035)', () => {
+  it('binds one Factory to several Google Cloud projects: a new key, then an account the organization has', async () => {
+    const { json, connect, addAccount } = setup();
+    const created = await connect({ name: 'Syncta', serviceAccountJson: JSON.stringify(syncta()) });
+    expect(await created.json()).toMatchObject({
+      type: 'connected',
+      connection: { label: 'syncta-prod', scope: 'factory', accountLabel: 'Syncta', provides: [{ key: 'logs' }], state: { tone: 'ok' } },
+      title: 'This Factory reads syncta-prod',
+    });
     const bookfateAccount = await addAccount(bookfate());
-    await json('POST', '/web/firebase/bindings', binding(synctaAccount, { crashes: false, apps: [] }));
-    const state = await json<FirebaseStateView>(
-      'POST',
-      '/web/firebase/bindings',
-      binding(bookfateAccount, { projectId: 'bookfate-prod', projectNumber: '900351719125', logs: false }),
-    );
-    expect(state.bindings.map(saved => [saved.factoryProjectId, saved.accountId, saved.projectId])).toEqual([
-      ['factory-1', synctaAccount, 'syncta-prod'],
-      ['factory-1', bookfateAccount, 'bookfate-prod'],
+    const methods = (await json('GET', '/web/connections/methods?factoryProjectId=factory-1')).connectors[0].methods;
+    expect(methods[1]).toMatchObject({ id: 'account', available: true, fields: [expect.objectContaining({ type: 'select', options: expect.arrayContaining([expect.objectContaining({ value: bookfateAccount })]) }), expect.anything()] });
+    expect((await connect({ accountId: bookfateAccount, projectId: 'bookfate-prod' }, 'account')).status).toBe(200);
+    const listed = (await json('GET', '/web/connections?factoryProjectId=factory-1')).connections;
+    expect(listed.map((row: any) => [row.label, row.accountLabel])).toEqual([
+      ['syncta-prod', 'Syncta'],
+      ['bookfate-prod', 'bookfate-prod'],
     ]);
-    expect(state.accounts.map(account => account.bindingIds.length)).toEqual([1, 1]);
+    expect((await json('GET', '/web/connections?factoryProjectId=factory-2')).connections).toEqual([]);
   });
 
   it('refuses another org\'s Factory, an unknown account, a bad app id and a duplicate app', async () => {
-    const { call, addAccount } = setup();
-    const accountId = await addAccount();
-    expect((await call('POST', '/web/firebase/bindings', binding(accountId, { factoryProjectId: 'factory-x' }))).status).toBe(404);
-    expect((await call('POST', '/web/firebase/bindings', binding('acc-missing'))).status).toBe(422);
-    const bad = await call('POST', '/web/firebase/bindings', binding(accountId, { apps: [{ appId: 'com.syncta', platform: 'android' }] }));
+    const { call, connect, connected, path } = setup();
+    expect((await connect({ serviceAccountJson: JSON.stringify(syncta()) }, 'key', 'factory-x')).status).toBe(400);
+    expect((await connect({ accountId: 'acc-missing' }, 'account')).status).toBe(422);
+    const id = await connected({ serviceAccountJson: JSON.stringify(syncta()) });
+    const bad = await call('PATCH', path(id, '/settings'), { section: 'binding', values: { apps: 'com.syncta' } });
     expect(bad.status).toBe(422);
-    expect(((await bad.json()) as { message: string }).message).toMatch(/apps\.0\.appId/);
-    const app = binding(accountId).apps[0]!;
-    expect((await call('POST', '/web/firebase/bindings', binding(accountId, { apps: [app, app] }))).status).toBe(422);
+    expect(await bad.json()).toMatchObject({ fields: { apps: expect.stringContaining('com.syncta') } });
+    const app = '1:1234567890:android:abc123';
+    expect((await call('PATCH', path(id, '/settings'), { section: 'binding', values: { apps: `${app}\n${app}` } })).status).toBe(422);
   });
 
-  it('updates and removes a binding by id', async () => {
-    const { call, json, addAccount, audits } = setup();
-    const accountId = await addAccount();
-    const { binding: saved } = await json('POST', '/web/firebase/bindings', binding(accountId));
-    const updated = await json<FirebaseStateView>('PUT', `/web/firebase/bindings/${saved.id}`, binding(accountId, { logs: false }));
-    expect(updated.bindings).toEqual([expect.objectContaining({ id: saved.id, logs: false })]);
-    expect((await call('PUT', '/web/firebase/bindings/bnd-missing', binding(accountId))).status).toBe(404);
-    expect((await json<FirebaseStateView>('DELETE', `/web/firebase/bindings/${saved.id}`)).bindings).toEqual([]);
-    expect((await call('DELETE', `/web/firebase/bindings/${saved.id}`)).status).toBe(404);
+  it('saves what a binding reads, unlinks it, and keeps when and by whom it was made through a rename', async () => {
+    const { call, json, connected, path, audits, managedSyncs } = setup();
+    const id = await connected({ serviceAccountJson: JSON.stringify(syncta()) });
+    const saved = await call('PATCH', path(id, '/settings'), {
+      section: 'binding',
+      values: { logs: false, crashes: true, apps: '1:1234567890:android:abc123 Syncta Android' },
+    });
+    expect(await saved.json()).toEqual({ message: 'Saved' });
+    let state = await json<FirebaseStateView>('GET', '/web/firebase/status');
+    expect(state.bindings).toEqual([
+      expect.objectContaining({ id, logs: false, crashes: true, apps: [{ appId: '1:1234567890:android:abc123', platform: 'android', label: 'Syncta Android' }], createdAt: expect.any(String), createdBy: 'u1' }),
+    ]);
+    const createdAt = state.bindings[0]!.createdAt;
+    expect(await json('PATCH', path(id), { name: 'Syncta prod' })).toEqual({ name: 'Syncta prod' });
+    state = await json<FirebaseStateView>('GET', '/web/firebase/status');
+    expect(state.bindings[0]).toMatchObject({ name: 'Syncta prod', createdAt });
+    expect((await call('POST', path(id, '/unlink'))).status).toBe(200);
+    state = await json<FirebaseStateView>('GET', '/web/firebase/status');
+    expect(state.bindings).toEqual([]);
+    expect(state.accounts).toHaveLength(1);
     expect(audits.filter(audit => audit.action === 'factory.observability.mapping_updated')).toHaveLength(3);
+    expect(managedSyncs).toHaveLength(3);
   });
 
-  it('records when and by whom a binding was made, keeps it through a rename', async () => {
-    const { json, addAccount } = setup();
-    const accountId = await addAccount();
-    const { binding: saved } = await json('POST', '/web/firebase/bindings', binding(accountId));
-    expect(saved).toMatchObject({ createdAt: expect.any(String), createdBy: expect.any(String) });
-    const renamed = await json<FirebaseStateView>('PUT', `/web/firebase/bindings/${saved.id}`, binding(accountId, { name: 'Syncta prod' }));
-    expect(renamed.bindings).toEqual([expect.objectContaining({ name: 'Syncta prod', createdAt: saved.createdAt, createdBy: saved.createdBy })]);
-  });
-
-  it('checks a binding read by read, with its own account, and names the missing role', async () => {
-    const { call, json, addAccount } = setup({
+  it('checks a binding read by read on its page, with its own account, and names the missing role', async () => {
+    const { call, connected, path } = setup({
       google: { fail: { crashlytics: { status: 403, body: { error: { code: 403, message: 'The caller does not have permission' } } } } },
     });
-    const accountId = await addAccount();
-    const draft = binding(accountId);
-    const response = await call('POST', '/web/firebase/bindings/check', { binding: draft });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      ok: false,
-      checks: [
-        { check: 'logs', target: 'syncta-prod', ok: true },
-        expect.objectContaining({ check: 'crashes', target: draft.apps[0]!.appId, ok: false, missingRole: 'roles/firebasecrashlytics.viewer' }),
-      ],
-    });
-    expect(await json('POST', '/web/firebase/bindings/check', { binding: { ...draft, crashes: false } })).toEqual({
-      ok: true,
-      checks: [{ check: 'logs', target: 'syncta-prod', ok: true }],
-    });
-    expect((await call('POST', '/web/firebase/bindings/check', { binding: binding('acc-missing') })).status).toBe(422);
+    const id = await connected({ serviceAccountJson: JSON.stringify(syncta()) });
+    await call('PATCH', path(id, '/settings'), { section: 'binding', values: { crashes: true, apps: '1:1234567890:android:abc123' } });
+    const { sections } = (await (await call('GET', path(id, '/detail'))).json()) as any;
+    expect(sections.filter((section: any) => section.type === 'notice')).toEqual([
+      expect.objectContaining({ tone: 'error', title: 'Crashes · 1:1234567890:android:abc123', message: expect.stringContaining('roles/firebasecrashlytics.viewer') }),
+    ]);
+    expect(sections.find((section: any) => section.id === 'binding').fields.map((field: any) => field.name)).toEqual(['projectId', 'logs', 'crashes', 'apps', 'database', 'databaseId']);
   });
 });
 
@@ -253,7 +265,7 @@ describe('Firebase upgrade from one key per organization', () => {
     expect(state.accounts).toHaveLength(1);
     expect(state.bindings).toEqual([]);
     // The upgraded account is usable straight away.
-    expect((await call('POST', '/web/firebase/bindings', binding(state.accounts[0]!.id))).status).toBe(200);
+    expect((await call('POST', '/web/connections?factoryProjectId=factory-1', { connector: 'google-cloud', method: 'account', input: { accountId: state.accounts[0]!.id } })).status).toBe(200);
   });
 });
 
@@ -268,7 +280,7 @@ describe('FirebaseIntegration agent tools', () => {
   type Runnable = { execute: (input: unknown, ctx: unknown) => Promise<any> };
 
   it('offers the tools only to a bound Factory, one per binding, and the output carries no key or token', async () => {
-    const { storage, json, addAccount, google } = setup();
+    const { storage, bind, addAccount, google } = setup();
     const integration = new FirebaseIntegration({ fetch: google.fetch });
     integration.initialize({ storage: storage as never });
 
@@ -276,7 +288,7 @@ describe('FirebaseIntegration agent tools', () => {
     const synctaAccount = await addAccount(syncta());
     expect(await integration.agentTools({ requestContext: sessionContext('factory-1') })).toEqual({});
 
-    await json('POST', '/web/firebase/bindings', binding(synctaAccount));
+    await bind(synctaAccount);
     const tools = await integration.agentTools({ requestContext: sessionContext('factory-1') });
     expect(Object.keys(tools).sort()).toEqual([
       'observability_crash_issue',
@@ -295,11 +307,11 @@ describe('FirebaseIntegration agent tools', () => {
   });
 
   it('asks which project when a Factory reads two, and reads each with its own account', async () => {
-    const { storage, json, addAccount, google } = setup();
+    const { storage, bind, addAccount, google } = setup();
     const integration = new FirebaseIntegration({ fetch: google.fetch });
     integration.initialize({ storage: storage as never });
-    await json('POST', '/web/firebase/bindings', binding(await addAccount(syncta()), { crashes: false, apps: [] }));
-    await json('POST', '/web/firebase/bindings', binding(await addAccount(bookfate()), { projectId: 'bookfate-prod', crashes: false, apps: [] }));
+    await bind(await addAccount(syncta()), { crashes: false, apps: [] });
+    await bind(await addAccount(bookfate()), { projectId: 'bookfate-prod', crashes: false, apps: [] });
 
     const tools = await integration.agentTools({ requestContext: sessionContext('factory-1') });
     const logs = tools.observability_query_logs as Runnable;
@@ -313,21 +325,18 @@ describe('FirebaseIntegration agent tools', () => {
 
 describe('Google Cloud «База»', () => {
   it('asks for the managed MCP servers to be synced after each binding or account change, and serves one Toolbox server per «База» binding', async () => {
-    const { json, call, addAccount, managedSyncs, storage } = setup();
-    const accountId = await addAccount();
-    const created = await json<{ binding: { id: string } }>(
-      'POST',
-      '/web/firebase/bindings',
-      binding(accountId, { database: { enabled: true, databaseId: 'analytics' } }),
-    );
-    await json('POST', '/web/firebase/bindings', binding(accountId, { factoryProjectId: 'factory-2', projectId: 'other-prod' }));
-    expect(managedSyncs).toEqual(['org-1', 'org-1']);
+    const { call, connected, path, managedSyncs, storage, json } = setup();
+    const id = await connected({ serviceAccountJson: JSON.stringify(syncta()) });
+    await call('PATCH', path(id, '/settings'), { section: 'binding', values: { database: true, databaseId: 'analytics' } });
+    await connected({ serviceAccountJson: JSON.stringify(bookfate()), projectId: 'other-prod' }, 'key', 'factory-2');
+    expect(managedSyncs).toEqual(['org-1', 'org-1', 'org-1']);
+    const accountId = (await json<FirebaseStateView>('GET', '/web/firebase/status')).bindings.find(binding => binding.id === id)!.accountId;
 
     const integration = new FirebaseIntegration();
     integration.initialize({ storage: storage as never });
     expect(await integration.managedMcpServers('org-1')).toEqual([
       {
-        key: created.binding.id,
+        key: id,
         name: 'db-syncta-prod',
         label: 'Firestore syncta-prod · analytics',
         launch: {
@@ -340,26 +349,26 @@ describe('Google Cloud «База»', () => {
         assignments: [{ factoryProjectId: 'factory-1' }],
       },
     ]);
+    // Its page carries the database's own editor: the one custom section, keyed by the managed server.
+    const { sections } = (await (await call('GET', path(id, '/detail'))).json()) as any;
+    expect(sections.find((section: any) => section.type === 'custom')).toEqual(
+      expect.objectContaining({ component: 'mcp-server', params: { owner: 'firebase', key: id } }),
+    );
 
-    await call('DELETE', `/web/firebase/bindings/${created.binding.id}`);
-    expect(managedSyncs).toHaveLength(3);
+    await call('POST', path(id, '/unlink'));
+    expect(managedSyncs).toHaveLength(4);
     expect(await integration.managedMcpServers('org-1')).toEqual([]);
   });
 
   it('checks «База» by listing the database\'s collections and names Cloud Datastore Viewer when refused', async () => {
-    const ok = setup();
-    const okAccount = await ok.addAccount();
-    const passed = await ok.json<{ ok: boolean; checks: Array<{ check: string; ok: boolean; target: string }> }>('POST', '/web/firebase/bindings/check', {
-      binding: binding(okAccount, { logs: false, crashes: false, database: { enabled: true } }),
-    });
-    expect(passed).toEqual({ ok: true, checks: [{ check: 'database', target: 'syncta-prod/(default)', ok: true }] });
-
-    const refused = setup({ google: { fail: { firestore: { status: 403, body: { error: { code: 403, message: 'Missing or insufficient permissions.', status: 'PERMISSION_DENIED' } } } } } });
-    const refusedAccount = await refused.addAccount();
-    const failed = await refused.json<{ ok: boolean; checks: Array<{ check: string; ok: boolean; missingRole?: string }> }>('POST', '/web/firebase/bindings/check', {
-      binding: binding(refusedAccount, { logs: false, crashes: false, database: { enabled: true } }),
-    });
-    expect(failed.ok).toBe(false);
-    expect(failed.checks[0]).toMatchObject({ check: 'database', ok: false, missingRole: 'roles/datastore.viewer' });
+    const run = async (setupOptions: Parameters<typeof setup>[0]) => {
+      const t = setup(setupOptions);
+      const id = await t.connected({ serviceAccountJson: JSON.stringify(syncta()) });
+      await t.call('PATCH', t.path(id, '/settings'), { section: 'binding', values: { logs: false, database: true } });
+      return ((await (await t.call('GET', t.path(id, '/detail'))).json()) as any).sections.filter((section: any) => section.type === 'notice');
+    };
+    expect(await run({})).toEqual([{ type: 'notice', tone: 'info', title: 'Access checked: everything turned on can be read.' }]);
+    const refused = await run({ google: { fail: { firestore: { status: 403, body: { error: { code: 403, message: 'Missing or insufficient permissions.', status: 'PERMISSION_DENIED' } } } } } });
+    expect(refused).toEqual([expect.objectContaining({ tone: 'error', title: 'Database · syncta-prod/(default)', message: expect.stringContaining('roles/datastore.viewer') })]);
   });
 });
