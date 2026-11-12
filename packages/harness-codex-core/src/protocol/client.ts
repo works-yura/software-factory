@@ -3,6 +3,8 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 
+import { harnessCommandPath, reportHarnessSpawnFailure, type HarnessCommand } from '@factory/harness/executable';
+
 import {
   CodexAppServerProcessExitedError,
   CodexAppServerRequestError,
@@ -152,8 +154,8 @@ export function buildCodexInitializeParams(clientInfo: InitializeParams['clientI
 export type CodexSpawn = (command: string, args: string[], options: SpawnOptionsWithoutStdio) => ChildProcessWithoutNullStreams;
 
 export interface SpawnCodexAppServerInput {
-  /** The CLI binary; `codex` on PATH by default. */
-  readonly command?: string;
+  /** The CLI: a path, or the server's resolver (`@factory/harness/executable`); `codex` on PATH by default. */
+  readonly command?: HarnessCommand;
   /** Arguments after `app-server` (see `codexAppServerArgs`). */
   readonly args?: ReadonlyArray<string>;
   readonly cwd: string;
@@ -186,13 +188,15 @@ export function parseCodexVersion(userAgent: string): string | undefined {
 
 /** Starts `codex app-server`, sends `initialize` and `initialized`, and returns the connected client. */
 export async function spawnCodexAppServer(input: SpawnCodexAppServerInput): Promise<CodexAppServerProcess> {
-  const command = input.command ?? 'codex';
+  // A resolver with no `codex` throws its HarnessExecutableUnavailableError here, before any spawn.
+  const command = harnessCommandPath(input.command, 'codex');
   const args = ['app-server', ...(input.args ?? [])];
   const spawn = input.spawn ?? (nodeSpawn as CodexSpawn);
   let child: ChildProcessWithoutNullStreams;
   try {
     child = spawn(command, args, { cwd: input.cwd, env: input.env as NodeJS.ProcessEnv, stdio: 'pipe' } as SpawnOptionsWithoutStdio);
   } catch (cause) {
+    reportHarnessSpawnFailure(input.command, cause);
     throw new CodexAppServerSpawnError({ command: `${command} app-server`, cause });
   }
   let stderr = '';
@@ -210,6 +214,8 @@ export async function spawnCodexAppServer(input: SpawnCodexAppServerInput): Prom
   const spawnFailed = new Promise<never>((_, reject) => {
     child.once('error', cause => {
       alive = false;
+      // Node reports a missing or non-executable file here (`spawn codex ENOENT`): the resolver looks again next time.
+      reportHarnessSpawnFailure(input.command, cause);
       reject(new CodexAppServerSpawnError({ command: `${command} app-server`, cause }));
     });
   });

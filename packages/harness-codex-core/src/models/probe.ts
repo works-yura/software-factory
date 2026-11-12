@@ -1,6 +1,7 @@
 // Asks the installed CLI what it offers: its version, whether its home holds a login, and its models
 // (`model/list`, every page; the CLI lists them signed in or not). Spawns `codex app-server` for the
 // questions and stops it.
+import type { HarnessCommand } from '@factory/harness/executable';
 import type { ServerProviderModel } from '@factory/harness/models/contracts';
 
 import { spawnCodexAppServer, type CodexSpawn } from '../protocol/client.ts';
@@ -11,7 +12,7 @@ import { parseCodexModelListResponse } from './codexModelCatalog.ts';
 const DEFAULT_PROBE_TIMEOUT_MS = 20_000;
 
 export interface CodexProbeInput {
-  readonly command?: string;
+  readonly command?: HarnessCommand;
   readonly args?: ReadonlyArray<string>;
   readonly cwd: string;
   readonly env: Record<string, string | undefined>;

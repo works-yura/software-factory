@@ -17,6 +17,7 @@ import type {
   TurnHandoffContext,
   TurnHandoffHook,
 } from '@factory/harness';
+import type { HarnessCommand } from '@factory/harness/executable';
 import { promptWithTurnHandoff } from '@factory/harness/turn-handoff';
 import {
   isUsageLimitFailure,
@@ -227,8 +228,8 @@ export interface CodexSessionConfig {
   store: CodexSessionStore;
   /** The session's working directory; asked once, before its first turn. */
   cwdFor: (sessionId: string) => string | Promise<string>;
-  /** The CLI binary; `codex` on PATH by default. */
-  command?: string;
+  /** The CLI: a path, or the server's resolver (`@factory/harness/executable`); `codex` on PATH by default. */
+  command?: HarnessCommand;
   /** Extra launch arguments (`-c key=value`, `--enable feature`); `FACTORY_CODEX_LAUNCH_ARGS` wins. */
   launchArgs?: string;
   spawn?: CodexSpawn;

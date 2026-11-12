@@ -1,6 +1,8 @@
 import { PassThrough } from 'node:stream';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+import { HarnessExecutableUnavailableError, isHarnessExecutableUnavailable } from '@factory/harness/executable';
 
 import { CodexAppServerClient, spawnCodexAppServer } from './client.ts';
 import { CodexAppServerInputStreamEndedError, CodexAppServerProtocolParseError, CodexAppServerRequestError, CodexAppServerTransportError } from './errors.ts';
@@ -164,6 +166,48 @@ describe('CodexAppServerClient', () => {
     server.terminate();
     await server.exited;
     expect(server.isAlive()).toBe(false);
+  });
+
+  it("spawns the resolver's path, and fails without a spawn when the CLI is not installed", async () => {
+    const spawn = fakeCodexSpawn();
+    const source = { command: () => '/home/a/.nvm/versions/node/v24/bin/codex', spawnFailed: vi.fn() };
+    const server = await spawnCodexAppServer({ command: source, cwd: '/work', env: {}, spawn });
+    expect(spawn.calls.map(call => call.command)).toEqual(['/home/a/.nvm/versions/node/v24/bin/codex']);
+    server.terminate();
+    await server.exited;
+
+    const missing = new HarnessExecutableUnavailableError({ harness: 'Codex', executable: 'codex' });
+    const none = fakeCodexSpawn();
+    const failed = spawnCodexAppServer({
+      command: {
+        command: () => {
+          throw missing;
+        },
+        spawnFailed: source.spawnFailed,
+      },
+      cwd: '/work',
+      env: {},
+      spawn: none,
+    });
+    await expect(failed).rejects.toBe(missing);
+    expect(none.calls).toEqual([]);
+  });
+
+  it('tells the resolver when the CLI could not be spawned for good', async () => {
+    const enoent = Object.assign(new Error('spawn /gone/codex ENOENT'), { code: 'ENOENT', syscall: 'spawn /gone/codex' });
+    const source = { command: () => '/gone/codex', spawnFailed: vi.fn() };
+    const failed = spawnCodexAppServer({
+      command: source,
+      cwd: '/',
+      env: {},
+      spawn: () => {
+        throw enoent;
+      },
+    });
+    const error = await failed.catch((thrown: unknown) => thrown);
+    expect(error).toMatchObject({ _tag: 'CodexAppServerSpawnError', cause: enoent });
+    expect(isHarnessExecutableUnavailable(error)).toBe(true);
+    expect(source.spawnFailed).toHaveBeenCalledWith(enoent);
   });
 
   it('fails the handshake with the process exit when the app-server dies', async () => {

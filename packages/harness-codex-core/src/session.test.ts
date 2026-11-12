@@ -10,6 +10,7 @@ import { FakeCodexAppServer, fakeCodexSpawn } from './testkit.ts';
 import { CodexRunContext } from './harness.ts';
 import { CodexError } from './errors.ts';
 import { CODEX_ACCOUNT_SWITCH_PROMPT } from './session.ts';
+import { HarnessExecutableUnavailableError, isHarnessExecutableUnavailable } from '@factory/harness/executable';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 async function until(check: () => boolean, label = 'condition') {
@@ -64,6 +65,31 @@ async function harnessWith(spawn: ReturnType<typeof fakeCodexSpawn>, config: Par
 const ended = (events: AgentEvent[]) => events.filter((event): event is Extract<AgentEvent, { type: 'agent_end' }> => event.type === 'agent_end');
 
 describe('CodexSession', () => {
+  it('fails a run whose CLI is not installed with why, and runs once it is', async () => {
+    let installed = false;
+    const spawn = scripted([reply('Done.')]);
+    const { session, events } = await harnessWith(spawn, {
+      command: {
+        command: () => {
+          if (!installed) throw new HarnessExecutableUnavailableError({ harness: 'Codex', executable: 'codex', message: 'Codex is not installed on this server.' });
+          return '/opt/homebrew/bin/codex';
+        },
+        spawnFailed: () => {},
+      },
+    });
+
+    // The CLI never took the message: the send fails with why, as one whose process could not start does.
+    await expect(session.sendMessage({ content: 'Fix the bug' })).rejects.toThrow('Codex is not installed on this server.');
+    const failure = events.find((event): event is Extract<AgentEvent, { type: 'error' }> => event.type === 'error')!.error;
+    expect(failure).toMatchObject({ message: 'Codex is not installed on this server.' });
+    expect(isHarnessExecutableUnavailable(failure)).toBe(true);
+    expect(spawn.calls).toEqual([]);
+
+    installed = true;
+    expect(await session.sendMessage({ content: 'Fix the bug' })).toEqual({ reason: 'complete' });
+    expect(spawn.calls.map(call => call.command)).toEqual(['/opt/homebrew/bin/codex']);
+  });
+
   it('runs a turn: opens the thread with its instructions and MCP servers, sends the model and streams the reply', async () => {
     const spawn = scripted([reply('Done.')]);
     const { session, events, transcript, store } = await harnessWith(spawn, {
