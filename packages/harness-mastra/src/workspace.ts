@@ -812,7 +812,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     const factorySandbox = sandboxConfig;
     const githubProvider = sourceControl.github;
-    const gitIdentity = githubProvider?.gitIdentity ?? { name: user.name, email: user.email };
 
     const storage = sourceControl.storage;
     const projectRepository = session.projectRepositoryId
@@ -830,6 +829,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (!installation) {
       throw new Error(`${sourceControl.id} installation ${connection.installationId} was not found`);
     }
+    // Commits are authored as the connection authenticates: a token connection's account, or the App bot.
+    const gitIdentity =
+      (githubProvider?.gitIdentityForInstallation
+        ? await githubProvider.gitIdentityForInstallation(installation.externalId)
+        : githubProvider?.gitIdentity) ?? { name: user.name, email: user.email };
     const repoFullName = repository.slug;
     // The factory environment: every `inEnvironment` link of the session's
     // factory in position order, with the project's settings. Absent when the

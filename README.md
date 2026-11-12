@@ -122,14 +122,14 @@ cd apps/server && corepack pnpm dev:local          # http://localhost:5874
 
 Бракує обов'язкової змінної — сервер не стартує й називає її.
 
-### GitHub без App
+### GitHub: App або токен
 
-`GITHUB_ACCESS_TOKEN` у `apps/server/.env` (група `GITHUB_APP_*` порожня) вмикає `GithubTokenIntegration` (`packages/integration-github/src/token-integration.ts`): токен акаунта, що може пушити в потрібні репозиторії (classic `repo` або fine-grained з read/write на Contents, Issues, Pull requests, Commit statuses).
+Кожна організація підключає GitHub у Налаштування › Підключення › «Додати підключення» ([ADR-0034](docs/adr/0034-github-app-or-token-per-connection.md)): «GitHub» — через App сервера (лише коли задано всю групу `GITHUB_APP_*`), «GitHub · токен» — персональний токен, який вставляє адміністратор організації (classic `repo` або fine-grained з read/write на Contents, Issues, Pull requests, Commit statuses; Workflows — якщо агенти правлять CI). Токен перевіряється (`GET /user`) і зберігається зашифровано; env не потрібен. Обидва способи можуть бути в одній організації. Для токен-підключень:
 
-- «Connect GitHub» реєструє акаунт токена (`GET /user`) як єдине встановлення, без OAuth; у пікері — репозиторії, куди акаунт може пушити.
-- Токен підключає одна організація: `GITHUB_ACCESS_TOKEN_ORG_ID` або перша, що натиснула Connect; іншим відмовлено.
-- Відкликаний токен (401) пишеться в лог один раз; діагностика показує `tokenRejected`.
-- API, clone/push і `GH_TOKEN` у пісочниці — з цим токеном.
+- У пікері — репозиторії, куди акаунт токена може пушити.
+- `GITHUB_ACCESS_TOKEN` у `apps/server/.env` — необов'язковий запасний: обслуговує підключення, які зареєстрував колишній режим токена сервера (id його акаунта), доки адміністратор не замінить токен; може стояти разом із `GITHUB_APP_*`. `GITHUB_ACCESS_TOKEN_ORG_ID` більше не читається.
+- Відкликаний токен (401) пишеться в лог один раз; діагностика показує `fallbackTokenRejected` для запасного.
+- API, clone/push і `GH_TOKEN` у пісочниці — з токеном підключення.
 - Webhook-ів нема: нові й закриті issues і merge PR ловить опитування, кожні 2 хв (`MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS`). Коментарі й рев'ю в GitHub не доходять — відповідати фабриці через UI.
 - Перевірки — commit statuses (check runs доступні лише App).
 - З власним токеном людини фабрика пише від її імені, тому себе за логіном не впізнає: свої PR — за міткою provenance, свій коментар тріажу — за міткою й логіном. GitHub не дає схвалити власний PR: рев'ю фабрики на її PR — лише коментар, якщо в Settings не задано окремий PAT рев'ювера.

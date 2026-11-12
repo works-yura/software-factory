@@ -349,10 +349,13 @@ const githubStub = {
   sourceControlStorage,
   integrationStorage,
   webhookSecret: undefined as string | undefined,
-  authMode: 'app' as 'app' | 'token',
+  appConfigured: true,
+  tokens: {
+    resolve: vi.fn(async (_installationId: number): Promise<{ kind: 'app' } | { kind: 'token'; source: 'stored' | 'env'; account: unknown }> => ({ kind: 'app' })),
+    remove: vi.fn(async () => {}),
+  },
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
-  directInstallations: vi.fn(async (): Promise<UserInstallation[] | undefined> => undefined),
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   getRepositoryCollaboratorPermission: vi.fn(async () => 'write'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
@@ -595,7 +598,6 @@ const testAuth: RouteAuth = {
 };
 let patAdmins: Set<string> | null = null;
 
-import type { UserInstallation } from './integration.ts';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.ts';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
@@ -1020,37 +1022,31 @@ describe('status route', () => {
     expect(json.installations[0].installationId).toBe(7);
   });
 
-  it('connects an access token without a Connect step, the way a GitLab token is', async () => {
-    githubStub.authMode = 'token';
-    githubStub.directInstallations.mockResolvedValue([
-      { installationId: 4242, accountLogin: 'yura', accountType: 'User' },
-    ]);
+  it('reports how each connection authenticates, and whether the App flow is offered', async () => {
+    tables.installations.push(
+      installationRow({ orgId: 'org1', userId: 'u1', installationId: 7, accountLogin: 'octo', accountType: 'Organization' }),
+      installationRow({ orgId: 'org1', userId: 'u1', installationId: 4242, accountLogin: 'yura', accountType: 'User' }),
+    );
+    githubStub.tokens.resolve.mockImplementation(async (installationId: number) =>
+      installationId === 4242 ? { kind: 'token', source: 'env', account: {} } : { kind: 'app' },
+    );
     try {
       const res = await buildApp({ id: 'u1' }).request('/web/github/status');
-      expect(await res.json()).toMatchObject({
-        mode: 'token',
-        connected: true,
-        installations: [{ installationId: 4242, accountLogin: 'yura' }],
-      });
-      expect(tables.installations).toEqual([
-        expect.objectContaining({ orgId: 'org1', externalId: '4242', accountName: 'yura' }),
+      const json = await res.json();
+      expect(json).toMatchObject({ appConfigured: true, canManage: true, connected: true });
+      expect(json).not.toHaveProperty('mode');
+      expect(json.installations).toEqual([
+        expect.objectContaining({ installationId: 7, kind: 'app', accountLogin: 'octo', needsAttention: false }),
+        expect.objectContaining({ installationId: 4242, kind: 'token', tokenSource: 'env', needsAttention: false }),
       ]);
-
-      // A token another org already claimed stays unconnected here.
-      tables.installations.length = 0;
-      githubStub.directInstallations.mockRejectedValueOnce(new Error('already connected by another org'));
-      const refused = await buildApp({ id: 'u1' }).request('/web/github/status');
-      expect(await refused.json()).toMatchObject({ mode: 'token', connected: false, reason: 'not_connected' });
     } finally {
-      githubStub.authMode = 'app';
-      githubStub.directInstallations.mockResolvedValue(undefined);
+      githubStub.tokens.resolve.mockImplementation(async () => ({ kind: 'app' }));
     }
   });
 
   it('leaves an App integration to its Connect flow', async () => {
     const res = await buildApp({ id: 'u1' }).request('/web/github/status');
-    expect(await res.json()).toMatchObject({ mode: 'app', connected: false });
-    expect(githubStub.directInstallations).not.toHaveBeenCalled();
+    expect(await res.json()).toMatchObject({ appConfigured: true, connected: false, installations: [] });
   });
 });
 
@@ -1263,7 +1259,7 @@ describe('repos route', () => {
     expect(tables.repositories).toHaveLength(0);
   });
 
-  it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
+  it('prunes an unused installation GitHub no longer knows (404) and keeps listing the rest', async () => {
     install(7, 'octo');
     install(8, 'stale');
     vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
@@ -1283,6 +1279,44 @@ describe('repos route', () => {
     expect(tables.installations.map(i => i.externalId)).toEqual(['7']);
     expect(String(errorSpy.mock.calls[0]![0])).toContain('stale GitHub installation 8');
     errorSpy.mockRestore();
+  });
+
+  it('marks a 404 installation that repositories or projects still use instead of deleting it', async () => {
+    install(8, 'stale');
+    const installationId = tables.installations[0]!.id as string;
+    tables.repositories.push({ id: 'repo-1', installationId, externalId: '99', slug: 'stale/app', defaultBranch: 'main' });
+    tables.connections.push({ id: 'connection-1', factoryProjectId: 'project-1', installationId, integrationId: 'github' });
+    vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const res = await buildApp({ id: 'u1' }).request('/web/github/repos');
+    expect(res.status).toBe(200);
+    expect(tables.installations).toHaveLength(1);
+    expect(tables.installations[0]!.providerMetadata).toMatchObject({ attention: 'not_found' });
+    const status = await (await buildApp({ id: 'u1' }).request('/web/github/status')).json();
+    expect(status.installations[0]).toMatchObject({ installationId: 8, needsAttention: true });
+
+    // Reachable again: the mark goes.
+    vi.mocked(listInstallationRepos).mockImplementation(defaultImpl);
+    await buildApp({ id: 'u1' }).request('/web/github/repos');
+    expect(tables.installations[0]!.providerMetadata).not.toHaveProperty('attention');
+    warnSpy.mockRestore();
+  });
+
+  it('never prunes a token connection on a 404', async () => {
+    install(4242, 'yura');
+    githubStub.tokens.resolve.mockImplementation(async () => ({ kind: 'token', source: 'env', account: {} }));
+    vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await buildApp({ id: 'u1' }).request('/web/github/repos');
+      expect(res.status).toBe(200);
+      expect(tables.installations).toHaveLength(1);
+      expect(tables.installations[0]!.providerMetadata).not.toHaveProperty('attention');
+    } finally {
+      githubStub.tokens.resolve.mockImplementation(async () => ({ kind: 'app' }));
+      warnSpy.mockRestore();
+    }
   });
 
   it('does not prune on non-404 errors', async () => {
@@ -1392,30 +1426,19 @@ describe('connect + callback', () => {
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
   });
 
-  it('registers the token account directly when the integration has no App, for manage too', async () => {
-    githubStub.directInstallations.mockResolvedValue([
-      { installationId: 4242, accountLogin: 'yura', accountType: 'User' },
-    ]);
+  it('has no install flow to offer when the server has no App', async () => {
+    githubStub.appConfigured = false;
     try {
       for (const path of ['/auth/github/connect', '/auth/github/connect?manage=1']) {
         const res = await buildApp({ id: 'u1' }).request(path);
         expect(res.status).toBe(302);
-        expect(res.headers.get('location')).toBe('/?github=connected');
+        expect(res.headers.get('location')).toBe('/?github=no_app');
       }
-      expect(tables.installations).toEqual([
-        expect.objectContaining({ orgId: 'org1', externalId: '4242', accountName: 'yura', accountType: 'User' }),
-      ]);
       expect(githubStub.exchangeOAuthCode).not.toHaveBeenCalled();
+      expect(tables.installations).toHaveLength(0);
     } finally {
-      githubStub.directInstallations.mockResolvedValue(undefined);
+      githubStub.appConfigured = true;
     }
-  });
-
-  it('reports an error when the token account cannot be read', async () => {
-    githubStub.directInstallations.mockRejectedValueOnce(new Error('Bad credentials'));
-    const res = await buildApp({ id: 'u1' }).request('/auth/github/connect');
-    expect(res.headers.get('location')).toBe('/?github=error');
-    expect(tables.installations).toHaveLength(0);
   });
 
   it('401s on a cookie-only connect navigation when there is no session', async () => {

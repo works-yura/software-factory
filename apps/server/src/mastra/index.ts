@@ -33,7 +33,7 @@ import {
   LocalFileBlobStore,
   MastraFactory,
 } from '@factory/server';
-import { GithubIntegration, GithubTokenIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
+import { GithubIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
 import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
@@ -175,43 +175,51 @@ const platformCredentialsConfigured = Boolean(
   process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
 );
 
-// Direct GitHub App fallback: when the platform-backed integration isn't in
-// play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
-// a GithubIntegration so the app still gets a real GitHub connection — Connect
-// GitHub in onboarding, the repo picker, and webhooks. A partial group stays
-// disabled so the status route can report exactly what's missing.
+// Direct GitHub (ADR-0034): one integration, each connection authenticates on its own. An
+// organization connects GitHub in Settings › Підключення either through this server's GitHub App
+// (offered only when the complete GITHUB_APP_* group is set) or with an access token an admin
+// pastes there, stored encrypted for the organization. Both kinds may coexist in one organization.
+// A partial App group leaves the App off (logged), so the status route's diagnostics report what's
+// missing while token connections keep working.
 //
-// This integration carries the deployment's GitHub event-rule overrides. When
-// the group is absent the factory installs the Platform-backed integration
-// instead, and `platform.github` (below) hands it the same overrides — only one
-// of the two is ever installed.
+// GITHUB_ACCESS_TOKEN is an optional fallback: it serves the connections the former server-wide
+// token mode registered (its account's id) until an admin replaces them with a stored token. It may
+// be set together with the App group.
+//
+// This integration carries the deployment's GitHub event-rule overrides. When neither the App group
+// nor the fallback token is set and Platform credentials are present, the factory installs the
+// Platform-backed integration instead, and `platform.github` (below) hands it the same overrides —
+// only one of the two is ever installed.
 const githubAppId = process.env.GITHUB_APP_ID?.trim();
 const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
 const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
 const githubClientSecret = process.env.GITHUB_APP_CLIENT_SECRET?.trim();
 const githubAppSlug = process.env.GITHUB_APP_SLUG?.trim();
-const githubAccessToken = process.env.GITHUB_ACCESS_TOKEN?.trim();
+const githubAppFields = [githubAppId, githubPrivateKey, githubClientId, githubClientSecret, githubAppSlug];
+const githubAppConfigured = githubAppFields.every(Boolean);
+if (!githubAppConfigured && githubAppFields.some(Boolean)) {
+  console.warn('[GitHub] The GITHUB_APP_* group is incomplete; the GitHub App is off until all five are set.');
+}
+const githubAccessToken = process.env.GITHUB_ACCESS_TOKEN?.trim() || undefined;
 const github =
-  githubAppId && githubPrivateKey && githubClientId && githubClientSecret && githubAppSlug
+  githubAppConfigured || githubAccessToken || !platformCredentialsConfigured
     ? new GithubIntegration({
-        appId: githubAppId,
-        privateKey: githubPrivateKey,
-        clientId: githubClientId,
-        clientSecret: githubClientSecret,
-        slug: githubAppSlug,
+        ...(githubAppConfigured
+          ? {
+              appId: githubAppId,
+              privateKey: githubPrivateKey,
+              clientId: githubClientId,
+              clientSecret: githubClientSecret,
+              slug: githubAppSlug,
+            }
+          : {}),
         webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+        ...(githubAccessToken ? { accessToken: githubAccessToken } : {}),
         // Extra reviewer bot logins this deployment trusts to trigger
         // review/comment notifications, on top of the built-in defaults.
         authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
       })
-    : githubAccessToken
-      ? // GitHub without an App: one access token reaches the repositories its
-        // account can push to, and polling replaces webhooks.
-        new GithubTokenIntegration({
-          accessToken: githubAccessToken,
-          authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
-        })
-      : undefined;
+    : undefined;
 
 // Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
 // and Group Access Tokens use the same API/Git authentication; the explicit

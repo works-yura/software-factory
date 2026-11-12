@@ -54,7 +54,11 @@ import type { GithubEventRules, GithubRuleOverrides } from './default-rules.ts';
 import { resolveGithubRules } from './default-rules.ts';
 import { attachGithubIssueReconciler } from './issue-reconciler.ts';
 import type { GithubIssueReconciler } from './issue-reconciler.ts';
-import { GithubReconcileWorker } from './reconcile-worker.ts';
+import {
+  DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS,
+  DEFAULT_GITHUB_RECONCILE_INTERVAL_MS,
+  GithubReconcileWorker,
+} from './reconcile-worker.ts';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.ts';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.ts';
 import {
@@ -80,6 +84,11 @@ import {
 } from './session-subscriptions.ts';
 import { settleOrAbort } from './settle-or-abort.ts';
 import type { GithubSubscriptionStorage } from './subscriptions.ts';
+import { GithubTokenConnections } from './token-auth.ts';
+import type { GithubInstallationAuth } from './token-auth.ts';
+import { createGithubPullRequestActivitySweep, octokitPullRequestActivitySource } from './pull-request-activity.ts';
+import { githubRulesOptions } from './rules.ts';
+import { routedSourceScopes } from '@factory/core';
 
 type InputOf<TMethod extends keyof VersionControl> =
   NonNullable<VersionControl[TMethod]> extends (input: infer TInput) => unknown ? TInput : never;
@@ -183,19 +192,23 @@ export interface ListRepoOpenIssuesOptions {
 export interface GithubIntegrationConfig {
   /** Replace an event handler, or disable it with null; omitted events keep defaults. */
   rules?: GithubRuleOverrides;
+  /**
+   * The GitHub App fields below are all-or-nothing: give all five to offer the App install flow, or
+   * none to run with access-token connections only (ADR-0034).
+   */
   /** GitHub App id (the numeric id, as a string). */
-  appId: string;
+  appId?: string;
   /**
    * App private key (PEM). Multi-line, `\n`-escaped, and fully flattened
    * single-line forms are all accepted (normalized at construction).
    */
-  privateKey: string;
+  privateKey?: string;
   /** OAuth client id of the GitHub App. */
-  clientId: string;
+  clientId?: string;
   /** OAuth client secret of the GitHub App. */
-  clientSecret: string;
+  clientSecret?: string;
   /** App slug — the URL name used to build the install URL. */
-  slug: string;
+  slug?: string;
   /**
    * Secret GitHub uses to sign webhook deliveries. Omitted → webhook
    * signature verification rejects all deliveries. Also serves as the default
@@ -209,10 +222,45 @@ export interface GithubIntegrationConfig {
    * in here; every other bot stays gated.
    */
   authorizedBots?: string[];
+  /**
+   * Optional fallback access token (`GITHUB_ACCESS_TOKEN`): serves the installation rows registered
+   * for its account that have no stored token — the rows the former server-wide token mode created.
+   * Organizations connect their own tokens in Settings › Підключення (ADR-0034).
+   */
+  accessToken?: string;
+  /** Overrides `https://api.github.com` for access-token clients (GitHub Enterprise Server). */
+  apiBaseUrl?: string;
+  /** Test seam for the access-token clients' Octokit transport. */
+  fetchImpl?: typeof fetch;
 }
 
 /** Settings that do not depend on how the integration authenticates. */
 export type GithubIntegrationSharedConfig = Pick<GithubIntegrationConfig, 'rules' | 'webhookSecret' | 'authorizedBots'>;
+
+/** Polling replaces webhooks for token connections, so sweeps run far more often than the hourly App default. */
+export const GITHUB_TOKEN_RECONCILE_INTERVAL_MS = 2 * 60_000;
+
+/** Raised when an installation can neither use a token nor the App (no App on this server). */
+export class GithubInstallationUnavailableError extends Error {
+  readonly status = 409;
+  constructor(installationId: number) {
+    super(
+      `GitHub connection ${installationId} has no usable credentials: it is not a token connection and this server ` +
+        'has no GitHub App configured. Reconnect it in Settings › Підключення › GitHub.',
+    );
+    this.name = 'GithubInstallationUnavailableError';
+  }
+}
+
+const STATUS_DESCRIPTION_LIMIT = 140;
+const STATUS_STATE: Record<CommitCheck['status'], 'pending' | 'success' | 'failure' | 'error'> = {
+  'in-progress': 'pending',
+  success: 'success',
+  failure: 'failure',
+  neutral: 'success',
+  skipped: 'success',
+  cancelled: 'error',
+};
 
 /** Human-readable names of the required config fields, for construction errors. */
 const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slug'] as const;
@@ -398,15 +446,18 @@ export class GithubIntegration implements FactoryIntegration {
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
-   * multi-replica deploy needs a deployment-stable state secret.
+   * multi-replica deploy needs a deployment-stable state secret. Only the App
+   * has that flow.
    */
-  readonly requiresStableStateSigner: boolean = true;
-  /**
-   * `app`: an org connects through the GitHub App install and OAuth flow.
-   * `token`: the deployment's access token connects every allowed org
-   * without a round trip to GitHub, as a GitLab access token does.
-   */
-  readonly authMode: 'app' | 'token' = 'app';
+  get requiresStableStateSigner(): boolean {
+    return this.appConfigured;
+  }
+
+  /** Per-installation credentials: stored tokens, the env fallback token, else the App. */
+  readonly tokens: GithubTokenConnections;
+  readonly #appConfigured: boolean;
+  readonly #apiBaseUrl: string | undefined;
+  readonly #fetchImpl: typeof fetch | undefined;
 
   readonly #appId: string;
   readonly #privateKey: string;
@@ -432,13 +483,11 @@ export class GithubIntegration implements FactoryIntegration {
    */
   readonly #installationOctokits = new Map<number, Octokit>();
 
-  constructor(config: GithubIntegrationConfig);
-  /** For subclasses that authenticate without an App, such as `GithubTokenIntegration`. */
-  constructor(config: GithubIntegrationSharedConfig, appCredentials: false);
-  constructor(config: GithubIntegrationConfig | GithubIntegrationSharedConfig, appCredentials = true) {
+  constructor(config: GithubIntegrationConfig = {}) {
     this.#rules = resolveGithubRules(config.rules);
-    const app: Partial<GithubIntegrationConfig> = appCredentials ? config : {};
-    const missing = appCredentials ? REQUIRED_FIELDS.filter(field => !app[field]) : [];
+    const app = config;
+    const anyAppField = REQUIRED_FIELDS.some(field => app[field] !== undefined);
+    const missing = anyAppField ? REQUIRED_FIELDS.filter(field => !app[field]) : [];
     if (missing.length > 0) {
       throw new Error(
         `GithubIntegration: missing required config field(s): ${missing.join(', ')}. ` +
@@ -453,21 +502,67 @@ export class GithubIntegration implements FactoryIntegration {
     this.#slug = app.slug ?? '';
     this.#webhookSecret = config.webhookSecret || undefined;
     this.#authorizedBots = (config.authorizedBots ?? []).map(bot => bot.trim()).filter(Boolean);
+    this.#appConfigured = anyAppField;
+    this.#apiBaseUrl = config.apiBaseUrl?.replace(/\/+$/, '') || undefined;
+    this.#fetchImpl = config.fetchImpl;
+    this.tokens = new GithubTokenConnections({
+      storage: () => this.integrationStorage,
+      envToken: config.accessToken,
+      client: {
+        ...(config.apiBaseUrl ? { baseUrl: config.apiBaseUrl } : {}),
+        ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
+      },
+    });
   }
 
-  /** App slug — the URL name used to build the install URL. */
+  /** Whether this server has a GitHub App, so organizations may connect through its install flow. */
+  get appConfigured(): boolean {
+    return this.#appConfigured;
+  }
+
+  /**
+   * App slug — the URL name used to build the install URL. Empty without an App: Factory then never
+   * claims a login as itself (a token may be a person's own; see ADR-0034).
+   */
   get slug(): string {
     return this.#slug;
   }
 
-  /** Commit authorship for repositories opened by this App. */
+  /**
+   * Process-wide commit authorship: the App bot, else the env token's account once known. A session
+   * uses {@link gitIdentityForInstallation}, which knows its connection.
+   */
   get gitIdentity(): GitIdentity | undefined {
-    return { login: `${this.#slug}[bot]` };
+    if (this.#appConfigured) return { login: `${this.#slug}[bot]` };
+    const login = this.tokens.envToken?.login;
+    return login ? { login } : undefined;
   }
 
-  /** Whether a GitHub login belongs to this integration's App. */
+  /** Commit authorship for a repository of `installationExternalId`: the token's account, or the App bot. */
+  async gitIdentityForInstallation(installationExternalId: string | number): Promise<GitIdentity | undefined> {
+    const installationId = Number(installationExternalId);
+    if (!Number.isSafeInteger(installationId)) return this.gitIdentity;
+    const auth = await this.tokens.resolve(installationId).catch(() => undefined);
+    if (auth?.kind === 'token') {
+      const login = await auth.account.account().then(
+        info => info.login,
+        () => undefined,
+      );
+      return login ? { login } : undefined;
+    }
+    return this.#appConfigured ? { login: `${this.#slug}[bot]` } : undefined;
+  }
+
+  /**
+   * Whether a GitHub login is Factory's own: the App bot, or the account of a connected token. Only
+   * used together with Factory's markers (triage comment, review status), since a token may be a
+   * person's own account.
+   */
   isFactoryCommentAuthor(login: string | null | undefined): boolean {
-    return typeof login === 'string' && login.toLowerCase() === `${this.#slug}[bot]`.toLowerCase();
+    if (typeof login !== 'string') return false;
+    const lower = login.toLowerCase();
+    if (this.#appConfigured && lower === `${this.#slug}[bot]`.toLowerCase()) return true;
+    return this.tokens.knownLogins.has(lower);
   }
 
   /** Extra bot logins authorized to trigger author-gated PR notifications. */
@@ -536,6 +631,7 @@ export class GithubIntegration implements FactoryIntegration {
    * app-level operations and to mint installation tokens.
    */
   getAppOctokit(): Octokit {
+    if (!this.#appConfigured) throw new Error('This server has no GitHub App configured.');
     return new Octokit({ authStrategy: createAppAuth, auth: this.#appAuth() });
   }
 
@@ -549,7 +645,15 @@ export class GithubIntegration implements FactoryIntegration {
       // Re-insert so Map order tracks recency for LRU eviction.
       this.#installationOctokits.delete(installationId);
     } else {
-      const created = new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+      const created = new Octokit({
+        ...(this.#apiBaseUrl ? { baseUrl: this.#apiBaseUrl } : {}),
+        ...(this.#fetchImpl ? { request: { fetch: this.#fetchImpl } } : {}),
+        authStrategy: perInstallationAuth,
+        auth: {
+          resolve: () => this.installationAuth(installationId),
+          app: this.#appConfigured ? { ...this.#appAuth(), installationId } : undefined,
+        } satisfies PerInstallationAuthOptions,
+      });
       // auth-app keeps serving a cached token GitHub has revoked (it only retries
       // 401s within 5 s of minting), so drop this client and mint fresh next call.
       // Not on 403: GitHub also uses it for rate limits.
@@ -569,6 +673,22 @@ export class GithubIntegration implements FactoryIntegration {
     return octokit;
   }
 
+  /**
+   * How an installation authenticates: a token connection (stored token, or the env fallback for
+   * rows the former token mode registered), else the App. Throws
+   * {@link GithubInstallationUnavailableError} when it would need the App and there is none.
+   */
+  async installationAuth(installationId: number): Promise<GithubInstallationAuth> {
+    const resolved = await this.tokens.resolve(installationId);
+    if (resolved.kind === 'app' && !this.#appConfigured) throw new GithubInstallationUnavailableError(installationId);
+    return resolved;
+  }
+
+  /** Whether an installation is a token connection; false when it cannot be resolved. */
+  async isTokenInstallation(installationId: number): Promise<boolean> {
+    return (await this.tokens.resolve(installationId).catch(() => undefined))?.kind === 'token';
+  }
+
   /** Octokit authenticated as a user via their OAuth token (the identify step). */
   getUserOctokit(userToken: string): Octokit {
     return new Octokit({ auth: userToken });
@@ -579,6 +699,8 @@ export class GithubIntegration implements FactoryIntegration {
    * server-side / inside the sandbox clone URL and never sent to the browser.
    */
   async mintInstallationToken(installationId: number): Promise<string> {
+    const resolved = await this.installationAuth(installationId);
+    if (resolved.kind === 'token') return resolved.account.token;
     const auth = createAppAuth(this.#appAuth());
     const installationAuth = await auth({ type: 'installation', installationId });
     return installationAuth.token;
@@ -605,6 +727,9 @@ export class GithubIntegration implements FactoryIntegration {
    * GitHub directly, so `fresh` has nothing to bypass here.
    */
   async listInstallationRepos(installationId: number, _options?: { fresh?: boolean }): Promise<RepoSummary[]> {
+    const resolved = await this.installationAuth(installationId);
+    // A token reaches the repositories its account can push to.
+    if (resolved.kind === 'token') return resolved.account.listRepos(installationId);
     const octokit = this.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.apps.listReposAccessibleToInstallation, {
       per_page: 100,
@@ -1209,6 +1334,18 @@ export class GithubIntegration implements FactoryIntegration {
    */
   async publishCommitCheck(input: InputOf<'publishCommitCheck'>): Promise<CommitCheck> {
     const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
+    // Check runs are App-only on GitHub; a token connection publishes a commit status per name
+    // (GitHub keeps the latest status per context on a commit).
+    if ((await this.installationAuth(getGithubInstallationId(input.connection))).kind === 'token') {
+      const { data } = await octokit.repos.createCommitStatus({
+        ...parts,
+        sha: input.headSha,
+        state: STATUS_STATE[input.status],
+        context: input.name,
+        description: input.title.slice(0, STATUS_DESCRIPTION_LIMIT),
+      });
+      return { id: String(data.id), name: data.context, headSha: input.headSha, status: input.status, url: data.target_url ?? null };
+    }
     const { status } = input;
     const { data } = await octokit.checks
       .create({
@@ -1318,6 +1455,7 @@ export class GithubIntegration implements FactoryIntegration {
    * flow and validated on callback.
    */
   buildInstallUrl(state: string): string {
+    if (!this.#appConfigured) throw new Error('This server has no GitHub App to install.');
     const url = new URL(`https://github.com/apps/${this.#slug}/installations/new`);
     url.searchParams.set('state', state);
     return url.toString();
@@ -1328,6 +1466,7 @@ export class GithubIntegration implements FactoryIntegration {
    * identity and obtain a user token for listing their installations.
    */
   buildOAuthIdentifyUrl(state: string, redirectUri: string): string {
+    if (!this.#appConfigured) throw new Error('This server has no GitHub App to authorize.');
     const url = new URL('https://github.com/login/oauth/authorize');
     url.searchParams.set('client_id', this.#clientId);
     url.searchParams.set('redirect_uri', redirectUri);
@@ -1368,6 +1507,11 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
+    // The fallback token's account is read at boot, so legacy token connections and their commit
+    // identity are known early, and a bad token is reported once.
+    void this.tokens.envToken?.account().catch((error: unknown) => {
+      console.warn('[GitHub] The fallback GITHUB_ACCESS_TOKEN could not be verified.', error);
+    });
     const ingestFactoryEvent = attachGithubRules(this, ctx);
     this.#ingestFactoryEvent = ingestFactoryEvent;
     return buildGithubRoutes({
@@ -1396,28 +1540,75 @@ export class GithubIntegration implements FactoryIntegration {
     await ingestLinkedRepositoryBacklog({ github: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
   }
 
-  /** Sweep pace when no interval is configured; undefined keeps the worker's hourly default. */
-  protected get defaultReconcileIntervalMs(): number | undefined {
-    return undefined;
-  }
-
   /**
-   * The repositories whose issues the issue sweep reads. All of them here:
-   * webhooks deliver every linked repository's issues to the rules anyway.
+   * The repositories whose issues the issue sweep reads. An App connection: all of them, since
+   * webhooks deliver every linked repository's issues to the rules anyway. A token connection: only
+   * the repositories a project's intake routes name (`source.repository`, GitHub routes), while
+   * GitHub intake is switched on. Its sweep files every open issue it finds without a card, so
+   * reading every repository the environment links would turn a repository's whole issue list into
+   * cards for a project that takes its work from elsewhere. Without the routes domain nothing of a
+   * token connection is read.
    */
   protected async issueSweepRepositories(
-    _ctx: IntegrationContext,
+    ctx: IntegrationContext,
     repositories: ReconcileRepository[],
   ): Promise<ReconcileRepository[]> {
-    return repositories;
+    const selected: ReconcileRepository[] = [];
+    const routes = ctx.runtime?.intakeRoutes;
+    for (const repository of repositories) {
+      if (!(await this.isTokenInstallation(repository.installationId))) {
+        selected.push(repository);
+        continue;
+      }
+      if (!routes) continue;
+      const projects = await ctx.storage.sourceControl.projectRepositories.listByExternalRepository({
+        installationExternalId: String(repository.installationId),
+        repositoryExternalId: String(repository.id),
+      });
+      for (const project of projects) {
+        const selection = (await ctx.storage.intake.getConfig({ orgId: project.orgId, integrationIds: [this.id] }))[
+          this.id
+        ];
+        if (!selection?.enabled) continue;
+        const named = routedSourceScopes(
+          await routes.listIntakeRoutes({ orgId: project.orgId, factoryProjectId: project.factoryProjectId }),
+          'source.repository',
+          this.id,
+        );
+        if (named.some(slug => slug.toLowerCase() === repository.fullName.toLowerCase())) {
+          selected.push(repository);
+          break;
+        }
+      }
+    }
+    return selected;
   }
 
   /**
-   * A sweep that reads pull-request activity webhooks would otherwise deliver.
-   * Undefined here: the App receives webhooks.
+   * A sweep that reads, for token connections, the pull-request activity webhooks would otherwise
+   * deliver. App connections receive webhooks and are skipped.
    */
-  protected pullRequestActivitySweep(_ctx: IntegrationContext): GithubPullRequestReconciler | undefined {
-    return undefined;
+  protected pullRequestActivitySweep(ctx: IntegrationContext): GithubPullRequestReconciler | undefined {
+    const options = githubRulesOptions(this, ctx);
+    if (!options) return undefined;
+    const sweep = createGithubPullRequestActivitySweep({
+      source: octokitPullRequestActivitySource(installationId => this.getInstallationOctokit(installationId)),
+      sourceControl: options.sourceControl,
+      integrationStorage: options.integrationStorage,
+      storage: options.storage,
+      selfLogin: async installationId => {
+        const resolved = await this.tokens.resolve(installationId);
+        return resolved.kind === 'token' ? (await resolved.account.account()).login : undefined;
+      },
+      deliver: event => this.deliverPolledEvent(ctx, event),
+    });
+    return async repositories => {
+      const tokenRepositories: ReconcileRepository[] = [];
+      for (const repository of repositories) {
+        if (await this.isTokenInstallation(repository.installationId)) tokenRepositories.push(repository);
+      }
+      return sweep(tokenRepositories);
+    };
   }
 
   /**
@@ -1433,17 +1624,35 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * Installations this integration can register without the App install and
-   * OAuth flow, or undefined when it needs that flow. Connect persists these
-   * directly.
+   * Keeps an App connection's repositories to their own pace inside sweeps that run at the token
+   * pace: a token connection's repositories pass on every sweep, an App connection's once
+   * `intervalMs` has passed since they last did.
    */
-  async directInstallations(_args: { orgId: string }): Promise<UserInstallation[] | undefined> {
-    return undefined;
+  #paceAppRepositories<T>(
+    sweep: ((repositories: ReconcileRepository[]) => Promise<T>) | undefined,
+    intervalMs: number,
+  ): ((repositories: ReconcileRepository[]) => Promise<T>) | undefined {
+    if (!sweep) return undefined;
+    let nextAppSweepAt = 0;
+    return async repositories => {
+      const now = Date.now();
+      const appDue = now >= nextAppSweepAt;
+      if (appDue) nextAppSweepAt = now + intervalMs;
+      const selected: ReconcileRepository[] = [];
+      for (const repository of repositories) {
+        if (appDue || (await this.isTokenInstallation(repository.installationId))) selected.push(repository);
+      }
+      return sweep(selected);
+    };
   }
 
   /**
    * Pull-request and issue sweeps share a worker and lease, but can be enabled
    * and paced independently. The legacy combined controls remain the fallback.
+   *
+   * Token connections get no webhooks, so the worker ticks at the token pace (two minutes); App
+   * connections' repositories keep the hourly drift sweep (five minutes for discovery) unless an
+   * interval is configured, which then paces both.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pullRequestEnabled = reconciliationEnabled(
@@ -1456,17 +1665,28 @@ export class GithubIntegration implements FactoryIntegration {
     );
     if (!pullRequestEnabled && !issueEnabled) return [];
 
+    const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    const configuredPullRequestInterval =
+      reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const configuredIssueInterval =
+      reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const configuredDiscoveryInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS);
+
     const merges = pullRequestEnabled
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
     const activity = pullRequestEnabled ? this.pullRequestActivitySweep(ctx) : undefined;
+    const pacedMerges = this.#paceAppRepositories(
+      merges,
+      configuredPullRequestInterval ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS,
+    );
     const reconcile: GithubPullRequestReconciler | undefined =
-      merges && activity
+      pacedMerges && activity
         ? async repositories => {
             // Activity first: it records the pull requests Factory opened, which
             // the merge reconcile then finds on their cards.
             const polled = await activity(repositories);
-            const reconciled = await merges(repositories);
+            const reconciled = await pacedMerges(repositories);
             return {
               repositories: reconciled.repositories,
               checked: polled.checked + reconciled.checked,
@@ -1476,10 +1696,13 @@ export class GithubIntegration implements FactoryIntegration {
               errors: [...polled.errors, ...reconciled.errors].slice(0, RECONCILE_ERROR_SAMPLE_LIMIT),
             };
           }
-        : (merges ?? activity);
-    const discover = pullRequestEnabled
-      ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
-      : undefined;
+        : (pacedMerges ?? activity);
+    const discover = this.#paceAppRepositories(
+      pullRequestEnabled
+        ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
+        : undefined,
+      configuredDiscoveryInterval ?? DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS,
+    );
     const issueSweep = issueEnabled
       ? attachGithubIssueReconciler(
           this,
@@ -1488,26 +1711,24 @@ export class GithubIntegration implements FactoryIntegration {
           input => this.listOpenIssueStates(input),
         )
       : undefined;
-    const issues: GithubIssueReconciler | undefined = issueSweep
-      ? async repositories => issueSweep(await this.issueSweepRepositories(ctx, repositories))
-      : undefined;
+    const issues: GithubIssueReconciler | undefined = this.#paceAppRepositories(
+      issueSweep ? async (repositories: ReconcileRepository[]) => issueSweep(await this.issueSweepRepositories(ctx, repositories)) : undefined,
+      configuredIssueInterval ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS,
+    );
     if (!reconcile && !issues && !discover) return [];
 
-    const legacyInterval =
-      reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS) ?? this.defaultReconcileIntervalMs;
-    const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
-    const issueIntervalMs =
-      reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
-    const discoveryIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS);
+    const intervalMs = configuredPullRequestInterval ?? GITHUB_TOKEN_RECONCILE_INTERVAL_MS;
+    const issueIntervalMs = configuredIssueInterval ?? GITHUB_TOKEN_RECONCILE_INTERVAL_MS;
+    const discoveryIntervalMs = configuredDiscoveryInterval ?? Math.min(intervalMs, DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS);
     return [
       new GithubReconcileWorker({
         ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
         ...(discover ? { discover } : {}),
         sourceControl: ctx.storage.sourceControl,
-        ...(intervalMs ? { intervalMs } : {}),
-        ...(issueIntervalMs ? { issueIntervalMs } : {}),
-        ...(discoveryIntervalMs ? { discoveryIntervalMs } : {}),
+        intervalMs,
+        issueIntervalMs,
+        discoveryIntervalMs,
       }),
     ];
   }
@@ -1683,9 +1904,14 @@ export class GithubIntegration implements FactoryIntegration {
 
   /** Non-secret config snapshot for system diagnostics/startup logs. */
   diagnostics(): Record<string, unknown> {
+    const envToken = this.tokens.envToken;
     return {
+      appConfigured: this.#appConfigured,
       slug: this.#slug,
       webhookSecretConfigured: this.#webhookSecret !== undefined,
+      fallbackTokenConfigured: envToken !== undefined,
+      fallbackTokenAccount: envToken?.login ?? null,
+      fallbackTokenRejected: envToken?.rejected ?? false,
     };
   }
 }
@@ -1883,4 +2109,53 @@ function parseGithubExternalTarget(externalId: string): { repositoryId: string; 
   const repositoryId = parsePositiveInteger(match[1]);
   const issueId = parsePositiveInteger(match[2]);
   return repositoryId && issueId ? { repositoryId: String(repositoryId), issueId: String(issueId) } : null;
+}
+
+/** Options of {@link perInstallationAuth}: how to resolve the installation, and its App credentials. */
+interface PerInstallationAuthOptions {
+  resolve: () => Promise<GithubInstallationAuth>;
+  app: (Parameters<typeof createAppAuth>[0] & { installationId: number }) | undefined;
+}
+
+type OctokitRequestHook = (
+  request: ((options: Record<string, unknown>) => Promise<unknown>) & {
+    endpoint: { merge: (route: unknown, parameters?: unknown) => Record<string, unknown> & { headers: Record<string, string> } };
+  },
+  route: unknown,
+  parameters?: unknown,
+) => Promise<unknown>;
+
+/**
+ * Octokit auth strategy that decides per request how its installation authenticates (ADR-0034):
+ * a token connection sends its token, anything else goes through the App's installation auth. The
+ * decision is made per request, so a token connected, replaced or removed later takes effect
+ * without rebuilding cached clients.
+ */
+function perInstallationAuth(options: PerInstallationAuthOptions & Record<string, unknown>) {
+  const { resolve, app, ...octokitOptions } = options;
+  const appAuth = app ? createAppAuth({ ...octokitOptions, ...app } as Parameters<typeof createAppAuth>[0]) : undefined;
+  const auth = async (parameters?: Record<string, unknown>) => {
+    const resolved = await resolve();
+    if (resolved.kind === 'token') return { type: 'token', tokenType: 'oauth', token: resolved.account.token };
+    if (!appAuth) throw new Error('This server has no GitHub App configured.');
+    return appAuth((parameters ?? { type: 'installation' }) as Parameters<typeof appAuth>[0]);
+  };
+  const hook: OctokitRequestHook = async (request, route, parameters) => {
+    const resolved = await resolve();
+    if (resolved.kind === 'token') {
+      const endpoint = request.endpoint.merge(route, parameters);
+      endpoint.headers.authorization = `token ${resolved.account.token}`;
+      try {
+        const response = await request(endpoint);
+        resolved.account.markAccepted();
+        return response;
+      } catch (error) {
+        if ((error as { status?: number }).status === 401) resolved.account.markRejected();
+        throw error;
+      }
+    }
+    if (!appAuth) throw new Error('This server has no GitHub App configured.');
+    return (appAuth.hook as unknown as OctokitRequestHook)(request, route, parameters);
+  };
+  return Object.assign(auth, { hook });
 }

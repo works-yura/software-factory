@@ -313,12 +313,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
       vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
       vi.stubEnv('GITHUB_ACCESS_TOKEN', 'ghp_entry-secret');
-      vi.stubEnv('GITHUB_ACCESS_TOKEN_ORG_ID', 'org-local');
       stubGithubUser();
       try {
         const mod = await import('./index.js');
         const integration = factoryConfigs[0]?.integrations?.find(candidate => candidate.id === 'github');
-        expect(integration?.diagnostics()).toMatchObject({ mode: 'token', orgPinned: true, webhooks: false });
+        expect(integration?.diagnostics()).toMatchObject({ appConfigured: false, fallbackTokenConfigured: true });
         expect(JSON.stringify(integration?.diagnostics())).not.toContain('ghp_entry-secret');
         expect(mod.mastra.getServer()?.apiRoutes?.map(route => route.path)).toContain('/auth/github/connect');
       } finally {
@@ -326,7 +325,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       }
     });
 
-    it('prefers a complete GitHub App group over GITHUB_ACCESS_TOKEN', { timeout: 60_000 }, async () => {
+    it('runs the GitHub App group and the GITHUB_ACCESS_TOKEN fallback together', { timeout: 60_000 }, async () => {
       vi.resetModules();
       vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
       vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
@@ -341,8 +340,14 @@ describe('platform entry (src/mastra/index.ts)', () => {
       try {
         await import('./index.js');
         const integration = factoryConfigs[0]?.integrations?.find(candidate => candidate.id === 'github');
-        expect(integration?.diagnostics()).toEqual({ slug: 'test-app', webhookSecretConfigured: true });
-        expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/user'), expect.anything());
+        expect(integration?.diagnostics()).toMatchObject({
+          appConfigured: true,
+          slug: 'test-app',
+          webhookSecretConfigured: true,
+          fallbackTokenConfigured: true,
+        });
+        expect(JSON.stringify(integration?.diagnostics())).not.toContain('ghp_entry-secret');
+        void fetchMock;
       } finally {
         vi.unstubAllGlobals();
       }

@@ -81,12 +81,13 @@ export interface GithubFeatureDiagnostics {
 export function getGithubFeatureDiagnostics(options: GithubFeatureGateOptions): GithubFeatureDiagnostics {
   const { github, auth, appDbConfigured, stateSigner, sandbox } = options;
   return {
-    githubAppConfigured: github !== undefined,
+    // The integration also serves token connections without an App (ADR-0034).
+    githubAppConfigured: github?.appConfigured ?? false,
     factoryAuthEnabled: auth.enabled(),
     appDbConfigured,
     stateSecretConfigured: stateSigner?.stable ?? false,
     sandboxEnabled: !!sandbox,
     sandboxProvider: sandbox?.provider ?? 'none',
-    missingGithubAppEnvVars: github ? [] : [...GITHUB_APP_ENV_VARS],
+    missingGithubAppEnvVars: github?.appConfigured ? [] : [...GITHUB_APP_ENV_VARS],
   };
 }

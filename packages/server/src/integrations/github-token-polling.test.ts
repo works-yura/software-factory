@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, createFactoryStorageForTests } from '@factory/testing';
-import { createGithubIssueReconciler, GithubTokenIntegration } from '@factory/integration-github';
+import { createGithubIssueReconciler, GithubIntegration } from '@factory/integration-github';
 
 /**
  * GitHub without an App learns about issues only by polling. This drives the
- * issue sweep through a real `GithubTokenIntegration` against a fake GitHub
+ * issue sweep through a real `GithubIntegration` (fallback access token) against a fake GitHub
  * API: the token reads the issues and the author's permission, and an issue
  * the token's own account filed becomes a card (Factory must not mistake the
  * person behind the token for itself).
@@ -81,8 +81,8 @@ async function setup(routes: Record<string, unknown>, options: { rejected?: bool
   });
 
   const github = fakeGithub({ 'GET /user': { id: 4242, login: 'yura', type: 'User' }, ...routes }, options);
-  const integration = new GithubTokenIntegration({ accessToken: TOKEN, fetchImpl: github.fetchImpl });
-  await integration.account();
+  const integration = new GithubIntegration({ accessToken: TOKEN, fetchImpl: github.fetchImpl });
+  await integration.tokens.envToken!.account();
   const reconciler = createGithubIssueReconciler(
     {
       github: integration,
@@ -153,6 +153,6 @@ describe('GitHub without an App: issues arrive by polling', () => {
 
     await expect(run.reconciler([repository])).resolves.toMatchObject({ created: 0, failed: 1 });
     expect(await run.workItems.listDeferredDecisions('org-1', run.project.id)).toHaveLength(0);
-    expect(run.integration.tokenRejected).toBe(true);
+    expect(run.integration.diagnostics()).toMatchObject({ fallbackTokenRejected: true });
   });
 });

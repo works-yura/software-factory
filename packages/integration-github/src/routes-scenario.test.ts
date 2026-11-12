@@ -131,7 +131,8 @@ const githubStub = {
   sourceControlStorage,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
-  directInstallations: async () => undefined,
+  appConfigured: true,
+  tokens: { resolve: async () => ({ kind: 'app' as const }), remove: async () => {} },
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
   listInstallationRepos: vi.fn(async () => [

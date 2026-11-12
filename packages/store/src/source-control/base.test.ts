@@ -110,6 +110,37 @@ describe('SourceControlStorage', () => {
     ).rejects.toThrow(/has not been registered/);
   });
 
+  it('reports what still references an installation and replaces its provider metadata', async () => {
+    const project = await createProject();
+    const installation = await createInstallation(github);
+    expect(await github.installations.usage({ orgId: 'org-1', id: installation.id })).toEqual({
+      repositories: 0,
+      projectConnections: 0,
+    });
+    await linkRepository({ factoryProjectId: project.id, installationId: installation.id });
+    expect(await github.installations.usage({ orgId: 'org-1', id: installation.id })).toEqual({
+      repositories: 1,
+      projectConnections: 1,
+    });
+    // Another org sees nothing of it.
+    expect(await github.installations.usage({ orgId: 'org-2', id: installation.id })).toEqual({
+      repositories: 0,
+      projectConnections: 0,
+    });
+    expect(await github.installations.setProviderMetadata({ orgId: 'org-2', id: installation.id, providerMetadata: {} })).toBeNull();
+
+    const updated = await github.installations.setProviderMetadata({
+      orgId: 'org-1',
+      id: installation.id,
+      providerMetadata: { auth: 'token', attention: 'not_found' },
+    });
+    expect(updated?.providerMetadata).toEqual({ auth: 'token', attention: 'not_found' });
+    expect((await github.installations.get({ orgId: 'org-1', id: installation.id }))?.providerMetadata).toEqual({
+      auth: 'token',
+      attention: 'not_found',
+    });
+  });
+
   it('stores concrete installations and repositories isolated by integration', async () => {
     const githubInstallation = await createInstallation(github, { externalId: 'shared-installation' });
     const gitlabInstallation = await createInstallation(gitlab, { externalId: 'shared-installation' });

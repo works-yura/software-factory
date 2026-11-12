@@ -43,7 +43,7 @@ import type {
 } from '@factory/store';
 import { listRepositoryCommits } from './commits.ts';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.ts';
-import type { GithubIntegration, UserInstallation } from './integration.ts';
+import type { GithubIntegration } from './integration.ts';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.ts';
 import type { GithubPatKind } from './pat.ts';
 import { listedPullRequestState, polledPullRequestEvent } from './rules.ts';
@@ -405,28 +405,90 @@ export async function ingestLinkedRepositoryBacklog(args: {
   }
 }
 
-/**
- * Persists the installations `github` registers without the App install and
- * OAuth flow. Undefined when it needs that flow; null when registering failed.
- */
-async function registerDirectInstallations(
+/** A GitHub connection as the settings page shows it (ADR-0034). Never a token. */
+export interface GithubConnectionView {
+  /** Storage id of the installation row. */
+  id: string;
+  kind: 'app' | 'token';
+  /** Token connections: a token the organization stored, or the server's `GITHUB_ACCESS_TOKEN` fallback. */
+  tokenSource?: 'stored' | 'env';
+  installationId: number;
+  accountLogin: string | null;
+  accountType: string | null;
+  needsAttention: boolean;
+}
+
+/** How an installation row connects: its stored kind, refined by how its id resolves now. */
+async function describeInstallation(
   github: GithubIntegration,
-  tenant: { orgId: string; userId: string },
-): Promise<UserInstallation[] | null | undefined> {
-  const direct = await github.directInstallations({ orgId: tenant.orgId }).catch((error: unknown) => {
-    console.warn('[GitHub] Could not register the configured token account.', error);
-    return null;
-  });
-  for (const inst of direct ?? []) {
-    await github.sourceControlStorage.installations.upsert({
-      orgId: tenant.orgId,
-      connectedByUserId: tenant.userId,
-      externalId: inst.installationId.toString(),
-      accountName: inst.accountLogin,
-      accountType: inst.accountType,
-    });
+  row: SourceControlInstallation,
+): Promise<GithubConnectionView> {
+  const installationId = Number(row.externalId);
+  const resolved = await github.tokens.resolve(installationId).catch(() => undefined);
+  const storedAsToken = row.providerMetadata.auth === 'token';
+  const kind = resolved?.kind === 'token' || storedAsToken ? 'token' : 'app';
+  const tokenSource = resolved?.kind === 'token' ? resolved.source : undefined;
+  return {
+    id: row.id,
+    kind,
+    ...(tokenSource ? { tokenSource } : {}),
+    installationId,
+    accountLogin: row.accountName,
+    accountType: row.accountType,
+    // A token row whose token is gone, or an App row with no App on this server, cannot be used.
+    needsAttention:
+      typeof row.providerMetadata.attention === 'string' ||
+      (kind === 'token' && !tokenSource) ||
+      (kind === 'app' && !github.appConfigured),
+  };
+}
+
+function withoutAttention(metadata: Record<string, unknown>): Record<string, unknown> {
+  const { attention: _attention, attentionAt: _attentionAt, ...rest } = metadata;
+  return rest;
+}
+
+const MAX_TOKEN_LENGTH = 500;
+
+/** The `{ token }` body of a token connect/replace, or null. */
+async function readTokenBody(c: RouteContext): Promise<string | null> {
+  const body = (await c.req.json().catch(() => undefined)) as unknown;
+  const token = isJsonObject(body) && typeof body.token === 'string' ? body.token.trim() : '';
+  return token && token.length <= MAX_TOKEN_LENGTH && !/\s/.test(token) ? token : null;
+}
+
+/**
+ * GitHub answered 404 for an installation (the App was uninstalled or reinstalled, or the row was
+ * recorded under other App credentials). A token connection is never pruned: its 404 says nothing
+ * about the row. An App row is deleted only when nothing references it; a row that repositories or
+ * project connections still use is marked as needing attention instead, so the links stay intact
+ * and the settings page asks for a reconnect.
+ */
+async function handleMissingInstallation(
+  github: GithubIntegration,
+  orgId: string,
+  inst: SourceControlInstallation,
+): Promise<void> {
+  const view = await describeInstallation(github, inst);
+  if (view.kind === 'token') {
+    console.warn(`[Factory] GitHub token connection ${inst.externalId} (${inst.accountName}) answered 404; kept.`);
+    return;
   }
-  return direct;
+  const usage = await github.sourceControlStorage.installations.usage({ orgId, id: inst.id });
+  if (usage.repositories > 0 || usage.projectConnections > 0) {
+    console.warn(
+      `[Factory] GitHub installation ${inst.externalId} answered 404 but is still used ` +
+        `(${usage.repositories} repositories, ${usage.projectConnections} project connections); marked as needing attention.`,
+    );
+    await github.sourceControlStorage.installations.setProviderMetadata({
+      orgId,
+      id: inst.id,
+      providerMetadata: { ...inst.providerMetadata, attention: 'not_found', attentionAt: new Date().toISOString() },
+    });
+    return;
+  }
+  console.error(`[Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub, unused)`);
+  await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
 }
 
 /**
@@ -487,26 +549,19 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         }
 
         const orgId = tenant.orgId;
-        const listInstallations = () => github.sourceControlStorage.installations.list({ orgId });
-        let rows = await listInstallations();
-        // An access token needs no Connect step: the org is connected as soon
-        // as it asks, the way a GitLab access token is.
-        if (rows.length === 0 && github.authMode === 'token') {
-          const direct = await registerDirectInstallations(github, { orgId, userId: tenant.userId });
-          if (direct?.length) rows = await listInstallations();
-        }
+        const rows = await github.sourceControlStorage.installations.list({ orgId });
+        const views = await Promise.all(rows.map(row => describeInstallation(github, row)));
+        const canManage = !auth.enabled() || (await auth.isOrganizationAdmin(loose(c), orgId));
 
         const connected = rows.length > 0;
         return c.json({
           enabled: true,
           sandboxEnabled: !!sandbox,
-          mode: github.authMode,
+          // Each connection says how it authenticates; the App flow is offered only when configured.
+          appConfigured: github.appConfigured,
+          canManage,
           connected,
-          installations: rows.map(r => ({
-            installationId: Number(r.externalId),
-            accountLogin: r.accountName,
-            accountType: r.accountType,
-          })),
+          installations: views,
           reason: connected ? 'ready' : 'not_connected',
           diagnostics: diagnostics(),
         });
@@ -603,11 +658,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
-        // A token-authenticated integration has no App to install: its
-        // installation is the token's account, persisted as-is.
-        const direct = await registerDirectInstallations(github, resolved.tenant);
-        if (direct === null) return c.redirect('/?github=error');
-        if (direct) return c.redirect('/?github=connected');
+        // Without an App there is no install flow: tokens connect in Settings › Підключення.
+        if (!github.appConfigured) return c.redirect('/?github=no_app');
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
         if (c.req.query('manage')) return c.redirect(github.buildInstallUrl(state));
         return c.redirect(github.buildOAuthIdentifyUrl(state, redirectUri));
@@ -713,25 +765,30 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const listed = await Promise.all(
           installs.map(async inst => {
             try {
-              return { inst, list: await github.listInstallationRepos(Number(inst.externalId), { fresh }) };
+              const list = await github.listInstallationRepos(Number(inst.externalId), { fresh });
+              // Reachable again: drop a "needs attention" mark a 404 left.
+              if (typeof inst.providerMetadata.attention === 'string') {
+                await github.sourceControlStorage.installations.setProviderMetadata({
+                  orgId,
+                  id: inst.id,
+                  providerMetadata: withoutAttention(inst.providerMetadata),
+                });
+              }
+              return { inst, list };
             } catch (err) {
+              const status = (err as { status?: number }).status;
               // 403 means this credential may not use the installation (e.g. the
               // Platform refuses personal-account installations to org API
-              // keys). Skip it so the org's usable installations still list.
-              if ((err as { status?: number }).status === 403) {
+              // keys); 401 a rejected token; 409 a connection with no usable
+              // credentials. Skip it so the org's usable installations still list.
+              if (status === 403 || status === 401 || status === 409) {
                 console.warn(
                   `[Factory] skipping GitHub installation ${inst.externalId} (${inst.accountName}): ${(err as Error).message}`,
                 );
                 return { inst, list: [] };
               }
-              // GitHub 404s when the installation no longer exists for this app
-              // (app uninstalled/reinstalled, or the row was recorded under
-              // different app credentials). Prune the stale row so `/status`
-              // reflects reality and the UI prompts a reconnect, then keep
-              // listing the remaining installations.
-              if ((err as { status?: number }).status !== 404) throw err;
-              console.error(`[Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
-              await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
+              if (status !== 404) throw err;
+              await handleMissingInstallation(github, orgId, inst);
               return { inst, list: [] };
             }
           }),
@@ -760,6 +817,218 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
         }));
         return c.json({ repos });
+      },
+    }),
+  );
+
+  // ── GitHub connections: App installations and access tokens (ADR-0034) ──
+  const forbidden = (c: RouteContext) =>
+    c.json({ error: 'forbidden', message: 'Only organization admins can connect or disconnect GitHub.' }, 403);
+  const canManage = async (c: RouteContext, orgId: string) => !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
+  const audit = (c: RouteContext, action: 'token_connected' | 'token_removed', metadata: Record<string, unknown>) =>
+    void Promise.resolve(
+      emitAudit?.({
+        context: c,
+        input: {
+          action: `factory.integration.${action}` as const,
+          targets: [{ type: 'integration', id: 'github', name: 'GitHub' }],
+          metadata,
+        },
+      }),
+    ).catch(() => undefined);
+
+  /** The account and reachable repositories of a pasted token, or the response explaining the refusal. */
+  const checkToken = async (
+    c: RouteContext,
+    token: string,
+  ): Promise<{ account: { id: number; login: string; type: string }; repositoryCount: number } | { response: Response }> => {
+    try {
+      const account = await github.tokens.checkToken(token);
+      const repositories = await github.tokens.forToken(token).listRepos(account.id);
+      return { account, repositoryCount: repositories.length };
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status === 401 || status === 403) {
+        return {
+          response: c.json(
+            {
+              error: 'invalid_token',
+              message:
+                `GitHub rejected this token (${status}). Paste a personal access token: classic with the repo scope, ` +
+                'or fine-grained with Contents, Issues, Pull requests and Commit statuses read and write.',
+            },
+            422,
+          ),
+        };
+      }
+      return {
+        response: c.json(
+          {
+            error: 'github_unreachable',
+            message: `GitHub could not check the token: ${error instanceof Error ? error.message : String(error)}`,
+          },
+          502,
+        ),
+      };
+    }
+  };
+
+  /** Stores the token for the account's installation row and marks the row a token connection. */
+  const saveTokenConnection = async (args: {
+    orgId: string;
+    userId: string;
+    token: string;
+    account: { id: number; login: string; type: string };
+    repositoryCount: number;
+    existing: SourceControlInstallation | null;
+  }): Promise<SourceControlInstallation> => {
+    await github.tokens.save(args.orgId, args.account.id, args.token, args.account.login);
+    return github.sourceControlStorage.installations.upsert({
+      orgId: args.orgId,
+      connectedByUserId: args.existing?.connectedByUserId ?? args.userId,
+      externalId: String(args.account.id),
+      accountName: args.account.login,
+      accountType: args.account.type,
+      providerMetadata: {
+        ...withoutAttention(args.existing?.providerMetadata ?? {}),
+        auth: 'token',
+        repositoryCount: args.repositoryCount,
+      },
+    });
+  };
+
+  routes.push(
+    registerApiRoute('/web/github/connections', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId } = resolved.tenant;
+        const rows = await github.sourceControlStorage.installations.list({ orgId });
+        const connections = await Promise.all(
+          rows.map(async row => {
+            const view = await describeInstallation(github, row);
+            try {
+              const repositories = await github.listInstallationRepos(view.installationId);
+              return {
+                ...view,
+                repositoryCount: repositories.length,
+                status: view.needsAttention ? ('needs_attention' as const) : ('ok' as const),
+              };
+            } catch (error) {
+              return {
+                ...view,
+                needsAttention: true,
+                repositoryCount: null,
+                status: 'needs_attention' as const,
+                error: error instanceof Error ? error.message : String(error),
+              };
+            }
+          }),
+        );
+        return c.json({
+          appConfigured: github.appConfigured,
+          canManage: await canManage(loose(c), orgId),
+          connections,
+        });
+      },
+    }),
+    // Connect with an access token: checked against GitHub, stored encrypted for the org. Never returned.
+    registerApiRoute('/web/github/token-connections', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        if (!(await canManage(loose(c), orgId))) return forbidden(loose(c));
+        const token = await readTokenBody(loose(c));
+        if (!token) {
+          return c.json({ error: 'invalid_body', message: 'Send the GitHub access token as { "token": "ghp_…" }.' }, 422);
+        }
+        const checked = await checkToken(loose(c), token);
+        if ('response' in checked) return checked.response;
+        const existing = await github.sourceControlStorage.installations.findByExternalId({
+          orgId,
+          externalId: String(checked.account.id),
+        });
+        const row = await saveTokenConnection({ orgId, userId, token, ...checked, existing });
+        audit(loose(c), 'token_connected', { replaced: existing !== null, account: checked.account.login });
+        return c.json({
+          connection: {
+            ...(await describeInstallation(github, row)),
+            repositoryCount: checked.repositoryCount,
+            status: 'ok',
+          },
+          replaced: existing !== null,
+        });
+      },
+    }),
+    registerApiRoute('/web/github/token-connections/:id', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        if (!(await canManage(loose(c), orgId))) return forbidden(loose(c));
+        const existing = await github.sourceControlStorage.installations.get({ orgId, id: c.req.param('id') });
+        if (!existing) return c.json({ error: 'not_found' }, 404);
+        const token = await readTokenBody(loose(c));
+        if (!token) {
+          return c.json({ error: 'invalid_body', message: 'Send the GitHub access token as { "token": "ghp_…" }.' }, 422);
+        }
+        const checked = await checkToken(loose(c), token);
+        if ('response' in checked) return checked.response;
+        // The connection is the account: its repositories and projects stay with it.
+        if (String(checked.account.id) !== existing.externalId) {
+          return c.json(
+            {
+              error: 'account_mismatch',
+              message: `This token belongs to @${checked.account.login}, not @${existing.accountName ?? existing.externalId}. Add it as a new connection instead.`,
+            },
+            422,
+          );
+        }
+        const row = await saveTokenConnection({ orgId, userId, token, ...checked, existing });
+        audit(loose(c), 'token_connected', { replaced: true, account: checked.account.login });
+        return c.json({
+          connection: {
+            ...(await describeInstallation(github, row)),
+            repositoryCount: checked.repositoryCount,
+            status: 'ok',
+          },
+          replaced: true,
+        });
+      },
+    }),
+    registerApiRoute('/web/github/connections/:id', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId } = resolved.tenant;
+        if (!(await canManage(loose(c), orgId))) return forbidden(loose(c));
+        const existing = await github.sourceControlStorage.installations.get({ orgId, id: c.req.param('id') });
+        if (!existing) return c.json({ error: 'not_found' }, 404);
+        const usage = await github.sourceControlStorage.installations.usage({ orgId, id: existing.id });
+        if (usage.projectConnections > 0) {
+          return c.json(
+            {
+              error: 'connection_in_use',
+              message: `Projects still use repositories of @${existing.accountName ?? existing.externalId}. Remove those repositories from the projects first.`,
+              projectConnections: usage.projectConnections,
+            },
+            409,
+          );
+        }
+        const view = await describeInstallation(github, existing);
+        await github.tokens.remove(orgId, Number(existing.externalId));
+        await github.sourceControlStorage.installations.delete({ orgId, id: existing.id });
+        if (view.kind === 'token') audit(loose(c), 'token_removed', { account: existing.accountName });
+        return c.json({ removed: true });
       },
     }),
   );

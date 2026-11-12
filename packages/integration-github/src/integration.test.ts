@@ -840,7 +840,14 @@ describe('GithubIntegration FactoryIntegration surface', () => {
 
   it('diagnostics() exposes only non-secret config', () => {
     const github = new GithubIntegration(validConfig());
-    expect(github.diagnostics()).toEqual({ slug: 'test-app', webhookSecretConfigured: true });
+    expect(github.diagnostics()).toEqual({
+      appConfigured: true,
+      slug: 'test-app',
+      webhookSecretConfigured: true,
+      fallbackTokenConfigured: false,
+      fallbackTokenAccount: null,
+      fallbackTokenRejected: false,
+    });
   });
 
   describe('resolveIntakeDispatch', () => {

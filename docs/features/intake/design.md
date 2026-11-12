@@ -50,7 +50,7 @@
 
 - **Підписка — маршрути.** Репозиторій, який читає проєкт, — GitHub-маршрут з `source.integration = github` і `source.repository = <owner/repo>` (`routedSourceScopes(routes, 'source.repository', 'github')`). Перемикач організації «GitHub увімкнено» (`intake config enabled`) лишається загальним вимикачем.
 - **Ручна стрічка «Вхідних»** — окрема можливість: дошка показує issues прив'язаних репозиторіїв, які названо маршрутами, і людина бере їх руками (`useBoardIntake`). PR дошка «Розробка» й далі показує з усіх прив'язаних репозиторіїв.
-- **Режим токена:** опитування подає issues лише репозиторіїв, названих маршрутами (`GithubTokenIntegration.issueSweepRepositories`).
+- **Режим токена:** опитування подає issues лише репозиторіїв, названих маршрутами (`GithubIntegration.issueSweepRepositories` для токен-підключень, ADR-0034).
 - **Посилання репозиторію** на сервері додає його маршрут (`subscribeLinkedRepository`, `server/src/intake/repository-subscriptions.ts`): перед «усім іншим», з його ціллю (картка лягає туди ж), фіксований id, `origin: { kind: 'repository' }`.
 - **Міграція** `intake.githubRepositorySelections.v1`: старий вибір організації (`sourceIds` — id або повна назва) → маршрут на кожен вибраний прив'язаний репозиторій кожного проєкту.
 - **GitLab** — так само: проєкт читає прив'язані проєкти GitLab, які називає його маршрут на `source.repository` (шлях проєкту); `routedGitLabProjects` зіставляє шлях із непрозорим `gitlab-project:…` через прив'язаний репозиторій. Міграція `intake.gitlabProjectSelections.v1` перевела старий вибір + прив'язки. Посилання репозиторію (GitHub чи GitLab) додає його маршрут.

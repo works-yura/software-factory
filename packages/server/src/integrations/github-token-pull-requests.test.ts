@@ -7,7 +7,7 @@ import { createBoardRegistry, createFactoryStorageForTests } from '@factory/test
 import {
   createGithubPullRequestActivitySweep,
   GithubRules,
-  GithubTokenIntegration,
+  GithubIntegration,
   octokitPullRequestActivitySource,
 } from '@factory/integration-github';
 import type { GithubPullRequestReconciler } from '@factory/integration-github';
@@ -15,7 +15,7 @@ import type { GithubPullRequestReconciler } from '@factory/integration-github';
 /**
  * GitHub without an App gets no webhooks, so the life of the pull request
  * Factory opened is read by polling. This drives the activity sweep through a
- * real `GithubTokenIntegration` against a fake GitHub API and into the real
+ * real `GithubIntegration` against a fake GitHub API and into the real
  * rules: the Work card records the pull request, a reviewer's comment and
  * review reach the authoring agent, the agent's own comments do not, and the
  * merge settles the card.
@@ -110,7 +110,7 @@ async function setup() {
     'GET /repos/acme/repo/collaborators/yura/permission': { permission: 'admin', user: { login: 'yura' } },
   };
   const github = fakeGithub(routes);
-  const integration = new GithubTokenIntegration({ accessToken: TOKEN, fetchImpl: github.fetchImpl });
+  const integration = new GithubIntegration({ accessToken: TOKEN, fetchImpl: github.fetchImpl });
   const rules = new GithubRules({
     github: integration,
     sourceControl,
@@ -125,7 +125,7 @@ async function setup() {
     sourceControl,
     integrationStorage,
     storage: seeded.workItems,
-    selfLogin: async () => (await integration.account()).login,
+    selfLogin: async () => (await integration.tokens.envToken!.account()).login,
     deliver: async event => {
       await rules.ingest(event);
     },

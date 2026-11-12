@@ -61,8 +61,8 @@ export interface PullRequestActivityOptions {
   /** Provenance rows, and the per-pull-request cursors (in settings, outside any org). */
   integrationStorage: IntegrationStorageHandle;
   storage: Pick<WorkItemsStorage, 'list'>;
-  /** The token's account; its comments and reviews are Factory's (see the module note). */
-  selfLogin: () => Promise<string | undefined>;
+  /** The token account of an installation; its comments and reviews are Factory's (see the module note). */
+  selfLogin: (installationId: number) => Promise<string | undefined>;
   /** Runs one delivery through the rules ingress and the subscribed sessions. */
   deliver: (event: ParsedGithubWebhook) => Promise<void>;
 }
@@ -285,9 +285,18 @@ export function createGithubPullRequestActivitySweep(options: PullRequestActivit
         });
       }
     };
-    const selfLogin = await options.selfLogin().catch(() => undefined);
+    const selfLogins = new Map<number, Promise<string | undefined>>();
+    const selfLoginOf = (installationId: number) => {
+      let login = selfLogins.get(installationId);
+      if (!login) {
+        login = options.selfLogin(installationId).catch(() => undefined);
+        selfLogins.set(installationId, login);
+      }
+      return login;
+    };
 
     for (const repository of repositories) {
+      const selfLogin = await selfLoginOf(repository.installationId);
       const read = { installationId: repository.installationId, repository: repository.fullName };
       let projectIds: Set<string>;
       let carded: Set<number>;

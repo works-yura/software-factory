@@ -465,6 +465,14 @@ export interface SourceControlStorageHandle {
     get(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
     findByExternalId(args: { orgId: string; externalId: string }): Promise<SourceControlInstallation | null>;
     upsert(args: UpsertSourceControlInstallationInput): Promise<SourceControlInstallation>;
+    /** Replace the installation's provider metadata (a token connection's kind, an attention mark). */
+    setProviderMetadata(args: {
+      orgId: string;
+      id: string;
+      providerMetadata: SourceControlProviderMetadata;
+    }): Promise<SourceControlInstallation | null>;
+    /** How many repository rows and project connections still reference the installation. */
+    usage(args: { orgId: string; id: string }): Promise<{ repositories: number; projectConnections: number }>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
   };
   readonly repositories: {
@@ -1164,6 +1172,23 @@ export class SourceControlStorage extends FactoryStorageDomain {
             },
           );
           return toInstallation(row);
+        },
+        setProviderMetadata: async ({ orgId, id, providerMetadata }) => {
+          if (!(await getInstallation({ orgId, id }))) return null;
+          await db().updateMany(
+            INSTALLATIONS,
+            { id, integration_id: integrationId, org_id: orgId },
+            { provider_metadata: providerMetadata },
+          );
+          return getInstallation({ orgId, id });
+        },
+        usage: async ({ orgId, id }) => {
+          if (!(await getInstallation({ orgId, id }))) return { repositories: 0, projectConnections: 0 };
+          const [repositories, projectConnections] = await Promise.all([
+            db().findMany<RepositoryDbRow>(REPOSITORIES, { installation_id: id }),
+            db().findMany<Record<string, unknown>>(CONNECTIONS, { installation_id: id, integration_id: integrationId }),
+          ]);
+          return { repositories: repositories.length, projectConnections: projectConnections.length };
         },
         delete: async ({ orgId, id }) => {
           const installation = await getInstallation({ orgId, id });
