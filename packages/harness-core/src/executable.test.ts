@@ -121,8 +121,32 @@ describe('createHarnessExecutable', () => {
     expect(executable.command()).toBe('/home/a/.local/bin/claude');
     const calls = isExecutable.mock.calls.length;
     expect(executable.command()).toBe('/home/a/.local/bin/claude');
-    expect(executable.unavailableReason()).toBeUndefined();
     expect(isExecutable.mock.calls.length).toBe(calls);
+    // Availability checks the kept file alone, never looks it up again.
+    expect(executable.unavailableReason()).toBeUndefined();
+    expect(isExecutable.mock.calls.slice(calls)).toEqual([['/home/a/.local/bin/claude']]);
+  });
+
+  it('reads a kept CLI that was removed since as missing, and finds it again once reinstalled', async () => {
+    let present = true;
+    const executable = createHarnessExecutable({
+      harness: 'Claude Code',
+      name: 'claude',
+      env: { PATH: '/usr/bin' },
+      wellKnownDirs: ['/home/a/.local/bin'],
+      isExecutable: path => present && path === '/home/a/.local/bin/claude',
+      readVersion: async () => '2.1.0',
+    });
+    expect(executable.unavailableReason()).toBeUndefined();
+
+    present = false;
+    expect(executable.unavailableReason()).toContain('Claude Code is not installed on this server');
+    expect(await executable.report()).toMatchObject({ found: false });
+    expect(() => executable.command()).toThrow(HarnessExecutableUnavailableError);
+
+    present = true;
+    expect(executable.unavailableReason()).toBeUndefined();
+    expect(executable.command()).toBe('/home/a/.local/bin/claude');
   });
 
   it('looks again while missing, so an install after boot is picked up without a restart', () => {

@@ -15,7 +15,8 @@
 // A found executable is kept: spawning it costs no lookup. One that is missing is looked up again
 // the next time it is asked for, so installing the CLI after the server started makes the harness
 // available without a restart. A spawn that fails for good on the kept path (it was removed)
-// drops it, and the next spawn looks again.
+// drops it, and the next spawn looks again. Availability (`unavailableReason`, `report`) checks
+// that the kept file is still there, so a CLI removed after boot is not offered as runnable.
 import { execFile } from 'node:child_process';
 import { accessSync, constants, statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -254,7 +255,10 @@ export interface HarnessExecutable extends HarnessCommandSource {
   readonly name: string;
   /** The current resolution: the kept one when found, a fresh lookup otherwise. */
   resolve(): HarnessExecutableResolution;
-  /** Why the harness cannot run, for availability and errors; undefined when it was found. */
+  /**
+   * Why the harness cannot run, for availability and errors; undefined when it was found. Checks the
+   * kept path is still executable, so a CLI removed after it was found reads as missing again.
+   */
   unavailableReason(): string | undefined;
   /** Path, source and version (`--version` read once per path), or where it looked: the boot log and diagnostics. */
   report(): Promise<HarnessExecutableReport>;
@@ -264,7 +268,17 @@ export function createHarnessExecutable(spec: HarnessExecutableSpec): HarnessExe
   const readVersion = spec.readVersion ?? readExecutableVersion;
   let kept: Extract<HarnessExecutableResolution, { found: true }> | undefined;
   const versions = new Map<string, Promise<string | undefined>>();
+  const isExecutable = spec.isExecutable ?? fileIsExecutable;
 
+  const drop = () => {
+    if (kept) versions.delete(kept.path);
+    kept = undefined;
+  };
+  /** The current resolution, after checking the kept file is still executable (one stat, no lookup). */
+  const current = (): HarnessExecutableResolution => {
+    if (kept && !isExecutable(kept.path)) drop();
+    return resolve();
+  };
   const resolve = (): HarnessExecutableResolution => {
     if (kept) return kept;
     const resolution = resolveHarnessExecutable(spec);
@@ -285,7 +299,7 @@ export function createHarnessExecutable(spec: HarnessExecutableSpec): HarnessExe
     name: spec.name,
     resolve,
     unavailableReason() {
-      const resolution = resolve();
+      const resolution = current();
       return resolution.found ? undefined : missingReason(resolution.searched);
     },
     command() {
@@ -300,11 +314,10 @@ export function createHarnessExecutable(spec: HarnessExecutableSpec): HarnessExe
     },
     spawnFailed(error) {
       if (!isHarnessExecutableUnavailable(error)) return;
-      if (kept) versions.delete(kept.path);
-      kept = undefined;
+      drop();
     },
     async report() {
-      const resolution = resolve();
+      const resolution = current();
       if (!resolution.found) {
         return { harness: spec.harness, name: spec.name, found: false, searched: resolution.searched, reason: missingReason(resolution.searched) };
       }
