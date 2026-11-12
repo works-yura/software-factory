@@ -10,7 +10,7 @@ import toolboxManifest from '../../../../../../../../packages/server/src/mcp-ser
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { McpServer } from '../../services/mcpServers';
-import { managedServer, renderConnections, useIntegrationHandlers } from './fixtures/connections';
+import { acmeConnection, managedServer, mcpConnection, renderConnections, useIntegrationHandlers } from './fixtures/connections';
 
 const BASE = `${TEST_BASE_URL}/web/mcp-servers`;
 const toolbox = mcpCatalogEntry(toolboxManifest, toolboxOverlay);
@@ -40,8 +40,14 @@ const discoveries: Array<{ from: string; context: Record<string, string> }> = []
 function useHandlers(servers: McpServer[] = [], canEdit = true) {
   const writes: Array<{ method: string; url: string; body: any }> = [];
   discoveries.length = 0;
-  useIntegrationHandlers();
+  // The server lists each server as an MCP connection whose page is the editor (the one custom section).
+  useIntegrationHandlers({ connections: servers.filter(candidate => !candidate.owner).map(candidate => mcpConnection(candidate.id, candidate.label)) });
   server.use(
+    http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, ({ params }) =>
+      HttpResponse.json({
+        sections: [{ type: 'custom', component: 'mcp-server', params: { serverId: String(params.id).replace(/^mcp:/, '') } }],
+      }),
+    ),
     http.get(BASE, () =>
       HttpResponse.json({
         servers,
@@ -128,7 +134,7 @@ async function render(search = '') {
   renderConnections(search);
   await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading connections…' })).not.toBeInTheDocument());
 }
-const NEW_TOOLBOX = '?connection=mcp-new:mcp-toolbox';
+const NEW_TOOLBOX = '?connection=new:mcp:entry:mcp-toolbox';
 
 async function pick(combobox: string, option: string) {
   await userEvent.click(screen.getByRole('combobox', { name: combobox }));
@@ -203,7 +209,7 @@ describe('Підключення: MCP servers', () => {
 
   it('adds an own server as a local command, with no stdio/HTTP wording', async () => {
     const writes = useHandlers();
-    await render('?connection=mcp-new:custom');
+    await render('?connection=new:mcp:custom');
     await screen.findByRole('textbox', { name: 'Command' });
     expect(screen.queryByText(/stdio|HTTP\)/)).not.toBeInTheDocument();
     await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Notes');
@@ -231,7 +237,7 @@ describe('Підключення: MCP servers', () => {
     expect(within(access).getByRole('button', { name: 'Audits', pressed: true })).toBeInTheDocument();
     expect(within(access).getByRole('button', { name: 'Partners' })).toBeInTheDocument();
     await userEvent.click(within(access).getByRole('button', { name: 'Analysis' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(within(screen.getByRole('tabpanel')).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(1));
     expect(writes.find(write => write.method === 'PUT')).toMatchObject({
       body: { assignments: [{ factoryProjectId: 'factory-1', sessions: ['cards'], boards: ['audits'], phases: ['analysis'] }] },
@@ -242,7 +248,7 @@ describe('Підключення: MCP servers', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Running: 2 tools.');
     expect(within(screen.getByRole('listitem', { name: 'delete_documents' })).getByText('writes')).toBeInTheDocument();
     await pick('Policy for delete_documents', 'Forbidden');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(within(screen.getByRole('tabpanel')).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(2));
     expect(writes.filter(write => write.method === 'PUT')[1]).toMatchObject({
@@ -260,12 +266,15 @@ describe('Підключення: MCP servers', () => {
     useHandlers([stored], false);
     await render('?connection=mcp:srv-1&view=settings');
     expect(await screen.findByRole('combobox', { name: 'What to connect' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
   it("shows a server an integration manages inside that connection's page: config read-only, tool policy editable, no access or delete", async () => {
     const writes = useHandlers([{ ...managedServer, health: undefined }], true);
     server.use(
+      http.get(`${TEST_BASE_URL}/web/connections`, () =>
+        HttpResponse.json({ connections: [acmeConnection], failures: [], copy: { organizationWide: 'Whole organization' } }),
+      ),
       http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, () =>
         HttpResponse.json({
           sections: [{ type: 'custom', component: 'mcp-server', title: 'Database tools', params: { owner: 'firebase', key: 'bnd-1' } }],
@@ -277,12 +286,13 @@ describe('Підключення: MCP servers', () => {
     expect(await screen.findByRole('heading', { name: 'Database tools' })).toBeInTheDocument();
     expect(await screen.findByRole('combobox', { name: 'What to connect' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Who has access')).not.toBeInTheDocument();
+    // A managed server keeps the access its integration gives it.
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Settings', 'Tools']);
 
+    await userEvent.click(screen.getByRole('tab', { name: 'Tools' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Check' }));
     await pick('Policy for delete_documents', 'Forbidden');
-    const saves = screen.getAllByRole('button', { name: 'Save' });
-    await userEvent.click(saves.at(-1)!);
+    await userEvent.click(within(screen.getByRole('tabpanel')).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes.at(-1)?.body.toolPolicies).toEqual({ default: 'allow', tools: { delete_documents: 'deny' } }));
   });
 
@@ -347,40 +357,6 @@ describe('Підключення: MCP servers', () => {
       assignments: [{ factoryProjectId: 'factory-1' }],
       toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
     }));
-  });
-
-  it('marks a row only when it needs attention: tools as a capability, a failure in plain words', async () => {
-    const recent = new Date(Date.now() - 5 * 60_000).toISOString();
-    const own = { ...stored, launch: { transport: 'http' as const, url: 'https://mcp.example.test/mcp', headers: {} } };
-    useHandlers([
-      {
-        ...own,
-        health: {
-          state: 'ok',
-          tools: [{ name: 'a', description: '' }, { name: 'b', description: '' }],
-          checkedAt: recent,
-        },
-      },
-      {
-        ...own,
-        id: 'srv-2',
-        name: 'broken',
-        label: 'Broken DB',
-        health: { state: 'error', tools: [], error: '7 PERMISSION_DENIED', errorKind: 'auth_denied' },
-      },
-      { ...own, id: 'srv-3', name: 'fresh', label: 'Fresh DB' },
-    ]);
-    await render();
-    const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('tr')!;
-    const working = await rowOf('Syncta Firestore');
-    expect(within(working).getByRole('img', { name: '2 tools' })).toBeInTheDocument();
-    expect(working).not.toHaveTextContent('Error');
-    const broken = await rowOf('Broken DB');
-    expect(within(broken).getByText('Error').closest('[data-state]')).toHaveAttribute(
-      'title',
-      'The account was refused access; give it the role the server needs. (7 PERMISSION_DENIED)',
-    );
-    expect(await rowOf('Fresh DB')).not.toHaveTextContent('Error');
   });
 
   it('inspects tools: risk from annotations, parameters, a quarantined tool highlighted, and tries a read-only one', async () => {
@@ -451,33 +427,6 @@ describe('Підключення: MCP servers', () => {
     );
   });
 
-  it('lists the connection’s own calls on its «Activity» tab', async () => {
-    useHandlers([stored]);
-    const now = new Date().toISOString();
-    server.use(
-      http.get(`${BASE}/activity`, () =>
-        HttpResponse.json({
-          since: now,
-          total: 3,
-          errors: 1,
-          truncated: false,
-          calls: [
-            { at: now, serverId: 'srv-1', serverLabel: 'Syncta Firestore', tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-123456789', tried: false },
-            { at: now, serverId: 'srv-1', serverLabel: 'Syncta Firestore', tool: 'get_documents', outcome: 'error', durationMs: 900, tried: true },
-            { at: now, serverId: 'srv-other', serverLabel: 'Sentry', tool: 'search_issues', outcome: 'ok', tried: false },
-          ],
-        }),
-      ),
-    );
-    await render('?connection=mcp:srv-1&view=activity');
-    const calls = await screen.findByRole('table', { name: 'Requests' });
-    expect(calls).toHaveTextContent('list_collections');
-    expect(calls).toHaveTextContent('120 ms');
-    expect(calls).toHaveTextContent('Error · tried from settings');
-    expect(calls).not.toHaveTextContent('search_issues');
-    expect(within(calls).getByRole('link', { name: 'Open session' })).toHaveAttribute('href', '/factories/factory-1/workspaces/session-123456789');
-  });
-
   it('gives access by session kind, keeps one row per Factory, and drops board limits with cards', async () => {
     const writes = useHandlers([{ ...stored, assignments: [] }]);
     await render('?connection=mcp:srv-1&view=access');
@@ -493,7 +442,7 @@ describe('Підключення: MCP servers', () => {
     await userEvent.click(within(access).getByRole('button', { name: 'Own sessions' }));
     await userEvent.click(within(access).getByRole('button', { name: 'Cards' }));
     expect(within(access).queryByRole('button', { name: 'Audits' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(within(screen.getByRole('tabpanel')).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(1));
     expect(writes.find(write => write.method === 'PUT')!.body.assignments).toEqual([{ factoryProjectId: 'factory-1', sessions: ['chat'] }]);

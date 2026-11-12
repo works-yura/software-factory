@@ -169,6 +169,8 @@ import { McpServerHub } from './mcp-servers/hub.ts';
 import { ManagedMcpServers } from './mcp-servers/managed.ts';
 import type { McpServerManagingIntegration } from './mcp-servers/managed.ts';
 import { buildMcpServerRoutes } from './mcp-servers/routes.ts';
+import { McpConnections } from './mcp-servers/connections.ts';
+import { MCP_CATALOG } from './mcp-servers/catalog.ts';
 import { mcpSessionCoordinates, resolveMcpSessionScope } from './mcp-servers/scope.ts';
 import { FactoryModelSwitchProcessor } from '@factory/session';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
@@ -2977,6 +2979,22 @@ export class MastraFactory {
           ...(device ? device.routes : []),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
+            // Settings › Підключення: MCP servers are a connector beside the integrations (ADR-0035).
+            connectors: [
+              {
+                id: 'mcp',
+                connections: new McpConnections({
+                  servers: mcpServersStorage,
+                  hub: mcpServerHub,
+                  credentials: mcpCredentials,
+                  catalog: MCP_CATALOG,
+                  projects: factoryProjectsStorage,
+                  managed: managedMcpServers,
+                  audit: auditDomain,
+                  auditLog: auditStorage,
+                }),
+              },
+            ],
             ...(attachmentService ? { attachments: attachmentService } : {}),
             usage: { usage: usageStorage, harnesses: factoryUsage.registry },
             ...(this.#intakeTriggers

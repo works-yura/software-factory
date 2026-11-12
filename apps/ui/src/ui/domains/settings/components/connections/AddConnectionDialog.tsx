@@ -1,20 +1,16 @@
+import type { ConnectionsListResponse, ConnectorView } from '@factory/contracts';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@mastra/playground-ui/components/Command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { toast } from '@mastra/playground-ui/components/Toaster';
-import { ChevronRight, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
-import { connectionCatalog, filterCatalog, linkableAccounts } from '../../connections/connections';
-import type { CatalogFilter, CatalogItem, ConnectionSources, LinkableAccount } from '../../connections/connections';
-import { serverToInput } from '../../services/mcpServers';
-import { localized } from '../mcp-servers/McpCatalogFields';
-import { CapabilityDots, serverDots, useCatalogDots } from './CapabilityDots';
-import type { CapabilityDot } from './CapabilityDots';
+import { connectionCatalog, filterCatalog } from '../../connections/connections';
+import type { CatalogFilter, CatalogItem } from '../../connections/connections';
+import { CapabilityDots, serverDots } from './CapabilityDots';
 import { ConnectionIcon } from './ConnectionIcon';
 import { ConnectorConnect } from './ConnectorSteps';
 import type { ConnectionTarget } from './ConnectSteps';
@@ -23,13 +19,8 @@ export type { ConnectionTarget };
 
 const FILTERS: CatalogFilter[] = ['all', 'tools', 'sources'];
 
-/**
- * A connect step the dialog opens in place: a first-party integration's, a server connector's
- * (`connector:<id>`), or reconnecting a server connection through its method (`reconnect:<id>`).
- */
+/** A connect step the dialog opens in place: a connector's (`connector:<id>`), or reconnecting a connection (`reconnect:<id>`). */
 export type Step = `connector:${string}` | `reconnect:${string}`;
-
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
  * The dialog's size is the kit's `md`; below 640px the kit turns it into a bottom drawer, which this
@@ -39,41 +30,17 @@ export const CONNECT_DIALOG_SHELL =
   'max-sm:h-[calc(100dvh+3rem)] max-sm:max-h-none max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top)]';
 
 /**
- * One row, as the kit's command item: logo, name (MCP badge only for third-party servers), then «+»
- * — shown on the selected row with a mouse, always on touch — and the capability icons.
+ * One row, as the kit's command item: the connector's logo and name (MCP badge for MCP servers),
+ * then «+» — shown on the selected row with a mouse, always on touch — and what it gives agents.
  */
-function CatalogRow({
-  value,
-  kind,
-  name,
-  detail,
-  mcp,
-  dots,
-  label,
-  trailing,
-  onSelect,
-  disabled,
-}: {
-  value: string;
-  /** The logo: a first-party kind, or a connector's logo key. */
-  kind: string;
-  name: string;
-  detail?: string;
-  mcp?: boolean;
-  dots: CapabilityDot[];
-  label: string;
-  trailing: 'add' | 'open';
-  onSelect: () => void;
-  disabled?: boolean;
-}) {
+function CatalogRow({ connector, onSelect }: { connector: ConnectorView; onSelect: () => void }) {
   const { t } = useTranslation('settings');
   return (
-    <CommandItem value={value} onSelect={onSelect} disabled={disabled} aria-label={label} className="group/row">
-      <ConnectionIcon kind={kind} />
+    <CommandItem value={`connector:${connector.id}`} onSelect={onSelect} aria-label={t('connections.addDialog.add', { name: connector.name })} className="group/row">
+      <ConnectionIcon kind={connector.icon} />
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="text-body-sm text-foreground truncate">{name}</span>
-        {detail && <span className="text-meta text-muted-foreground truncate">{detail}</span>}
-        {mcp && (
+        <span className="text-body-sm text-foreground truncate">{connector.name}</span>
+        {connector.mcp && (
           <Badge size="sm" variant="neutral" className="shrink-0">
             {t('connections.mcpBadge')}
           </Badge>
@@ -85,10 +52,10 @@ function CatalogRow({
           className="pointer-coarse:translate-x-0 pointer-coarse:opacity-100 translate-x-1 opacity-0 transition duration-150 group-data-[selected=true]/row:translate-x-0 group-data-[selected=true]/row:opacity-100 motion-reduce:transition-none"
         >
           <Button type="button" tabIndex={-1} variant="ghost" size="icon-sm" onClick={onSelect}>
-            {trailing === 'add' ? <Plus /> : <ChevronRight />}
+            <Plus />
           </Button>
         </span>
-        <CapabilityDots dots={dots} />
+        <CapabilityDots dots={serverDots(connector.provides)} />
       </span>
     </CommandItem>
   );
@@ -96,71 +63,25 @@ function CatalogRow({
 
 /**
  * Step one, as Mastra's «Add connection to project»: the kit's command list with search and the
- * type filter on one line, then the organization's MCP servers this Factory can link, the
- * connectors the server describes, and «Інше» — MCP servers, third-party or own. Keyboard: arrows move, Enter picks.
+ * type filter on one line, then the connectors the server describes — «Інтеграції», and «Інше» for
+ * MCP. Keyboard: arrows move, Enter picks.
  */
-function PickStep({
-  factoryId,
-  sources,
-  onConnect,
-  onPick,
-}: {
-  factoryId: string;
-  sources: ConnectionSources;
-  onConnect: (step: Step) => void;
-  onPick: (target: ConnectionTarget) => void;
-}) {
+function PickStep({ connectors, onConnect }: { connectors: readonly ConnectorView[]; onConnect: (step: Step) => void }) {
   const { t } = useTranslation('settings');
-  const catalogDots = useCatalogDots();
-  const { save } = useMcpServerMutations();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<CatalogFilter>('all');
-  const [linking, setLinking] = useState<string>();
-
-  const nameOf = (item: CatalogItem) =>
-    item.connector
-      ? item.connector.name
-      : item.entry
-        ? localized(item.entry.label)
-        : t('connections.addDialog.customMcp');
-  const iconOf = (item: CatalogItem) => item.connector?.icon ?? item.kind;
-  const dotsOf = (item: CatalogItem) => (item.connector ? serverDots(item.connector.provides) : catalogDots(item.capabilities));
-  const shown = filterCatalog(connectionCatalog(sources), linkableAccounts(factoryId, sources), {
-    query,
-    filter,
-    textOf: item => `${nameOf(item)} ${item.entry ? localized(item.entry.summary) : (item.connector?.description ?? '')}`,
-  });
-  const integrations = shown.items.filter(item => item.section === 'integrations');
-  const other = shown.items.filter(item => item.section === 'other');
-
-  const pick = (item: CatalogItem) => {
-    // A connector the server describes opens its methods; an MCP entry its own page.
-    if (item.connector) onConnect(`connector:${item.connector.id}`);
-    else onPick({ connection: item.entry ? `mcp-new:${item.entry.id}` : 'mcp-new:custom' });
-  };
-
-  const link = (account: LinkableAccount) => {
-    const server = sources.mcp?.servers.find(candidate => candidate.id === account.targetId);
-    if (!server) return;
-    setLinking(account.id);
-    save.mutate(
-      {
-        ...serverToInput(server),
-        assignments: [...server.assignments, { factoryProjectId: factoryId, sessions: ['chat', 'personal', 'cards'] }],
-        id: server.id,
-      },
-      {
-        onSuccess: () => {
-          toast.success(t('connections.addDialog.linked', { name: server.label }));
-          onPick({ connection: `mcp:${server.id}` });
-        },
-        onError: error => toast.error(errorMessage(error)),
-        onSettled: () => setLinking(undefined),
-      },
-    );
-  };
-
+  const shown = filterCatalog(connectionCatalog(connectors), { query, filter });
+  const integrations = shown.filter(item => item.section === 'integrations');
+  const other = shown.filter(item => item.section === 'other');
   const heading = (text: string) => <span className="text-column text-muted-foreground tracking-normal normal-case">{text}</span>;
+  const group = (items: CatalogItem[], label: string) =>
+    items.length > 0 && (
+      <CommandGroup heading={heading(label)} aria-label={label}>
+        {items.map(item => (
+          <CatalogRow key={item.id} connector={item.connector} onSelect={() => onConnect(`connector:${item.connector.id}`)} />
+        ))}
+      </CommandGroup>
+    );
 
   return (
     <>
@@ -186,63 +107,10 @@ function PickStep({
             </SegmentedControl>
           }
         />
-        <CommandList
-          scrollArea
-          scrollAreaClassName="h-[min(26rem,calc(100dvh-16rem))] max-sm:h-auto max-sm:flex-1"
-          className="px-2 py-2"
-        >
+        <CommandList scrollArea scrollAreaClassName="h-[min(26rem,calc(100dvh-16rem))] max-sm:h-auto max-sm:flex-1" className="px-2 py-2">
           <CommandEmpty>{t('connections.addDialog.nothing')}</CommandEmpty>
-          {shown.accounts.length > 0 && (
-            <CommandGroup heading={heading(t('connections.addDialog.accounts'))} aria-label={t('connections.addDialog.accounts')}>
-              {shown.accounts.map(account => (
-                <CatalogRow
-                  key={account.id}
-                  value={account.id}
-                  kind={account.kind}
-                  name={account.name}
-                  mcp={account.kind === 'mcp'}
-                  dots={catalogDots(['tools'])}
-                  label={t('connections.addDialog.link', { name: account.name })}
-                  trailing="add"
-                  disabled={linking !== undefined}
-                  onSelect={() => link(account)}
-                />
-              ))}
-            </CommandGroup>
-          )}
-          {integrations.length > 0 && (
-            <CommandGroup heading={heading(t('connections.addDialog.integrations'))} aria-label={t('connections.addDialog.integrations')}>
-              {integrations.map(item => (
-                <CatalogRow
-                  key={item.id}
-                  value={item.id}
-                  kind={iconOf(item)}
-                  name={nameOf(item)}
-                  dots={dotsOf(item)}
-                  label={t('connections.addDialog.add', { name: nameOf(item) })}
-                  trailing={item.connected ? 'open' : 'add'}
-                  onSelect={() => pick(item)}
-                />
-              ))}
-            </CommandGroup>
-          )}
-          {other.length > 0 && (
-            <CommandGroup heading={heading(t('connections.addDialog.other'))} aria-label={t('connections.addDialog.other')}>
-              {other.map(item => (
-                <CatalogRow
-                  key={item.id}
-                  value={item.id}
-                  kind={iconOf(item)}
-                  name={nameOf(item)}
-                  mcp
-                  dots={dotsOf(item)}
-                  label={t('connections.addDialog.add', { name: nameOf(item) })}
-                  trailing="add"
-                  onSelect={() => pick(item)}
-                />
-              ))}
-            </CommandGroup>
-          )}
+          {group(integrations, t('connections.addDialog.integrations'))}
+          {group(other, t('connections.addDialog.other'))}
         </CommandList>
       </Command>
     </>
@@ -250,21 +118,19 @@ function PickStep({
 }
 
 /**
- * «Додати підключення»: one dialog for picking and connecting. Step one lists what can be added; a
- * connector the server describes opens its methods in the same dialog (a form, a redirect, or a
- * provider session); an MCP server goes straight to its page. «Перепідключити» on a server connection opens here at its reconnect method.
+ * «Додати підключення»: one dialog for picking and connecting. Step one lists the connectors; a
+ * connector opens its methods in the same dialog (a form, a redirect, a provider session, or — the
+ * one exception — its editor's page). «Перепідключити» opens here at the connection's method.
  */
 export function AddConnectionDialog({
   open,
-  factoryId,
   sources,
   onPick,
   onClose,
   initialStep,
 }: {
   open: boolean;
-  factoryId: string;
-  sources: ConnectionSources;
+  sources: { connections?: ConnectionsListResponse; connectors?: ConnectorView[] };
   onPick: (target: ConnectionTarget) => void;
   onClose: () => void;
   /** Open straight into one connect step: a connector's, or a server connection's reconnect. */
@@ -286,7 +152,7 @@ export function AddConnectionDialog({
         {step?.startsWith('connector:') || step?.startsWith('reconnect:') ? (
           <ServerStep step={step as `connector:${string}` | `reconnect:${string}`} sources={sources} onBack={back} onPick={onPick} />
         ) : (
-          <PickStep factoryId={factoryId} sources={sources} onConnect={setStep} onPick={onPick} />
+          <PickStep connectors={sources.connectors ?? []} onConnect={setStep} />
         )}
       </DialogContent>
     </Dialog>
@@ -301,7 +167,7 @@ function ServerStep({
   onPick,
 }: {
   step: `connector:${string}` | `reconnect:${string}`;
-  sources: ConnectionSources;
+  sources: { connections?: ConnectionsListResponse; connectors?: ConnectorView[] };
   onBack: () => void;
   onPick: (target: ConnectionTarget) => void;
 }) {

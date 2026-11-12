@@ -68,6 +68,11 @@ export interface ConnectMethod {
   /** The form's submit button. */
   submitLabel?: string;
   available: true | ConnectionBlocked;
+  /**
+   * The method is the one custom editor (ADR-0035's exception): choosing it opens that editor's page
+   * (`?connection=new:<connector>:<method>`) with these params instead of a form.
+   */
+  editor?: { component: 'mcp-server'; params: Record<string, string> };
 }
 
 /**

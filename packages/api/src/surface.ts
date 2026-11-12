@@ -166,6 +166,8 @@ export interface FactoryApiRoutesDeps {
     skillOverrides: SkillOverridesStorage;
   };
   integrations?: IntegrationRegistration[];
+  /** Connectors that are not integrations (the MCP servers), served by the same `/web/connections` registry. */
+  connectors?: ConnectorRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
@@ -979,7 +981,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
     ...providerRoutes,
     // Settings › Підключення: every integration's connections through one registry (ADR-0035).
-    ...buildConnectionRoutes({ auth: deps.auth, connectors, emitAudit }),
+    ...buildConnectionRoutes({ auth: deps.auth, connectors: [...connectors, ...(deps.connectors ?? [])], emitAudit }),
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady

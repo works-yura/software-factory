@@ -2,9 +2,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Bug, Database, GitBranch, Inbox, Plug, ScrollText, Wrench } from 'lucide-react';
 import type { ConnectionProvidesView } from '@factory/contracts';
 import type { LucideIcon } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
-import type { CatalogCapability, ConnectionCapability } from '../../connections/connections';
 
 /** Tints from the badge palette: what agents call (violet), what brings work (green), code (blue). */
 const TINT = {
@@ -36,37 +34,6 @@ export function CapabilityDots({ dots }: { dots: CapabilityDot[] }) {
       ))}
     </span>
   );
-}
-
-/** The catalog's capabilities («Додати підключення»). */
-export function useCatalogDots() {
-  const { t } = useTranslation('settings');
-  const spec: Record<CatalogCapability, { icon: LucideIcon; tint: string }> = {
-    tools: { icon: Wrench, tint: TINT.tools },
-    tasks: { icon: Inbox, tint: TINT.sources },
-    code: { icon: GitBranch, tint: TINT.code },
-  };
-  return (capabilities: CatalogCapability[]): CapabilityDot[] =>
-    capabilities.map(key => ({ key, ...spec[key], label: t(`connections.addDialog.capability.${key}`) }));
-}
-
-/** A connection's capabilities (the list's «Можливості»): logs, crashes, database, tools, tasks, repositories. */
-export function useConnectionDots() {
-  const { t } = useTranslation('settings');
-  const spec: Record<ConnectionCapability['key'], { icon: LucideIcon; tint: string }> = {
-    logs: { icon: ScrollText, tint: TINT.tools },
-    crashes: { icon: Bug, tint: TINT.tools },
-    database: { icon: Database, tint: TINT.tools },
-    tools: { icon: Wrench, tint: TINT.tools },
-    tasks: { icon: Inbox, tint: TINT.sources },
-    repositories: { icon: GitBranch, tint: TINT.code },
-  };
-  return (capabilities: ConnectionCapability[]): CapabilityDot[] =>
-    capabilities.map(capability => ({
-      key: capability.key,
-      ...spec[capability.key],
-      label: 'count' in capability ? t(`connections.capabilities.${capability.key}`, { count: capability.count }) : t(`connections.capabilities.${capability.key}`),
-    }));
 }
 
 /** Icons for the capability keys a server's connector may name; an unknown key gets a plug. */

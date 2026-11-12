@@ -6,11 +6,10 @@ import { useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router';
 
-import { factoryConnections } from '../../connections/connections';
 import { settingsSectionPath } from '../../settingsSections';
-import { localized } from '../mcp-servers/McpCatalogFields';
 import { ConnectionIcon } from './ConnectionIcon';
-import { HealthBadge, useRowKind } from './ConnectionList';
+import { editorMethodOf } from './ConnectionDetail';
+import { HealthBadge } from './ConnectionList';
 import { useConnectionSources } from './useConnectionSources';
 
 /**
@@ -25,7 +24,6 @@ export function ConnectionsPageHeader() {
   const [params, setParams] = useSearchParams();
   const isMobile = useIsMobile(640);
   const { sources } = useConnectionSources();
-  const kindOf = useRowKind();
   const open = params.get('connection');
   const titleId = useId();
   // The sidebar's phone breakpoint: there the mobile header names the page instead.
@@ -66,14 +64,11 @@ export function ConnectionsPageHeader() {
     );
   }
 
-  const row = factoryConnections(factoryId, sources).find(candidate => candidate.id === open);
-  const entryId = open.startsWith('mcp-new:') ? open.slice('mcp-new:'.length) : undefined;
-  const entry = entryId ? sources.mcp?.catalog.find(candidate => candidate.id === entryId) : undefined;
-  const kind = open.startsWith('mcp') ? 'mcp' : (open as 'google-cloud');
-  const icon = row ? kindOf(row).icon : kind;
-  const name =
-    row?.title ??
-    (entry ? localized(entry.label) : entryId ? t('connections.detail.newMcp') : t(`connections.kinds.${kind}`, { defaultValue: t('connections.title') }));
+  // A connection's page, or a new connection's editor page (`new:<connector>:<method>`): named as the server names them.
+  const view = sources.connections?.connections.find(candidate => candidate.id === open);
+  const editor = editorMethodOf(open, sources.connectors ?? []);
+  const icon = view?.connector.icon ?? editor?.connector.icon ?? '';
+  const name = view?.label ?? editor?.method.label ?? t('connections.title');
 
   return (
     <PageHeader>
@@ -87,9 +82,9 @@ export function ConnectionsPageHeader() {
         <ConnectionIcon kind={icon} />
       </PageHeader.Icon>
       {title(name)}
-      {row && (
+      {view && (
         <PageHeader.Meta beside>
-          <HealthBadge row={row} />
+          <HealthBadge view={view} />
         </PageHeader.Meta>
       )}
     </PageHeader>

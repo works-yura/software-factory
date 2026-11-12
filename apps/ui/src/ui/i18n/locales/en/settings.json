@@ -1546,32 +1546,6 @@
       "created": "Created"
     },
     "mcpBadge": "MCP",
-    "organizationWide": "Whole organization",
-    "kinds": {
-      "mcp": "MCP server"
-    },
-    "capabilities": {
-      "logs": "Logs",
-      "crashes_one": "Crashes · {{count}} app",
-      "crashes_other": "Crashes · {{count}} apps",
-      "database": "Database",
-      "tools_one": "{{count}} tool",
-      "tools_other": "{{count}} tools",
-      "tasks": "Tasks",
-      "repositories": "Repositories",
-      "crashes": "Crashes"
-    },
-    "states": {
-      "ok": "Working",
-      "error": "Error",
-      "needs_auth": "Needs access",
-      "unchecked": "Not checked yet",
-      "disabled": "Off",
-      "configured": "Set up",
-      "reads-nothing": "Reads nothing",
-      "connected": "Connected",
-      "env": "From the server environment"
-    },
     "actions": {
       "menu": "Actions for {{name}}",
       "open": "Open",
@@ -1590,48 +1564,33 @@
     },
     "unlink": {
       "title": "Unlink “{{name}}” from this Factory?",
-      "mcpBody": "This Factory's agents stop seeing the server's tools and its access settings for this Factory are cleared. The server stays in the organization for other Factories.",
       "bindingBody": "The Factory stops reading this project; its logs, crashes, apps and database settings are cleared. The account stays in the organization.",
       "confirm": "Unlink",
-      "cancel": "Cancel",
-      "done": "Unlinked from the Factory"
+      "cancel": "Cancel"
     },
     "delete": {
-      "title": "Delete “{{name}}” from the organization?",
-      "body": "The server goes for every Factory, with its keys and settings. This cannot be undone.",
       "confirm": "Delete",
-      "cancel": "Cancel",
-      "done": "Deleted"
+      "cancel": "Cancel"
     },
-    "reconnected_one": "Reconnected: {{count}} tool",
-    "reconnected_other": "Reconnected: {{count}} tools",
-    "reconnectFailed": "Could not reconnect: {{error}}",
     "back": "All connections",
     "detail": {
       "account": "Account",
       "notFound": "This connection is gone: it was unlinked or deleted.",
-      "newMcp": "New MCP server",
       "back": "Connections",
       "tabs": {
         "label": "Connection sections",
-        "overview": "Overview",
-        "activity": "Activity",
         "access": "Access",
         "tools": "Tools",
         "settings": "Settings"
       },
       "name": "Name",
       "save": "Save",
-      "saved": "Renamed",
       "created": "Created",
-      "checked": "Checked",
       "state": "Status",
       "id": "Connection ID",
       "by": "{{who}}",
       "byYou": "you",
-      "notRecorded": "not recorded",
-      "scope": "Scope",
-      "noActivity": "Calls are not recorded for this integration."
+      "notRecorded": "not recorded"
     },
     "activity": {
       "title": "Activity",
@@ -1699,21 +1658,10 @@
         "tools": "Tools",
         "sources": "Sources"
       },
-      "accounts": "Organization accounts",
       "integrations": "Integrations",
       "other": "Other",
-      "customMcp": "Own MCP server",
       "nothing": "Nothing found.",
-      "add": "Connect {{name}}",
-      "link": "Link {{name}}",
-      "linking": "Linking…",
-      "linked": "“{{name}}” linked to the Factory",
-      "connected": "connected",
-      "capability": {
-        "tools": "Tools for agents",
-        "tasks": "Tasks",
-        "code": "Repositories"
-      }
+      "add": "Connect {{name}}"
     },
     "listHeading": "Connections",
     "addShort": "Add",
@@ -1743,7 +1691,8 @@
         "completed": "{{name}} is connected",
         "pending": "{{name}} is still confirming the sign-in; the connection appears in the list in a moment."
       },
-      "mcpPending": "The database server is being set up; it appears here in a moment."
+      "mcpPending": "The database server is being set up; it appears here in a moment.",
+      "choose": "Choose…"
     }
   }
 }

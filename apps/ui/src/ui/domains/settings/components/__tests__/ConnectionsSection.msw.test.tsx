@@ -6,46 +6,36 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { connectionNavigation } from '../../connections/api';
-import type { McpActivity, McpServer } from '../../services/mcpServers';
+import type { McpActivity } from '../../services/mcpServers';
 import {
   acmeConnection,
   acmeConnector,
   FACTORY_ID,
-  managedServer,
   MCP_BASE,
+  mcpConnection,
   renderConnections,
+  sentryConnection,
   useIntegrationHandlers,
 } from './fixtures/connections';
 
-const own: McpServer = {
-  ...managedServer,
-  id: 'srv-sentry',
-  name: 'sentry',
-  label: 'Sentry',
-  owner: undefined,
-  launch: { transport: 'http', url: 'https://mcp.sentry.dev/mcp', headers: {} },
-  assignments: [{ factoryProjectId: FACTORY_ID, sessions: ['chat'] }, { factoryProjectId: 'other-factory' }],
-  health: { state: 'error', tools: [], error: '401', errorKind: 'auth_denied' },
-};
-const elsewhere: McpServer = { ...own, id: 'srv-notes', name: 'notes', label: 'Notes', assignments: [{ factoryProjectId: 'other-factory' }], health: undefined };
-
+/** The page's own handlers around the shared ones; writes to the connections API are recorded. */
 function useHandlers(options: { activity?: McpActivity } = {}) {
   useIntegrationHandlers();
   const writes: Array<{ method: string; url: string; body: unknown }> = [];
+  const record = async (method: string, request: Request) =>
+    void writes.push({ method, url: request.url, body: await request.json().catch(() => null) });
   server.use(
-    http.get(MCP_BASE, () => HttpResponse.json({ servers: [managedServer, own, elsewhere], catalog: [], credentials: {}, canEdit: true })),
-    http.put(`${MCP_BASE}/:id`, async ({ request }) => {
-      const body = await request.json();
-      writes.push({ method: 'PUT', url: request.url, body });
-      return HttpResponse.json({ server: { ...own, ...(body as object) } });
+    http.post(`${TEST_BASE_URL}/web/connections/:id/unlink`, async ({ request }) => {
+      await record('UNLINK', request);
+      return HttpResponse.json({ message: 'Unlinked from this Factory. The organization’s server stays.' });
     }),
-    http.delete(`${MCP_BASE}/:id`, ({ request }) => {
-      writes.push({ method: 'DELETE', url: request.url, body: null });
-      return HttpResponse.json({ deleted: true });
+    http.post(`${TEST_BASE_URL}/web/connections/:id/reconnect`, async ({ request }) => {
+      await record('RECONNECT', request);
+      return HttpResponse.json({ type: 'connected', connection: sentryConnection, title: 'Reconnected: 3 tools' });
     }),
-    http.post(`${MCP_BASE}/:id/reconnect`, ({ request }) => {
-      writes.push({ method: 'RECONNECT', url: request.url, body: null });
-      return HttpResponse.json({ status: { connected: true, toolCount: 3, tools: [], checkedAt: 'now' } });
+    http.post(`${TEST_BASE_URL}/web/connections`, async ({ request }) => {
+      await record('CONNECT', request);
+      return HttpResponse.json({ type: 'connected', connection: mcpConnection('srv-notes', 'Notes'), title: 'Notes is linked to this Factory' });
     }),
     ...(options.activity ? [http.get(`${MCP_BASE}/activity`, () => HttpResponse.json(options.activity))] : []),
   );
@@ -61,15 +51,13 @@ async function openMenu(name: string) {
 }
 
 describe('Підключення', () => {
-  it("lists the Factory's connections in one table: the server's connectors, then MCP servers by badge; never another Factory's, never a server an integration runs", async () => {
+  it("lists the Factory's connections in one table, as the server describes them: MCP servers by badge, a failure in the server's words", async () => {
     useHandlers();
     renderConnections();
 
     expect(screen.getByRole('heading', { name: 'Connections', level: 1 })).toBeInTheDocument();
     const list = await rows();
     expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['Acme main', 'Sentry']);
-    // A server an integration runs under the hood (Google Cloud's «База») is part of that connection, not a row.
-    expect(screen.queryByRole('link', { name: /^Firestore syncta-57c6a/ })).not.toBeInTheDocument();
     const sentry = await rowNamed('Sentry');
     expect(sentry).toHaveTextContent('MCP');
     expect(within(sentry).getByText('Error').closest('[data-state]')).toHaveAttribute('title', expect.stringContaining('The account was refused access'));
@@ -81,7 +69,6 @@ describe('Підключення', () => {
     // A working connection says nothing about its state; it is not an MCP server.
     expect(acme).not.toHaveTextContent('MCP');
     expect(acme).not.toHaveTextContent('Live');
-    expect(screen.queryByRole('link', { name: /^Notes/ })).not.toBeInTheDocument();
   });
 
   it("names a server connection's creation and lets it be renamed on «Overview»", async () => {
@@ -97,7 +84,6 @@ describe('Підключення', () => {
     expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connections' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/settings/integrations`);
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Overview']);
     const name = screen.getByRole('textbox', { name: 'Name' });
     await userEvent.clear(name);
     await userEvent.type(name, 'Acme prod');
@@ -167,7 +153,7 @@ describe('Підключення', () => {
     expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
   });
 
-  it("unlinks an MCP server from this Factory only, keeping the others' access", async () => {
+  it("unlinks a Factory-scoped connection from this Factory, in the server's words", async () => {
     const writes = useHandlers();
     renderConnections();
     await rows();
@@ -175,33 +161,18 @@ describe('Підключення', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Unlink from Factory' }));
     const dialog = await screen.findByRole('dialog', { name: 'Unlink “Sentry” from this Factory?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Unlink' }));
-
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({ method: 'PUT', url: expect.stringContaining('/srv-sentry'), body: { assignments: [{ factoryProjectId: 'other-factory' }] } });
+    await waitFor(() => expect(writes).toEqual([expect.objectContaining({ method: 'UNLINK', url: expect.stringContaining('mcp%3Asrv-sentry') })]));
+    expect(await screen.findByText('Unlinked from this Factory. The organization’s server stays.')).toBeInTheDocument();
   });
 
-  it('renames, reconnects and deletes an own MCP server from its menu', async () => {
+  it('reconnects at once when the method asks for nothing, and says how it went', async () => {
     const writes = useHandlers();
     renderConnections();
     await rows();
-
-    await openMenu('Sentry');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
-    const rename = await screen.findByRole('dialog');
-    await userEvent.clear(within(rename).getByRole('textbox', { name: 'Name' }));
-    await userEvent.type(within(rename).getByRole('textbox', { name: 'Name' }), 'Sentry prod');
-    await userEvent.click(within(rename).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(writes.at(-1)).toMatchObject({ method: 'PUT', body: { label: 'Sentry prod', name: 'sentry' } }));
-
     await openMenu('Sentry');
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Reconnect' }));
-    await waitFor(() => expect(writes.at(-1)).toMatchObject({ method: 'RECONNECT' }));
+    await waitFor(() => expect(writes).toEqual([expect.objectContaining({ method: 'RECONNECT', body: { input: {} } })]));
     expect(await screen.findByText('Reconnected: 3 tools')).toBeInTheDocument();
-
-    await openMenu('Sentry');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(writes.at(-1)).toMatchObject({ method: 'DELETE', url: expect.stringContaining('/srv-sentry') }));
   });
 
   it("offers a server connector's actions as the server decides them, a blocked one with the server's reason", async () => {
@@ -326,7 +297,7 @@ describe('Підключення', () => {
     expect(screen.getByRole('menuitem', { name: /^Rename/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('adds from one dialog: integrations by capability, MCP only under «Other», the database Google Cloud runs never offered', async () => {
+  it('adds from one dialog: integrations by capability, MCP only under «Other»', async () => {
     useHandlers();
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
@@ -338,8 +309,8 @@ describe('Підключення', () => {
     ]);
     expect(within(integrations).getByRole('option', { name: 'Connect Acme Cloud' })).toContainElement(within(integrations).getByRole('img', { name: 'Tickets' }));
     expect(within(integrations).queryByText('MCP')).not.toBeInTheDocument();
-    expect(within(within(dialog).getByRole('group', { name: 'Other' })).getByRole('option', { name: 'Connect Own MCP server' })).toBeInTheDocument();
-    expect(within(dialog).queryByText(/Toolbox/)).not.toBeInTheDocument();
+    const other = within(dialog).getByRole('group', { name: 'Other' });
+    expect(within(other).getByRole('option', { name: 'Connect MCP servers' })).toHaveTextContent('MCP');
 
     // Sources leave out tools and the organization's accounts.
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Sources' }));
@@ -347,19 +318,24 @@ describe('Підключення', () => {
     expect(within(dialog).getByRole('option', { name: 'Connect Acme Cloud' })).toBeInTheDocument();
   });
 
-  it('links an organization server with access for every session kind', async () => {
+  it("links an organization's MCP server through the connector's select, and opens an editor method on its own page", async () => {
     const writes = useHandlers();
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'notes');
-    await userEvent.click(within(dialog).getByRole('option', { name: 'Link Notes' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect MCP servers' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect MCP servers' });
+    await userEvent.click(within(dialog).getByRole('button', { name: /A server of the organization/ }));
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Server' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Notes' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Link' }));
+    await waitFor(() => expect(writes).toEqual([expect.objectContaining({ method: 'CONNECT', body: { connector: 'mcp', method: 'link', input: { serverId: 'srv-notes' } } })]));
+    expect(await within(dialog).findByText('Notes is linked to this Factory')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
 
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]!.body).toMatchObject({
-      assignments: [{ factoryProjectId: 'other-factory' }, { factoryProjectId: FACTORY_ID, sessions: ['chat', 'personal', 'cards'] }],
-    });
-    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=mcp%3Asrv-notes'));
+    // Back on the catalog: an editor method opens its page instead of a form.
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Add connection' })).getByRole('option', { name: 'Connect MCP servers' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Connect MCP servers' })).getByRole('button', { name: /Own MCP server/ }));
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=new%3Amcp%3Acustom'));
   });
 
   it('picks with the keyboard: the search narrows the list, arrows move, Enter opens', async () => {

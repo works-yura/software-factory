@@ -2,6 +2,7 @@ import type { ConnectFormField, ConnectMethod, ConnectResult, ConnectorView } fr
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -53,7 +54,7 @@ export function FormField({
   error,
   onChange,
 }: {
-  field: Pick<ConnectFormField, 'name' | 'displayName' | 'description' | 'placeholder' | 'accept' | 'required' | 'default'> & { type: string };
+  field: Pick<ConnectFormField, 'name' | 'displayName' | 'description' | 'placeholder' | 'accept' | 'required' | 'default' | 'options'> & { type: string };
   value: string;
   error?: string;
   onChange: (value: string) => void;
@@ -79,7 +80,20 @@ export function FormField({
           {field.displayName}
         </Txt>
       </label>
-      {field.type === 'textarea' || field.type === 'file' ? (
+      {field.type === 'select' ? (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger id={id} aria-label={field.displayName} {...(describedBy ? { 'aria-describedby': describedBy } : {})}>
+            {field.options?.find(option => option.value === value)?.label ?? field.placeholder ?? t('connections.connector.choose')}
+          </SelectTrigger>
+          <SelectContent>
+            {(field.options ?? []).map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : field.type === 'textarea' || field.type === 'file' ? (
         <Textarea {...common} rows={6} className="font-mono text-xs" onChange={event => onChange(event.target.value)} />
       ) : (
         <Input {...common} type={field.type === 'secret' ? 'password' : 'text'} onChange={event => onChange(event.target.value)} />
@@ -138,7 +152,13 @@ export function ConnectorConnect({
   const reconnectMutation = useReconnect();
   const mutation = reconnect ? reconnectMutation : connect;
   const single = methods.length === 1 ? methods[0] : undefined;
-  const [chosenId, setChosenId] = useState<string | undefined>(single?.id);
+  const [chosenId, setChosenIdState] = useState<string | undefined>(single?.editor ? undefined : single?.id);
+  // The one custom editor (ADR-0035) is a page, not a form: choosing its method opens that page.
+  const setChosenId = (id: string | undefined) => {
+    const picked = methods.find(candidate => candidate.id === id);
+    if (picked?.editor) onPick({ connection: `new:${connector.id}:${picked.id}` });
+    else setChosenIdState(id);
+  };
   const method = methods.find(candidate => candidate.id === chosenId);
   const [values, setValues] = useState<Record<string, string>>({});
   const [done, setDone] = useState<Extract<ConnectResult, { type: 'connected' }>>();
@@ -176,7 +196,7 @@ export function ConnectorConnect({
 
   const back = () => {
     mutation.reset();
-    if (method && !single) setChosenId(undefined);
+    if (method && !single) setChosenIdState(undefined);
     else onBack();
   };
 

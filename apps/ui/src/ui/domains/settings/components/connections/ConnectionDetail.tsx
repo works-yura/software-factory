@@ -1,31 +1,18 @@
-import type { McpCatalogEntry } from '@factory/core';
+import type { ConnectionView, ConnectorView } from '@factory/contracts';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
-import type { ConnectionRow, ConnectionSources } from '../../connections/connections';
-import type { McpServer, McpServersState } from '../../services/mcpServers';
-import { McpServerEditor } from '../mcp-servers/McpServerEditor';
-import type { McpServerSection, McpServerStart } from '../mcp-servers/McpServerEditor';
-import { mcpErrorText } from '../mcp-servers/McpServerInspect';
-import { ConnectionActivity } from './ConnectionActivity';
 import { ConnectorDetailSections } from './ConnectorDetail';
 import { HealthBadge, useRenameConnection } from './ConnectionList';
+import { McpServerSection } from './McpServerSection';
 import { TimeAgo } from './TimeAgo';
-
-export { mcpStartOf } from './mcpStart';
-import { mcpStartOf } from './mcpStart';
-
-type DetailTab = 'overview' | 'activity' | 'access' | 'tools' | 'settings';
 
 /** «Хто»: a member's name, «вами», or nothing when unknown. */
 function useWho(factoryId: string) {
@@ -39,211 +26,131 @@ function useWho(factoryId: string) {
   };
 }
 
-/** «Назва» with «Зберегти», when the connection's name is stored; otherwise just the name. */
-function NameRow({ row }: { row: ConnectionRow }) {
+/** «Назва» with «Зберегти» when the server allows renaming; otherwise just the name. */
+function NameRow({ view }: { view: ConnectionView }) {
   const { t } = useTranslation('settings');
   const { rename, pending } = useRenameConnection();
-  const [name, setName] = useState(row.title);
+  const [name, setName] = useState(view.label);
   const next = name.trim();
   return (
     <SettingsRow label={t('connections.detail.name')}>
-      {(row.view ? row.view.actions.rename === true : Boolean(row.rename)) ? (
+      {view.actions.rename === true ? (
         <form
           className="flex w-full items-center justify-end gap-2"
           onSubmit={event => {
             event.preventDefault();
-            if (next && next !== row.title) rename(row, next);
+            if (next && next !== view.label) rename(view, next);
           }}
         >
           <Input aria-label={t('connections.detail.name')} value={name} onChange={event => setName(event.target.value)} className="min-w-0 flex-1 sm:w-56 sm:flex-none" />
-          <Button type="submit" size="sm" variant="primary" disabled={!next || next === row.title || pending}>
+          <Button type="submit" size="sm" variant="primary" disabled={!next || next === view.label || pending}>
             {t('connections.detail.save')}
           </Button>
         </form>
       ) : (
-        <span className="text-body-sm text-foreground">{row.title}</span>
+        <span className="text-body-sm text-foreground">{view.label}</span>
       )}
     </SettingsRow>
   );
 }
 
-/** «Огляд», as Mastra's: name, account, created (when and by whom), last check, state, the connection's id. */
-function Overview({ row, factoryId }: { row: ConnectionRow; factoryId: string }) {
+/** «Огляд», as Mastra's: name, account, how it connects, who depends on it, created, state, the connection's id. */
+function Overview({ view, factoryId, organizationWide }: { view: ConnectionView; factoryId: string; organizationWide: string }) {
   const { t } = useTranslation('settings');
   const who = useWho(factoryId);
-  const health = row.server?.health;
-  const failure = health && (row.state === 'error' || row.state === 'needs_auth') ? mcpErrorText(t, health.errorKind, health.error) : undefined;
-  const connectionId = row.server?.id ?? row.id;
-  const by = who(row.createdBy);
-  const view = row.view;
-  const stateMessage = view ? view.state.message : failure;
+  const by = who(view.createdBy);
   return (
     <SettingsContainer>
-      <NameRow row={row} />
+      <NameRow view={view} />
       <SettingsRow label={t('connections.detail.account')}>
         <span className="text-body-sm flex min-w-0 flex-col items-end text-right max-sm:items-start max-sm:text-left">
-          <span className="text-foreground truncate">{row.account?.name ?? (row.scope === 'organization' ? t('connections.organizationWide') : '—')}</span>
-          {row.account?.detail && <span className="text-meta text-muted-foreground truncate">{row.account.detail}</span>}
+          <span className="text-foreground truncate">{view.accountLabel ?? (view.scope === 'organization' ? organizationWide : '—')}</span>
+          {view.accountDetail && <span className="text-meta text-muted-foreground truncate">{view.accountDetail}</span>}
         </span>
       </SettingsRow>
-      {view?.method && (
+      {view.method && (
         <SettingsRow label={t('connections.connector.method')}>
           <span className="text-body-sm text-foreground">{view.method}</span>
         </SettingsRow>
       )}
-      {view?.dependents && (
+      {view.dependents && (
         <SettingsRow label={t('connections.connector.dependents')}>
           <span className="text-body-sm text-foreground">{view.dependents}</span>
         </SettingsRow>
       )}
       <SettingsRow label={t('connections.detail.created')}>
         <span className="text-body-sm text-foreground flex items-center gap-1.5">
-          {row.createdAt ? <TimeAgo value={row.createdAt} /> : <span className="text-muted-foreground">{t('connections.detail.notRecorded')}</span>}
-          {row.createdAt && by && <span className="text-muted-foreground">· {by}</span>}
+          {view.createdAt ? <TimeAgo value={view.createdAt} /> : <span className="text-muted-foreground">{t('connections.detail.notRecorded')}</span>}
+          {view.createdAt && by && <span className="text-muted-foreground">· {by}</span>}
         </span>
       </SettingsRow>
-      {health?.checkedAt && (
-        <SettingsRow label={t('connections.detail.checked')}>
-          <TimeAgo value={health.checkedAt} className="text-body-sm text-foreground" />
-        </SettingsRow>
-      )}
-      <SettingsRow label={t('connections.detail.state')} {...(stateMessage ? { description: stateMessage } : {})}>
+      <SettingsRow label={t('connections.detail.state')} {...(view.state.message ? { description: view.state.message } : {})}>
         <span className="flex items-center gap-2">
-          <HealthBadge row={row} />
-          {view ? (
-            view.state.tone !== 'ok' && <span className="text-body-sm text-muted-foreground">{view.state.label}</span>
-          ) : (
-            row.state !== 'ok' && row.state !== 'connected' && <span className="text-body-sm text-muted-foreground">{t(`connections.states.${row.state}`)}</span>
-          )}
+          <HealthBadge view={view} />
+          {view.state.tone !== 'ok' && <span className="text-body-sm text-muted-foreground">{view.state.label}</span>}
         </span>
       </SettingsRow>
       <SettingsRow label={t('connections.detail.id')}>
         <span className="bg-surface-panel shadow-inset flex min-w-0 items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2">
-          <span className="text-meta text-muted-foreground truncate font-mono">{connectionId}</span>
-          <CopyButton content={connectionId} size="icon-sm" variant="ghost" />
+          <span className="text-meta text-muted-foreground truncate font-mono">{view.id}</span>
+          <CopyButton content={view.id} size="icon-sm" variant="ghost" />
         </span>
       </SettingsRow>
     </SettingsContainer>
   );
 }
 
-/** Pages without tabs: a new MCP server. */
-function Plain({ children }: { children: ReactNode }) {
-  return <div className="flex min-w-0 flex-col gap-5">{children}</div>;
+/** A `new:<connector>:<method>` link: the connector and its editor method, when the server offers one. */
+export function editorMethodOf(id: string, connectors: readonly ConnectorView[]) {
+  const match = /^new:([^:]+):(.+)$/.exec(id);
+  if (!match) return undefined;
+  const connector = connectors.find(candidate => candidate.id === match[1]);
+  const method = connector?.methods.find(candidate => candidate.id === match[2]);
+  return connector && method?.editor ? { connector, method, editor: method.editor } : undefined;
 }
 
 /**
- * One connection's page (`?connection=`), as Mastra's: the page header names it (`ConnectionsPageHeader`),
- * then tabs — «Огляд», «Активність», and ours: «Доступ», «Інструменти», «Налаштування»,
- * «Діагностика» — each only where the connection has it. The tab is kept in the URL (`&view=`).
+ * One connection's page (`?connection=`): «Огляд» from the connection's view, then the sections the
+ * server lays out for it. A `new:<connector>:<method>` page is that method's editor (the one custom
+ * editor, ADR-0035).
  */
 export function ConnectionDetail({
   id,
   factoryId,
-  rows,
-  sources,
+  views,
+  connectors,
+  organizationWide,
+  onDone,
 }: {
   id: string;
   factoryId: string;
-  rows: readonly ConnectionRow[];
-  sources: ConnectionSources;
-  onBack: () => void;
+  views: readonly ConnectionView[];
+  connectors: readonly ConnectorView[];
+  organizationWide: string;
+  /** Back to the list, after a new connection was saved in its editor. */
+  onDone: () => void;
 }) {
   const { t } = useTranslation('settings');
-  const [params, setParams] = useSearchParams();
-  const mcp: McpServersState | undefined = sources.mcp;
-
-  if (id.startsWith('mcp-new:') && mcp) {
-    const entryId = id.slice('mcp-new:'.length);
-    const entry = mcp.catalog.find(candidate => candidate.id === entryId);
-    const start: McpServerStart = entry ? { kind: 'catalog', entry } : { kind: 'custom' };
+  const editor = editorMethodOf(id, connectors);
+  if (editor) {
     return (
-      <Plain>
-        <McpServerEditor start={start} state={mcp} onSaved={() => setParams(new URLSearchParams())} />
-      </Plain>
+      <div className="flex min-w-0 flex-col gap-5">
+        <McpServerSection params={editor.editor.params} onSaved={onDone} />
+      </div>
     );
   }
-
-  const listed = rows.find(candidate => candidate.id === id);
-  // An MCP server of the organization this Factory is not linked to (just unlinked, or linked from
-  // «Додати підключення» before the list caught up): its page, with its form saying who has access.
-  const orphan = !listed && id.startsWith('mcp:') ? mcp?.servers.find(candidate => `mcp:${candidate.id}` === id && !candidate.owner) : undefined;
-  const row: ConnectionRow | undefined =
-    listed ??
-    (orphan && mcp
-      ? {
-          id,
-          kind: 'mcp',
-          title: orphan.label,
-          mcp: true,
-          capabilities: [],
-          state: orphan.enabled ? (orphan.health?.state ?? 'unchecked') : 'disabled',
-          scope: 'factory',
-          server: orphan,
-          rename: 'server',
-        }
-      : undefined);
-  if (!row) {
+  const view = views.find(candidate => candidate.id === id);
+  if (!view) {
     return (
       <Txt as="p" variant="caption" tone="muted">
         {t('connections.detail.notFound')}
       </Txt>
     );
   }
-
-  const server = row.server;
-  const editor = (section: McpServerSection) =>
-    server && mcp ? (
-      <McpServerEditor key={`${server.id}:${server.updatedAt}:${section}`} server={server} start={mcpStartOf(server, mcp.catalog)} state={mcp} onSaved={() => {}} section={section} />
-    ) : null;
-  const settings: ReactNode = server ? editor('config') : null;
-
-  const tabs: Array<{ value: DetailTab; content: ReactNode }> = [
-    {
-      value: 'overview',
-      content: (
-        <>
-          <Overview row={row} factoryId={factoryId} />
-          {row.view && <ConnectorDetailSections id={row.view.id} />}
-        </>
-      ),
-    },
-    ...(server ? [{ value: 'activity' as const, content: <ConnectionActivity factoryId={factoryId} serverId={server.id} heading={false} /> }] : []),
-    ...(server ? [{ value: 'access' as const, content: editor('access') }] : []),
-    ...(server ? [{ value: 'tools' as const, content: editor('tools') }] : []),
-    ...(settings ? [{ value: 'settings' as const, content: settings }] : []),
-  ];
-  const requested = params.get('view') as DetailTab | null;
-  const current = tabs.some(tab => tab.value === requested) ? (requested as DetailTab) : 'overview';
-
   return (
-    <Tabs<DetailTab>
-      defaultTab="overview"
-      value={current}
-      onValueChange={value =>
-        setParams(
-          previous => {
-            const next = new URLSearchParams(previous);
-            if (value === 'overview') next.delete('view');
-            else next.set('view', value);
-            return next;
-          },
-          { replace: true },
-        )
-      }
-    >
-      <TabList aria-label={t('connections.detail.tabs.label')} size="sm">
-        {tabs.map(tab => (
-          <Tab key={tab.value} value={tab.value}>
-            {t(`connections.detail.tabs.${tab.value}`)}
-          </Tab>
-        ))}
-      </TabList>
-      {tabs.map(tab => (
-        <TabContent key={tab.value} value={tab.value} className="flex min-w-0 flex-col gap-5 pt-4">
-          {tab.content}
-        </TabContent>
-      ))}
-    </Tabs>
+    <div className="flex min-w-0 flex-col gap-5">
+      <Overview view={view} factoryId={factoryId} organizationWide={organizationWide} />
+      <ConnectorDetailSections id={view.id} />
+    </div>
   );
 }

@@ -1,31 +1,26 @@
-import { useAllConnections, useConnectors } from '../../../../../hooks/useConnections';
-import { useMcpServersQuery } from '../../../../../hooks/useMcpServers';
 import { useParams } from 'react-router';
-import type { ConnectionSources } from '../../connections/connections';
+
+import { useAllConnections, useConnectors } from '../../../../../hooks/useConnections';
+import type { ConnectionsListResponse, ConnectorView } from '@factory/contracts';
 
 /**
- * Every integration's state the Connections page is built from. Each loads on its own: a failing one
- * leaves its rows out and is named in `errors`, the others still show.
+ * What the Connections page is built from, all of it the server's (ADR-0035): this Factory's
+ * connections from every connector, and every connector with its methods.
  */
 export function useConnectionSources(): {
-  sources: ConnectionSources;
+  sources: { connections?: ConnectionsListResponse; connectors?: ConnectorView[] };
   pending: boolean;
-  errors: Array<{ kind: 'mcp' | 'connections'; error: unknown; retry: () => void }>;
+  error: { error: unknown; retry: () => void } | undefined;
 } {
   const { factoryId } = useParams<{ factoryId: string }>();
-  const mcp = useMcpServersQuery();
   const connections = useAllConnections(factoryId);
   const connectors = useConnectors();
   return {
     sources: {
-      ...(mcp.data ? { mcp: mcp.data } : {}),
       ...(connections.data ? { connections: connections.data } : {}),
       ...(connectors.data ? { connectors: connectors.data.connectors } : {}),
     },
-    pending: mcp.isPending || (Boolean(factoryId) && connections.isPending) || connectors.isPending,
-    errors: [
-      ...(mcp.isError ? [{ kind: 'mcp' as const, error: mcp.error, retry: () => void mcp.refetch() }] : []),
-      ...(connections.isError ? [{ kind: 'connections' as const, error: connections.error, retry: () => void connections.refetch() }] : []),
-    ],
+    pending: (Boolean(factoryId) && connections.isPending) || connectors.isPending,
+    error: connections.isError ? { error: connections.error, retry: () => void connections.refetch() } : undefined,
   };
 }

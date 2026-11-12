@@ -5,7 +5,6 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router';
 
-import { factoryConnections } from '../../connections/connections';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { AddConnectionDialog } from './AddConnectionDialog';
 import type { Step } from './AddConnectionDialog';
@@ -23,9 +22,8 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
  */
 const LEGACY_TABS = new Set(['services', 'mcp']);
 
-/** A connect step «Перепідключити» opens straight into (`&step=`): a first-party kind's, or a server connection's. */
-const isStep = (value: string | null): value is Step =>
-  Boolean(value?.startsWith('connector:') || value?.startsWith('reconnect:'));
+/** A connect step the dialog opens straight into (`&step=`): a connector's, or a connection's reconnect. */
+const isStep = (value: string | null): value is Step => Boolean(value?.startsWith('connector:') || value?.startsWith('reconnect:'));
 
 /** The `?connection=` link of a connection's page. */
 export const connectionHref = (id: string) => `?${new URLSearchParams({ connection: id }).toString()}`;
@@ -33,14 +31,14 @@ export const connectionHref = (id: string) => `?${new URLSearchParams({ connecti
 /**
  * Settings › Підключення, as Mastra's Connect page: the connections in the kit's table (the page
  * header carries «+ Додати підключення», which opens the dialog through `?add=1`), then «Активність».
- * A row links to its own page (`?connection=`), whose header and tabs `ConnectionDetail` and
- * `ConnectionsPageHeader` draw.
+ * A row links to its own page (`?connection=`). Everything shown is what the server describes
+ * (ADR-0035); the page knows no provider.
  */
 export function ConnectionsSection() {
   const { t } = useTranslation('settings');
   const { factoryId } = useParams<{ factoryId: string }>();
   const [params, setParams] = useSearchParams();
-  const { sources, pending, errors } = useConnectionSources();
+  const { sources, pending, error } = useConnectionSources();
 
   const legacyService = params.get('service');
   const legacyTab = params.get('tab');
@@ -59,14 +57,16 @@ export function ConnectionsSection() {
   }, [legacyTab, legacyService, setParams]);
 
   const open = params.get('connection');
-  const rows = factoryConnections(factoryId ?? '', sources);
-  // `?connection=<connector>` (a link to a connector, not one connection) becomes its only connection, else the list.
-  const linked = open !== null && !rows.some(row => row.id === open)
-    ? (sources.connectors ?? []).find(connector => connector.id === open || connector.aliases?.includes(open))
-    : undefined;
-  const connectorLink = linked !== undefined;
-  const ofConnector = linked ? rows.filter(row => row.view?.connector.id === linked.id) : [];
-  const resolvedLink = connectorLink && !pending ? (ofConnector.length === 1 ? ofConnector[0]!.id : '') : undefined;
+  const views = sources.connections?.connections ?? [];
+  const connectors = sources.connectors ?? [];
+  const organizationWide = sources.connections?.copy.organizationWide ?? '';
+  // `?connection=<connector>` (by its id or an older name) becomes its only connection, else the list.
+  const linked =
+    open !== null && !views.some(view => view.id === open)
+      ? connectors.find(connector => connector.id === open || connector.aliases?.includes(open))
+      : undefined;
+  const ofConnector = linked ? views.filter(view => view.connector.id === linked.id) : [];
+  const resolvedLink = linked && !pending ? (ofConnector.length === 1 ? ofConnector[0]!.id : '') : undefined;
   useEffect(() => {
     if (resolvedLink === undefined) return;
     setParams(
@@ -86,21 +86,22 @@ export function ConnectionsSection() {
   const go = (target: ConnectionTarget | null) =>
     setParams(current => {
       const next = new URLSearchParams(current);
-      for (const key of ['connection', 'account', 'add', 'step', 'view']) next.delete(key);
+      for (const key of ['connection', 'add', 'step', 'view']) next.delete(key);
       if (target) next.set('connection', target.connection);
       return next;
     });
 
-  if (open && !connectorLink) {
+  if (open && !linked) {
     if (pending) return <SkeletonRows label={t('connections.loading')} rows={3} />;
     return (
       <ConnectionDetail
         key={open}
         id={open}
         factoryId={factoryId}
-        rows={rows}
-        sources={sources}
-        onBack={() => go(null)}
+        views={views}
+        connectors={connectors}
+        organizationWide={organizationWide}
+        onDone={() => go(null)}
       />
     );
   }
@@ -116,16 +117,16 @@ export function ConnectionsSection() {
             {t('connections.organizationNote')}
           </Txt>
         </div>
-        {errors.map(failure => (
-          <div key={failure.kind} className="flex flex-wrap items-center justify-between gap-2">
+        {error && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Txt as="p" variant="caption" className="text-destructive-foreground">
-              {failure.kind === 'connections' ? t('connections.title') : t(`connections.kinds.${failure.kind}`)}: {errorMessage(failure.error)}
+              {t('connections.title')}: {errorMessage(error.error)}
             </Txt>
-            <Button size="sm" variant="ghost" onClick={failure.retry}>
+            <Button size="sm" variant="ghost" onClick={error.retry}>
               {t('intake.retry')}
             </Button>
           </div>
-        ))}
+        )}
         {(sources.connections?.failures ?? []).map(failure => (
           <Txt key={failure.connector.id} as="p" variant="caption" className="text-destructive-foreground">
             {failure.connector.name}: {failure.message}
@@ -133,21 +134,19 @@ export function ConnectionsSection() {
         ))}
         {pending ? (
           <SkeletonRows label={t('connections.loading')} rows={3} />
-        ) : rows.length === 0 ? (
+        ) : views.length === 0 ? (
           <EmptyState iconSlot={null} titleSlot={t('connections.empty')} className="py-10" />
         ) : (
           <ConnectionList
-            rows={rows}
-            factoryId={factoryId}
-            sources={sources}
-            canEditMcp={sources.mcp?.canEdit ?? false}
+            views={views}
+            organizationWide={organizationWide}
             hrefOf={connectionHref}
             onOpen={id => go({ connection: id })}
-            onReconnect={kind =>
+            onReconnect={step =>
               setParams(current => {
                 const next = new URLSearchParams(current);
                 next.set('add', '1');
-                next.set('step', kind);
+                next.set('step', step);
                 return next;
               })
             }
@@ -158,7 +157,6 @@ export function ConnectionsSection() {
       <AddConnectionDialog
         open={adding}
         {...(isStep(params.get('step')) ? { initialStep: params.get('step') as Step } : {})}
-        factoryId={factoryId}
         sources={sources}
         onClose={() =>
           setParams(current => {
