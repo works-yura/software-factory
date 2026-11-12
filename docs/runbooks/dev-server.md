@@ -40,11 +40,23 @@ scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
 
 `install.sh` копіює `start-server.sh` у `~/.mastracode/factory-v4/` (поза проєктом: диск `/Volumes/dot` монтується пізніше за вхід), пише там `server.env` (`FACTORY_REPO`, `MASTRACODE_PUBLIC_URL`, `PORT`), розгортає шаблон plist у `~/Library/LaunchAgents/` і перезавантажує агент. Решта налаштована поза репозиторієм:
 
+### Викатка: сервер працює з викоченого коміту, не з робочої папки
+
+**Правки в робочій папці (`v4/`) на сервер Mac mini не потрапляють**, навіть збережені й закомічені. Сервер працює з окремої копії — git worktree у `../v4-runtime/` (слоти `a` і `b`, посилання `current` на активний), бо дев-сервер у робочій папці перезапускався від кожного збереженого файлу, недописаного теж. Викотити:
+
+```sh
+scripts/mac-mini/deploy.sh            # поточний HEAD (лише закомічене)
+scripts/mac-mini/deploy.sh <коміт>    # будь-який коміт — так само відкат
+scripts/mac-mini/deploy.sh --status   # що працює зараз
+```
+
+`deploy.sh` ставить неактивний слот на коміт, робить `pnpm install` і збірку UI; лише якщо все вдалося — перемикає `current` і перезапускає агент. Збірка впала — сервер лишається на старому коміті. `.env` у слотах — посилання на `v4/apps/server/.env` (секрети в одному місці). `apps/ui` у робочій папці для сервера збирати більше не треба.
+
 | Що | Де |
 | --- | --- |
 | Адреса | `https://factory.tail5c61c7.ts.net` — лише в tailnet; Tailscale Service `svc:factory` (машина з тегом `tag:server`), проксі на `http://127.0.0.1:5874` |
 | Автозапуск сервера | LaunchAgent `ai.eclipt.factory` (шаблон `scripts/mac-mini/ai.eclipt.factory.plist`): `RunAtLoad`, `KeepAlive` лише при невдалому виході, `ThrottleInterval` 30 с |
-| Скрипт запуску | `scripts/mac-mini/start-server.sh`: node з `nvm` (`default`), чекає диск із проєктом (до 5 хв), читає `server.env` і запускає `corepack pnpm dev:local` в `apps/server` |
+| Скрипт запуску | `scripts/mac-mini/start-server.sh`: node з `nvm` (`default`), чекає `.env` викоченого слота (диск монтується пізно, до 5 хв), читає `server.env` (`FACTORY_REPO` = `…/v4-runtime/current`) і запускає `corepack pnpm dev:local` в `apps/server` |
 | Сторож | той самий скрипт: кожні 20 с `GET http://127.0.0.1:5874/health` (відповідає без входу); 6 невдач поспіль (2 хв) — зупиняє всю групу процесів і виходить з 1, launchd піднімає знову. Потрібен, бо `mastra dev` живе далі, коли сервер у ньому впав. Старт до першої здорової відповіді — до 15 хв. Рядки `[watchdog …]` у лозі |
 | Лог | `~/Library/Logs/factory.log` |
 | Tailscale | Login Items (System Settings › General › Login Items); serve-конфіг сервісу зберігається між перезавантаженнями |

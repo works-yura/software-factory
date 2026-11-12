@@ -4,6 +4,7 @@
 # Copies start-server.sh into ~/.mastracode/factory-v4/, writes server.env, renders the plist into
 # ~/Library/LaunchAgents/ and (re)loads it. Rerun after changing start-server.sh or the plist.
 # server.env keeps local edits: a rerun only adds settings it is missing.
+# The server runs the deployed commit (deploy.sh), not this working tree.
 set -euo pipefail
 
 PUBLIC_URL="${1:-}"
@@ -20,7 +21,7 @@ if [ -n "$PUBLIC_URL" ] || [ ! -f "$STATE/server.env" ]; then
   : "${PUBLIC_URL:?usage: $0 <public url, e.g. https://factory.tail5c61c7.ts.net>}"
   cat > "$STATE/server.env" <<CONF
 # Read by start-server.sh. Rerun install.sh with a new URL, or edit and restart the agent.
-FACTORY_REPO="$REPO"
+FACTORY_REPO="$(dirname "$REPO")/v4-runtime/current"
 MASTRACODE_PUBLIC_URL="$PUBLIC_URL"
 PORT=5874
 CONF

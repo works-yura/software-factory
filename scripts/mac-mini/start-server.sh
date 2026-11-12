@@ -39,7 +39,7 @@ HEALTH_URL="http://127.0.0.1:${PORT}/health"
 HEALTH_INTERVAL=20   # seconds between checks
 HEALTH_FAILS=6       # failures in a row before a restart: 2 minutes, longer than a dev rebuild
 STARTUP_LIMIT=900    # seconds the first start may take before it counts as stuck
-MOUNT_WAIT=300       # seconds to wait for the project's volume
+MOUNT_WAIT=300       # seconds to wait for the server's .env (its volume may mount late)
 
 log() { echo "[watchdog $(date '+%F %T')] $*"; }
 
@@ -74,7 +74,8 @@ ensure_tailscale() {
 ensure_tailscale
 
 DIR="$FACTORY_REPO/apps/server"
-for (( waited = 0; waited < MOUNT_WAIT; waited += 5 )); do [ -d "$DIR" ] && break; sleep 5; done
+# The deployed slot links its .env to the working tree, which may sit on a volume that mounts late.
+for (( waited = 0; waited < MOUNT_WAIT; waited += 5 )); do [ -r "$DIR/.env" ] && break; sleep 5; done
 cd "$DIR" || { log "no $DIR"; exit 1; }
 
 # Own process group (job control), so a restart stops pnpm, varlock, mastra dev and the server together.
