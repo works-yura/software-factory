@@ -38,3 +38,4 @@
 | [0032](0032-integration-tokens-belong-to-organization.md) | Токени інтеграцій належать організації, без токенів розгортання: ClickUp зроблено; GitLab (webhook на організацію) і GitHub-токен — рішення, реалізацію відкладено | 2026-11-12 |
 | [0033](0033-workflow-as-phase-runner.md) | Workflow як виконавець фази: параметри картки за схемою, граф у Factory з версіями, чотири види кроків (запропоновано) | 2026-11-12 |
 | [0034](0034-github-app-or-token-per-connection.md) | GitHub: App або токен на кожне підключення (обидва в одній організації), токен зашифровано на встановлення, `GITHUB_ACCESS_TOKEN` — запасний; 404 більше не видаляє використовувані встановлення | 2026-11-12 |
+| [0035](0035-connections-server-describes-ui-renders.md) | Підключення: сервер описує конектори (модель platform-connect Mastra Factory, форми tool-provider Mastra), UI лише показує; GitHub перенесено | 2026-11-12 |
