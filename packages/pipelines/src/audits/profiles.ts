@@ -56,12 +56,22 @@ export const AUDIT_PROFILES: readonly AuditProfile[] = [
     reference: 'references/performance.md',
     urgentFrom: 'critical',
     topic: 'performance',
-  },  {
+  },
+  {
     kind: 'stability',
     title: { uk: 'Стабільність: логи і креші', en: 'Stability: logs and crashes' },
     reference: 'references/stability.md',
     urgentFrom: 'high',
     topic: 'stability',
+  },
+  {
+    // What production users actually received: the project's own chat-audit playbook, fed by the
+    // logs tools and the read-only database. A playbook's P0/P1/P2 map to critical/high/medium.
+    kind: 'prod-chats',
+    title: { uk: 'Prod: переписки й логи', en: 'Prod: chats and logs' },
+    reference: 'references/prod-chats.md',
+    urgentFrom: 'high',
+    topic: 'prod-chats',
   },
 ];
 

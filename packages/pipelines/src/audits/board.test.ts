@@ -53,4 +53,12 @@ describe('audit profiles', () => {
     expect(isUrgentFinding(security, 'medium')).toBe(false);
     expect(isUrgentFinding(auditProfile('dependencies')!, 'high')).toBe(false);
   });
+
+  it('raise a prod-chats P0 or P1 (critical, high) to a person, and keep a P2 (medium) in the report', () => {
+    const prodChats = auditProfile('prod-chats')!;
+    expect(prodChats).toMatchObject({ topic: 'prod-chats', reference: 'references/prod-chats.md' });
+    expect(isUrgentFinding(prodChats, 'critical')).toBe(true);
+    expect(isUrgentFinding(prodChats, 'high')).toBe(true);
+    expect(isUrgentFinding(prodChats, 'medium')).toBe(false);
+  });
 });

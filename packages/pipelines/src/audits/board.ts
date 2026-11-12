@@ -21,7 +21,7 @@ export const AUDIT_SKILL = 'audit-run';
 
 /**
  * Audits: read-only analysis of a project, filed by hand or by an intake rule on a schedule. An
- * audit card names its kind (security, dependencies, code quality, docs versus code, performance, stability —
+ * audit card names its kind (security, dependencies, code quality, docs versus code, performance, stability, production chats —
  * see `AUDIT_PROFILES`); the agent reads the repositories and docs, may run read-only scanners,
  * and writes a report to the project docs (`docs/audits/<date>-<topic>.md`) — never code, never a
  * pull request. Like every board it starts in Intake; Analysis starts on its own, so a card an
