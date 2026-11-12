@@ -97,8 +97,11 @@ export interface ConnectorView extends ConnectorRef {
   description?: string;
   /** Other names older links use for it (`?connection=<alias>` opens it like its id). */
   aliases?: string[];
-  /** The catalog's filter: tools agents call, or sources that bring work and code. */
-  category: 'tools' | 'sources';
+  /**
+   * The catalog's filter: tools agents call, sources that bring work and code, or agents — the
+   * accounts a harness's sessions run on (Claude Code's, Codex's sign-ins).
+   */
+  category: 'tools' | 'sources' | 'agents';
   /** Runs as a third-party MCP server (the row and catalog show the badge). */
   mcp?: boolean;
   /** What its connections give agents. */
@@ -267,16 +270,29 @@ export interface ConnectSession {
 }
 
 /**
+ * An `authorize` that finishes somewhere the browser cannot follow (a harness CLI's own sign-in, its
+ * page opened on the server's machine): no `url` or `session`, only what to tell the person while
+ * the UI asks about `authId` until the flow ends or `timeoutMs` passes.
+ */
+export interface ConnectWaiting {
+  title: string;
+  message?: string;
+  timeoutMs: number;
+}
+
+/**
  * A connect or reconnect: `authorize` — the URL to open (or a `session` to run) and, when the connector can be asked about
  * it, the `authId` whose `AuthFlowStatus` `/web/connections/authorizations/:authId` reports — or the
  * connection it made, with what to tell the person.
  */
 export type ConnectResult =
-  | { type: 'authorize'; url?: string; authId?: string; session?: ConnectSession }
+  | { type: 'authorize'; url?: string; authId?: string; session?: ConnectSession; waiting?: ConnectWaiting }
   | { type: 'connected'; connection: ConnectionView; title: string; message?: string };
 
 export interface AuthorizationStatusResponse {
   status: AuthFlowStatus;
+  /** Why a `failed` flow failed, in the request's language, when the connector knows. */
+  message?: string;
 }
 
 /** A refusal: the code, what to tell the person, and per-field messages for a form. */

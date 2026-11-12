@@ -14,6 +14,7 @@ import {
   MCP_BASE,
   mcpConnection,
   renderConnections,
+  roboAgentConnector,
   sentryConnection,
   useIntegrationHandlers,
 } from './fixtures/connections';
@@ -336,6 +337,43 @@ describe('Підключення', () => {
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Add connection' })).getByRole('option', { name: 'Connect MCP servers' }));
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Connect MCP servers' })).getByRole('button', { name: /Own MCP server/ }));
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=new%3Amcp%3Acustom'));
+  });
+
+  it("lists an agent connector under «Agents» and waits on its CLI sign-in until the server says it finished", async () => {
+    useIntegrationHandlers({ connectors: [acmeConnector, roboAgentConnector] });
+    const asked: string[] = [];
+    let polls = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/connections`, async ({ request }) => {
+        asked.push(JSON.stringify(await request.json()));
+        return HttpResponse.json({
+          type: 'authorize',
+          authId: 'flow-1',
+          waiting: { title: 'Finish signing in to Robo in the browser that opened', message: 'It opened on the server.', timeoutMs: 60_000 },
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/connections/authorizations/flow-1`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get('connector')).toBe('robo');
+        polls += 1;
+        return HttpResponse.json({ status: polls > 1 ? 'completed' : 'pending' });
+      }),
+    );
+    const assign = vi.spyOn(connectionNavigation, 'assign').mockImplementation(() => {});
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+    const agents = within(dialog).getByRole('group', { name: 'Agents' });
+    expect(within(agents).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect Robo Agent']);
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Agents' }));
+    expect(within(dialog).queryByRole('group', { name: 'Integrations' })).not.toBeInTheDocument();
+
+    await userEvent.click(within(agents).getByRole('option', { name: 'Connect Robo Agent' }));
+    const connect = await screen.findByRole('dialog', { name: 'Connect Robo Agent' });
+    await userEvent.click(within(connect).getByRole('button', { name: 'Continue' }));
+    expect(await within(connect).findByText('Finish signing in to Robo in the browser that opened')).toBeInTheDocument();
+    expect(await within(connect).findByText('Robo Agent is connected', {}, { timeout: 5_000 })).toBeInTheDocument();
+    expect(asked).toEqual([JSON.stringify({ connector: 'robo', method: 'sign-in', input: {} })]);
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it('picks with the keyboard: the search narrows the list, arrows move, Enter opens', async () => {

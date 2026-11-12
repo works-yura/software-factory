@@ -1,4 +1,4 @@
-import type { ConnectFormField, ConnectMethod, ConnectResult, ConnectorView } from '@factory/contracts';
+import type { ConnectFormField, ConnectMethod, ConnectResult, ConnectorView, ConnectWaiting } from '@factory/contracts';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -164,6 +164,8 @@ export function ConnectorConnect({
   const [done, setDone] = useState<Extract<ConnectResult, { type: 'connected' }>>();
   /** A session run here (a provider popup): in progress, finished, still confirming, or failed. */
   const [authorizing, setAuthorizing] = useState<'running' | 'completed' | 'pending' | { error: string }>();
+  /** What to tell the person while a flow finishes elsewhere (a CLI's sign-in page on the server's machine). */
+  const [waiting, setWaiting] = useState<ConnectWaiting>();
   const queryClient = useQueryClient();
   const frame = {
     kind: connector.icon,
@@ -179,7 +181,8 @@ export function ConnectorConnect({
           setDone(result);
           return;
         }
-        if (result.session) setAuthorizing('running');
+        if (result.session || result.waiting) setAuthorizing('running');
+        setWaiting(result.waiting);
         finishAuthorize(baseUrl, connector.id, result).then(
           outcome => {
             if (outcome === 'redirected') return;
@@ -289,6 +292,11 @@ export function ConnectorConnect({
       }
     >
       {blocked && <Notice variant="info" title={blocked} role="status" />}
+      {authorizing === 'running' && waiting && (
+        <Notice variant="info" title={waiting.title} role="status">
+          {waiting.message && <Notice.Message>{waiting.message}</Notice.Message>}
+        </Notice>
+      )}
       {failure && Object.keys(fieldErrors).length === 0 && (
         <Notice variant="destructive" title={t('connections.connect.errorTitle')} role="alert">
           <Notice.Message>{errorMessage(failure)}</Notice.Message>

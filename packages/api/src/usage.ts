@@ -123,6 +123,42 @@ async function mapLimited<T, R>(items: ReadonlyArray<T>, limit: number, run: (it
 }
 
 /**
+ * An account's allowance: what was stored (`known`), or with `refresh` read from the provider again
+ * when it was not asked within a minute and is on. A reading in a unit its source does not use is put
+ * right against the stored one (`reconcileUsageWindows`); a failed probe keeps the windows last seen
+ * and says why they are not newer. What Settings › Підключення and the limits overview both read.
+ */
+export async function readAccountUsage({
+  usage,
+  facet,
+  orgId,
+  account,
+  known,
+  refresh,
+  now,
+}: {
+  usage: Pick<UsageStorage, 'saveAccountLimits'>;
+  facet: HarnessUsage;
+  orgId: string;
+  account: { id: string; disabled?: boolean };
+  known: AccountUsageLimits | undefined;
+  refresh: boolean;
+  now: Date;
+}): Promise<AccountUsageView | undefined> {
+  const fresh = known !== undefined && now.getTime() - Date.parse(known.checkedAt) < ACCOUNT_USAGE_PROBE_INTERVAL_MS;
+  if (!refresh || fresh || account.disabled || !facet.readAccountLimits) {
+    return known ? { ...known, ...(refresh ? { stale: true } : {}) } : undefined;
+  }
+  const read = await facet.readAccountLimits({ orgId, accountId: account.id });
+  if (read.unavailable && known && known.windows.length > 0) return { ...known, stale: true, unavailable: read.unavailable };
+  const reconciled = reconcileUsageWindows(known?.windows ?? [], read.windows);
+  if (reconciled.suspectedUnitChange.length > 0) {
+    console.warn(`[Factory usage] ${facet.displayName} reported ${reconciled.suspectedUnitChange.join(', ')} as a fraction; read as a percentage.`);
+  }
+  return usage.saveAccountLimits(orgId, account.id, { ...read, windows: reconciled.windows });
+}
+
+/**
  * What the Factory's agents spent, for every harness alike (`@factory/harness/usage`):
  *
  *   - `GET /web/config/providers/:provider/accounts/usage[?refresh=1]` each account's allowance
@@ -185,8 +221,7 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
 
   /**
    * The facet's sign-ins and their allowances: what was stored, or with `refresh` read from the
-   * provider again for accounts not asked within a minute. A reading in a unit its source does not
-   * use is put right against the stored one (`reconcileUsageWindows`).
+   * provider again for accounts not asked within a minute (`readAccountUsage`).
    */
   async #readAccounts(
     orgId: string,
@@ -197,26 +232,10 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
     const signIns = accounts.filter(account => isSignInCredentialKind(account.kind));
     const stored = await this.deps.usage.listAccountLimits(orgId, signIns.map(account => account.id));
     const now = this.#now();
-    return mapLimited(signIns, PROBE_CONCURRENCY, async account => {
-      const entry = { id: account.id, label: account.label, disabled: Boolean(account.disabled) };
-      const known = stored.get(account.id);
-      const fresh = known !== undefined && now.getTime() - Date.parse(known.checkedAt) < ACCOUNT_USAGE_PROBE_INTERVAL_MS;
-      if (!refresh || fresh || account.disabled || !facet.readAccountLimits) {
-        return { account: entry, usage: known ? { ...known, ...(refresh ? { stale: true } : {}) } : undefined };
-      }
-      const read = await facet.readAccountLimits({ orgId, accountId: account.id });
-      // A failed probe keeps the windows last seen and says why they are not newer.
-      if (read.unavailable && known && known.windows.length > 0) {
-        return { account: entry, usage: { ...known, stale: true, unavailable: read.unavailable } };
-      }
-      const reconciled = reconcileUsageWindows(known?.windows ?? [], read.windows);
-      if (reconciled.suspectedUnitChange.length > 0) {
-        console.warn(
-          `[Factory usage] ${facet.displayName} reported ${reconciled.suspectedUnitChange.join(', ')} as a fraction; read as a percentage.`,
-        );
-      }
-      return { account: entry, usage: await this.deps.usage.saveAccountLimits(orgId, account.id, { ...read, windows: reconciled.windows }) };
-    });
+    return mapLimited(signIns, PROBE_CONCURRENCY, async account => ({
+      account: { id: account.id, label: account.label, disabled: Boolean(account.disabled) },
+      usage: await readAccountUsage({ usage: this.deps.usage, facet, orgId, account, known: stored.get(account.id), refresh, now }),
+    }));
   }
 
   #refreshRequested(c: Context): boolean {

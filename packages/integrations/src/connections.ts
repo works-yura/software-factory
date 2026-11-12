@@ -33,6 +33,7 @@ import type {
   ConnectionView,
   ConnectorRef,
   ConnectSession,
+  ConnectWaiting,
   ConnectorView,
   RemovalImpact,
 } from '@factory/contracts';
@@ -68,7 +69,7 @@ export type ConnectorDescription = Omit<ConnectorView, 'id'>;
 export type ConnectorConnection = Omit<ConnectionView, 'id' | 'connector'> & { id: string };
 
 export type ConnectorConnectResult =
-  | { type: 'authorize'; url?: string; authId?: string; session?: ConnectSession }
+  | { type: 'authorize'; url?: string; authId?: string; session?: ConnectSession; waiting?: ConnectWaiting }
   | { type: 'connected'; connection: ConnectorConnection; title: string; message?: string };
 
 /** A facet call's result: the value, or the status and body to refuse with. */
@@ -88,6 +89,11 @@ export const connectionRefused = (
  * one it never offers in `actions`.
  */
 export interface IntegrationConnections {
+  /**
+   * The connector decides who may connect and change its connections (each member manages their own
+   * accounts: a harness's sign-ins). Unset, the registry lets only organization admins change them.
+   */
+  readonly memberManaged?: boolean;
   /** Name, logo key, category, capabilities and connect methods, for «Додати підключення». */
   describe(request: ConnectionRequest): ConnectorDescription | Promise<ConnectorDescription>;
   /** The organization's connections (and the asking Factory's links). */
@@ -97,8 +103,11 @@ export interface IntegrationConnections {
     methodId: string,
     input: Record<string, string>,
   ): Promise<ConnectionOutcome<ConnectorConnectResult>>;
-  /** Where an `authorize` flow stands, by the `authId` it returned (`ToolProvider.getAuthStatus`); null: unknown. */
-  getAuthStatus?(request: ConnectionRequest, authId: string): Promise<AuthFlowStatus | null>;
+  /**
+   * Where an `authorize` flow stands, by the `authId` it returned (`ToolProvider.getAuthStatus`), with
+   * why it failed when the connector knows; null: unknown.
+   */
+  getAuthStatus?(request: ConnectionRequest, authId: string): Promise<AuthFlowStatus | { status: AuthFlowStatus; message?: string } | null>;
   reconnect?(
     request: ConnectionRequest,
     id: string,
@@ -203,7 +212,8 @@ function splitConnectionId(id: string): { connectorId: string; localId: string }
 
 /**
  * `/web/connections`: one registry over every connector's facet. Org-scoped (a personal account is
- * refused), readable by members, changed by organization admins only; every refusal and every
+ * refused), readable by members, changed by organization admins only (unless the connector is
+ * `memberManaged` and decides itself); every refusal and every
  * string is in the request's language.
  */
 export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRoute[] {
@@ -276,7 +286,7 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
     const copy = localize(COPY, resolved.language);
     const connector = split ? byId.get(split.connectorId) : undefined;
     if (!split || !connector) return { response: refuse(c, 404, { error: 'not_found', message: copy.notFound }) };
-    if (write && !resolved.request.admin) return { response: refuse(c, 403, { error: 'forbidden', message: copy.adminOnly }) };
+    if (write && !resolved.request.admin && !connector.connections.memberManaged) return { response: refuse(c, 403, { error: 'forbidden', message: copy.adminOnly }) };
     return { request: resolved.request, connector, localId: split.localId, copy };
   };
 
@@ -341,7 +351,9 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
         if (!parsed.success) return refuse(c, 400, { error: 'invalid_body', message: copy.invalidBody });
         const connector = byId.get(parsed.data.connector);
         if (!connector) return refuse(c, 404, { error: 'unknown_connector', message: copy.unknownConnector });
-        if (!resolved.request.admin) return refuse(c, 403, { error: 'forbidden', message: copy.adminOnly });
+        if (!resolved.request.admin && !connector.connections.memberManaged) {
+          return refuse(c, 403, { error: 'forbidden', message: copy.adminOnly });
+        }
         const outcome = await connector.connections.connect(resolved.request, parsed.data.method, parsed.data.input);
         if (!outcome.ok) return refuse(c, outcome.status, outcome.body);
         return c.json(await connectResult(connector, resolved.request, outcome.value));
@@ -359,7 +371,8 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
         if (!connector) return refuse(c, 404, { error: 'unknown_connector', message: copy.unknownConnector });
         if (!connector.connections.getAuthStatus) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
         const status = await connector.connections.getAuthStatus(resolved.request, c.req.param('authId'));
-        return status ? c.json({ status }) : refuse(c, 404, { error: 'not_found', message: copy.notFound });
+        if (!status) return refuse(c, 404, { error: 'not_found', message: copy.notFound });
+        return c.json(typeof status === 'string' ? { status } : status);
       },
     }),
     registerApiRoute('/web/connections/:id/reconnect', {

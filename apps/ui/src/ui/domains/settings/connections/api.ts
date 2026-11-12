@@ -64,8 +64,9 @@ const AUTH_POLL_DEADLINE_MS = 60_000;
 
 /**
  * Finishes an `authorize` result: opens its URL (the page leaves: `redirected`), or runs its session
- * here and then asks the connector about `authId` until the account is active (`completed`), or the
- * minute passes (`pending`: the provider still confirms). A failed flow throws.
+ * here — or, for a `waiting` flow, waits on it — and then asks the connector about `authId` until the
+ * account is active (`completed`), or the time passes (`pending`: the provider still confirms; a minute,
+ * or the flow's `timeoutMs`). A failed flow throws with the connector's reason.
  */
 export async function finishAuthorize(
   baseUrl: string,
@@ -73,17 +74,19 @@ export async function finishAuthorize(
   result: Extract<ConnectResult, { type: 'authorize' }>,
   options: { intervalMs?: number; deadlineMs?: number } = {},
 ): Promise<'redirected' | 'completed' | 'pending'> {
-  if (!result.session) {
+  if (result.session) {
+    await connectionNavigation.runSession(result.session, result.authId);
+  } else if (!result.waiting) {
     if (result.url) connectionNavigation.assign(connectionRedirectUrl(baseUrl, result.url));
     return 'redirected';
   }
-  await connectionNavigation.runSession(result.session, result.authId);
+  // A `waiting` flow finishes where the browser cannot follow (a CLI's sign-in on the server's machine): only asked about.
   if (!result.authId) return 'completed';
-  const deadline = Date.now() + (options.deadlineMs ?? AUTH_POLL_DEADLINE_MS);
+  const deadline = Date.now() + (options.deadlineMs ?? result.waiting?.timeoutMs ?? AUTH_POLL_DEADLINE_MS);
   for (;;) {
-    const { status } = await connectionsApi.authStatus(baseUrl, connector, result.authId);
+    const { status, message } = await connectionsApi.authStatus(baseUrl, connector, result.authId);
     if (status === 'completed') return 'completed';
-    if (status === 'failed') throw new ConnectionApiError(409, { error: 'auth_failed' });
+    if (status === 'failed') throw new ConnectionApiError(409, { error: 'auth_failed', ...(message ? { message } : {}) });
     if (Date.now() >= deadline) return 'pending';
     await new Promise(resolve => setTimeout(resolve, options.intervalMs ?? AUTH_POLL_INTERVAL_MS));
   }

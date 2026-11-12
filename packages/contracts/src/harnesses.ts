@@ -7,6 +7,8 @@
 export interface HarnessDescriptor {
   id: string;
   label: string;
+  /** Its logo key (`mastra`, `anthropic`, `openai`): what the UI draws beside its name. */
+  icon: string;
   /**
    * Where the model is chosen: per session (the chat's model picker, `/model`)
    * or per Factory (Settings → Models; the chat only shows it).
@@ -39,16 +41,18 @@ export interface HarnessDescriptor {
     /** A model provider and model (Mastra's providers). */
     modelProvider: boolean;
     /**
-     * The members' sign-ins its turns run on (Settings → Models → accounts): the
-     * credential-account provider they are filed under. Absent: no accounts.
+     * The members' sign-ins its turns run on: the credential-account provider they
+     * are filed under, and the connector that connects them in Settings ›
+     * Підключення (ADR-0036). Absent: no accounts.
      */
-    accounts?: { provider: string };
+    accounts?: { provider: string; connector: string };
   };
 }
 
 export const MASTRA_HARNESS: HarnessDescriptor = {
   id: 'mastra',
   label: 'Mastra',
+  icon: 'mastra',
   modelScope: 'session',
   supports: {
     goal: true,
@@ -66,6 +70,7 @@ export const MASTRA_HARNESS: HarnessDescriptor = {
 export const CLAUDE_CODE_HARNESS: HarnessDescriptor = {
   id: 'claude-code',
   label: 'Claude Code',
+  icon: 'anthropic',
   modelScope: 'factory',
   supports: {
     goal: false,
@@ -77,13 +82,14 @@ export const CLAUDE_CODE_HARNESS: HarnessDescriptor = {
     sandboxRecreate: false,
     sessionlessChat: false,
   },
-  setup: { modelProvider: false, accounts: { provider: 'anthropic' } },
+  setup: { modelProvider: false, accounts: { provider: 'anthropic', connector: 'claude-code' } },
 };
 
 /** OpenAI's Codex: the `codex` CLI's app-server on the server host, signed in with the members' ChatGPT sign-ins. */
 export const CODEX_HARNESS: HarnessDescriptor = {
   id: 'codex',
   label: 'Codex',
+  icon: 'openai',
   modelScope: 'factory',
   supports: {
     goal: false,
@@ -95,7 +101,7 @@ export const CODEX_HARNESS: HarnessDescriptor = {
     sandboxRecreate: false,
     sessionlessChat: false,
   },
-  setup: { modelProvider: false, accounts: { provider: 'openai-codex' } },
+  setup: { modelProvider: false, accounts: { provider: 'openai-codex', connector: 'codex' } },
 };
 
 export const HARNESSES: readonly HarnessDescriptor[] = [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS];

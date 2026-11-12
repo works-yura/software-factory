@@ -9,27 +9,27 @@
 
 import type { ConnectorView } from '@factory/contracts';
 
-/** The add catalog's filter: tools agents call, and sources that bring work and code. */
-export type ConnectionCategory = 'tools' | 'sources';
+/** The add catalog's filter: tools agents call, sources that bring work and code, and the agents' own accounts. */
+export type ConnectionCategory = 'tools' | 'sources' | 'agents';
 
 export type CatalogFilter = 'all' | ConnectionCategory;
 
-/** One entry of «Додати підключення»: a connector the server describes, in «Інтеграції» or «Інше» (MCP). */
+/** One entry of «Додати підключення»: a connector the server describes, in «Агенти», «Інтеграції» or «Інше» (MCP). */
 export interface CatalogItem {
   /** `connector:<id>`. */
   id: string;
   connector: ConnectorView;
   category: ConnectionCategory;
-  section: 'integrations' | 'other';
+  section: 'agents' | 'integrations' | 'other';
 }
 
-/** «Додати підключення»: every connector; MCP ones under «Інше». */
+/** «Додати підключення»: every connector; the agents' accounts under «Агенти», MCP ones under «Інше». */
 export function connectionCatalog(connectors: readonly ConnectorView[]): CatalogItem[] {
   return connectors.map(connector => ({
     id: `connector:${connector.id}`,
     connector,
     category: connector.category,
-    section: connector.mcp ? 'other' : 'integrations',
+    section: connector.category === 'agents' ? 'agents' : connector.mcp ? 'other' : 'integrations',
   }));
 }
 

@@ -79,7 +79,9 @@ import type { WorkItemBranchSource } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
-import { CODEX_ACCOUNT_PROVIDER, CredentialAccountRoutes } from './credential-accounts.ts';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
+import { createAgentAccountsConnections } from './agent-connections.ts';
+import { CODEX_ACCOUNT_PROVIDER, CredentialAccountRoutes, SIGN_IN_ACCOUNT_PROVIDERS } from './credential-accounts.ts';
 import type { AccountSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
@@ -231,6 +233,7 @@ function guardConnections(registration: IntegrationRegistration, facet: Integrat
       return call(...args);
     };
   return {
+    ...(facet.memberManaged ? { memberManaged: true } : {}),
     describe: request => facet.describe(request),
     list: ready(request => facet.list(request)),
     connect: ready((request, method, input) => facet.connect(request, method, input)),
@@ -770,6 +773,51 @@ function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
  *   - every registered integration's `routes()` surface (full set when ready,
  *     disabled-status stub otherwise), plus stubs for absent known ids
  */
+/**
+ * One connector per harness this server runs whose sessions run on members' sign-ins (ADR-0036):
+ * its id is the descriptor's `setup.accounts.connector`.
+ */
+function agentAccountConnectors(deps: FactoryApiRoutesDeps): ConnectorRegistration[] {
+  const running = HARNESSES.filter(
+    harness =>
+      (harness.id !== CLAUDE_CODE_HARNESS.id || deps.claudeCodeEnabled === true) && (harness.id !== CODEX_HARNESS.id || deps.codexEnabled === true),
+  );
+  const signIns: Record<string, AccountSignInFlows | undefined> = {
+    [CLAUDE_CODE_HARNESS.id]: deps.claudeSignIn,
+    [CODEX_HARNESS.id]: deps.codexSignIn,
+  };
+  const users = deps.users;
+  return running.flatMap(harness => {
+    const accounts = harness.setup.accounts;
+    const provider = accounts ? SIGN_IN_ACCOUNT_PROVIDERS[accounts.provider] : undefined;
+    if (!accounts || !provider) return [];
+    const signIn = signIns[harness.id];
+    const facet = deps.usage?.harnesses.forHarness(harness.id);
+    return [
+      {
+        id: accounts.connector,
+        connections: createAgentAccountsConnections({
+          harness,
+          kind: provider.kind,
+          signInName: provider.name,
+          credentials: deps.domains.modelCredentials,
+          ...(signIn ? { signIn } : {}),
+          ...(deps.usage ? { usage: { storage: deps.usage.usage, ...(facet ? { facet } : {}) } } : {}),
+          projects: deps.domains.projects,
+          ...(users
+            ? {
+                userName: async (userId: string) => {
+                  const user = await users.getUser(userId);
+                  return user?.name?.trim() || user?.email?.trim() || undefined;
+                },
+              }
+            : {}),
+        }),
+      },
+    ];
+  });
+}
+
 export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[] {
   const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
   const registrations = deps.integrations ?? [];
@@ -980,8 +1028,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
     ...providerRoutes,
-    // Settings › Підключення: every integration's connections through one registry (ADR-0035).
-    ...buildConnectionRoutes({ auth: deps.auth, connectors: [...connectors, ...(deps.connectors ?? [])], emitAudit }),
+    // Settings › Підключення: every integration's connections through one registry (ADR-0035), and
+    // the accounts each turn-based harness runs on (ADR-0036).
+    ...buildConnectionRoutes({
+      auth: deps.auth,
+      connectors: [...connectors, ...agentAccountConnectors(deps), ...(deps.connectors ?? [])],
+      emitAudit,
+    }),
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady

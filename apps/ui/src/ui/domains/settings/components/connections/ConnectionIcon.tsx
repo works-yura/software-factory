@@ -1,5 +1,6 @@
+import { OpenAIIcon } from '@mastra/playground-ui/icons/OpenAIIcon';
 import { Server } from 'lucide-react';
-import { siClickup, siGithub, siGitlab, siGooglecloud } from 'simple-icons';
+import { siAnthropic, siClickup, siGithub, siGitlab, siGooglecloud } from 'simple-icons';
 import type { SimpleIcon } from 'simple-icons';
 
 /**
@@ -12,9 +13,17 @@ const BRANDS: Partial<Record<string, { icon: SimpleIcon; ink?: boolean }>> = {
   clickup: { icon: siClickup },
   github: { icon: siGithub, ink: true },
   gitlab: { icon: siGitlab },
+  anthropic: { icon: siAnthropic, ink: true },
+};
+
+/** Marks simple-icons does not carry (OpenAI's), from the kit's own icons. */
+const KIT_MARKS: Partial<Record<string, typeof OpenAIIcon>> = {
+  openai: OpenAIIcon,
 };
 
 export function BrandLogo({ kind, size = 20 }: { kind: string; size?: number }) {
+  const Mark = KIT_MARKS[kind];
+  if (Mark) return <Mark aria-hidden className="text-foreground" style={{ width: size, height: size }} />;
   const brand = BRANDS[kind];
   if (!brand) return <Server aria-hidden className="text-muted-foreground" style={{ width: size, height: size }} />;
   return (

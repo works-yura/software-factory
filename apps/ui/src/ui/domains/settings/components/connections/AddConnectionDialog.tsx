@@ -17,7 +17,7 @@ import type { ConnectionTarget } from './ConnectSteps';
 
 export type { ConnectionTarget };
 
-const FILTERS: CatalogFilter[] = ['all', 'tools', 'sources'];
+const FILTERS: CatalogFilter[] = ['all', 'agents', 'tools', 'sources'];
 
 /** A connect step the dialog opens in place: a connector's (`connector:<id>`), or reconnecting a connection (`reconnect:<id>`). */
 export type Step = `connector:${string}` | `reconnect:${string}`;
@@ -71,6 +71,7 @@ function PickStep({ connectors, onConnect }: { connectors: readonly ConnectorVie
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<CatalogFilter>('all');
   const shown = filterCatalog(connectionCatalog(connectors), { query, filter });
+  const agents = shown.filter(item => item.section === 'agents');
   const integrations = shown.filter(item => item.section === 'integrations');
   const other = shown.filter(item => item.section === 'other');
   const heading = (text: string) => <span className="text-column text-muted-foreground tracking-normal normal-case">{text}</span>;
@@ -109,6 +110,7 @@ function PickStep({ connectors, onConnect }: { connectors: readonly ConnectorVie
         />
         <CommandList scrollArea scrollAreaClassName="h-[min(26rem,calc(100dvh-16rem))] max-sm:h-auto max-sm:flex-1" className="px-2 py-2">
           <CommandEmpty>{t('connections.addDialog.nothing')}</CommandEmpty>
+          {group(agents, t('connections.addDialog.agents'))}
           {group(integrations, t('connections.addDialog.integrations'))}
           {group(other, t('connections.addDialog.other'))}
         </CommandList>

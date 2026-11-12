@@ -59,6 +59,21 @@ export const acmeConnector: ConnectorView = {
   ],
 };
 
+/**
+ * A FAKE agent connector (Robo Agent): the accounts a harness's sessions run on, connected by a CLI
+ * sign-in the server runs — no URL, only a `waiting` note and an `authId` to ask about.
+ */
+export const roboAgentConnector: ConnectorView = {
+  id: 'robo',
+  name: 'Robo Agent',
+  icon: 'robo',
+  description: 'The Robo accounts Robo Agent sessions run on.',
+  category: 'agents',
+  provides: [{ key: 'agent', label: 'Runs Robo Agent sessions' }],
+  capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true },
+  methods: [{ id: 'sign-in', label: 'Sign in with Robo', authKind: 'oauth', available: true }],
+};
+
 export const acmeConnection: ConnectionView = {
   id: 'acme:main',
   connector: { id: 'acme', name: 'Acme Cloud', icon: 'acme' },

@@ -1656,8 +1656,10 @@
         "label": "Type",
         "all": "All",
         "tools": "Tools",
-        "sources": "Sources"
+        "sources": "Sources",
+        "agents": "Agents"
       },
+      "agents": "Agents",
       "integrations": "Integrations",
       "other": "Other",
       "nothing": "Nothing found.",
