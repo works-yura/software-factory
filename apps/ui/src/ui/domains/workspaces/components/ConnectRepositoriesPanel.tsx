@@ -8,7 +8,6 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { useApiConfig } from '../../../../api/config';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
@@ -17,7 +16,7 @@ import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { FolderIcon, GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
-import { connectGithub, isGitLabRepository } from '../services/github';
+import { isGitLabRepository } from '../services/github';
 
 /**
  * Repository linking for a server-backed Factory. Linked repositories retain
@@ -26,7 +25,6 @@ import { connectGithub, isGitLabRepository } from '../services/github';
  */
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const { t } = useTranslation('workspaces');
-  const { baseUrl } = useApiConfig();
   const statusQuery = useGithubStatusQuery();
   const status = statusQuery.data;
   const githubConnected = status?.connected === true;
@@ -73,35 +71,15 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
     return <SkeletonRows label={t('vcs.loadingStatus')} rows={3} rowClassName="h-10 w-full rounded-xl" />;
   }
 
-  // GitHub stays connectable while GitLab is configured or repositories are
-  // already linked: a server with both providers lists GitHub repositories
-  // only once the org has connected it. An access token connects by itself.
-  const githubConnectable =
-    !githubConnected &&
-    status !== undefined &&
-    status.enabled &&
-    status.mode !== 'token' &&
-    !status.authRequired &&
-    status.reason !== 'missing_config' &&
-    status.reason !== 'organization_required';
-
   return (
     <div className="flex min-w-0 flex-col" aria-label={t('connectRepos.label')}>
-      {status && (!gitlabConfigured || status.mode === 'token') && (
+      {/* Connecting GitHub (the App or a token) is in Settings › Підключення; here only why repositories are missing. */}
+      {status && (!gitlabConfigured || githubConnected) && (
         <StatusCallout
           status={status}
           connected={githubConnected}
           empty={githubConnected && !reposQuery.isPending && (reposQuery.data ?? []).length === 0}
         />
-      )}
-
-      {githubConnectable && (
-        <div className="px-4 py-3">
-          <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
-            <GithubIcon className="size-4" />
-            {t('vcs.connect', { host: 'GitHub' })}
-          </Button>
-        </div>
       )}
 
       {(githubConnected || gitlabConfigured || linked.length > 0) && (
@@ -295,20 +273,17 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
     );
   }
 
-  // An access token connects by itself, so here it failed or its account sees no repository.
-  if (status.mode === 'token' && (empty || (!connected && status.reason === 'not_connected'))) {
+  // Only token connections and none of them sees a repository: a token lists what its account can push to.
+  const tokensOnly = status.installations.length > 0 && status.installations.every(installation => installation.kind === 'token');
+  if (connected && empty && tokensOnly) {
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>
-        <Trans
-          t={t}
-          i18nKey={connected ? 'connectRepos.callout.tokenNoAccess' : 'connectRepos.callout.tokenNotConnected'}
-          components={markup}
-        />
+        <Trans t={t} i18nKey="connectRepos.callout.tokenNoAccess" components={markup} />
       </Txt>
     );
   }
 
-  // Not connected: app installed but no installation persisted (callback didn't complete).
+  // Not connected: no App installation or token yet; connecting is in Settings › Підключення.
   if (!connected && status.reason === 'not_connected') {
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>

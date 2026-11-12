@@ -243,7 +243,6 @@
     "manageGitlab": "Керувати підключенням GitLab",
     "connectAnotherGitlab": "Підключити ще один акаунт GitLab",
     "connectGitlab": "Підключити GitLab",
-    "githubFromEnv": "GitHub налаштовано токеном доступу розгортання (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab налаштовано через змінні середовища розгортання",
     "environmentHint": "Ресурси пісочниці, порядок репозиторіїв і команди налаштування задаються в розділі <link>Середовище</link>.",
     "connectionsHint": "GitHub і GitLab підключаються в розділі «Підключення».",
@@ -1546,17 +1545,17 @@
     "saveFailed": "Не вдалося зберегти стадії пісочниць"
   },
   "envFiles": {
-    "title": "Env-файли",
+    "title": "Секрети",
     "description": "Записуються в цю копію репозиторію в кожній пісочниці перед налаштуванням; агенти можуть їх читати; ніколи не комітяться.",
-    "adminOnly": "Додавати, переглядати й змінювати env-файли можуть лише адміністратори організації.",
-    "add": "Додати env-файл",
-    "addTo": "Додати env-файл до {{name}}",
-    "loadFailed": "Не вдалося завантажити env-файли",
-    "notWritable": "Env-файли не можна зберегти, поки на сервері не налаштовано ключ шифрування облікових даних.",
-    "empty": "Env-файлів немає.",
-    "tableOf": "Env-файли {{name}}",
+    "adminOnly": "Додавати, переглядати й змінювати секрети можуть лише адміністратори організації.",
+    "add": "Додати секрет",
+    "addTo": "Додати секрет до {{name}}",
+    "loadFailed": "Не вдалося завантажити секрети",
+    "notWritable": "Секрети не можна зберегти, поки на сервері не налаштовано ключ шифрування облікових даних.",
+    "empty": "Секретів немає.",
+    "tableOf": "Секрети {{name}}",
     "path": "Шлях",
-    "pathHelp": "Відносно кореня репозиторію, напр. .env.staging, apps/mobile/.env або ios/Config.xcconfig.",
+    "pathHelp": "Куди записати файл, відносно кореня репозиторію: .env.staging, ios/Config.xcconfig, .secrets/service-account.json.",
     "pathProblem": {
       "empty": "Введіть шлях.",
       "absolute": "Вкажіть шлях відносно кореня репозиторію.",
@@ -1579,18 +1578,18 @@
     "editTitle": "Редагувати {{path}}",
     "dialogDescription": "Агенти в пісочниці можуть читати цей файл. Стадії, які Factory не вмикає, і production ніколи не записуються.",
     "saved": "{{path}} збережено",
-    "saveFailed": "Не вдалося зберегти env-файл",
+    "saveFailed": "Не вдалося зберегти секрет",
     "deleteTitle": "Видалити {{path}}?",
     "deleteDescription": "Його буде прибрано з кожної пісочниці на наступній команді. Вміст не можна відновити.",
-    "deleteFailed": "Не вдалося видалити env-файл",
+    "deleteFailed": "Не вдалося видалити секрет",
     "dropTitle": "Перетягніть сюди файл",
-    "dropDescription": "або виберіть на комп'ютері: будь-який текстовий файл, напр. .env чи .json сервісного акаунта",
+    "dropDescription": "або виберіть на комп'ютері будь-який текстовий файл",
     "chooseFile": "Вибрати файл",
     "fileLoaded": "Завантажено {{name}} ({{size}}). Вміст приховано.",
     "showContent": "Показати вміст",
     "file": {
-      "tooLarge": "{{name}} завеликий: env-файл — не більше {{max}} КБ.",
-      "binary": "{{name}} схожий на двійковий. Env-файли мають бути текстовими.",
+      "tooLarge": "{{name}} завеликий: секрет — не більше {{max}} КБ.",
+      "binary": "{{name}} схожий на двійковий. Секрет має бути текстовим файлом.",
       "unreadable": "Не вдалося прочитати {{name}}. Спробуйте ще раз."
     }
   },
@@ -1618,10 +1617,6 @@
     },
     "repositoriesHint": "З якими репозиторіями працює ця Factory — у розділі «Репозиторії».",
     "openRepositories": "Відкрити «Репозиторії»",
-    "github": {
-      "connected": "GitHub App підключено для організації.",
-      "notConnected": "GitHub ще не підключено: встановіть GitHub App, щоб Factory бачила репозиторії."
-    },
     "gitlab": {
       "connected": "GitLab підключено для організації.",
       "notConnected": "GitLab ще не підключено."
@@ -1903,7 +1898,8 @@
         "tasks": "Задачі",
         "code": "Репозиторії"
       },
-      "googleAccount": "Акаунт Google Cloud"
+      "googleAccount": "Акаунт Google Cloud",
+      "githubToken": "GitHub · токен"
     },
     "listHeading": "Підключення",
     "addShort": "Додати",
@@ -1916,5 +1912,39 @@
     "time": {
       "ago": "{{time}} тому"
     }
+  },
+  "githubConnections": {
+    "tokenTitle": "Підключити GitHub токеном",
+    "tokenSubtitle": "Приватний токен акаунта, що вже має доступ до репозиторіїв. Factory перевіряє його в GitHub і зберігає зашифрованим.",
+    "tokenLabel": "Токен доступу GitHub",
+    "tokenHint": "Classic токен — зі scope repo. Fine-grained — з доступом на читання й запис до Contents, Issues, Pull requests і Commit statuses; ще Workflows, якщо агенти змінюють CI.",
+    "submit": "Підключити",
+    "replace": "Замінити",
+    "cancel": "Скасувати",
+    "connecting": "Підключення…",
+    "connectedTitle": "Підключено @{{account}}",
+    "connectedBody": "Репозиторіїв, до яких є доступ: {{repos}}.",
+    "replacedTitle": "Токен @{{account}} замінено",
+    "adminOnly": "Підключати, замінювати й відключати GitHub може лише адміністратор організації.",
+    "list": "Підключення GitHub",
+    "kindApp": "App",
+    "kindToken": "Токен",
+    "kindEnvToken": "Токен (env сервера)",
+    "repositories": "Репозиторіїв: {{repos}}",
+    "repositoriesUnknown": "Репозиторії не прочитано",
+    "needsAttention": "Потребує уваги",
+    "unknownAccount": "Акаунт невідомий",
+    "manage": "Керувати на GitHub",
+    "replaceToken": "Замінити токен",
+    "disconnect": "Відключити",
+    "disconnectTitle": "Відключити {{account}}?",
+    "disconnectBody": "Factory перестане бачити репозиторії цього підключення. Акаунт і токен на самому GitHub лишаються.",
+    "disconnectFailed": "Не вдалося відключити",
+    "addMore": "Додати ще",
+    "viaApp": "Через GitHub App",
+    "viaAppHint": "Встановлення App у GitHub-організації потребує схвалення її власника.",
+    "viaToken": "Приватний токен",
+    "none": "GitHub ще не підключено: підключіть через GitHub App або приватним токеном.",
+    "loadFailed": "Не вдалося прочитати підключення GitHub: {{error}}"
   }
 }

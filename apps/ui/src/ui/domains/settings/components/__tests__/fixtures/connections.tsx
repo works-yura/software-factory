@@ -42,7 +42,7 @@ export const managedServer: McpServer = {
 
 /**
  * The integrations' state around the MCP servers a test brings: one Google Cloud binding (or
- * none), ClickUp connected, GitHub from the environment, GitLab not set up, no activity.
+ * none), ClickUp connected, GitHub through a token from the environment (the App available), GitLab not set up, no activity.
  */
 export function useIntegrationHandlers(options: { firebase?: FirebaseState } = {}) {
   server.use(
@@ -56,7 +56,25 @@ export function useIntegrationHandlers(options: { firebase?: FirebaseState } = {
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({ config: { github: { enabled: false, sourceIds: null }, gitlab: { enabled: false, sourceIds: null }, clickup: { enabled: true, sourceIds: null } } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json({ enabled: true, mode: 'token', connected: true, installations: [], reason: 'ready' })),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({
+        enabled: true,
+        appConfigured: true,
+        canManage: true,
+        connected: true,
+        installations: [{ id: 'inst-env', installationId: 4242, accountLogin: 'yura', accountType: 'User', kind: 'token', tokenSource: 'env' }],
+        reason: 'ready',
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/connections`, () =>
+      HttpResponse.json({
+        appConfigured: true,
+        canManage: true,
+        connections: [
+          { id: 'inst-env', kind: 'token', tokenSource: 'env', installationId: 4242, accountLogin: 'yura', accountType: 'User', repositoryCount: 7, status: 'ok' },
+        ],
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' })),
     http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/projects`, () => HttpResponse.json({ items: [{ value: 'syncta-57c6a' }] })),
     http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/databases`, () => HttpResponse.json({ items: [{ value: '(default)' }] })),

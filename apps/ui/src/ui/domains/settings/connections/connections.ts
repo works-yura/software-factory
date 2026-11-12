@@ -59,6 +59,9 @@ export const CONNECTION_KINDS: Record<ConnectionKind, ConnectionKindDescriptor> 
 /** First-party integrations, the order «Додати підключення» lists them in. */
 export const FIRST_PARTY: ReadonlyArray<Exclude<ConnectionKind, 'mcp'>> = ['google-cloud', 'clickup', 'github', 'gitlab'];
 
+/** The catalog entry that connects GitHub with a personal access token (`github` is the GitHub App). */
+export const GITHUB_TOKEN_ITEM = 'github-token';
+
 /** What a connection lets agents do, as the row lists it. */
 export type ConnectionCapability =
   | { key: 'logs' }
@@ -220,8 +223,11 @@ function sourceRows(sources: ConnectionSources): ConnectionRow[] {
       scope: 'organization',
     });
   }
-  if (github?.connected || github?.mode === 'token') {
-    const logins = (github.installations ?? []).map(installation => installation.accountLogin).filter((login): login is string => Boolean(login));
+  const installations = github?.installations ?? [];
+  if (github?.connected || installations.length > 0) {
+    const logins = installations.map(installation => installation.accountLogin).filter((login): login is string => Boolean(login));
+    // Each connection keeps its own kind (App or token); the row's state is the worst of them.
+    const fromEnvOnly = installations.length > 0 && installations.every(installation => installation.kind === 'token' && installation.tokenSource === 'env');
     rows.push({
       id: 'github',
       kind: 'github',
@@ -229,7 +235,7 @@ function sourceRows(sources: ConnectionSources): ConnectionRow[] {
       mcp: false,
       ...(logins.length ? { account: { name: logins.join(', ') } } : {}),
       capabilities: [{ key: 'repositories' }, { key: 'tasks' }],
-      state: github.mode === 'token' ? 'env' : 'connected',
+      state: installations.some(installation => installation.needsAttention) ? 'error' : fromEnvOnly ? 'env' : 'connected',
       scope: 'organization',
     });
   }
@@ -266,7 +272,7 @@ export function factoryConnections(factoryId: string, sources: ConnectionSources
 
 /** One entry of «Додати підключення»: a first-party integration, a third-party MCP server, or an own one. */
 export interface CatalogItem {
-  /** `google-cloud`, `clickup`, `github`, `gitlab`, `mcp-entry:<id>`, `mcp-custom`. */
+  /** `google-cloud`, `clickup`, `github` (the GitHub App), `github-token`, `gitlab`, `mcp-entry:<id>`, `mcp-custom`. */
   id: string;
   kind: ConnectionKind;
   category: ConnectionCategory;
@@ -284,21 +290,28 @@ export function connectionCatalog(sources: ConnectionSources): CatalogItem[] {
   const connected: Record<(typeof FIRST_PARTY)[number], boolean> = {
     'google-cloud': Boolean(sources.firebase?.accounts.length),
     clickup: Boolean(sources.clickup?.connected),
-    github: Boolean(sources.github?.connected || sources.github?.mode === 'token'),
+    // GitHub can always take one more connection (another App installation or token), so its entries add.
+    github: false,
     gitlab: Boolean(sources.gitlab?.configured),
   };
   // Entries an integration runs under the hood are that integration's business, not a choice.
   const thirdParty = (sources.mcp?.catalog ?? []).filter(entry => !entry.integration);
+  const firstParty = (kind: (typeof FIRST_PARTY)[number], id: string = kind): CatalogItem => ({
+    id,
+    kind,
+    category: CONNECTION_KINDS[kind].category,
+    section: 'integrations',
+    mcp: false,
+    capabilities: CONNECTION_KINDS[kind].capabilities,
+    connected: connected[kind],
+  });
   return [
-    ...FIRST_PARTY.map(kind => ({
-      id: kind,
-      kind,
-      category: CONNECTION_KINDS[kind].category,
-      section: 'integrations' as const,
-      mcp: false,
-      capabilities: CONNECTION_KINDS[kind].capabilities,
-      connected: connected[kind],
-    })),
+    // GitHub is two ways in: through the server's GitHub App (only when the server has one), or a personal access token.
+    ...FIRST_PARTY.flatMap(kind =>
+      kind !== 'github'
+        ? [firstParty(kind)]
+        : [...(sources.github?.appConfigured ? [firstParty('github')] : []), ...(sources.github?.enabled !== false ? [firstParty('github', GITHUB_TOKEN_ITEM)] : [])],
+    ),
     ...thirdParty.map(entry => ({
       id: `mcp-entry:${entry.id}`,
       kind: 'mcp' as const,

@@ -108,7 +108,7 @@ describe('Repositories settings', () => {
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
 
-  it('offers to connect GitHub when the server has GitHub but GitLab repositories are already linked', async () => {
+  it('never connects GitHub here: connecting is in Підключення, linked from this page', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -143,10 +143,15 @@ describe('Repositories settings', () => {
     renderRepositoriesSettings();
 
     expect((await screen.findAllByText(PRIMARY_PROJECT)).length).toBeGreaterThan(0);
-    expect(await screen.findByRole('button', { name: 'Connect GitHub' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect GitHub' })).not.toBeInTheDocument();
+    expect(screen.getByText(/GitHub and GitLab are connected under Connections/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Connections' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/integrations?connection=github`,
+    );
   });
 
-  it('lists GitHub repositories of an access token with no Connect or Manage step, beside GitLab', async () => {
+  it('lists GitHub repositories of a token connection with no Connect or Manage step, beside GitLab', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -157,9 +162,9 @@ describe('Repositories settings', () => {
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({
           enabled: true,
-          mode: 'token',
+          appConfigured: true,
           connected: true,
-          installations: [{ installationId: 4242, accountLogin: 'yura', accountType: 'User' }],
+          installations: [{ id: 'inst-gh', installationId: 4242, accountLogin: 'yura', accountType: 'User', kind: 'token', tokenSource: 'stored' }],
           reason: 'ready',
         }),
       ),

@@ -8,8 +8,10 @@ import { ChevronRight, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useApiConfig } from '../../../../../api/config';
 import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
-import { connectionCatalog, filterCatalog, linkableAccounts } from '../../connections/connections';
+import { connectGithub } from '../../../workspaces/services/github';
+import { connectionCatalog, filterCatalog, GITHUB_TOKEN_ITEM, linkableAccounts } from '../../connections/connections';
 import type {
   CatalogCapability,
   CatalogFilter,
@@ -22,12 +24,15 @@ import { serverToInput } from '../../services/mcpServers';
 import { localized } from '../mcp-servers/McpCatalogFields';
 import { CapabilityDots, useCatalogDots } from './CapabilityDots';
 import { ConnectionIcon } from './ConnectionIcon';
-import { GoogleCloudConnect, SourceConnect } from './ConnectSteps';
+import { GithubTokenConnect, GoogleCloudConnect, SourceConnect } from './ConnectSteps';
 import type { ConnectionTarget, FirstParty } from './ConnectSteps';
 
 export type { ConnectionTarget };
 
 const FILTERS: CatalogFilter[] = ['all', 'tools', 'sources'];
+
+/** A connect step the dialog opens in place: a first-party integration's, or GitHub's token. */
+type Step = Exclude<FirstParty, 'github'> | typeof GITHUB_TOKEN_ITEM;
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -107,17 +112,24 @@ function PickStep({
 }: {
   factoryId: string;
   sources: ConnectionSources;
-  onConnect: (kind: FirstParty) => void;
+  onConnect: (step: Step) => void;
   onPick: (target: ConnectionTarget) => void;
 }) {
   const { t } = useTranslation('settings');
+  const { baseUrl } = useApiConfig();
   const { save } = useMcpServerMutations();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<CatalogFilter>('all');
   const [linking, setLinking] = useState<string>();
 
   const nameOf = (item: CatalogItem) =>
-    item.entry ? localized(item.entry.label) : item.id === 'mcp-custom' ? t('connections.addDialog.customMcp') : t(`connections.kinds.${item.kind}`);
+    item.entry
+      ? localized(item.entry.label)
+      : item.id === 'mcp-custom'
+        ? t('connections.addDialog.customMcp')
+        : item.id === GITHUB_TOKEN_ITEM
+          ? t('connections.addDialog.githubToken')
+          : t(`connections.kinds.${item.kind}`);
   const shown = filterCatalog(connectionCatalog(sources), linkableAccounts(factoryId, sources), {
     query,
     filter,
@@ -127,7 +139,10 @@ function PickStep({
   const other = shown.items.filter(item => item.section === 'other');
 
   const pick = (item: CatalogItem) => {
-    if (item.kind !== 'mcp') onConnect(item.kind);
+    // GitHub through the App is the App's own install flow on GitHub; its token has a step here.
+    if (item.id === GITHUB_TOKEN_ITEM) onConnect(GITHUB_TOKEN_ITEM);
+    else if (item.kind === 'github') connectGithub(baseUrl);
+    else if (item.kind !== 'mcp') onConnect(item.kind);
     else onPick({ connection: item.entry ? `mcp-new:${item.entry.id}` : 'mcp-new:custom' });
   };
 
@@ -249,7 +264,8 @@ function PickStep({
 /**
  * «Додати підключення»: one dialog for picking and connecting. Step one lists what can be added; a
  * first-party integration opens its connect step in the same dialog (Google Cloud: an account and
- * its key; ClickUp, GitHub, GitLab: their state and controls); an MCP server or an organization
+ * its key; ClickUp, GitLab: their state and controls; «GitHub · токен»: the token). «GitHub» (the
+ * server's GitHub App) starts the App's install flow on GitHub; an MCP server or an organization
  * account goes straight to its page.
  */
 export function AddConnectionDialog({
@@ -265,7 +281,7 @@ export function AddConnectionDialog({
   onPick: (target: ConnectionTarget) => void;
   onClose: () => void;
 }) {
-  const [step, setStep] = useState<FirstParty>();
+  const [step, setStep] = useState<Step>();
   const back = () => setStep(undefined);
   return (
     <Dialog
@@ -279,6 +295,8 @@ export function AddConnectionDialog({
       <DialogContent size="md" className={CONNECT_DIALOG_SHELL}>
         {step === 'google-cloud' ? (
           <GoogleCloudConnect accounts={sources.firebase?.accounts ?? []} onBack={back} onPick={onPick} />
+        ) : step === GITHUB_TOKEN_ITEM ? (
+          <GithubTokenConnect onBack={back} onPick={onPick} />
         ) : step ? (
           <SourceConnect kind={step} onBack={back} onPick={onPick} />
         ) : (

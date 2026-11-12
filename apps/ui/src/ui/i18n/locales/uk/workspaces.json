@@ -235,9 +235,8 @@
       "missingEnv": "Бракує змінних середовища: <code>{{vars}}</code>",
       "configure": "Задайте їх у <code>mastracode/web/.env</code>, зареєструйте <code>http://localhost:5173/auth/github/callback</code> як callback URL для GitHub App, а потім перезапустіть <code>pnpm web:dev</code> з <code>mastracode/web</code>.",
       "organizationRequired": "Ваш акаунт не має організації. Для підключення репозиторіїв потрібна організація. Вийдіть і увійдіть знову, щоб створити її автоматично, або попросіть адміністратора додати вас до організації.",
-      "tokenNotConnected": "GitHub не вдалося підключити з <code>GITHUB_ACCESS_TOKEN</code> розгортання: токен недійсний чи прострочений, або його вже підключила інша організація. Причину видно в лозі сервера.",
       "tokenNoAccess": "Репозиторіїв не знайдено. Токен показує лише репозиторії, у які його акаунт може пушити. Fine-grained токен бачить лише репозиторії свого власника ресурсу: створіть його з організацією як власником ресурсу або використайте classic токен зі scope <code>repo</code>.",
-      "notConnected": "GitHub App ще не підключено. Натисніть <strong>Підключити GitHub</strong>, щоб встановити його. Після встановлення GitHub переспрямує на <code>/auth/github/callback</code> — переконайтеся, що цю адресу зареєстровано в налаштуваннях вашого GitHub App (Callback URL).",
+      "notConnected": "GitHub ще не підключено. Підключіть його в Налаштуваннях › Підключення: через GitHub App або приватним токеном.",
       "noAccess": "Репозиторіїв не знайдено. Можливо, ваше встановлення GitHub App не має доступу до жодного репозиторію. Перевірте доступ до репозиторіїв на <code>https://github.com/settings/installations</code> і надайте доступ принаймні до одного."
     }
   },
@@ -377,6 +376,7 @@
     "loadBuilds": "Не вдалося завантажити збірки",
     "loadBuild": "Не вдалося завантажити збірку",
     "loadGithubToken": "Не вдалося завантажити статус токена GitHub ({{status}})",
+    "githubConnection": "Запит до підключень GitHub не вдався ({{status}})",
     "saveGithubToken": "Не вдалося зберегти токен GitHub ({{status}})",
     "removeGithubToken": "Не вдалося видалити токен GitHub ({{status}})",
     "listRepos": "Не вдалося отримати список репозиторіїв ({{status}})",

@@ -23,10 +23,20 @@ import { translator } from '../../../i18n/t';
 
 const tk = translator('workspaces');
 
+/** How a GitHub connection authenticates: the server's GitHub App, or a personal access token. */
+export type GithubConnectionKind = 'app' | 'token';
+
 export interface GithubInstallation {
+  /** Storage row id. Absent on older servers. */
+  id?: string;
   installationId: number;
   accountLogin: string | null;
   accountType: string | null;
+  /** Absent on older servers (App only). */
+  kind?: GithubConnectionKind;
+  /** Token connections only: `env` is a legacy connection served by the server's GITHUB_ACCESS_TOKEN. */
+  tokenSource?: 'stored' | 'env';
+  needsAttention?: boolean;
 }
 
 /**
@@ -59,11 +69,10 @@ export interface GithubFeatureDiagnostics {
 export interface GithubStatus {
   enabled: boolean;
   sandboxEnabled?: boolean;
-  /**
-   * `token`: the deployment's access token connects the org by itself, so
-   * there is no Connect or Manage step. Absent on older servers (App only).
-   */
-  mode?: 'app' | 'token';
+  /** The GitHub App flow is available on this server. Absent on older servers. */
+  appConfigured?: boolean;
+  /** The caller is an organization admin: may add, replace and disconnect connections. */
+  canManage?: boolean;
   connected: boolean;
   installations: GithubInstallation[];
   /**
@@ -170,6 +179,99 @@ export function manageGithubConnection(baseUrl: string): void {
  */
 export function connectUserGithub(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${currentPageRedirectTo()}`);
+}
+
+/** One GitHub connection of the organization, as Settings › Підключення › GitHub lists it. Never a token. */
+export interface GithubConnection {
+  id: string;
+  kind: GithubConnectionKind;
+  tokenSource?: 'stored' | 'env';
+  installationId: number;
+  accountLogin: string | null;
+  accountType: string | null;
+  /** Repositories the connection reaches right now; null when they could not be read. */
+  repositoryCount: number | null;
+  status: 'ok' | 'needs_attention';
+  error?: string;
+}
+
+export interface GithubConnections {
+  appConfigured: boolean;
+  canManage: boolean;
+  connections: GithubConnection[];
+}
+
+/** A failed connections request, with the server's `error` code (`invalid_token`, `connection_in_use`, …). */
+export class GithubConnectionError extends Error {
+  readonly status: number;
+  readonly code: string | undefined;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'GithubConnectionError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+async function readConnectionResponse<T>(res: Response): Promise<T> {
+  const body = (await res.json().catch(() => undefined)) as ({ error?: string; message?: string } & T) | undefined;
+  if (!res.ok) {
+    throw new GithubConnectionError(
+      body?.message ?? body?.error ?? tk('errors.githubConnection', { status: res.status }),
+      res.status,
+      body?.error,
+    );
+  }
+  return body as T;
+}
+
+/** Every GitHub connection of the organization, with its kind, account and live repository count. */
+export async function fetchGithubConnections(baseUrl: string): Promise<GithubConnections> {
+  const res = await fetch(`${baseUrl}/web/github/connections`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  return readConnectionResponse<GithubConnections>(res);
+}
+
+/** Connect a personal access token: the server checks it with GitHub and stores it encrypted. */
+export async function connectGithubToken(
+  baseUrl: string,
+  token: string,
+): Promise<{ connection: GithubConnection; replaced: boolean }> {
+  const res = await fetch(`${baseUrl}/web/github/token-connections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token }),
+  });
+  return readConnectionResponse(res);
+}
+
+/** Replace a token connection's token; the new one must belong to the same GitHub account. */
+export async function replaceGithubToken(
+  baseUrl: string,
+  id: string,
+  token: string,
+): Promise<{ connection: GithubConnection; replaced: boolean }> {
+  const res = await fetch(`${baseUrl}/web/github/token-connections/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token }),
+  });
+  return readConnectionResponse(res);
+}
+
+/** Disconnect a GitHub connection (App installation or token). 409 while projects still use it. */
+export async function disconnectGithubConnection(baseUrl: string, id: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/connections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  await readConnectionResponse(res);
 }
 
 /** `default` = the worker token every sandbox gets; `reviewer` = optional

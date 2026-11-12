@@ -241,7 +241,6 @@
     "manageGitlab": "Manage GitLab connection",
     "connectAnotherGitlab": "Connect another GitLab account",
     "connectGitlab": "Connect GitLab",
-    "githubFromEnv": "GitHub managed by the deployment's access token (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab managed by deployment environment variables",
     "environmentHint": "Sandbox resources, repository order and setup commands live in <link>Environment</link>.",
     "connectionsHint": "GitHub and GitLab are connected under Connections.",
@@ -1518,17 +1517,17 @@
     "saveFailed": "Failed to save the sandbox stages"
   },
   "envFiles": {
-    "title": "Env files",
+    "title": "Secrets",
     "description": "Written into this checkout in every sandbox before setup runs, readable by agents, never committed.",
-    "adminOnly": "Only organization admins can add, view or change env files.",
-    "add": "Add env file",
-    "addTo": "Add env file to {{name}}",
-    "loadFailed": "Failed to load env files",
-    "notWritable": "Env files can't be saved until a credential encryption key is configured on the server.",
-    "empty": "No env files.",
-    "tableOf": "Env files of {{name}}",
+    "adminOnly": "Only organization admins can add, view or change secrets.",
+    "add": "Add secret",
+    "addTo": "Add secret to {{name}}",
+    "loadFailed": "Failed to load secrets",
+    "notWritable": "Secrets can't be saved until a credential encryption key is configured on the server.",
+    "empty": "No secrets.",
+    "tableOf": "Secrets of {{name}}",
     "path": "Path",
-    "pathHelp": "Relative to the repository root, e.g. .env.staging, apps/mobile/.env or ios/Config.xcconfig.",
+    "pathHelp": "Where to write the file, relative to the repository root: .env.staging, ios/Config.xcconfig, .secrets/service-account.json.",
     "pathProblem": {
       "empty": "Enter a path.",
       "absolute": "Use a path relative to the repository root.",
@@ -1551,18 +1550,18 @@
     "editTitle": "Edit {{path}}",
     "dialogDescription": "Agents in the sandbox can read this file. Stages the Factory doesn't enable, and production, are never written.",
     "saved": "Saved {{path}}",
-    "saveFailed": "Failed to save the env file",
+    "saveFailed": "Failed to save the secret",
     "deleteTitle": "Delete {{path}}?",
     "deleteDescription": "It is removed from every sandbox on its next command. Its content can't be recovered.",
-    "deleteFailed": "Failed to delete the env file",
+    "deleteFailed": "Failed to delete the secret",
     "dropTitle": "Drop a file here",
-    "dropDescription": "or choose one from your computer: any text file, e.g. .env or a service-account .json",
+    "dropDescription": "or choose any text file from your computer",
     "chooseFile": "Choose file",
     "fileLoaded": "Loaded {{name}} ({{size}}). The content is hidden.",
     "showContent": "Show content",
     "file": {
-      "tooLarge": "{{name}} is too large: env files hold at most {{max}} KB.",
-      "binary": "{{name}} looks binary. Env files must be text.",
+      "tooLarge": "{{name}} is too large: a secret is at most {{max}} KB.",
+      "binary": "{{name}} looks binary. A secret must be a text file.",
       "unreadable": "Couldn't read {{name}}. Try again."
     }
   },
@@ -1590,10 +1589,6 @@
     },
     "repositoriesHint": "Which repositories this Factory works in is under Repositories.",
     "openRepositories": "Open Repositories",
-    "github": {
-      "connected": "The GitHub App is connected for the organization.",
-      "notConnected": "GitHub is not connected yet: install the GitHub App so the Factory sees repositories."
-    },
     "gitlab": {
       "connected": "GitLab is connected for the organization.",
       "notConnected": "GitLab is not connected yet."
@@ -1867,7 +1862,8 @@
         "tasks": "Tasks",
         "code": "Repositories"
       },
-      "googleAccount": "Google Cloud account"
+      "googleAccount": "Google Cloud account",
+      "githubToken": "GitHub · token"
     },
     "listHeading": "Connections",
     "addShort": "Add",
@@ -1880,5 +1876,39 @@
     "time": {
       "ago": "{{time}} ago"
     }
+  },
+  "githubConnections": {
+    "tokenTitle": "Connect GitHub with a token",
+    "tokenSubtitle": "A private token of an account that already has access to the repositories. Factory checks it with GitHub and stores it encrypted.",
+    "tokenLabel": "GitHub access token",
+    "tokenHint": "Classic token — with the repo scope. Fine-grained — with read and write access to Contents, Issues, Pull requests and Commit statuses; plus Workflows if agents change CI.",
+    "submit": "Connect",
+    "replace": "Replace",
+    "cancel": "Cancel",
+    "connecting": "Connecting…",
+    "connectedTitle": "Connected @{{account}}",
+    "connectedBody": "Repositories it can reach: {{repos}}.",
+    "replacedTitle": "Token of @{{account}} replaced",
+    "adminOnly": "Only organization admins can connect, replace or disconnect GitHub.",
+    "list": "GitHub connections",
+    "kindApp": "App",
+    "kindToken": "Token",
+    "kindEnvToken": "Token (server env)",
+    "repositories": "Repositories: {{repos}}",
+    "repositoriesUnknown": "Repositories not read",
+    "needsAttention": "Needs attention",
+    "unknownAccount": "Unknown account",
+    "manage": "Manage on GitHub",
+    "replaceToken": "Replace token",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect {{account}}?",
+    "disconnectBody": "Factory stops seeing this connection's repositories. The account and the token on GitHub itself stay.",
+    "disconnectFailed": "Couldn't disconnect",
+    "addMore": "Add another",
+    "viaApp": "Through the GitHub App",
+    "viaAppHint": "Installing the App on a GitHub organization needs its owner's approval.",
+    "viaToken": "Private token",
+    "none": "GitHub is not connected yet: connect it through the GitHub App or with a private token.",
+    "loadFailed": "Couldn't read the GitHub connections: {{error}}"
   }
 }

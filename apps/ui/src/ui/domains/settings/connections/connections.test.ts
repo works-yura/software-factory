@@ -101,7 +101,11 @@ describe('factoryConnections', () => {
     firebase,
     mcp,
     clickup: { configured: true, connected: true, workspaces: ['Eclipt'], intervalSeconds: 60 },
-    github: { enabled: true, mode: 'token', connected: false, installations: [] } as never,
+    github: {
+      enabled: true,
+      connected: true,
+      installations: [{ id: 'inst-1', installationId: 4242, accountLogin: 'yura', accountType: 'User', kind: 'token', tokenSource: 'env' }],
+    },
     gitlab: { enabled: true, configured: false, reauthRequired: false },
   });
 
@@ -135,7 +139,21 @@ describe('factoryConnections', () => {
   });
 
   it('marks a connection the environment makes', () => {
-    expect(rows[4]).toMatchObject({ kind: 'github', state: 'env' });
+    expect(rows[4]).toMatchObject({ kind: 'github', state: 'env', account: { name: 'yura' } });
+  });
+
+  it('lists GitHub with every connection of either kind, and flags one that needs attention', () => {
+    const [github] = factoryConnections('syncts', {
+      github: {
+        enabled: true,
+        connected: true,
+        installations: [
+          { id: 'inst-1', installationId: 1, accountLogin: 'eclipt', accountType: 'Organization', kind: 'app' },
+          { id: 'inst-2', installationId: 2, accountLogin: 'client', accountType: 'User', kind: 'token', tokenSource: 'stored', needsAttention: true },
+        ],
+      },
+    });
+    expect(github).toMatchObject({ id: 'github', account: { name: 'eclipt, client' }, state: 'error' });
   });
 });
 
@@ -153,11 +171,29 @@ describe('connectionCatalog', () => {
     expect(connectionCatalog({ firebase, mcp }).map(item => [item.id, item.section, item.mcp])).toEqual([
       ['google-cloud', 'integrations', false],
       ['clickup', 'integrations', false],
-      ['github', 'integrations', false],
+      ['github-token', 'integrations', false],
       ['gitlab', 'integrations', false],
       ['mcp-entry:weather', 'other', true],
       ['mcp-custom', 'other', true],
     ]);
+  });
+});
+
+describe('connectionCatalog › GitHub', () => {
+  it('offers the GitHub App only when the server has one, and the token always', () => {
+    const ids = (appConfigured: boolean) =>
+      connectionCatalog({ github: { enabled: true, appConfigured, connected: false, installations: [] } })
+        .filter(item => item.kind === 'github')
+        .map(item => [item.id, item.connected]);
+    expect(ids(true)).toEqual([
+      ['github', false],
+      ['github-token', false],
+    ]);
+    expect(ids(false)).toEqual([['github-token', false]]);
+  });
+
+  it('offers no GitHub when the server has it off', () => {
+    expect(connectionCatalog({ github: { enabled: false, connected: false, installations: [] } }).some(item => item.kind === 'github')).toBe(false);
   });
 });
 
@@ -167,7 +203,7 @@ describe('filterCatalog', () => {
 
   it('narrows by category: sources leave out tools and accounts', () => {
     const result = filterCatalog(items, linkableAccounts('syncts', { firebase, mcp }), { query: '', filter: 'sources', textOf: text });
-    expect(result.items.map(item => item.id)).toEqual(['clickup', 'github', 'gitlab']);
+    expect(result.items.map(item => item.id)).toEqual(['clickup', 'github-token', 'gitlab']);
     expect(result.accounts).toEqual([]);
   });
 

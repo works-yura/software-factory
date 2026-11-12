@@ -77,7 +77,7 @@ describe('Підключення', () => {
     expect(sentry).toHaveTextContent('MCP');
     expect(within(sentry).getByText('Error').closest('[data-state]')).toHaveAttribute('title', expect.stringContaining('The account was refused access'));
     expect(await rowNamed('ClickUp')).toHaveTextContent('eclipt.ai');
-    expect(await rowNamed('GitHub')).toHaveTextContent('Whole organization');
+    expect(await rowNamed('GitHub')).toHaveTextContent('yura');
     expect(screen.queryByRole('link', { name: /^Notes/ })).not.toBeInTheDocument();
   });
 
@@ -189,6 +189,7 @@ describe('Підключення', () => {
       'Connect Google Cloud',
       'Connect ClickUp',
       'Connect GitHub',
+      'Connect GitHub · token',
       'Connect GitLab',
     ]);
     expect(within(integrations).queryByText('MCP')).not.toBeInTheDocument();
@@ -277,14 +278,79 @@ describe('Підключення', () => {
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=clickup'));
   });
 
+  it('connects GitHub with a token in the dialog: a refused token shows why and tries again, then opens the GitHub page', async () => {
+    useHandlers();
+    const posted: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/token-connections`, async ({ request }) => {
+        posted.push(await request.json());
+        if (posted.length === 1) return HttpResponse.json({ error: 'invalid_token', message: 'GitHub rejected this token (401).' }, { status: 422 });
+        return HttpResponse.json({
+          connection: { id: 'inst-2', kind: 'token', tokenSource: 'stored', installationId: 9, accountLogin: 'client', accountType: 'User', repositoryCount: 3, status: 'ok' },
+          replaced: false,
+        });
+      }),
+    );
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect GitHub · token' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect GitHub with a token' });
+
+    await userEvent.type(within(dialog).getByLabelText('GitHub access token'), 'ghp_wrong');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't connect");
+    expect(alert).toHaveTextContent('GitHub rejected this token (401).');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
+
+    expect(await within(dialog).findByText('Connected @client')).toBeInTheDocument();
+    expect(within(dialog).getByText('Repositories it can reach: 3.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Open settings' }));
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=github'));
+    expect(posted).toEqual([{ token: 'ghp_wrong' }, { token: 'ghp_wrong' }]);
+  });
+
+  it('offers GitHub through the App only when the server has the App; the token always', async () => {
+    useHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, appConfigured: false, canManage: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+    );
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+    await waitFor(() => expect(within(dialog).getByRole('option', { name: 'Connect GitHub · token' })).toBeInTheDocument());
+    expect(within(dialog).queryByRole('option', { name: 'Connect GitHub' })).not.toBeInTheDocument();
+  });
+
+  it('tells a member that only admins connect GitHub with a token', async () => {
+    useHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, appConfigured: true, canManage: false, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+    );
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect GitHub · token' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect GitHub with a token' });
+    expect(await within(dialog).findByText('Only organization admins can connect, replace or disconnect GitHub.')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('GitHub access token')).not.toBeInTheDocument();
+  });
+
   it('picks with the keyboard: the search narrows the list, arrows move, Enter opens', async () => {
     useHandlers();
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
     await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'git');
-    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect GitHub', 'Connect GitLab']);
-    await userEvent.keyboard('{ArrowDown}{Enter}');
+    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual([
+      'Connect GitHub',
+      'Connect GitHub · token',
+      'Connect GitLab',
+    ]);
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
     expect(await screen.findByRole('dialog', { name: 'Connect GitLab' })).toBeInTheDocument();
   });
 

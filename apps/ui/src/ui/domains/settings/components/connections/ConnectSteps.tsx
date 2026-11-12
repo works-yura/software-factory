@@ -17,7 +17,9 @@ import { useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
 import type { FIRST_PARTY } from '../../connections/connections';
 import type { FirebaseAccount } from '../../services/firebase';
 import { ClickUpService } from '../ClickUpService';
-import { GitHubService, GitLabService } from '../SourceControlServices';
+import { GithubTokenForm } from '../GithubConnections';
+import type { GithubTokenResult } from '../GithubConnections';
+import { GitLabService } from '../SourceControlServices';
 import { ConnectionIcon } from './ConnectionIcon';
 
 /** Where a pick leads: a connection's page (`?connection=`), with an account to link. */
@@ -25,18 +27,35 @@ export type ConnectionTarget = { connection: string; account?: string };
 
 export type FirstParty = (typeof FIRST_PARTY)[number];
 
+/** The organization-wide sources whose connect step shows their state and their own controls. */
+export type SourceKind = 'clickup' | 'gitlab';
+
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** The header and footer every connect step shares: logo, «Підключити X», one line; «← Назад» and the step's action. */
-function StepFrame({ kind, children, onBack, action }: { kind: FirstParty; children: ReactNode; onBack: () => void; action?: ReactNode }) {
+function StepFrame({
+  kind,
+  children,
+  onBack,
+  action,
+  title,
+  subtitle,
+}: {
+  kind: FirstParty;
+  children: ReactNode;
+  onBack: () => void;
+  action?: ReactNode;
+  title?: string;
+  subtitle?: string;
+}) {
   const { t } = useTranslation('settings');
   return (
     <>
       <DialogHeader className="flex-row items-start gap-2.5">
         <ConnectionIcon kind={kind} />
         <span className="flex min-w-0 flex-col gap-0.5">
-          <DialogTitle>{t('connections.connect.title', { name: t(`connections.kinds.${kind}`) })}</DialogTitle>
-          <DialogDescription className="text-body-sm">{t(`connections.connect.subtitle.${kind}`)}</DialogDescription>
+          <DialogTitle>{title ?? t('connections.connect.title', { name: t(`connections.kinds.${kind}`) })}</DialogTitle>
+          <DialogDescription className="text-body-sm">{subtitle ?? t(`connections.connect.subtitle.${kind}`)}</DialogDescription>
         </span>
       </DialogHeader>
       <DialogBody className="gap-4">{children}</DialogBody>
@@ -219,20 +238,14 @@ export function GoogleCloudConnect({
   );
 }
 
-/** Each organization-wide source's state: whether it is connected, in one line, and how to retry reading it. */
-function useSourceState(kind: Exclude<FirstParty, 'google-cloud'>) {
+/** ClickUp's or GitLab's state: whether it is connected, in one line, and how to retry reading it. */
+function useSourceState(kind: SourceKind) {
   const { t } = useTranslation('settings');
   const clickup = useClickUpStatusQuery();
-  const github = useGithubStatusQuery();
   const gitlab = useGitLabStatusQuery();
-  const query = kind === 'clickup' ? clickup : kind === 'github' ? github : gitlab;
-  const connected =
-    kind === 'clickup'
-      ? clickup.data?.connected === true
-      : kind === 'github'
-        ? github.data?.connected === true || github.data?.mode === 'token'
-        : gitlab.data?.configured === true;
-  const fromEnv = kind === 'github' ? github.data?.mode === 'token' : kind === 'gitlab' ? gitlab.data?.mode === 'direct' : false;
+  const query = kind === 'clickup' ? clickup : gitlab;
+  const connected = kind === 'clickup' ? clickup.data?.connected === true : gitlab.data?.configured === true;
+  const fromEnv = kind === 'gitlab' && gitlab.data?.mode === 'direct';
   const detail =
     kind === 'clickup' && clickup.data?.workspaces.length
       ? clickup.data.workspaces.join(', ')
@@ -243,16 +256,17 @@ function useSourceState(kind: Exclude<FirstParty, 'google-cloud'>) {
 }
 
 /**
- * Connect ClickUp, GitHub or GitLab: their state at the top — connected (and as what), not yet, or
- * a tinted panel when it could not be read — and their own controls below (GitLab's connect, the
- * GitHub App, ClickUp's import switch); «Відкрити налаштування» goes to the connection's page.
+ * Connect ClickUp or GitLab: their state at the top — connected (and as what), not yet, or a tinted
+ * panel when it could not be read — and their own controls below (GitLab's connect, ClickUp's
+ * import switch); «Відкрити налаштування» goes to the connection's page. GitHub has its own entries:
+ * the App starts its install flow, the token opens {@link GithubTokenConnect}.
  */
 export function SourceConnect({
   kind,
   onBack,
   onPick,
 }: {
-  kind: Exclude<FirstParty, 'google-cloud'>;
+  kind: SourceKind;
   onBack: () => void;
   onPick: (target: ConnectionTarget) => void;
 }) {
@@ -292,7 +306,55 @@ export function SourceConnect({
           {state.detail && <Notice.Message>{state.detail}</Notice.Message>}
         </Notice>
       )}
-      {!state.pending && !state.error && (kind === 'clickup' ? <ClickUpService /> : kind === 'github' ? <GitHubService /> : <GitLabService />)}
+      {!state.pending && !state.error && (kind === 'clickup' ? <ClickUpService /> : <GitLabService />)}
+    </StepFrame>
+  );
+}
+
+/**
+ * «GitHub · токен»: paste a private access token; Factory checks it with GitHub and stores it
+ * encrypted. A refusal shows why in a tinted panel and tries again; on success the account and how
+ * many repositories it reaches, and «Відкрити налаштування» goes to the GitHub page. Only an
+ * organization admin connects; anyone else is told so.
+ */
+export function GithubTokenConnect({ onBack, onPick }: { onBack: () => void; onPick: (target: ConnectionTarget) => void }) {
+  const { t } = useTranslation('settings');
+  const status = useGithubStatusQuery();
+  const [done, setDone] = useState<GithubTokenResult>();
+  const frame = { kind: 'github' as const, onBack, title: t('githubConnections.tokenTitle'), subtitle: t('githubConnections.tokenSubtitle') };
+  const openSettings = (
+    <Button size="sm" variant="primary" onClick={() => onPick({ connection: 'github' })}>
+      {t('connections.connect.openSettings')}
+    </Button>
+  );
+
+  if (done) {
+    return (
+      <StepFrame {...frame} action={openSettings}>
+        <Notice
+          variant="success"
+          title={t(done.replaced ? 'githubConnections.replacedTitle' : 'githubConnections.connectedTitle', { account: done.connection.accountLogin ?? '' })}
+          role="status"
+        >
+          {done.connection.repositoryCount !== null && (
+            <Notice.Message>{t('githubConnections.connectedBody', { repos: done.connection.repositoryCount })}</Notice.Message>
+          )}
+        </Notice>
+      </StepFrame>
+    );
+  }
+
+  return (
+    <StepFrame {...frame}>
+      {status.isPending ? (
+        <span className="flex items-center gap-2">
+          <Spinner size="sm" aria-hidden />
+        </span>
+      ) : status.data?.canManage === false ? (
+        <Notice variant="info" title={t('githubConnections.adminOnly')} role="status" />
+      ) : (
+        <GithubTokenForm onDone={setDone} />
+      )}
     </StepFrame>
   );
 }

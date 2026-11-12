@@ -229,9 +229,8 @@
       "missingEnv": "Missing env vars: <code>{{vars}}</code>",
       "configure": "Set them in <code>mastracode/web/.env</code>, register <code>http://localhost:5173/auth/github/callback</code> as the GitHub App callback URL, then restart <code>pnpm web:dev</code> from <code>mastracode/web</code>.",
       "organizationRequired": "Your account has no organization. Connecting repositories requires an org. Sign out and back in to auto-create one, or ask your admin to add you to an org.",
-      "tokenNotConnected": "GitHub could not connect with the deployment's <code>GITHUB_ACCESS_TOKEN</code>: the token is invalid or expired, or another organization already connected it. The server log names the reason.",
       "tokenNoAccess": "No repositories found. The access token lists only repositories its account can push to. A fine-grained token reaches only its resource owner's repositories: create it with the organization as the resource owner, or use a classic token with the <code>repo</code> scope.",
-      "notConnected": "The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub redirects to <code>/auth/github/callback</code> — make sure that URL is registered in your GitHub App settings (Callback URL).",
+      "notConnected": "GitHub is not connected yet. Connect it in Settings › Connections: through the GitHub App or with a private token.",
       "noAccess": "No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's repository access at <code>https://github.com/settings/installations</code> and grant access to at least one repo."
     }
   },
@@ -371,6 +370,7 @@
     "loadBuilds": "Failed to load builds",
     "loadBuild": "Failed to load the build",
     "loadGithubToken": "Failed to load GitHub token status ({{status}})",
+    "githubConnection": "GitHub connections request failed ({{status}})",
     "saveGithubToken": "Failed to save GitHub token ({{status}})",
     "removeGithubToken": "Failed to remove GitHub token ({{status}})",
     "listRepos": "Failed to list repos ({{status}})",

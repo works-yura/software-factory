@@ -3,12 +3,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
-import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
-import { manageGithubConnection } from '../../workspaces/services/github';
 import { settingsSectionPath } from '../settingsSections';
+import { GithubConnectionsList } from './GithubConnections';
 import { GithubPatBlock } from './GithubPatBlock';
 import { ProviderConnectControl } from './PlatformProviderConnections';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
@@ -29,31 +28,21 @@ function RepositoriesLink() {
 }
 
 /**
- * Settings › Інтеграції › Сервіси › GitHub: the organization's connection (the GitHub App, or an
- * access token from the environment), the person's own GitHub account, and the org's PAT.
+ * Settings › Підключення › GitHub: every GitHub connection of the organization (through the GitHub
+ * App or a private token, side by side) with its actions and «Додати ще», the person's own GitHub
+ * account, and the org's tokens for the `gh` CLI.
  */
 export function GitHubService() {
-  const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
   const status = useGithubStatusQuery().data;
   const connected = status?.connected === true;
-  const fromToken = status?.mode === 'token';
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Txt as="p" variant="caption" tone="muted">
-          {fromToken ? t('repositories.githubFromEnv') : connected ? t('integrations.github.connected') : t('integrations.github.notConnected')}
-        </Txt>
-        {connected && !fromToken && (
-          <Button size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-            {t('repositories.manageGithub')}
-          </Button>
-        )}
-      </div>
-      {(connected || fromToken) && (
+      <GithubConnectionsList />
+      {connected && (
         <>
-          <UserGithubConnectionRow />
+          {/* The person's own GitHub account links through the App's OAuth, so only with an App. */}
+          {status?.appConfigured !== false && <UserGithubConnectionRow />}
           <GithubPatBlock />
         </>
       )}
