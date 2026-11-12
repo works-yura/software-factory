@@ -55,8 +55,6 @@ describe('production boot guards (src/mastra/index.ts)', () => {
       'GOOGLE_CLIENT_ID',
       'GOOGLE_CLIENT_SECRET',
       'FACTORY_AUTH_SECRET',
-      'FACTORY_OWNER_EMAIL',
-      'FACTORY_AUTH_IMPORT_FIREBASE_USERS',
     ]) {
       vi.stubEnv(name, '');
     }
@@ -158,13 +156,6 @@ describe('production boot guards (src/mastra/index.ts)', () => {
       vi.stubEnv('FACTORY_AUTH', 'firebase');
 
       await expect(import('./index.js')).rejects.toThrow(/FACTORY_AUTH must be unset or google, got "firebase"/);
-    });
-
-    it('refuses an unreadable Firebase export before booting', { timeout: 60_000 }, async () => {
-      vi.stubEnv('FACTORY_AUTH_IMPORT_FIREBASE_USERS', '/nonexistent/firebase-users.json');
-
-      await expect(import('./index.js')).rejects.toThrow(/FACTORY_AUTH_IMPORT_FIREBASE_USERS could not be read/);
-      expect(factoryConfigs).toHaveLength(0);
     });
   });
 });

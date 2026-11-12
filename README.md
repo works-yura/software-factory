@@ -119,10 +119,8 @@ cd apps/server && corepack pnpm dev:local          # http://localhost:5874
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth-клієнт Google (тип «Web application»); redirect URI — `<MASTRACODE_PUBLIC_URL>/auth/api/callback/google` |
 | `FACTORY_AUTH_SECRET` | підпис cookie сесії, ≥ 32 символи (`openssl rand -base64 32`); зміна виводить усіх |
 | `MASTRACODE_PUBLIC_URL` | адреса, яку бачить браузер (у `dev:google` типово `http://localhost:5874`) |
-| `FACTORY_OWNER_EMAIL` | необов'язково: Google-адреса власника; його сесії й налаштування з local dev / Firebase лишаються за ним |
-| `FACTORY_AUTH_IMPORT_FIREBASE_USERS` | необов'язково: `firebase auth:export users.json --format=json`; люди з колишнього Firebase-входу стають адміністраторами `factory-local-org` зі своїми id |
 
-Бракує обов'язкової змінної — сервер не стартує й називає її. Перенесення людей ідемпотентне, підсумок — рядок `[auth] Existing users: …` у лозі.
+Бракує обов'язкової змінної — сервер не стартує й називає її.
 
 ### GitHub без App
 

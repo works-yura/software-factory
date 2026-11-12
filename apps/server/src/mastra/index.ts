@@ -39,7 +39,7 @@ import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 // Local development: loopback sign-in, credential key, and vector store.
-import { createGoogleAuth, existingUsersFromEnv, moveExistingUsers } from './google/google-auth';
+import { createGoogleAuth } from './google/google-auth';
 import {
   createLocalDevAuth,
   createLocalVector,
@@ -166,10 +166,6 @@ if (redisUrl) {
 // slots), not identity signals.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
-let googleAuth: ReturnType<typeof createGoogleAuth> | undefined;
-// People of the previous sign-in to move over (FACTORY_OWNER_EMAIL, FACTORY_AUTH_IMPORT_FIREBASE_USERS);
-// read up front so a bad export file stops the boot before anything starts.
-let existingUsers: ReturnType<typeof existingUsersFromEnv>;
 
 if (localDevAuthEnabled && googleAuthEnabled) {
   throw new Error('Set either FACTORY_LOCAL_DEV_AUTH=1 or FACTORY_AUTH=google, not both.');
@@ -177,8 +173,7 @@ if (localDevAuthEnabled && googleAuthEnabled) {
 if (localDevAuthEnabled) {
   auth = createLocalDevAuth();
 } else if (googleAuthEnabled) {
-  auth = googleAuth = createGoogleAuth();
-  existingUsers = existingUsersFromEnv();
+  auth = createGoogleAuth();
 } else if (authDisabled) {
   auth = null;
 }
@@ -459,10 +454,6 @@ export const factory = new MastraFactory({
 });
 
 const preparedArgs = await factory.prepare();
-
-// Google sign-in: move the people of the previous sign-in over by email once the auth database is
-// ready (`prepare()` ran the provider's `init`), keeping their user ids. Idempotent.
-if (googleAuth && existingUsers) await moveExistingUsers(googleAuth, existingUsers);
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
