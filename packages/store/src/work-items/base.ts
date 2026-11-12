@@ -2376,10 +2376,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   /**
    * Strip every ref to a retired session; matching happens in app code because
-   * `findMany` cannot reach inside the `sessions` JSON column.
+   * `findMany` cannot reach inside the `sessions` JSON column. Its active run
+   * bindings are revoked too: a binding left on a deleted session sends every
+   * later run of the card to a session nobody owns ("no authenticated session
+   * owner"), while a revoked one lets the next run prepare a fresh session.
    * ponytail: org-wide scan per session delete; JSON-path query if it measures.
    */
   async clearSessionReferences({ orgId, sessionId }: { orgId: string; sessionId: string }): Promise<number> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { org_id: orgId, session_id: sessionId, status: 'active' },
+      { status: 'revoked', revoked_at: new Date() },
+    );
     const rows = await this.#db.findMany<Pick<WorkItemDbRow, 'id' | 'sessions'> & Record<string, unknown>>(
       this.#legacyMode ? WORK_ITEMS_SCHEMA.name : FACTORY_BOARD_ITEMS_SCHEMA.name,
       { org_id: orgId },

@@ -242,6 +242,31 @@ describe('WorkItemsStorage', () => {
     expect(bindings.find(binding => binding.id === work.binding.id)?.status).toBe('active');
   });
 
+  it("revokes a deleted session's active bindings, so the card's next run starts a fresh one", async () => {
+    const storage = await makeStorage();
+    const start = (sessionId: string, kickoffKey: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role: 'audit',
+        session: { sessionId, branch: 'factory/42', threadId: sessionId },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+    const first = await start('session-deleted', 'kickoff-1');
+
+    await storage.clearSessionReferences({ orgId: 'org1', sessionId: 'session-deleted' });
+
+    const after = await storage.listRunBindings('org1', 'project1', first.item.id);
+    expect(after.find(binding => binding.id === first.binding.id)?.status).toBe('revoked');
+    const second = await start('session-fresh', 'kickoff-2');
+    expect(second.binding.id).not.toBe(first.binding.id);
+    expect(second.binding.status).toBe('active');
+  });
+
   it('lists the cards a session was ever bound to, revoked bindings included', async () => {
     const storage = await makeStorage();
     const start = (kickoffKey: string, sessionId: string, externalId: string) =>
