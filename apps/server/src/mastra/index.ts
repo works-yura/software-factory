@@ -38,15 +38,9 @@ import { ClickUpIntegration } from '@factory/integration-clickup';
 import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-// Local development: loopback sign-in, credential key, and vector store.
 import { createGoogleAuth } from './google/google-auth';
-import {
-  createLocalDevAuth,
-  createLocalVector,
-  localDevAuthEnabled,
-  localDevCredentialKey,
-  ownMachineCredentialKey,
-} from './local';
+// Local development: the machine's credential key and a vector store without Postgres.
+import { createLocalVector, ownMachineCredentialKey } from './local';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -77,17 +71,17 @@ if (authSetting && authSetting !== 'google') {
 }
 const googleAuthEnabled = authSetting === 'google';
 /**
- * The server runs on the person's own machine: local dev auth, or a development server that signs
- * in with Google. Claude and ChatGPT sign-in (which open a browser page here), device preview and
- * the machine credential key are offered only then.
+ * The server runs on the person's own machine: a development server (`dev:local`) that signs in
+ * with Google. Claude and ChatGPT sign-in (which open a browser page here), device preview and the
+ * machine credential key are offered only then.
  */
-const ownMachine = localDevAuthEnabled || (googleAuthEnabled && process.env.NODE_ENV === 'development');
+const ownMachine = googleAuthEnabled && process.env.NODE_ENV === 'development';
 
 function credentialEncryption() {
-  // Local dev mode keeps a stable key in ~/.mastracode.
+  // A development server on this machine keeps a stable key in ~/.mastracode (the same file local dev
+  // auth used, so secrets stored before keep decrypting).
   const encodedKey =
-    process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim() ||
-    (localDevAuthEnabled ? localDevCredentialKey() : ownMachine ? ownMachineCredentialKey() : undefined);
+    process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim() || (ownMachine ? ownMachineCredentialKey() : undefined);
   if (!encodedKey) {
     const plaintextOptIn = process.env.FACTORY_CREDENTIAL_ENCRYPTION?.trim() === 'plaintext';
     if (!localDevelopmentMode && !plaintextOptIn) {
@@ -155,11 +149,9 @@ if (redisUrl) {
 
 // Auth selection. There is no implicit default: with none of these set,
 // `factory.prepare()` refuses to boot and names the options.
-//   1. FACTORY_LOCAL_DEV_AUTH=1 — loopback-only single-user identity, checked
-//      before every other option.
-//   2. FACTORY_AUTH=google — Google sign-in on better-auth with organizations
-//      and invitation links (see google/google-auth.ts).
-//   3. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
+//   1. FACTORY_AUTH=google — Google sign-in on better-auth with organizations
+//      and invitation links (see google/google-auth.ts); `dev:local` sets it.
+//   2. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
 // A deployment with its own identity provider passes it to MastraFactory's
 // `auth` slot instead. Note MASTRA_PLATFORM_ACCESS_TOKEN /
 // MASTRA_PLATFORM_SECRET_KEY are integration credentials (GitHub/GitLab
@@ -167,12 +159,10 @@ if (redisUrl) {
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
 
-if (localDevAuthEnabled && googleAuthEnabled) {
-  throw new Error('Set either FACTORY_LOCAL_DEV_AUTH=1 or FACTORY_AUTH=google, not both.');
+if (process.env.FACTORY_LOCAL_DEV_AUTH?.trim()) {
+  throw new Error('FACTORY_LOCAL_DEV_AUTH was removed: Google sign-in is the only sign-in (FACTORY_AUTH=google).');
 }
-if (localDevAuthEnabled) {
-  auth = createLocalDevAuth();
-} else if (googleAuthEnabled) {
+if (googleAuthEnabled) {
   auth = createGoogleAuth();
 } else if (authDisabled) {
   auth = null;
@@ -375,13 +365,10 @@ export const factory = new MastraFactory({
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
-  // Local dev auth signs in every loopback caller, so MCP clients on this
-  // machine (Claude Code, Cursor) connect without an OAuth server.
-  ...(localDevAuthEnabled ? { mcp: { tokenless: true } } : {}),
   sandbox,
   // Factories created with `harness: 'claude-code'` run their agents on the
   // `claude` CLI, each session in its own config dir, signed in only with the
-  // organization's Claude accounts (local dev auth adds "Sign in with Claude").
+  // organization's Claude accounts (a development server adds "Sign in with Claude").
   claudeCode: {
     storeDir:
       process.env.FACTORY_CLAUDE_CODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'claude-code-sessions'),
@@ -390,8 +377,8 @@ export const factory = new MastraFactory({
   },
   // Factories created with `harness: 'codex'` run their agents on this machine's `codex` CLI (its
   // app-server), each session in its own CODEX_HOME beside the store, signed in only with the
-  // members' ChatGPT sign-ins (Settings → Models → Codex accounts; local dev auth adds "Sign in with
-  // ChatGPT", a `codex login` in a throwaway home). The machine's own `codex login`
+  // members' ChatGPT sign-ins (Settings → Models → Codex accounts; a development server adds "Sign in
+  // with ChatGPT", a `codex login` in a throwaway home). The machine's own `codex login`
   // (`~/.codex`) is never read: there is no setting for a shared home any more (FACTORY_CODEX_HOME
   // is gone), so no deployment runs every Factory on one person's login. Without the CLI, Settings
   // lists Codex as needing setup.
@@ -466,8 +453,6 @@ export const mastra = new Mastra({
   pubsub: preparedArgs.pubsub,
   workers: preparedArgs.workers,
   workflows: preparedArgs.workflows,
-  // Local dev auth trusts loopback only, so bind the server there too.
-  ...(localDevAuthEnabled ? { server: { ...preparedArgs.server, host: '127.0.0.1' } } : {}),
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

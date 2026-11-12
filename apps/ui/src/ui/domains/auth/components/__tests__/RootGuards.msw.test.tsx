@@ -43,7 +43,7 @@ afterEach(() => vi.useRealTimers());
 
 describe('Factory session expiry', () => {
   it.each([
-    { provider: 'factory-local-dev', signInAction: 'Continue to sign in' },
+    { provider: 'custom-sso', signInAction: 'Continue to sign in' },
     { provider: 'better-auth', signInAction: 'Sign in with Google' },
   ])(
     'keeps the draft and return URL when $provider expires while away from the tab',

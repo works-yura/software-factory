@@ -47,12 +47,6 @@ export interface FactoryMcpConfig {
    * without one, since clients would have nowhere to sign in.
    */
   authorizationServers?: string[];
-  /**
-   * Serve without an OAuth authorization server. Only for auth providers that
-   * identify callers without a token, like the loopback-only local dev auth;
-   * any other caller gets a 401 with nowhere to sign in.
-   */
-  tokenless?: boolean;
 }
 
 /**

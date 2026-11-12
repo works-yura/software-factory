@@ -2063,7 +2063,7 @@ describe('MastraFactory.prepare', () => {
     // and the error names every way to fix it.
     const factory = new RealMastraFactory({ secretEncryption, storage: fakeStorage() });
     await expect(factory.prepare()).rejects.toThrow(
-      /no auth provider configured.*FACTORY_LOCAL_DEV_AUTH=1.*MASTRACODE_AUTH_DISABLED=1.*pass an auth provider/,
+      /no auth provider configured.*FACTORY_AUTH=google.*MASTRACODE_AUTH_DISABLED=1.*pass an auth provider/,
     );
     expect(prepareMock).not.toHaveBeenCalled();
   });

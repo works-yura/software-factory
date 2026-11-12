@@ -3,15 +3,32 @@ import { randomUUID } from 'node:crypto';
 /**
  * The HTTP calls the web UI makes to set up a Claude Code Factory and chat in
  * it (see apps/ui/src/ui/domains/workspaces/services and hooks/useFactories),
- * against a local-dev-auth server (loopback callers are signed in).
+ * as the signed-in e2e person (the session cookie `startStack` registers).
  */
 
 export const CONTROLLER_ID = 'code';
 
+const sessions = new Map<string, string>();
+
+/** The e2e person's session cookie for a server; every call to `baseUrl` sends it. */
+export function registerSession(baseUrl: string, cookie: string): void {
+  sessions.set(baseUrl, cookie);
+}
+
+function sessionHeaders(baseUrl: string): Record<string, string> {
+  const cookie = sessions.get(baseUrl) ?? process.env.FACTORY_E2E_SESSION_COOKIE;
+  if (!cookie) throw new Error(`No e2e session for ${baseUrl}: start it with startStack (or set FACTORY_E2E_SESSION_COOKIE).`);
+  return { cookie };
+}
+
 export async function api<T = unknown>(baseUrl: string, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
     method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
-    headers: { accept: 'application/json', ...(init.body === undefined ? {} : { 'content-type': 'application/json' }) },
+    headers: {
+      accept: 'application/json',
+      ...sessionHeaders(baseUrl),
+      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     signal: AbortSignal.timeout(60_000),
   });
@@ -145,7 +162,10 @@ export async function displayState(baseUrl: string, sessionId: string): Promise<
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
-    const res = await fetch(`${baseUrl}${sessionPath(sessionId)}/stream`, { signal: controller.signal });
+    const res = await fetch(`${baseUrl}${sessionPath(sessionId)}/stream`, {
+      headers: sessionHeaders(baseUrl),
+      signal: controller.signal,
+    });
     if (!res.ok || !res.body) throw new Error(`stream -> ${res.status}: ${await res.text()}`);
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

@@ -239,7 +239,7 @@ describe('OrganizationSection', () => {
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({
           authenticated: true,
-          provider: 'factory-local-dev',
+          provider: 'custom-sso',
           user: { userId: 'dev', email: 'dev@localhost', organizationId: 'factory-local-org' },
         }),
       ),

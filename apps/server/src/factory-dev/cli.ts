@@ -174,10 +174,10 @@ async function resolveEnvironment(settings: FactoryDevSettings): Promise<NodeJS.
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     MASTRA_PROJECT_ID: settings.project.id,
-    // Sandboxes always run on this machine; local dev auth signs in the one
-    // loopback developer (it requires development mode on 127.0.0.1).
+    // Sandboxes always run on this machine; people sign in with Google
+    // (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, FACTORY_AUTH_SECRET in .env).
     FACTORY_SANDBOX_PROVIDER: 'local',
-    FACTORY_LOCAL_DEV_AUTH: '1',
+    FACTORY_AUTH: 'google',
     NODE_ENV: 'development',
     HOST: '127.0.0.1',
   };

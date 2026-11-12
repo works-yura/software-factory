@@ -1,9 +1,13 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { chmodSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
+import { createTestSession } from '@factory/auth-better-auth/testing';
+
+import { registerSession } from './factory-api.ts';
 import { startFakeGitLab, type FakeGitLab } from './fake-gitlab.ts';
 
 export const REPO_ROOT = resolve(import.meta.dirname, '../../..');
@@ -38,6 +42,11 @@ export interface StackOptions {
 export interface Stack {
   baseUrl: string;
   port: number;
+  /**
+   * The `Cookie` header of the signed-in e2e person (Google sign-in, session created directly in the
+   * server's auth database). `factory-api.ts` sends it on every call to `baseUrl`.
+   */
+  sessionCookie: string;
   scratch: string;
   gitlab: FakeGitLab;
   /** The fake CLI's per-invocation log (JSON lines); empty for the real CLI. */
@@ -199,7 +208,7 @@ const STRIPPED_ENV = [
 ];
 
 /**
- * The real dev server (`apps/server` `dev:local`: `mastra factory dev`, which
+ * The real dev server (`apps/server` `dev:local`, Google sign-in: `mastra factory dev`, which
  * bundles the workspace packages into packages/*\/node_modules/.cache like a
  * production dev run) on a free port, with every data dir in a scratch
  * directory, the fake GitLab as its source control, and the chosen `claude`.
@@ -255,6 +264,10 @@ export async function startStack(options: StackOptions): Promise<Stack> {
   }
   const port = await freePort();
   const baseUrl = `http://localhost:${port}`;
+  const databasePath = join(scratch, 'mastra.db');
+  // Google sign-in is the only sign-in; the e2e person gets a session written straight into the
+  // server's auth database (createTestSession), so the Google client below is never called.
+  const authSecret = randomBytes(32).toString('base64');
 
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -267,7 +280,10 @@ export async function startStack(options: StackOptions): Promise<Stack> {
     PATH: `${bin}:${process.env.PATH ?? ''}`,
     PORT: String(port),
     MASTRACODE_PUBLIC_URL: baseUrl,
-    MASTRA_DB_PATH: join(scratch, 'mastra.db'),
+    MASTRA_DB_PATH: databasePath,
+    GOOGLE_CLIENT_ID: 'factory-e2e',
+    GOOGLE_CLIENT_SECRET: 'factory-e2e',
+    FACTORY_AUTH_SECRET: authSecret,
     MASTRACODE_LOCAL_SANDBOX_ROOT: sandboxRoot,
     FACTORY_CLAUDE_CODE_STORE_DIR: join(scratch, 'claude-code-sessions'),
     GITLAB_ACCESS_TOKEN: gitlab.token,
@@ -348,7 +364,8 @@ export async function startStack(options: StackOptions): Promise<Stack> {
       if (Date.now() - started > BOOT_TIMEOUT_MS) throw new Error(`dev server not ready after ${BOOT_TIMEOUT_MS / 1000}s`);
       track();
       try {
-        const res = await fetch(`${baseUrl}/web/config/features`, { signal: AbortSignal.timeout(3_000) });
+        // Public, and the first call creates the auth tables the session below is written to.
+        const res = await fetch(`${baseUrl}/auth/me`, { signal: AbortSignal.timeout(3_000) });
         if (res.ok) break;
       } catch {
         // Not listening yet.
@@ -363,9 +380,19 @@ export async function startStack(options: StackOptions): Promise<Stack> {
   track();
   console.log(`[e2e] dev server ready on ${baseUrl} in ${Math.round((Date.now() - started) / 1000)}s (scratch ${scratch})`);
 
+  const sessionCookie = await createTestSession({
+    databaseUrl: `file:${databasePath}`,
+    secret: authSecret,
+    publicUrl: baseUrl,
+    email: 'e2e@factory.invalid',
+    name: 'Factory E2E',
+  });
+  registerSession(baseUrl, sessionCookie);
+
   return {
     baseUrl,
     port,
+    sessionCookie,
     scratch,
     gitlab,
     claudeLog,

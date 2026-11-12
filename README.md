@@ -108,17 +108,17 @@ corepack pnpm --filter @factory/app-ui build      # UI → apps/ui/dist
 cd apps/server && corepack pnpm dev:local          # http://localhost:5874
 ```
 
-`dev:local` — локальний режим без входу (`FACTORY_LOCAL_DEV_AUTH=1`), база `~/.mastracode/factory-v4/mastra.db` (окремо від v3), пісочниці на цій машині. Налаштування інтеграцій — у `apps/server/.env` (у git не потрапляє); схема змінних — `apps/server/.env.schema`. Перевіряти лише на тестовому репозиторії.
+`dev:local` — сервер на цій машині з входом через Google (`FACTORY_AUTH=google`), база `~/.mastracode/factory-v4/mastra.db` (окремо від v3), пісочниці на цій машині. Налаштування — у `apps/server/.env` (у git не потрапляє); схема змінних — `apps/server/.env.schema`. Перевіряти лише на тестовому репозиторії.
 
 ### Вхід через Google
 
-`dev:google` (або `FACTORY_AUTH=google` на сервері) — кнопка «Увійти через Google», кожен новий користувач отримує свою організацію, інших додають посиланням-запрошенням з «Налаштування › Організація» ([docs/features/auth](docs/features/auth/design.md), [ADR-0030](docs/adr/0030-google-sign-in-organizations-invite-links.md)). У `apps/server/.env`:
+Єдиний вхід (і в `dev:local`, і на сервері — `FACTORY_AUTH=google`): кнопка «Увійти через Google», кожен новий користувач отримує свою організацію, інших додають посиланням-запрошенням з «Налаштування › Організація» ([docs/features/auth](docs/features/auth/design.md), [ADR-0030](docs/adr/0030-google-sign-in-organizations-invite-links.md)). У `apps/server/.env`:
 
 | Змінна | Що |
 | --- | --- |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth-клієнт Google (тип «Web application»); redirect URI — `<MASTRACODE_PUBLIC_URL>/auth/api/callback/google` |
 | `FACTORY_AUTH_SECRET` | підпис cookie сесії, ≥ 32 символи (`openssl rand -base64 32`); зміна виводить усіх |
-| `MASTRACODE_PUBLIC_URL` | адреса, яку бачить браузер (у `dev:google` типово `http://localhost:5874`) |
+| `MASTRACODE_PUBLIC_URL` | адреса, яку бачить браузер (у `dev:local` типово `http://localhost:5874`) |
 
 Бракує обов'язкової змінної — сервер не стартує й називає її.
 

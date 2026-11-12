@@ -387,7 +387,7 @@ Fallback на env-ключі сервера для тенантів вимкне
 
 **Вхід у саму фабрику:**
 
-- `FACTORY_LOCAL_DEV_AUTH=1` — один локальний користувач;
+- ~~`FACTORY_LOCAL_DEV_AUTH=1` — один локальний користувач~~ (прибрано, ADR-0030: єдиний вхід — Google);
 - WorkOS (`WORKOS_*`);
 - Mastra Platform (`MASTRA_SHARED_API_URL`).
 
@@ -927,7 +927,7 @@ MCP-сервер фабрики (`/web/factory/projects/:projectId/mcp`, OAuth �
   - текст `instructions` для клієнта;
   - подія `factory.activity` (поки лише опитуванням; Claude і ChatGPT її не використовують);
   - картка «MCP-клієнти» в Налаштування → Підключення з URL та кроками для Claude, Claude Code і ChatGPT.
-- **Локальний режим (наш, не з upstream):** з `FACTORY_LOCAL_DEV_AUTH=1` ендпоінт працює без OAuth-сервера (`mcp: { tokenless: true }`), бо локальний вхід і так пускає кожен запит з localhost. Запит з іншим Host отримує 401. Підключення Claude Code:
+- **Локальний режим (наш, не з upstream; прибрано разом із local dev auth, ADR-0030):** з `FACTORY_LOCAL_DEV_AUTH=1` ендпоінт працював без OAuth-сервера (`mcp: { tokenless: true }`), бо локальний вхід і так пускав кожен запит з localhost. Запит з іншим Host отримує 401. Підключення Claude Code:
   ```
   claude mcp add --transport http factory http://localhost:5874/web/factory/projects/<projectId>/mcp
   ```

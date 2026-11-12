@@ -3,17 +3,10 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/** Loopback-only credential key, created once in ~/.mastracode and reused across restarts. */
-export function localDevCredentialKey(): string {
-  if (process.env.NODE_ENV !== 'development' || process.env.HOST !== '127.0.0.1') {
-    throw new Error('Local development encryption requires NODE_ENV=development and HOST=127.0.0.1.');
-  }
-  return ownMachineCredentialKey();
-}
-
 /**
- * The same key for a development server on the person's own machine that signs people in another
- * way (`FACTORY_AUTH=google`), so credentials stored under local dev auth stay readable.
+ * The credential key of a development server on the person's own machine, created once in
+ * ~/.mastracode and reused across restarts. The file is the one local dev auth (removed) used, so
+ * credentials stored under it stay readable; never rename it.
  */
 export function ownMachineCredentialKey(): string {
   if (process.env.NODE_ENV !== 'development') {

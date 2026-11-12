@@ -8,8 +8,7 @@
 
 | Налаштування | Що | Для чого |
 | --- | --- | --- |
-| `FACTORY_LOCAL_DEV_AUTH=1` | одна людина `factory-local-developer` в `factory-local-org`, лише з loopback (`apps/server/src/mastra/local/local-dev-auth.ts`) | розробка на своїй машині |
-| `FACTORY_AUTH=google` | better-auth, кнопка «Увійти через Google», організації й запрошення | сервер для кількох людей |
+| `FACTORY_AUTH=google` | better-auth, кнопка «Увійти через Google», організації й запрошення | єдиний вхід: і `dev:local` на своїй машині, і сервер |
 | `MASTRACODE_AUTH_DISABLED=1` | без входу, лише API | димові тести |
 
 Ворота запитів, `/auth/me`, `/auth/login`, `/auth/logout` і `ALL /auth/api/*` — провайдер-нейтральні: `packages/auth/src/auth.ts`.
@@ -33,7 +32,9 @@
   - назва, ваша роль, учасники (ім'я, email, роль; власник позначений, його не видалити);
   - owner/admin: «Запросити посиланням» — email → `invite-member` з роллю `member` → посилання `<origin>/invite/<id>` з кнопкою копіювання; «Запрошення, що чекають» — копіювати посилання, скасувати (`cancel-invitation`); «Видалити» учасника з підтвердженням (`remove-member`);
   - «Ваші організації», коли їх більше однієї: `organization/list`, перехід — `set-active` і повне перезавантаження застосунку в `/`; список, що не завантажився, — повідомлення про помилку, а не прихований розділ.
-- Інші входи (local dev) показують у розділі пояснення: організації — лише з Google.
+- Інший провайдер (свій, переданий у `MastraFactory`) показує в розділі пояснення: організації — лише з Google.
+- Local dev auth (`FACTORY_LOCAL_DEV_AUTH`, `FACTORY_LOCAL_DEV_TRUSTED_HOSTS`) прибрано: сервер, де змінна ще стоїть, не стартує й каже, що її прибрано. Id `factory-local-org` і `factory-local-developer`, під якими лежать наявні дані, — константи `EXISTING_ORGANIZATION_ID` і `EXISTING_OWNER_USER_ID` у `packages/auth/src/existing-ids.ts`. Ключ шифрування дев-сервера — той самий файл `~/.mastracode/factory-local-dev-key` (`ownMachineCredentialKey`), тож збережені секрети розшифровуються.
+- e2e (`tests/e2e`) запускає `dev:local` із фіктивним Google-клієнтом і входить, записуючи сесію просто в базу сервера (`createTestSession` у `packages/auth-better-auth/src/testing.ts`); cookie сесії `factory-api.ts` додає до кожного запиту, Playwright — у контекст браузера.
 
 ## Запрошення посиланням
 

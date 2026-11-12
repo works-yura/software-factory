@@ -562,8 +562,8 @@ const CONTROLLER_ID = 'code';
 
 /** Thrown by `prepare()` when no `auth` slot was configured. */
 const MISSING_AUTH_ERROR =
-  'MastraFactory: no auth provider configured. Set FACTORY_LOCAL_DEV_AUTH=1 for local single-user ' +
-  'development, MASTRACODE_AUTH_DISABLED=1 to run without authentication, or pass an auth provider ' +
+  'MastraFactory: no auth provider configured. Set FACTORY_AUTH=google for Google sign-in, ' +
+  'MASTRACODE_AUTH_DISABLED=1 to run without authentication, or pass an auth provider ' +
   "(MastraFactory's `auth` option; `null` disables auth).";
 
 /** Why a wake couldn't be run as its Factory session's owner. */
@@ -841,13 +841,9 @@ export class MastraFactory {
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(mcpConfig);
     // The MCP endpoint authenticates callers itself, so it needs an auth
-    // provider and somewhere for clients to get tokens, unless the provider
-    // needs no token (loopback dev auth).
+    // provider and somewhere for clients to get tokens.
     const mcpEnabled =
-      Boolean(auth) &&
-      mcpConfig !== false &&
-      mcpConfig?.enabled !== false &&
-      (mcpAuthorizationServers.length > 0 || mcpConfig?.tokenless === true);
+      Boolean(auth) && mcpConfig !== false && mcpConfig?.enabled !== false && mcpAuthorizationServers.length > 0;
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.

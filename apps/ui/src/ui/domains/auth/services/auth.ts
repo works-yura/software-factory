@@ -37,7 +37,7 @@ export interface FactoryAuthState {
   /** Explicit server capability; absent on older servers. */
   telemetryEnabled?: boolean;
   user?: { userId?: string; email?: string; name?: string; avatarUrl?: string; organizationId?: string };
-  /** Active identity provider: 'better-auth' (Google) | 'factory-local-dev' | custom adapter kind. */
+  /** Active identity provider: 'better-auth' (Google) or a custom adapter's name. */
   provider?: string;
 }
 

@@ -25,13 +25,17 @@ vi.mock('@factory/server', async importOriginal => {
  * the factory has no default auth provider and refuses to boot without one.
  * The custom `/web/*` routes are always present.
  */
-/** Boot the entry with loopback local dev auth (FACTORY_LOCAL_DEV_AUTH=1). */
-function useLocalDevAuth() {
+/** Boot the entry with Google sign-in (FACTORY_AUTH=google) the way `dev:local` runs it. */
+function useGoogleAuth() {
   vi.stubEnv('MASTRACODE_AUTH_DISABLED', '');
-  vi.stubEnv('FACTORY_LOCAL_DEV_AUTH', '1');
+  vi.stubEnv('FACTORY_AUTH', 'google');
+  vi.stubEnv('GOOGLE_CLIENT_ID', 'test-client-id');
+  vi.stubEnv('GOOGLE_CLIENT_SECRET', 'test-client-secret');
+  vi.stubEnv('FACTORY_AUTH_SECRET', 'a-session-secret-of-at-least-32-characters');
+  vi.stubEnv('MASTRACODE_PUBLIC_URL', 'http://localhost:5874');
   vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('HOST', '127.0.0.1');
-  // Set so the entry never writes the local dev key under ~/.mastracode.
+  // Set so the entry never writes the machine key under ~/.mastracode.
   vi.stubEnv('FACTORY_CREDENTIAL_ENCRYPTION_KEY', Buffer.alloc(32, 7).toString('base64'));
 }
 
@@ -222,8 +226,8 @@ describe('platform entry (src/mastra/index.ts)', () => {
       ]) {
         vi.stubEnv(name, '');
       }
-      // The connect routes need an auth provider: sign in as the loopback dev.
-      useLocalDevAuth();
+      // The connect routes need an auth provider.
+      useGoogleAuth();
       vi.resetModules();
     });
 
@@ -353,7 +357,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.stubEnv('MASTRACODE_AUTH_DISABLED', '');
 
       await expect(import('./index.js')).rejects.toThrow(
-        /no auth provider configured.*FACTORY_LOCAL_DEV_AUTH=1.*MASTRACODE_AUTH_DISABLED=1/,
+        /no auth provider configured.*FACTORY_AUTH=google.*MASTRACODE_AUTH_DISABLED=1/,
       );
     });
 
@@ -365,11 +369,19 @@ describe('platform entry (src/mastra/index.ts)', () => {
       expect(paths).not.toContain('/auth/login');
     });
 
-    it('uses the loopback local dev provider when FACTORY_LOCAL_DEV_AUTH=1', { timeout: 60_000 }, async () => {
-      useLocalDevAuth();
+    it('uses Google sign-in on better-auth when FACTORY_AUTH=google', { timeout: 60_000 }, async () => {
+      useGoogleAuth();
       await import('./index.js');
 
-      expect(factoryConfigs[0]?.auth).toMatchObject({ name: 'factory-local-dev' });
+      expect(factoryConfigs[0]?.auth).toMatchObject({ name: 'better-auth' });
+    });
+
+    it('refuses the removed local dev auth by name', { timeout: 60_000 }, async () => {
+      useGoogleAuth();
+      vi.stubEnv('FACTORY_LOCAL_DEV_AUTH', '1');
+
+      await expect(import('./index.js')).rejects.toThrow(/FACTORY_LOCAL_DEV_AUTH was removed/);
+      expect(factoryConfigs).toHaveLength(0);
     });
   });
 });

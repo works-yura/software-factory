@@ -33,6 +33,16 @@ const stepTitle = (page: Page, title: string) => page.locator('label[cmdk-label]
 
 let anchor: { factoryId: string; projectRepositoryId: string };
 
+// The e2e person is signed in (Google sign-in; the session was written by the stack).
+test.beforeEach(async ({ context }) => {
+  const cookie = process.env.FACTORY_E2E_SESSION_COOKIE;
+  if (!cookie) throw new Error('FACTORY_E2E_SESSION_COOKIE is unset: run through ui/playwright.config.ts.');
+  const separator = cookie.indexOf('=');
+  await context.addCookies([
+    { name: cookie.slice(0, separator), value: cookie.slice(separator + 1), url: baseUrl(), httpOnly: true, sameSite: 'Lax' },
+  ]);
+});
+
 test.beforeAll(async () => {
   // A Factory to start from: with none, the app shows first-Factory onboarding instead of the wizard.
   anchor = await createClaudeFactory(baseUrl(), { name: 'UI anchor', projectId: projectId() });

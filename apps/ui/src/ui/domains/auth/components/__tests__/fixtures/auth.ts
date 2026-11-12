@@ -4,14 +4,14 @@ import type { FactoryProjectPayload } from '../../../../workspaces/services/gith
 export const signedIn: FactoryAuthState = {
   authEnabled: true,
   authenticated: true,
-  provider: 'factory-local-dev',
+  provider: 'custom-sso',
   user: { userId: 'user-1', email: 'dev@mastra.ai', name: 'Dev' },
 };
 
 export const signedOut: FactoryAuthState = {
   authEnabled: true,
   authenticated: false,
-  provider: 'factory-local-dev',
+  provider: 'custom-sso',
 };
 
 export const factory: FactoryProjectPayload = { id: 'factory-1', name: 'Factory' };

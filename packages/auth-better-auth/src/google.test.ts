@@ -1,9 +1,13 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { createClient } from '@libsql/client';
 import type { Auth } from 'better-auth';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { INVITATION_EXPIRES_IN_SECONDS } from './index';
-import type { MastraAuthBetterAuth } from './index';
-import { createTestGoogleAuth, TEST_ORIGIN as ORIGIN } from './testing';
+import { INVITATION_EXPIRES_IN_SECONDS, MastraAuthBetterAuth } from './index';
+import { createTestGoogleAuth, createTestSession, TEST_ORIGIN as ORIGIN } from './testing';
 import type { GoogleProfile, TestGoogleAuth } from './testing';
 
 /**
@@ -380,5 +384,32 @@ describe('an expired invitation', () => {
     expect(accepted.status).toBe(400);
     expect(await accepted.json()).toMatchObject({ code: 'INVITATION_NOT_FOUND' });
     expect((await memberRows()).filter(row => row.organizationId === orgId)).toHaveLength(1);
+  });
+});
+
+describe('createTestSession (e2e sign-in without Google)', () => {
+  it("signs a person in on a server's own database with a cookie the server accepts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'factory-test-session-'));
+    const databaseUrl = `file:${join(dir, 'mastra.db')}`;
+    const secret = 'an-e2e-session-secret-of-32-characters';
+    const client = createClient({ url: databaseUrl });
+    try {
+      const server = new MastraAuthBetterAuth({ secret, google: { clientId: 'id', clientSecret: 'secret' } });
+      await server.init({ database: { dialect: 'libsql', client }, publicUrl: ORIGIN });
+      // The server creates its tables on first use.
+      await server.handleAuthRequest(new Request(`${ORIGIN}/auth/api/get-session`));
+
+      const session = { databaseUrl, secret, publicUrl: ORIGIN, email: 'e2e@factory.invalid', name: 'E2E' };
+      const cookie = await createTestSession(session);
+      const again = await createTestSession(session);
+      const signedIn = await server.authenticateToken('', new Request(`${ORIGIN}/web/x`, { headers: { cookie } }));
+      const second = await server.authenticateToken('', new Request(`${ORIGIN}/web/x`, { headers: { cookie: again } }));
+
+      expect(signedIn?.user.email).toBe('e2e@factory.invalid');
+      expect(second?.user.id).toBe(signedIn?.user.id);
+    } finally {
+      client.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

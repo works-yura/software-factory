@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client';
 import { LibsqlDialect } from '@libsql/kysely-libsql';
 import { betterAuth } from 'better-auth';
 import type { Auth, BetterAuthOptions } from 'better-auth';
+import { makeSignature } from 'better-auth/crypto';
 import { getMigrations } from 'better-auth/db/migration';
 
 import { factoryBetterAuthOptions, MastraAuthBetterAuth } from './index';
@@ -117,4 +118,50 @@ export async function createTestGoogleAuth(): Promise<TestGoogleAuth> {
       return ctx.adapter.findMany<MemberRecord>({ model: 'member' });
     },
   };
+}
+
+/**
+ * Tests only (e2e): signs a person in on a running Factory server's own auth database without
+ * Google. Builds better-auth with the server's options on the same libSQL file, creates the user (or
+ * reuses the row with that email) and a session, and returns the `Cookie` header value the server
+ * accepts (`better-auth.session_token=<token>.<signature>`, signed with the server's
+ * FACTORY_AUTH_SECRET). The server must have created its auth tables already (any request to
+ * `/auth/me` does).
+ */
+export async function createTestSession(options: {
+  /** The server's libSQL database (`file:<MASTRA_DB_PATH>`). */
+  databaseUrl: string;
+  /** The server's FACTORY_AUTH_SECRET. */
+  secret: string;
+  publicUrl: string;
+  email: string;
+  name: string;
+}): Promise<string> {
+  const client = createClient({ url: options.databaseUrl });
+  try {
+    const auth = betterAuth(
+      factoryBetterAuthOptions({
+        database: {
+          dialect: new LibsqlDialect({ client } as ConstructorParameters<typeof LibsqlDialect>[0]),
+          type: 'sqlite',
+        },
+        secret: options.secret,
+        google: { clientId: 'e2e', clientSecret: 'e2e' },
+        publicUrl: options.publicUrl,
+      }),
+    ) as unknown as Auth;
+    const ctx = await auth.$context;
+    const existing = await ctx.internalAdapter.findUserByEmail(options.email);
+    const user =
+      existing?.user ??
+      (await ctx.internalAdapter.createUser(
+        { email: options.email, name: options.name, emailVerified: true },
+        { method: 'admin' },
+      ));
+    const session = await ctx.internalAdapter.createSession(user.id);
+    const signed = `${session.token}.${await makeSignature(session.token, options.secret)}`;
+    return `${ctx.authCookies.sessionToken.name}=${encodeURIComponent(signed)}`;
+  } finally {
+    client.close();
+  }
 }

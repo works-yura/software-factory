@@ -3,13 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "End-to-end tests: the real dev server (bundled like `dev:local`) driven over HTTP and in a browser, with a fake `claude` CLI that talks real MCP.",
+  "description": "End-to-end tests: the real dev server (bundled like `dev:local`, signed in through a session written to its database) driven over HTTP and in a browser, with a fake `claude` CLI that talks real MCP.",
   "scripts": {
     "check": "tsc --noEmit",
     "e2e": "vitest run",
     "e2e:ui": "playwright test -c ui/playwright.config.ts"
   },
   "devDependencies": {
+    "@factory/auth-better-auth": "workspace:*",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@playwright/test": "1.61.1",
     "@types/node": "22.20.1",

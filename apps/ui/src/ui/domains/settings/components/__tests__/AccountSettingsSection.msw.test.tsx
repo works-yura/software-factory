@@ -18,7 +18,7 @@ function stubAuthenticatedAccount() {
           name: 'Dev',
           organizationId: 'org-1',
         },
-        provider: 'factory-local-dev',
+        provider: 'custom-sso',
       }),
     ),
   );
@@ -33,7 +33,7 @@ describe('AccountSettingsSection', () => {
 
       expect(await screen.findByText('Dev')).toBeInTheDocument();
       expect(screen.getByText('dev@mastra.ai')).toBeInTheDocument();
-      expect(screen.getByText('Factory Local Dev')).toBeInTheDocument();
+      expect(screen.getByText('Custom Sso')).toBeInTheDocument();
       expect(screen.getByText('user-1')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Copy account ID' })).toBeInTheDocument();
       expect(screen.getByText('org-1')).toBeInTheDocument();
