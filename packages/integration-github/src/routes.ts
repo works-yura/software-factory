@@ -416,6 +416,13 @@ export interface GithubConnectionView {
   accountLogin: string | null;
   accountType: string | null;
   needsAttention: boolean;
+  /** The organization's own name for the connection; `null` shows the account. */
+  name: string | null;
+  createdAt: string;
+  /** Who connected it. */
+  connectedBy: string;
+  /** Project connections still using its repositories: removing it is refused until they are gone. */
+  projectConnections: number;
 }
 
 /** How an installation row connects: its stored kind, refined by how its id resolves now. */
@@ -428,6 +435,7 @@ async function describeInstallation(
   const storedAsToken = row.providerMetadata.auth === 'token';
   const kind = resolved?.kind === 'token' || storedAsToken ? 'token' : 'app';
   const tokenSource = resolved?.kind === 'token' ? resolved.source : undefined;
+  const usage = await github.sourceControlStorage.installations.usage({ orgId: row.orgId, id: row.id });
   return {
     id: row.id,
     kind,
@@ -440,6 +448,10 @@ async function describeInstallation(
       typeof row.providerMetadata.attention === 'string' ||
       (kind === 'token' && !tokenSource) ||
       (kind === 'app' && !github.appConfigured),
+    name: row.displayName,
+    createdAt: row.createdAt.toISOString(),
+    connectedBy: row.connectedByUserId,
+    projectConnections: usage.projectConnections,
   };
 }
 
@@ -1304,6 +1316,30 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     return null;
   };
   routes.push(
+    // «Перейменувати» on Settings › Підключення: the organization's own name for one GitHub connection.
+    registerApiRoute('/web/github/installations/:id', {
+      method: 'PATCH',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        if (auth.enabled() && !(await auth.isOrganizationAdmin(loose(c), resolved.tenant.orgId))) {
+          return c.json({ error: 'forbidden', message: 'Only organization admins can rename the GitHub connection.' }, 403);
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { name?: unknown } | undefined;
+        const raw = body && typeof body.name === 'string' ? body.name.trim() : body?.name === null ? '' : undefined;
+        if (raw === undefined || raw.length > 80) {
+          return c.json({ error: 'invalid_body', message: 'Send { "name": "…" } (up to 80 characters; empty goes back to the account).' }, 422);
+        }
+        const renamed = await github.sourceControlStorage.installations.rename({
+          orgId: resolved.tenant.orgId,
+          id: c.req.param('id'),
+          name: raw || null,
+        });
+        if (!renamed) return c.json({ error: 'not_found' }, 404);
+        return c.json({ id: renamed.id, name: renamed.displayName });
+      },
+    }),
     registerApiRoute('/web/github/pat', {
       method: 'GET',
       requiresAuth: false,

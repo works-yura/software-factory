@@ -103,6 +103,21 @@ describe('SourceControlStorage', () => {
     });
   }
 
+  it('names an installation for the organization, keeps the name through a re-install, and clears it', async () => {
+    const installation = await createInstallation(github);
+    expect(installation.displayName).toBeNull();
+    expect(await github.installations.rename({ orgId: 'org-1', id: installation.id, name: 'Eclipt GitHub' })).toMatchObject({ displayName: 'Eclipt GitHub' });
+    // The App reinstalled on the same account upserts the row; the organization's name stays.
+    await createInstallation(github);
+    expect((await github.installations.get({ orgId: 'org-1', id: installation.id }))?.displayName).toBe('Eclipt GitHub');
+    expect(await github.installations.rename({ orgId: 'org-2', id: installation.id, name: 'Not yours' })).toBeNull();
+    expect(await github.installations.rename({ orgId: 'org-1', id: installation.id, name: null })).toMatchObject({ displayName: null });
+
+    const memory = new SourceControlStorageInMemory('github');
+    const stored = await memory.installations.upsert({ orgId: 'org-1', connectedByUserId: 'user-1', externalId: 'i' });
+    expect(await memory.installations.rename({ orgId: 'org-1', id: stored.id, name: 'Eclipt GitHub' })).toMatchObject({ displayName: 'Eclipt GitHub' });
+  });
+
   it('rejects empty integration ids and access before registration', async () => {
     expect(() => domain.forIntegration('')).toThrow(/must not be empty/);
     await expect(

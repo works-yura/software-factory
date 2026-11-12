@@ -91,6 +91,7 @@ export class ClickUpIntegration implements FactoryIntegration {
         intake: this.intake,
         intervalSeconds: this.#intervalSeconds,
         ...(ctx.hooks ? { hooks: ctx.hooks } : {}),
+        usage: { projects: ctx.storage.projects, intakeRoutes: () => ctx.runtime?.intakeRoutes },
       }),
       buildConnectCodeRoute({ platform: CLICKUP_PLATFORM, auth: ctx.auth, codes: this.#codes }),
     ];

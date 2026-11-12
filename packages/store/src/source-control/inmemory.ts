@@ -71,6 +71,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         externalId: input.externalId,
         accountName: input.accountName ?? null,
         accountType: input.accountType ?? null,
+        displayName: null,
         providerMetadata: input.providerMetadata ?? {},
         createdAt: new Date(),
       };
@@ -99,6 +100,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         repositories: this.repositoriesRows.filter(row => row.installationId === id).length,
         projectConnections: this.connectionsRows.filter(row => row.installationId === id).length,
       };
+    },
+    rename: async ({ orgId, id, name }: { orgId: string; id: string; name: string | null }): Promise<SourceControlInstallation | null> => {
+      const row = this.installationsRows.find(candidate => candidate.orgId === orgId && candidate.id === id);
+      if (!row) return null;
+      row.displayName = name;
+      return row;
     },
     delete: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       const index = this.installationsRows.findIndex(row => row.orgId === orgId && row.id === id);

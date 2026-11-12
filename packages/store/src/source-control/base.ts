@@ -64,6 +64,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       external_id: { type: 'text' },
       account_name: { type: 'text', nullable: true },
       account_type: { type: 'text', nullable: true },
+      /** A name the organization gives the connection; empty shows the account. */
+      display_name: { type: 'text', nullable: true },
       provider_metadata: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
@@ -239,6 +241,8 @@ export interface SourceControlInstallation {
   externalId: string;
   accountName: string | null;
   accountType: string | null;
+  /** The organization's own name for this connection; `null` shows the account. */
+  displayName: string | null;
   providerMetadata: SourceControlProviderMetadata;
   createdAt: Date;
 }
@@ -473,6 +477,8 @@ export interface SourceControlStorageHandle {
     }): Promise<SourceControlInstallation | null>;
     /** How many repository rows and project connections still reference the installation. */
     usage(args: { orgId: string; id: string }): Promise<{ repositories: number; projectConnections: number }>;
+    /** Names the connection («Перейменувати»); `null` goes back to the account name. Kept across re-installs. */
+    rename(args: { orgId: string; id: string; name: string | null }): Promise<SourceControlInstallation | null>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
   };
   readonly repositories: {
@@ -618,6 +624,7 @@ interface InstallationDbRow extends Record<string, unknown> {
   external_id: string;
   account_name: string | null;
   account_type: string | null;
+  display_name?: string | null;
   provider_metadata: SourceControlProviderMetadata;
   created_at: Date;
 }
@@ -701,6 +708,7 @@ function toInstallation(row: InstallationDbRow): SourceControlInstallation {
     externalId: row.external_id,
     accountName: row.account_name,
     accountType: row.account_type,
+    displayName: row.display_name ?? null,
     providerMetadata: row.provider_metadata,
     createdAt: row.created_at,
   };
@@ -1189,6 +1197,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
             db().findMany<Record<string, unknown>>(CONNECTIONS, { installation_id: id, integration_id: integrationId }),
           ]);
           return { repositories: repositories.length, projectConnections: projectConnections.length };
+        },
+        rename: async ({ orgId, id, name }) => {
+          if (!(await getInstallation({ orgId, id }))) return null;
+          await db().updateMany(INSTALLATIONS, { id, integration_id: integrationId, org_id: orgId }, { display_name: name });
+          return getInstallation({ orgId, id });
         },
         delete: async ({ orgId, id }) => {
           const installation = await getInstallation({ orgId, id });

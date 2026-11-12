@@ -110,11 +110,13 @@ describe('ClickUp connection routes', () => {
       account: { username: 'ann' },
       intervalSeconds: 60,
       canManage: true,
+      connectedAt: expect.any(String),
+      connectedBy: 'admin-a',
     });
     expect(JSON.stringify(connected.body)).not.toContain('pk_a');
     expect(rows.get('org-a')).toEqual({
       data: { apiToken: 'pk_a' },
-      metadata: { username: 'ann', userId: '1', workspaces: ['Acme'] },
+      metadata: { username: 'ann', userId: '1', workspaces: ['Acme'], connectedBy: 'admin-a' },
       userId: 'admin-a',
     });
     expect(audits).toEqual([{ action: 'factory.integration.token_connected', metadata: { replaced: false, account: 'ann' } }]);
@@ -192,7 +194,20 @@ describe('ClickUp connection routes', () => {
       account: { username: 'ann' },
       intervalSeconds: 60,
       canManage: true,
+      connectedAt: expect.any(String),
     });
+  });
+
+  it('names the connection, keeps the name and who connected it when the token is replaced', async () => {
+    const { call, rows } = setup();
+    await call('PUT', '/web/clickup/connection', { token: 'pk_a' });
+    const named = await call('PATCH', '/web/clickup/connection/name', { name: ' Eclipt ClickUp ' });
+    expect(named.status).toBe(200);
+    expect(named.body).toMatchObject({ name: 'Eclipt ClickUp', connectedBy: 'admin-a' });
+    expect(rows.get('org-a')?.data).toEqual({ apiToken: 'pk_a' });
+    await call('PUT', '/web/clickup/connection', { token: 'pk_a' });
+    expect((await call('GET', '/web/clickup/status')).body).toMatchObject({ name: 'Eclipt ClickUp', connectedBy: 'admin-a' });
+    expect((await call('PATCH', '/web/clickup/connection/name', { name: null })).body).not.toHaveProperty('name');
   });
 
   it('lets anyone manage the token when the server runs without sign-in', async () => {

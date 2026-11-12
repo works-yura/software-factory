@@ -73,10 +73,16 @@ export async function saveClickUpConnection(
   orgId: string,
   input: { token: string; userId: string | null; account: ClickUpConnectionMetadata },
 ): Promise<void> {
+  // A replaced token keeps the connection's own name and who first connected it.
+  const previous = (await storage.connections.get(orgId))?.metadata ?? {};
+  const kept = {
+    ...(typeof previous.name === 'string' ? { name: previous.name } : {}),
+    ...(typeof previous.connectedBy === 'string' ? { connectedBy: previous.connectedBy } : input.userId ? { connectedBy: input.userId } : {}),
+  };
   await storage.connections.upsert(orgId, {
     userId: input.userId,
     data: { apiToken: input.token.trim() } satisfies ClickUpConnectionData,
-    metadata: { ...input.account },
+    metadata: { ...input.account, ...kept },
   });
 }
 

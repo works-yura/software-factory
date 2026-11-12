@@ -3,8 +3,11 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
+import { routedSourceScopes } from '@factory/core';
+import type { IntakeRoutesReader } from '@factory/core';
 import type { RouteAuth } from '@factory/http';
 import type { IntegrationHooks } from '@factory/integrations';
+import type { FactoryProjectsStorage } from '@factory/store';
 
 import { ClickUpApiError } from './api.ts';
 import { clickUpMetadataOf, clickUpTokenOf, saveClickUpConnection } from './connection.ts';
@@ -13,6 +16,7 @@ import type { ClickUpIntake } from './intake.ts';
 
 const listIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const tokenBodySchema = z.object({ token: z.string().trim().min(1).max(500) });
+const nameBodySchema = z.object({ name: z.string().trim().max(80).nullable() });
 
 export interface ClickUpRoutesOptions {
   auth: RouteAuth;
@@ -21,6 +25,13 @@ export interface ClickUpRoutesOptions {
   intake: Pick<ClickUpIntake, 'lists'>;
   intervalSeconds: number;
   hooks?: IntegrationHooks;
+  /** The organization's Factories and their intake routes: what removing the token stops. */
+  usage?: { projects: Pick<FactoryProjectsStorage, 'listAll'>; intakeRoutes: () => IntakeRoutesReader | undefined };
+}
+
+/** `GET /web/clickup/usage`: the Factories whose intake routes read ClickUp Lists — what stops without the token. */
+export interface ClickUpUsageView {
+  factories: Array<{ id: string; name: string; lists: number }>;
 }
 
 /** `GET /web/clickup/status`: the organization's connection, checked live. Never the token. */
@@ -35,6 +46,11 @@ export interface ClickUpStatusView {
   intervalSeconds: number;
   /** The caller may connect, replace or disconnect the token (an organization admin). */
   canManage: boolean;
+  /** The organization's own name for the connection; absent shows the account. */
+  name?: string;
+  /** When the connection was made and who made it (absent on connections from before that was kept). */
+  connectedAt?: string;
+  connectedBy?: string;
   error?: string;
 }
 
@@ -85,14 +101,20 @@ async function checkToken(
 }
 
 export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
-  const { auth, clients, storage, intake, intervalSeconds, hooks } = options;
+  const { auth, clients, storage, intake, intervalSeconds, hooks, usage } = options;
 
   const status = async (orgId: string, canManage: boolean): Promise<ClickUpStatusView> => {
     const connection = await storage().connections.get(orgId);
     const token = clickUpTokenOf(connection?.data);
     if (!connection || !token) return { configured: false, connected: false, workspaces: [], intervalSeconds, canManage };
     const stored = clickUpMetadataOf(connection.metadata);
-    const account = stored?.username ? { account: { username: stored.username } } : {};
+    const meta = connection.metadata;
+    const account = {
+      ...(stored?.username ? { account: { username: stored.username } } : {}),
+      ...(typeof meta.name === 'string' ? { name: meta.name } : {}),
+      connectedAt: connection.createdAt.toISOString(),
+      ...(typeof meta.connectedBy === 'string' ? { connectedBy: meta.connectedBy } : {}),
+    };
     // The token is checked live, so the page can say "rejected" instead of showing an empty list.
     try {
       const workspaces = await clients.forToken(token).listWorkspaces();
@@ -164,6 +186,47 @@ export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
         if (before) clients.forget(before);
         if (removed) audit(context, 'token_removed', {});
         return c.json(await status(resolved.orgId, resolved.canManage));
+      },
+    }),
+    // «Перейменувати»: the organization's own name for its ClickUp connection; the token stays.
+    registerApiRoute('/web/clickup/connection/name', {
+      method: 'PATCH',
+      requiresAuth: false,
+      handler: async c => {
+        const context = c as unknown as Context;
+        const resolved = await resolveOrg(context, auth);
+        if ('response' in resolved) return resolved.response;
+        if (!resolved.canManage) return forbidden(context);
+        const body = nameBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!body.success) return c.json({ error: 'invalid_body', message: 'Send { "name": "…" } (up to 80 characters, or null).' }, 422);
+        const connection = await storage().connections.get(resolved.orgId);
+        if (!connection) return c.json({ error: 'clickup_not_connected', message: 'Connect ClickUp before naming it.' }, 409);
+        const { name: _previous, ...rest } = connection.metadata;
+        await storage().connections.upsert(resolved.orgId, {
+          userId: connection.userId,
+          data: connection.data,
+          metadata: { ...rest, ...(body.data.name ? { name: body.data.name } : {}) },
+        });
+        return c.json(await status(resolved.orgId, resolved.canManage));
+      },
+    }),
+    // What removing the token stops: each Factory of the organization whose intake routes read ClickUp Lists.
+    registerApiRoute('/web/clickup/usage', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrg(c as unknown as Context, auth);
+        if ('response' in resolved) return resolved.response;
+        const reader = usage?.intakeRoutes();
+        if (!usage || !reader) return c.json({ error: 'usage_unavailable', message: 'Intake routes are not available on this server.' }, 503);
+        const factories: ClickUpUsageView['factories'] = [];
+        for (const project of await usage.projects.listAll()) {
+          if (project.orgId !== resolved.orgId) continue;
+          const routes = await reader.listIntakeRoutes({ orgId: project.orgId, factoryProjectId: project.id });
+          const lists = routedSourceScopes(routes, 'source.list').length;
+          if (lists > 0) factories.push({ id: project.id, name: project.name, lists });
+        }
+        return c.json({ factories } satisfies ClickUpUsageView);
       },
     }),
     registerApiRoute('/web/clickup/lists', {
