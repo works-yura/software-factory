@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { connectionNavigation } from '../../connections/api';
-import type { McpActivity } from '../../services/mcpServers';
+import type { ConnectionActivityResponse } from '@factory/contracts';
 import {
   acmeConnection,
   acmeConnector,
@@ -20,7 +20,7 @@ import {
 } from './fixtures/connections';
 
 /** The page's own handlers around the shared ones; writes to the connections API are recorded. */
-function useHandlers(options: { activity?: McpActivity } = {}) {
+function useHandlers(options: { activity?: ConnectionActivityResponse } = {}) {
   useIntegrationHandlers();
   const writes: Array<{ method: string; url: string; body: unknown }> = [];
   const record = async (method: string, request: Request) =>
@@ -38,7 +38,7 @@ function useHandlers(options: { activity?: McpActivity } = {}) {
       await record('CONNECT', request);
       return HttpResponse.json({ type: 'connected', connection: mcpConnection('srv-notes', 'Notes'), title: 'Notes is linked to this Factory' });
     }),
-    ...(options.activity ? [http.get(`${MCP_BASE}/activity`, () => HttpResponse.json(options.activity))] : []),
+    ...(options.activity ? [http.get(`${TEST_BASE_URL}/web/connections/activity`, () => HttpResponse.json(options.activity))] : []),
   );
   return writes;
 }
@@ -408,9 +408,10 @@ describe('Підключення', () => {
         total: 2,
         errors: 1,
         truncated: false,
+        failures: [],
         calls: [
-          { at: new Date().toISOString(), serverId: 'srv-gc', serverLabel: 'Firestore syncta-57c6a', tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-1', tried: false },
-          { at: new Date().toISOString(), serverId: 'srv-sentry', serverLabel: 'Sentry', tool: 'search_issues', outcome: 'error', tried: false },
+          { at: new Date().toISOString(), connectionId: 'mcp:srv-gc', connectionLabel: 'Firestore syncta-57c6a', connector: { id: 'mcp', name: 'MCP servers', icon: 'mcp' }, tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-1', tried: false },
+          { at: new Date().toISOString(), connectionId: 'mcp:srv-sentry', connectionLabel: 'Sentry', connector: { id: 'mcp', name: 'MCP servers', icon: 'mcp' }, tool: 'search_issues', outcome: 'error', tried: false },
         ],
       },
     });

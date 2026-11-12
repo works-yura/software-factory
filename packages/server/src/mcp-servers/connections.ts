@@ -19,6 +19,7 @@ import type {
   ConnectMethod,
   ConnectorConnection,
   ConnectorConnectResult,
+  ConnectorActivity,
   ConnectorDescription,
   IntegrationConnections,
   RemovalImpact,
@@ -28,6 +29,7 @@ import type { FactoryProjectsStorage, McpServersStorage } from '@factory/store';
 import type { McpCredentials } from './credentials.ts';
 import type { McpServerHub } from './hub.ts';
 import type { ManagedMcpServers } from './managed.ts';
+import { readMcpActivity } from './routes.ts';
 import type { McpServerRoutesOptions } from './routes.ts';
 
 type State = ReturnType<typeof mcpServerState>;
@@ -449,6 +451,25 @@ export class McpConnections implements IntegrationConnections {
         empty: copy.detail.noCalls,
       },
     ];
+  }
+
+  /** «Активність»: the Factory's agent calls through every server it reaches, as the audit trail recorded them. */
+  async activity(request: ConnectionRequest, window: { since: Date; limit: number }): Promise<ConnectorActivity> {
+    if (!this.#deps.auditLog || !request.factoryProjectId) return { total: 0, errors: 0, truncated: false, calls: [] };
+    const read = await readMcpActivity({
+      auditLog: this.#deps.auditLog,
+      servers: this.#deps.servers,
+      orgId: request.orgId,
+      factoryProjectId: request.factoryProjectId,
+      since: window.since,
+      limit: window.limit,
+    });
+    return {
+      total: read.total,
+      errors: read.errors,
+      truncated: read.truncated,
+      calls: read.calls.map(({ serverId, serverLabel, factoryProjectId: _factory, ...call }) => ({ ...call, connectionId: serverId, connectionLabel: serverLabel })),
+    };
   }
 
   async #calls(request: ConnectionRequest, id: string): Promise<Array<{ at: string; tool: string; ok: boolean }>> {

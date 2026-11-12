@@ -27,9 +27,9 @@ const tools = connector('tooly', {
 
 describe('filterActivity', () => {
   const calls = [
-    { serverLabel: 'Firestore syncta', tool: 'list_collections', outcome: 'ok' as const },
-    { serverLabel: 'Sentry', tool: 'search_issues', outcome: 'error' as const },
-    { serverLabel: 'Firestore syncta', tool: 'query_collection', outcome: 'error' as const },
+    { connectionLabel: 'Firestore syncta', tool: 'list_collections', outcome: 'ok' as const },
+    { connectionLabel: 'Sentry', tool: 'search_issues', outcome: 'error' as const },
+    { connectionLabel: 'Firestore syncta', tool: 'query_collection', outcome: 'error' as const },
   ];
 
   it('keeps calls every filter matches: is, is not, contains, and is with several values', () => {

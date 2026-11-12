@@ -17,6 +17,17 @@ function useRefreshAll() {
   return () => queryClient.invalidateQueries();
 }
 
+/** «Активність»: the Factory's agent calls through every connector that keeps them, in the last `hours`. */
+export function useConnectionActivity(factoryProjectId: string | undefined, hours = 24) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: ['connections', 'activity', factoryProjectId ?? '', hours] as const,
+    queryFn: () => connectionsApi.activity(baseUrl, factoryProjectId!, hours),
+    enabled: Boolean(factoryProjectId),
+    refetchInterval: 60_000,
+  });
+}
+
 /** Every connector with its connect methods, capabilities and health, for «Додати підключення». */
 export function useConnectors(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();

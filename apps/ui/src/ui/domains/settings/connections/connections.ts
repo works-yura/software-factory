@@ -56,12 +56,12 @@ export interface ActivityFilter {
 }
 
 /** Calls kept by «Фільтр запитів»: every filter must match (`is`, `is-not`, `contains`; `is` with several values matches any). */
-export function filterActivity<Call extends { serverLabel: string; tool: string; outcome: 'ok' | 'error' }>(
+export function filterActivity<Call extends { connectionLabel: string; tool: string; outcome: 'ok' | 'error' }>(
   calls: readonly Call[],
   filters: readonly ActivityFilter[],
 ): Call[] {
   const field = (call: Call, fieldId: ActivityFilter['fieldId']) =>
-    fieldId === 'connection' ? call.serverLabel : fieldId === 'tool' ? call.tool : call.outcome;
+    fieldId === 'connection' ? call.connectionLabel : fieldId === 'tool' ? call.tool : call.outcome;
   return calls.filter(call =>
     filters.every(filter => {
       const actual = field(call, filter.fieldId).toLowerCase();

@@ -97,7 +97,6 @@ const CALL_ACTIONS = ['factory.mcp_server.tool_called', 'factory.mcp_server.tool
 const ACTIVITY_CALLS = 50;
 const ACTIVITY_PAGE = 200;
 const ACTIVITY_PAGES = 5;
-const ACTIVITY_MAX_HOURS = 24 * 7;
 
 type AuditEvent = Awaited<ReturnType<NonNullable<McpServerRoutesOptions['auditLog']>['list']>>['events'][number];
 
@@ -114,6 +113,53 @@ function callOf(event: AuditEvent): McpServerCall {
     ...(event.factoryProjectId ? { factoryProjectId: event.factoryProjectId } : {}),
     tried,
   };
+}
+
+/**
+ * A Factory's agent calls through every MCP server since `since`, newest first: counts over the window
+ * (a lower bound when the trail held more than was read: `truncated`) and the newest `limit` calls with
+ * the server named. No payloads. What the MCP connector serves as «Активність» (`McpConnections.activity`).
+ */
+export async function readMcpActivity({
+  auditLog,
+  servers,
+  orgId,
+  factoryProjectId,
+  since,
+  limit = ACTIVITY_CALLS,
+}: {
+  auditLog: NonNullable<McpServerRoutesOptions['auditLog']>;
+  servers: Pick<McpServersStorage, 'list'>;
+  orgId: string;
+  factoryProjectId: string;
+  since: Date;
+  limit?: number;
+}): Promise<Omit<McpActivity, 'since'>> {
+  const activity: Omit<McpActivity, 'since'> = { total: 0, errors: 0, calls: [], truncated: false };
+  const labels = new Map((await servers.list(orgId)).map(server => [server.id, server.label]));
+  let before: string | undefined;
+  for (let page = 0; page < ACTIVITY_PAGES; page += 1) {
+    const result = await auditLog.list({ orgId, factoryProjectId, actions: CALL_ACTIONS, limit: ACTIVITY_PAGE, ...(before ? { before } : {}) });
+    let reachedStart = false;
+    for (const event of result.events) {
+      if (new Date(event.occurredAt) < since) {
+        reachedStart = true;
+        break;
+      }
+      const target = event.targets.find(candidate => candidate.type === 'mcp_server');
+      if (!target) continue;
+      const call = callOf(event);
+      activity.total += 1;
+      if (call.outcome === 'error') activity.errors += 1;
+      if (activity.calls.length < limit) {
+        activity.calls.push({ ...call, serverId: target.id, serverLabel: labels.get(target.id) ?? (typeof event.metadata.server === 'string' ? event.metadata.server : target.id) });
+      }
+    }
+    if (reachedStart || !result.nextCursor) break;
+    before = result.nextCursor;
+    if (page === ACTIVITY_PAGES - 1) activity.truncated = true;
+  }
+  return activity;
 }
 
 class Refusal extends Error {
@@ -234,45 +280,6 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
         const factoryProjectId = c.req.query('factoryProjectId');
         if (!factoryProjectId || factoryProjectId.length > 128) throw new Refusal(400, { error: 'factory_required' });
         return c.json({ suggestions: await credentials.suggestions(orgId, factoryProjectId) });
-      }),
-    }),
-    // «Активність» on a Factory's Підключення: its agents' calls through every server in the last
-    // `hours` (default 24), newest first, with counts. No payloads.
-    registerApiRoute('/web/mcp-servers/activity', {
-      method: 'GET',
-      handler: handle(async c => {
-        const { orgId } = await caller(c, auth, false);
-        const factoryProjectId = c.req.query('factoryProjectId');
-        if (!factoryProjectId || factoryProjectId.length > 128) throw new Refusal(400, { error: 'factory_required' });
-        const hoursParam = Number(c.req.query('hours') ?? 24);
-        const hours = Number.isFinite(hoursParam) ? Math.min(Math.max(Math.trunc(hoursParam), 1), ACTIVITY_MAX_HOURS) : 24;
-        const since = new Date(now().getTime() - hours * 3_600_000);
-        const activity: McpActivity = { since: since.toISOString(), total: 0, errors: 0, calls: [], truncated: false };
-        if (!auditLog) return c.json(activity);
-        const labels = new Map((await servers.list(orgId)).map(server => [server.id, server.label]));
-        let before: string | undefined;
-        for (let page = 0; page < ACTIVITY_PAGES; page += 1) {
-          const result = await auditLog.list({ orgId, factoryProjectId, actions: CALL_ACTIONS, limit: ACTIVITY_PAGE, ...(before ? { before } : {}) });
-          let reachedStart = false;
-          for (const event of result.events) {
-            if (new Date(event.occurredAt) < since) {
-              reachedStart = true;
-              break;
-            }
-            const target = event.targets.find(candidate => candidate.type === 'mcp_server');
-            if (!target) continue;
-            const call = callOf(event);
-            activity.total += 1;
-            if (call.outcome === 'error') activity.errors += 1;
-            if (activity.calls.length < ACTIVITY_CALLS) {
-              activity.calls.push({ ...call, serverId: target.id, serverLabel: labels.get(target.id) ?? (typeof event.metadata.server === 'string' ? event.metadata.server : target.id) });
-            }
-          }
-          if (reachedStart || !result.nextCursor) break;
-          before = result.nextCursor;
-          if (page === ACTIVITY_PAGES - 1) activity.truncated = true;
-        }
-        return c.json(activity);
       }),
     }),
     // Choices for an input from the account another input picked (projects, databases). Read-only;

@@ -20,7 +20,7 @@ const own = (name: string, label: string, factories: string[]): McpServerInput =
   enabled: true,
 });
 
-async function setup(options: { admin?: boolean; reconnect?: { connected: boolean; toolCount: number; errorKind?: 'auth_denied' } } = {}) {
+async function setup(options: { admin?: boolean; reconnect?: { connected: boolean; toolCount: number; errorKind?: 'auth_denied' }; auditEvents?: unknown[] } = {}) {
   const backend = new LibSQLFactoryStorage({ id: 'mcp-connections-test', url: ':memory:' });
   const servers = backend.registerDomain(
     new McpServersStorage(createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(3) } })),
@@ -35,6 +35,15 @@ async function setup(options: { admin?: boolean; reconnect?: { connected: boolea
     catalog: [],
     projects: { get: async ({ id }) => (['syncts', 'other'].includes(id) ? ({ id, name: id } as never) : null) },
     audit: { record: async input => void audits.push(input.action) },
+    ...(options.auditEvents
+      ? {
+          auditLog: {
+            list: async (query: { factoryProjectId?: string }) => ({
+              events: (options.auditEvents as Array<{ factoryProjectId: string }>).filter(event => !query.factoryProjectId || event.factoryProjectId === query.factoryProjectId),
+            }),
+          } as never,
+        }
+      : {}),
   });
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -116,6 +125,32 @@ describe('MCP servers as a connector (ADR-0035)', () => {
     expect((await call('PATCH', path(sentry.id), { name: 'x' })).status).toBe(403);
     const [row] = (await call('GET', `/web/connections${Q}`)).body.connections;
     expect(row.actions.remove).toEqual({ reason: 'Only organization admins change connections.' });
+  });
+});
+
+describe('«Активність» through the registry (ADR-0035)', () => {
+  it("serves the Factory's calls through every server, newest first, the server named, deleted ones by the name they had", async () => {
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000);
+    const events: unknown[] = [];
+    const { call, sentry } = await setup({ auditEvents: events });
+    const event = (at: Date, outcome: string, factoryProjectId: string, target: string) => ({
+      action: 'factory.mcp_server.tool_called',
+      targets: [{ type: 'mcp_server', id: target }],
+      metadata: { tool: 'list_issues', outcome, sessionId: 'session-1', server: 'gone-db' },
+      factoryProjectId,
+      occurredAt: at,
+    });
+    events.push(event(hoursAgo(1), 'ok', 'syncts', sentry.id), event(hoursAgo(2), 'error', 'syncts', 'deleted'), event(hoursAgo(3), 'ok', 'other', sentry.id), event(hoursAgo(30), 'ok', 'syncts', sentry.id));
+
+    const activity = (await call('GET', '/web/connections/activity?factoryProjectId=syncts')).body;
+    expect(activity).toMatchObject({ total: 2, errors: 1, truncated: false, failures: [] });
+    expect(activity.calls.map((entry: any) => [entry.connectionLabel, entry.outcome, entry.connectionId, entry.connector.id])).toEqual([
+      ['Sentry', 'ok', `mcp:${sentry.id}`, 'mcp'],
+      ['gone-db', 'error', 'mcp:deleted', 'mcp'],
+    ]);
+    expect(activity.calls[0]).toMatchObject({ tool: 'list_issues', sessionId: 'session-1', tried: false });
+    // Without a Factory there is nothing to show.
+    expect((await call('GET', '/web/connections/activity')).body).toMatchObject({ total: 0, calls: [] });
   });
 });
 

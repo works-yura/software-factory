@@ -358,6 +358,34 @@ export interface ConnectionRemoved {
   message: string;
 }
 
+/** One call an agent made through a connection («Активність»): no payloads. */
+export interface ConnectionActivityCall {
+  at: string;
+  tool: string;
+  outcome: 'ok' | 'error';
+  durationMs?: number;
+  /** The session that made it; absent for a try from Settings. */
+  sessionId?: string;
+  /** Made from Settings («Спробувати»), not by an agent. */
+  tried: boolean;
+  /** The connection's global id and name, and its connector. */
+  connectionId: string;
+  connectionLabel: string;
+  connector: ConnectorRef;
+}
+
+/** `GET /web/connections/activity`: every connector's calls for the asking Factory in a window, newest first. */
+export interface ConnectionActivityResponse {
+  since: string;
+  total: number;
+  errors: number;
+  /** The newest calls (at most 50). */
+  calls: ConnectionActivityCall[];
+  /** A connector read more than it could: the counts are a lower bound. */
+  truncated: boolean;
+  failures: Array<{ connector: ConnectorRef; message: string }>;
+}
+
 export const connectRequestSchema = z.object({
   connector: z.string().min(1).max(64),
   method: z.string().min(1).max(64),

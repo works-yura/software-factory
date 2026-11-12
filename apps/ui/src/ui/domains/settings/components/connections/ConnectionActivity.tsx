@@ -10,10 +10,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
-import { useMcpActivity } from '../../../../../hooks/useMcpServers';
+import { useConnectionActivity } from '../../../../../hooks/useConnections';
 import { filterActivity } from '../../connections/connections';
 import type { ActivityFilter } from '../../connections/connections';
-import type { McpActivityCall } from '../../services/mcpServers';
+import type { ConnectionActivityCall } from '@factory/contracts';
 import { TimeAgo } from './TimeAgo';
 
 const RANGES = [1, 24, 168] as const;
@@ -21,7 +21,7 @@ type Range = (typeof RANGES)[number];
 
 const OUTCOME_DOT = { ok: 'bg-green-500', error: 'bg-red-500' } as const;
 
-function Outcome({ call }: { call: McpActivityCall }) {
+function Outcome({ call }: { call: ConnectionActivityCall }) {
   const { t } = useTranslation('settings');
   return (
     <span className="flex items-center gap-2">
@@ -34,7 +34,7 @@ function Outcome({ call }: { call: McpActivityCall }) {
   );
 }
 
-function SessionLink({ factoryId, call }: { factoryId: string; call: McpActivityCall }) {
+function SessionLink({ factoryId, call }: { factoryId: string; call: ConnectionActivityCall }) {
   const { t } = useTranslation('settings');
   if (!call.sessionId || call.tried) return null;
   return (
@@ -45,21 +45,21 @@ function SessionLink({ factoryId, call }: { factoryId: string; call: McpActivity
 }
 
 /** The calls as the kit's inset table on wide screens; on phones one stacked entry per call. */
-function Calls({ factoryId, calls, showConnection }: { factoryId: string; calls: McpActivityCall[]; showConnection: boolean }) {
+function Calls({ factoryId, calls, showConnection }: { factoryId: string; calls: ConnectionActivityCall[]; showConnection: boolean }) {
   const { t } = useTranslation('settings');
   const isMobile = useIsMobile(640);
-  const duration = (call: McpActivityCall) => (call.durationMs !== undefined ? t('mcpServers.calls.duration', { ms: call.durationMs }) : '—');
+  const duration = (call: ConnectionActivityCall) => (call.durationMs !== undefined ? t('mcpServers.calls.duration', { ms: call.durationMs }) : '—');
 
   if (isMobile) {
     return (
       <ul aria-label={t('connections.activity.listLabel')} className="bg-surface-panel shadow-raised flex flex-col rounded-xl p-1">
         {calls.map(call => (
-          <li key={`${call.at}:${call.serverId}:${call.tool}`} className="text-body-sm flex flex-col gap-1 rounded-lg px-3 py-2">
+          <li key={`${call.at}:${call.connectionId}:${call.tool}`} className="text-body-sm flex flex-col gap-1 rounded-lg px-3 py-2">
             <span className="flex items-center justify-between gap-2">
               <span className="text-foreground truncate font-mono">{call.tool}</span>
               <TimeAgo value={call.at} className="text-muted-foreground shrink-0" />
             </span>
-            {showConnection && <span className="text-muted-foreground truncate">{call.serverLabel}</span>}
+            {showConnection && <span className="text-muted-foreground truncate">{call.connectionLabel}</span>}
             <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
               <Outcome call={call} />
               <span>{duration(call)}</span>
@@ -87,11 +87,11 @@ function Calls({ factoryId, calls, showConnection }: { factoryId: string; calls:
       </Table.Header>
       <Table.Body>
         {calls.map(call => (
-          <Table.Row key={`${call.at}:${call.serverId}:${call.tool}`}>
+          <Table.Row key={`${call.at}:${call.connectionId}:${call.tool}`}>
             <Table.Cell>
               <TimeAgo value={call.at} />
             </Table.Cell>
-            {showConnection && <Table.Cell>{call.serverLabel}</Table.Cell>}
+            {showConnection && <Table.Cell>{call.connectionLabel}</Table.Cell>}
             <Table.Cell>
               <span className="font-mono">{call.tool}</span>
             </Table.Cell>
@@ -128,13 +128,13 @@ export function ConnectionActivity({
   const { t } = useTranslation('settings');
   const [hours, setHours] = useState<Range>(24);
   const [filters, setFilters] = useState<FilterBarItem[]>([]);
-  const activity = useMcpActivity(factoryId, hours);
-  const all = (activity.data?.calls ?? []).filter(call => !serverId || call.serverId === serverId);
+  const activity = useConnectionActivity(factoryId, hours);
+  const all = (activity.data?.calls ?? []).filter(call => !serverId || call.connectionId === serverId);
   const calls = filterActivity(all, filters as ActivityFilter[]);
 
   const unique = (values: string[]) => [...new Set(values)].sort().map(value => ({ value }));
   const fields: FilterBarField[] = [
-    ...(serverId ? [] : [{ id: 'connection', label: t('connections.activity.fields.connection'), suggestions: unique(all.map(call => call.serverLabel)) }]),
+    ...(serverId ? [] : [{ id: 'connection', label: t('connections.activity.fields.connection'), suggestions: unique(all.map(call => call.connectionLabel)) }]),
     { id: 'tool', label: t('connections.activity.fields.tool'), suggestions: unique(all.map(call => call.tool)) },
     {
       id: 'outcome',

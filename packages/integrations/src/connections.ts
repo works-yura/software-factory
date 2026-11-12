@@ -29,6 +29,8 @@ import {
 } from '@factory/contracts';
 import type {
   AuthFlowStatus,
+  ConnectionActivityCall,
+  ConnectionActivityResponse,
   ConnectionActionsView,
   ConnectionBlocked,
   ConnectionDetailSection,
@@ -162,7 +164,24 @@ export interface IntegrationConnections {
   ): Promise<ConnectionOutcome<{ message: string }>>;
   /** The detail page's sections; null when it does not exist. */
   detail?(request: ConnectionRequest, id: string): Promise<ConnectionDetailSection[] | null>;
+  /**
+   * The calls agents made through its connections for `request.factoryProjectId` since `since`,
+   * newest first, at most `limit` (counts cover them all): «Активність». Absent: it has none.
+   */
+  activity?(request: ConnectionRequest, window: { since: Date; limit: number }): Promise<ConnectorActivity>;
 }
+
+/** A connector's activity in a window; the registry adds the connector and global ids. */
+export interface ConnectorActivity {
+  total: number;
+  errors: number;
+  truncated: boolean;
+  calls: Array<Omit<ConnectionActivityCall, 'connectionId' | 'connector'> & { connectionId: string }>;
+}
+
+/** The newest calls «Активність» shows, and the longest window it reads. */
+export const ACTIVITY_CALLS = 50;
+export const ACTIVITY_MAX_HOURS = 24 * 7;
 
 /** The language a request asks for (`Accept-Language`, first supported tag wins); English otherwise. */
 export function connectionLanguage(header: string | undefined | null): ConnectionLanguage {
@@ -455,6 +474,41 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
           failures: results.flatMap(result => (result.failure ? [result.failure] : [])),
           copy: { organizationWide: copy.organizationWide },
         });
+      },
+    }),
+    // «Активність»: every connector's calls for the asking Factory, newest first (ADR-0035's first exception, now through the registry).
+    registerApiRoute('/web/connections/activity', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolve(c);
+        if ('response' in resolved) return resolved.response;
+        const { request, language } = resolved;
+        const copy = localize(COPY, language);
+        const hoursParam = Number(c.req.query('hours') ?? 24);
+        const hours = Number.isFinite(hoursParam) ? Math.min(Math.max(Math.trunc(hoursParam), 1), ACTIVITY_MAX_HOURS) : 24;
+        const since = new Date(Date.now() - hours * 3_600_000);
+        const body: ConnectionActivityResponse = { since: since.toISOString(), total: 0, errors: 0, calls: [], truncated: false, failures: [] };
+        if (!request.factoryProjectId) return c.json(body);
+        await Promise.all(
+          connectors.filter(speaks).map(async connector => {
+            if (!connector.connections.activity) return;
+            let ref: ConnectorRef = unnamed(connector);
+            try {
+              ref = refOf(await describe(connector, request));
+              const read = await connector.connections.activity(request, { since, limit: ACTIVITY_CALLS });
+              body.total += read.total;
+              body.errors += read.errors;
+              body.truncated ||= read.truncated;
+              body.calls.push(...read.calls.map(call => ({ ...call, connectionId: `${connector.id}:${call.connectionId}`, connector: ref })));
+            } catch (error) {
+              console.warn(`[factory] ${connector.id} activity could not be read:`, error);
+              body.failures.push({ connector: ref, message: copy.listFailed(error instanceof Error ? error.message : String(error)) });
+            }
+          }),
+        );
+        body.calls = body.calls.sort((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_CALLS);
+        return c.json(body);
       },
     }),
     registerApiRoute('/web/connections/methods', {

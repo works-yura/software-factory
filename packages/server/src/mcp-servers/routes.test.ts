@@ -166,46 +166,6 @@ describe('MCP server routes: status, try, reconnect, calls', () => {
   });
 });
 
-describe('MCP server routes: a Factory’s activity', () => {
-  const now = new Date(Date.UTC(2026, 10, 12, 12, 0));
-  const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000);
-
-  it('counts the Factory’s calls through every server in the last 24 hours, newest first, with the server named', async () => {
-    const { call, auditEvents, auditQueries } = await setup({ now });
-    const { server } = await (await call('POST', '/web/mcp-servers', firestore)).json();
-    const event = (at: Date, outcome: string, factoryProjectId: string, target = server.id) => ({
-      actorId: 'session-1',
-      actorType: 'agent',
-      action: 'factory.mcp_server.tool_called',
-      targets: [{ type: 'mcp_server', id: target }],
-      metadata: { tool: 'list_collections', outcome, sessionId: 'session-1', server: 'gone-db' },
-      factoryProjectId,
-      occurredAt: at,
-    });
-    auditEvents.push(
-      event(hoursAgo(1), 'ok', 'syncts'),
-      event(hoursAgo(2), 'error', 'syncts', 'deleted-server'),
-      event(hoursAgo(3), 'ok', 'post-airborne'),
-      event(hoursAgo(30), 'ok', 'syncts'),
-    );
-
-    const res = await call('GET', '/web/mcp-servers/activity?factoryProjectId=syncts');
-    expect(res.status).toBe(200);
-    const activity = await res.json();
-    expect(activity).toMatchObject({ since: hoursAgo(24).toISOString(), total: 2, errors: 1, truncated: false });
-    expect(activity.calls.map((c: { serverLabel: string; outcome: string }) => [c.serverLabel, c.outcome])).toEqual([
-      ['Syncta Firestore', 'ok'],
-      ['gone-db', 'error'],
-    ]);
-    expect(auditQueries.at(-1)).toMatchObject({ factoryProjectId: 'syncts', actions: ['factory.mcp_server.tool_called', 'factory.mcp_server.tool_tried'] });
-  });
-
-  it('asks which Factory', async () => {
-    const { call } = await setup({ now });
-    expect((await call('GET', '/web/mcp-servers/activity')).status).toBe(400);
-  });
-});
-
 describe('MCP server routes', () => {
   it('creates, lists, changes and deletes a server; secret values never come back', async () => {
     const { call, audits } = await setup();

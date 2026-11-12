@@ -6,6 +6,7 @@
 
 import type {
   AuthorizationStatusResponse,
+  ConnectionActivityResponse,
   ConnectionDetailView,
   ConnectionErrorBody,
   ConnectionRemoved,
@@ -129,4 +130,6 @@ export const connectionsApi = {
   updateSettings: (baseUrl: string, id: string, section: string, values: ConnectionSettingsValues) =>
     request<{ message: string }>(baseUrl, 'PATCH', path(id, '/settings'), { section, values }),
   detail: (baseUrl: string, id: string) => request<ConnectionDetailView>(baseUrl, 'GET', path(id, '/detail')),
+  activity: (baseUrl: string, factoryProjectId: string, hours: number) =>
+    request<ConnectionActivityResponse>(baseUrl, 'GET', `/web/connections/activity?${new URLSearchParams({ factoryProjectId, hours: String(hours) })}`),
 };

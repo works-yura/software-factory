@@ -128,23 +128,6 @@ export interface McpServerCall {
   tried: boolean;
 }
 
-/** One call in a Factory's «Активність»: which server, which tool, how it went. */
-export interface McpActivityCall extends McpServerCall {
-  serverId: string;
-  serverLabel: string;
-}
-
-/** A Factory's agent calls through every MCP server in a window (24 h by default). */
-export interface McpActivity {
-  since: string;
-  total: number;
-  errors: number;
-  /** The newest calls (up to 50). */
-  calls: McpActivityCall[];
-  /** More calls than were read: the counts are a lower bound. */
-  truncated: boolean;
-}
-
 export class McpServerRequestError extends Error {
   readonly status: number;
 
@@ -234,9 +217,6 @@ export const fetchMcpServerCalls = async (baseUrl: string, id: string): Promise<
   (await request<{ calls: McpServerCall[] }>(baseUrl, `/web/mcp-servers/${encodeURIComponent(id)}/calls`)).calls;
 
 /** «Активність» on Підключення: the Factory's agents' calls through all its servers in the last `hours`. */
-export const fetchMcpActivity = (baseUrl: string, factoryProjectId: string, hours = 24) =>
-  request<McpActivity>(baseUrl, `/web/mcp-servers/activity?factoryProjectId=${encodeURIComponent(factoryProjectId)}&hours=${hours}`);
-
 /** A stored server as the form's starting point (secrets are never known: only their names). */
 export function serverToInput(server: McpServer): McpServerInput {
   return {

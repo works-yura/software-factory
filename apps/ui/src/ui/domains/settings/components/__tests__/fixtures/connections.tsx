@@ -168,7 +168,7 @@ export function useIntegrationHandlers(options: { connections?: ConnectionView[]
     ),
     http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, () => HttpResponse.json({ sections: [] })),
     http.get(`${TEST_BASE_URL}/web/connections/methods`, () => HttpResponse.json({ connectors: options.connectors ?? [acmeConnector, mcpConnector] })),
-    http.get(`${MCP_BASE}/activity`, () => HttpResponse.json({ since: '2026-11-11T12:00:00.000Z', total: 0, errors: 0, calls: [], truncated: false })),
+    http.get(`${TEST_BASE_URL}/web/connections/activity`, () => HttpResponse.json({ since: '2026-11-11T12:00:00.000Z', total: 0, errors: 0, calls: [], truncated: false, failures: [] })),
   );
 }
 
