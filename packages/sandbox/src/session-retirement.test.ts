@@ -98,6 +98,7 @@ function seedRepositoryLink(storage: SourceControlStorageInMemory, teardownComma
     externalId: '7',
     accountName: 'acme',
     accountType: 'Organization',
+    displayName: null,
     providerMetadata: {},
     createdAt: now,
   });
