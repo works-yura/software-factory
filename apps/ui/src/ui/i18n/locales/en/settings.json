@@ -1891,10 +1891,7 @@
       "factoryLists_other": "“{{factory}}” — {{count}} ClickUp Lists in intake routes",
       "nothing": "No Factory of the organization reads ClickUp Lists now.",
       "confirm": "Delete",
-      "done": "Connection deleted",
-      "githubBody": "The connection goes for the whole organization: Factories stop seeing its repositories. A token is deleted; the App stays installed on GitHub.",
-      "githubInUse_one": "{{count}} Factory project still uses its repositories — remove them in Repositories first.",
-      "githubInUse_other": "{{count}} Factory projects still use its repositories — remove them in Repositories first."
+      "done": "Connection deleted"
     },
     "organizationNote": "Connections belong to the organization: all its Factories see them. Google Cloud and MCP servers are also opened to each Factory separately."
   },
@@ -1922,14 +1919,30 @@
     "manage": "Manage on GitHub",
     "replaceToken": "Replace token",
     "disconnect": "Disconnect",
-    "disconnectTitle": "Disconnect {{account}}?",
-    "disconnectBody": "Factory stops seeing this connection's repositories. The account and the token on GitHub itself stay.",
     "disconnectFailed": "Couldn't disconnect",
     "addMore": "Add another",
     "viaApp": "Through the GitHub App",
     "viaAppHint": "Installing the App on a GitHub organization needs its owner's approval.",
     "viaToken": "Private token",
     "none": "GitHub is not connected yet: connect it through the GitHub App or with a private token.",
-    "loadFailed": "Couldn't read the GitHub connections: {{error}}"
+    "loadFailed": "Couldn't read the GitHub connections: {{error}}",
+    "remove": {
+      "title": "Delete the “{{name}}” connection?",
+      "body": "The connection goes for the whole organization. Its token is deleted; the App stays installed on GitHub.",
+      "counting": "Checking what depends on it…",
+      "uncounted": "Could not check what depends on it",
+      "nothing": "No Factory takes repositories from it.",
+      "factories": "Unlinked from: {{factories}}",
+      "repositories": "Repositories:",
+      "moves": "moves to {{account}} ({{kind}})",
+      "unlinks": "is unlinked: Factory stops seeing this repository",
+      "kind": {
+        "app": "App",
+        "token": "Token"
+      },
+      "confirm": "Delete",
+      "confirmMove": "Delete and move",
+      "confirmUnlink": "Delete and unlink"
+    }
   }
 }

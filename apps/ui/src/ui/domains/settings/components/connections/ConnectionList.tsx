@@ -25,7 +25,8 @@ import type { ConnectionRow, ConnectionSources, OrgActionBlock } from '../../con
 export type ReconnectStep = 'clickup' | 'gitlab' | 'google-cloud' | typeof GITHUB_TOKEN_ITEM;
 import type { FirebaseBinding, FirebaseBindingInput } from '../../services/firebase';
 import { serverToInput } from '../../services/mcpServers';
-import { disconnectGithubConnection, manageGithubConnection, renameGithubInstallation } from '../../../workspaces/services/github';
+import { manageGithubConnection, renameGithubInstallation } from '../../../workspaces/services/github';
+import { RemoveGithubConnectionDialog } from './RemoveGithubConnectionDialog';
 import { RemoveAccountDialog } from '../GoogleCloudService';
 import { mcpErrorText } from '../mcp-servers/McpServerInspect';
 import { CapabilityDots, useConnectionDots } from './CapabilityDots';
@@ -187,35 +188,17 @@ function RemoveOrgConnection({ row, onClose }: { row: ConnectionRow; onClose: ()
 
 /**
  * «Видалити підключення» for one GitHub connection: the organization's App installation or token
- * goes. While Factory projects still use its repositories the server refuses; the confirmation says
- * so and waits.
+ * goes. The dialog first says which Factories and repositories depend on it and what happens to
+ * each (moves to another connection, or is unlinked), then deletes on confirmation.
  */
 function RemoveGithubConnection({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
   const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const remove = useMutation({
-    mutationFn: () => disconnectGithubConnection(baseUrl, row.installationId!),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
-  });
-  const inUse = row.projectConnections ?? 0;
   return (
-    <ConfirmDialog
-      title={t('connections.removeOrg.title', { name: row.title })}
-      body={inUse > 0 ? t('connections.removeOrg.githubInUse', { count: inUse }) : t('connections.removeOrg.githubBody')}
-      confirm={t('connections.removeOrg.confirm')}
-      cancel={t('connections.delete.cancel')}
-      pending={remove.isPending || inUse > 0}
+    <RemoveGithubConnectionDialog
+      id={row.installationId!}
+      name={row.title}
       onClose={onClose}
-      onConfirm={() =>
-        remove.mutate(undefined, {
-          onSuccess: () => {
-            toast.success(t('connections.removeOrg.done'));
-            onClose();
-          },
-          onError: error => toast.error(errorMessage(error)),
-        })
-      }
+      onRemoved={() => toast.success(t('connections.removeOrg.done'))}
     />
   );
 }

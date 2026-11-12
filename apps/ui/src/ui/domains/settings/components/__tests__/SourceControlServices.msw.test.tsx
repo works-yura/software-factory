@@ -137,29 +137,58 @@ describe('Connections › GitHub', () => {
     ]);
   });
 
-  it('disconnects after a confirmation, and shows why when projects still use the connection', async () => {
+  it('says what deleting moves before it deletes, and deletes only on confirmation', async () => {
     githubHandlers();
-    const deleted: string[] = [];
+    const deleted: Array<{ id: string; confirm: string | null }> = [];
     server.use(
-      http.delete(`${TEST_BASE_URL}/web/github/connections/:id`, ({ params }) => {
-        deleted.push(String(params.id));
-        return HttpResponse.json(
-          { error: 'connection_in_use', message: '2 project connections still use repositories of @client.', projectConnections: 2 },
-          { status: 409 },
-        );
+      http.get(`${TEST_BASE_URL}/web/github/connections/:id/usage`, ({ params }) =>
+        HttpResponse.json({
+          connection: { id: params.id, kind: 'token', accountLogin: 'client' },
+          factories: [{ id: 'fp-1', name: 'bookfate' }],
+          repositories: [
+            { id: 'r1', slug: 'client/app', externalId: '1', factories: ['bookfate'], projectRepositoryIds: ['l1'], target: { id: 'inst-app', kind: 'app', accountLogin: 'eclipt' } },
+          ],
+        }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/github/connections/:id`, ({ params, request }) => {
+        deleted.push({ id: String(params.id), confirm: new URL(request.url).searchParams.get('confirm') });
+        return HttpResponse.json({ removed: true, moved: [{ slug: 'client/app', to: { id: 'inst-app', kind: 'app', accountLogin: 'eclipt' } }], unlinked: [] });
       }),
     );
     renderService(<GitHubService />);
 
     const token = await screen.findByRole('listitem', { name: '@client' });
     await userEvent.click(within(token).getByRole('button', { name: 'Disconnect' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Disconnect @client?' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Disconnect' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete the “@client” connection?' });
+    expect(await within(dialog).findByText('Unlinked from: bookfate')).toBeInTheDocument();
+    expect(within(dialog).getByRole('list', { name: 'Repositories:' })).toHaveTextContent('client/appmoves to @eclipt (App)');
+    expect(deleted).toEqual([]);
+    // Everything moves: the button says so.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete and move' }));
+    await waitFor(() => expect(deleted).toEqual([{ id: 'inst-token', confirm: '1' }]));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
 
-    const alert = await within(token).findByRole('alert');
+  it('shows why a delete failed and keeps the dialog open', async () => {
+    githubHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/connections/:id/usage`, ({ params }) =>
+        HttpResponse.json({ connection: { id: params.id, kind: 'token', accountLogin: 'client' }, factories: [], repositories: [] }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/github/connections/:id`, () =>
+        HttpResponse.json({ error: 'session_retirement_unavailable', message: 'Sessions could not be stopped.' }, { status: 409 }),
+      ),
+    );
+    renderService(<GitHubService />);
+
+    const token = await screen.findByRole('listitem', { name: '@client' });
+    await userEvent.click(within(token).getByRole('button', { name: 'Disconnect' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete the “@client” connection?' });
+    expect(await within(dialog).findByText('No Factory takes repositories from it.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    const alert = await within(dialog).findByRole('alert');
     expect(alert).toHaveTextContent("Couldn't disconnect");
-    expect(alert).toHaveTextContent('2 project connections still use repositories of @client.');
-    expect(deleted).toEqual(['inst-token']);
+    expect(alert).toHaveTextContent('Sessions could not be stopped.');
   });
 
   it('adds another connection with a token; the App way is offered only when the server has the App', async () => {

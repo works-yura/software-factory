@@ -285,14 +285,54 @@ export async function replaceGithubToken(
   return readConnectionResponse(res);
 }
 
-/** Disconnect a GitHub connection (App installation or token). 409 while projects still use it. */
-export async function disconnectGithubConnection(baseUrl: string, id: string): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/github/connections/${encodeURIComponent(id)}`, {
+/** Another connection of the organization that reaches a repository, which it moves to. */
+export interface GithubConnectionTarget {
+  id: string;
+  kind: 'app' | 'token';
+  accountLogin: string | null;
+}
+
+/** What deleting a connection moves or unlinks: the Factories using it and each repository's fate. */
+export interface GithubConnectionUsage {
+  connection: { id: string; kind: 'app' | 'token'; accountLogin: string | null };
+  factories: Array<{ id: string; name: string }>;
+  repositories: Array<{
+    id: string;
+    slug: string;
+    externalId: string;
+    factories: string[];
+    projectRepositoryIds: string[];
+    /** null: the repository is unlinked and Factory stops seeing it. */
+    target: GithubConnectionTarget | null;
+  }>;
+}
+
+/** What deleting the connection would move to another connection or unlink. */
+export async function fetchGithubConnectionUsage(baseUrl: string, id: string): Promise<GithubConnectionUsage> {
+  const res = await fetch(`${baseUrl}/web/github/connections/${encodeURIComponent(id)}/usage`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  return readConnectionResponse<GithubConnectionUsage>(res);
+}
+
+/**
+ * Delete a GitHub connection (App installation or token). Without `confirm` the server refuses
+ * (409) while Factories still use it; with it, repositories another connection reaches move there
+ * and the rest are unlinked — what {@link fetchGithubConnectionUsage} showed.
+ */
+export async function disconnectGithubConnection(
+  baseUrl: string,
+  id: string,
+  options: { confirm?: boolean } = {},
+): Promise<{ removed: true; moved?: Array<{ slug: string; to: GithubConnectionTarget | null }>; unlinked?: string[] }> {
+  const query = options.confirm ? '?confirm=1' : '';
+  const res = await fetch(`${baseUrl}/web/github/connections/${encodeURIComponent(id)}${query}`, {
     method: 'DELETE',
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  await readConnectionResponse(res);
+  return readConnectionResponse(res);
 }
 
 /** `default` = the worker token every sandbox gets; `reviewer` = optional

@@ -12,7 +12,7 @@ import { useApiConfig } from '../../../../api/config';
 import { useGithubConnectionMutations, useGithubConnectionsQuery } from '../../../../hooks/useGithubConnections';
 import type { GithubConnection } from '../../workspaces/services/github';
 import { connectGithub, manageGithubConnection } from '../../workspaces/services/github';
-import { ConfirmDialog } from './connections/ConnectionDialogs';
+import { RemoveGithubConnectionDialog } from './connections/RemoveGithubConnectionDialog';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -137,7 +137,6 @@ function accountOf(connection: GithubConnection, unknown: string): string {
 function ConnectionItem({ connection, canManage }: { connection: GithubConnection; canManage: boolean }) {
   const { t } = useTranslation('settings');
   const { baseUrl } = useApiConfig();
-  const { disconnect } = useGithubConnectionMutations();
   const [replacing, setReplacing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const account = accountOf(connection, t('githubConnections.unknownAccount'));
@@ -168,11 +167,6 @@ function ConnectionItem({ connection, canManage }: { connection: GithubConnectio
           <Notice.Message>{connection.error}</Notice.Message>
         </Notice>
       )}
-      {disconnect.isError && (
-        <Notice variant="destructive" title={t('githubConnections.disconnectFailed')} role="alert">
-          <Notice.Message>{errorMessage(disconnect.error)}</Notice.Message>
-        </Notice>
-      )}
       {canManage && !replacing && (
         <div className="flex flex-wrap items-center gap-2">
           {connection.kind === 'app' ? (
@@ -193,15 +187,7 @@ function ConnectionItem({ connection, canManage }: { connection: GithubConnectio
         <GithubTokenForm replace={connection} onDone={() => setReplacing(false)} onCancel={() => setReplacing(false)} />
       )}
       {confirming && (
-        <ConfirmDialog
-          title={t('githubConnections.disconnectTitle', { account })}
-          body={t('githubConnections.disconnectBody')}
-          confirm={t('githubConnections.disconnect')}
-          cancel={t('githubConnections.cancel')}
-          pending={disconnect.isPending}
-          onConfirm={() => disconnect.mutate(connection.id, { onSettled: () => setConfirming(false) })}
-          onClose={() => setConfirming(false)}
-        />
+        <RemoveGithubConnectionDialog id={connection.id} name={account} onClose={() => setConfirming(false)} />
       )}
     </li>
   );

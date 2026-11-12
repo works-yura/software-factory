@@ -239,9 +239,9 @@ describe('Підключення', () => {
     }
   });
 
-  it('renames a GitHub App connection, and removes it once no Factory project uses its repositories', async () => {
+  it('renames a GitHub App connection, and shows what deleting it moves and unlinks before it deletes', async () => {
     useHandlers();
-    const calls: Array<{ method: string; id: unknown; body?: unknown }> = [];
+    const calls: Array<{ method: string; id: unknown; body?: unknown; confirm?: string | null }> = [];
     let inUse = 1;
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -260,9 +260,26 @@ describe('Підключення', () => {
         calls.push({ method: 'PATCH', id: params.id, body: await request.json() });
         return HttpResponse.json({ id: params.id, name: 'Eclipt GitHub' });
       }),
-      http.delete(`${TEST_BASE_URL}/web/github/connections/:id`, ({ params }) => {
-        calls.push({ method: 'DELETE', id: params.id });
-        return HttpResponse.json({ removed: true });
+      http.get(`${TEST_BASE_URL}/web/github/connections/:id/usage`, ({ params }) =>
+        HttpResponse.json({
+          connection: { id: params.id, kind: 'app', accountLogin: 'eclipt-ai' },
+          factories: inUse
+            ? [
+                { id: 'fp-1', name: 'post-airborne' },
+                { id: 'fp-2', name: 'syncts' },
+              ]
+            : [],
+          repositories: inUse
+            ? [
+                { id: 'r1', slug: 'eclipt-ai/app', externalId: '1', factories: ['post-airborne'], projectRepositoryIds: ['l1'], target: { id: 'inst-token', kind: 'token', accountLogin: 'works-yura' } },
+                { id: 'r2', slug: 'eclipt-ai/site', externalId: '2', factories: ['syncts'], projectRepositoryIds: ['l2'], target: null },
+              ]
+            : [],
+        }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/github/connections/:id`, ({ params, request }) => {
+        calls.push({ method: 'DELETE', id: params.id, confirm: new URL(request.url).searchParams.get('confirm') });
+        return HttpResponse.json({ removed: true, moved: [], unlinked: [] });
       }),
     );
     renderConnections();
@@ -277,22 +294,20 @@ describe('Підключення', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', id: 'inst-row-1', body: { name: 'Eclipt GitHub' } }]));
 
-    // While a Factory project still uses its repositories, the confirmation says so and does not delete.
+    // Before deleting, the dialog says which Factories it is unlinked from and what happens to each repository.
     await openMenu('eclipt-ai');
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete connection' }));
-    const blocked = await screen.findByRole('dialog', { name: 'Delete the “eclipt-ai” connection?' });
-    expect(blocked).toHaveTextContent('1 Factory project still uses its repositories — remove them in Repositories first.');
-    expect(within(blocked).getByRole('button', { name: 'Delete' })).toBeDisabled();
-    await userEvent.click(within(blocked).getByRole('button', { name: 'Cancel' }));
-
-    inUse = 0;
-    renderConnections();
-    await waitFor(async () => expect(await screen.findAllByRole('button', { name: 'Actions for eclipt-ai' })).not.toHaveLength(0));
-    await userEvent.click(screen.getAllByRole('button', { name: 'Actions for eclipt-ai' }).at(-1)!);
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete connection' }));
-    const confirm = await screen.findByRole('dialog', { name: 'Delete the “eclipt-ai” connection?' });
-    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', id: 'inst-row-1' }));
+    const dialog2 = await screen.findByRole('dialog', { name: 'Delete the “eclipt-ai” connection?' });
+    await within(dialog2).findByText('Unlinked from: post-airborne, syncts');
+    const repositories = within(dialog2).getByRole('list', { name: 'Repositories:' });
+    expect(within(repositories).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      'eclipt-ai/appmoves to @works-yura (Token)',
+      'eclipt-ai/siteis unlinked: Factory stops seeing this repository',
+    ]);
+    // Something is unlinked, so the button says so; nothing was deleted yet.
+    expect(calls.filter(call => call.method === 'DELETE')).toEqual([]);
+    await userEvent.click(within(dialog2).getByRole('button', { name: 'Delete and unlink' }));
+    await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', id: 'inst-row-1', confirm: '1' }));
   });
 
   it('tells a member the organization’s connections are changed by an admin', async () => {
