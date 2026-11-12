@@ -15,7 +15,8 @@ import type {
   IntakeTriggerRouteRepository,
 } from '@factory/core';
 
-import { IntakeTriggerEngine } from './engine.ts';
+import { FIRE_LOCK_BUSY_REASON, IntakeTriggerEngine } from './engine.ts';
+import type { IntakeTriggerEngineOptions } from './engine.ts';
 import { eventTriggerKind } from './event-trigger.ts';
 import { alwaysPolicy } from './policies.ts';
 
@@ -25,11 +26,12 @@ const scope = { orgId: 'org-1', factoryProjectId: 'project-1' };
 function memoryRoutes() {
   const routes = new Map<string, IntakeTriggerRoute>();
   const fires: IntakeRouteFire[] = [];
+  const locks = new Map<string, { holder: string; until: number }>();
   const repository: IntakeTriggerRouteRepository = {
     getTriggerRoute: async id => routes.get(id) ?? null,
     listTriggerRoutes: async () => [...routes.values()],
     recordFire: async input => {
-      const fire = { ...input, id: `fire-${fires.length + 1}` };
+      const fire = { ...input, triggeredBy: input.triggeredBy ?? null, id: `fire-${fires.length + 1}` };
       fires.push(fire);
       return fire;
     },
@@ -40,8 +42,17 @@ function memoryRoutes() {
         .reverse()
         .slice(0, options?.limit ?? Infinity),
     lastDoneFire: async routeId => fires.filter(fire => fire.routeId === routeId && fire.outcome === 'done').at(-1) ?? null,
+    claimFire: async (route, holder, until) => {
+      const current = locks.get(route.id);
+      if (current && current.holder !== holder && current.until > Date.now()) return false;
+      locks.set(route.id, { holder, until: until.getTime() });
+      return true;
+    },
+    releaseFire: async (route, holder) => {
+      if (locks.get(route.id)?.holder === holder) locks.delete(route.id);
+    },
   };
-  return { routes, fires, repository };
+  return { routes, fires, locks, repository };
 }
 
 /** A trigger with no clock: the test fires it by hand through the sink the engine gave it. */
@@ -90,9 +101,14 @@ function everyOtherPolicy(): IntakePolicyKind {
   };
 }
 
-async function setup(kinds: Parameters<typeof intakeKinds>[0]) {
+async function setup(kinds: Parameters<typeof intakeKinds>[0], fireLock?: IntakeTriggerEngineOptions['fireLock']) {
   const memory = memoryRoutes();
-  const engine = new IntakeTriggerEngine({ routes: memory.repository, kinds: intakeKinds(kinds), logger: { warn: () => {} } });
+  const engine = new IntakeTriggerEngine({
+    routes: memory.repository,
+    kinds: intakeKinds(kinds),
+    logger: { warn: () => {} },
+    ...(fireLock ? { fireLock } : {}),
+  });
   await engine.start();
   const add = async (overrides: Partial<IntakeTriggerRoute> = {}) => {
     const route: IntakeTriggerRoute = {
@@ -210,6 +226,74 @@ describe('IntakeTriggerEngine', () => {
     await manual.fire({ routeId: route.id, firedAt: new Date(1000), triggerKind: 'test-webhook' });
     expect(manual.armed.has(route.id)).toBe(false);
     expect(memory.fires).toEqual([]);
+  });
+
+  it('fires a route by hand through the same policy, action and record, naming who started it', async () => {
+    const manual = manualTrigger();
+    const notes: string[] = [];
+    const { engine, memory, add } = await setup({
+      triggers: [manual.trigger],
+      actions: [noteAction(notes)],
+      policies: [alwaysPolicy, everyOtherPolicy()],
+    });
+    const route = await add({ policyKind: 'test-every-other' });
+    const first = await engine.fireNow(route, 'admin-7');
+    await manual.fire({ routeId: route.id, firedAt: new Date(2000), triggerKind: 'test-webhook', fireKey: 'claim-1' });
+    expect(first).toMatchObject({
+      outcome: 'done',
+      triggerKind: 'test-webhook',
+      triggeredBy: 'admin-7',
+      fireKey: expect.stringMatching(/^manual:/),
+    });
+    // The policy counts the manual fire like any other: the trigger's next one is held back.
+    expect(memory.fires.map(fire => [fire.outcome, fire.triggeredBy])).toEqual([
+      ['done', 'admin-7'],
+      ['skipped', null],
+    ]);
+    expect(notes).toHaveLength(1);
+    expect(memory.locks.size).toBe(0);
+  });
+
+  it('runs one fire of a route at a time: the next waits for the lock, and one that waits too long is skipped', async () => {
+    const manual = manualTrigger();
+    let release: () => void = () => {};
+    const running: string[] = [];
+    const slow: IntakeActionKind<object> = {
+      kind: 'test-note',
+      label: { uk: 'Повільна', en: 'Slow' },
+      parse: () => ({}),
+      describe: () => 'slow',
+      run: async ({ fired }) => {
+        running.push(`start ${fired.fireKey}`);
+        if (fired.fireKey === 'claim-1') await new Promise<void>(resolve => (release = resolve));
+        running.push(`end ${fired.fireKey}`);
+        return { workItemId: null };
+      },
+    };
+    const { engine, memory, add } = await setup(
+      { triggers: [manual.trigger], actions: [slow], policies: [alwaysPolicy] },
+      { waitMs: 1_000, pollMs: 5 },
+    );
+    const route = await add();
+    const scheduled = manual.fire({ routeId: route.id, firedAt: new Date(1000), triggerKind: 'test-webhook', fireKey: 'claim-1' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const byHand = engine.fireNow(route, 'admin-7');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(running).toEqual(['start claim-1']);
+    release();
+    await scheduled;
+    const fire = await byHand;
+    expect(running).toEqual(['start claim-1', 'end claim-1', `start ${fire!.fireKey}`, `end ${fire!.fireKey}`]);
+
+    // A lock held past the wait (another replica's fire still running): skipped, said why.
+    expect(memory.locks.size).toBe(0);
+    const quick = await setup({ triggers: [manualTrigger().trigger], actions: [slow], policies: [alwaysPolicy] }, { waitMs: 30, pollMs: 5 });
+    quick.memory.routes.set(route.id, route);
+    quick.memory.locks.set(route.id, { holder: 'replica-2', until: Date.now() + 60_000 });
+    expect(await quick.engine.fireNow(route, 'admin-7')).toMatchObject({ outcome: 'skipped', reason: FIRE_LOCK_BUSY_REASON });
+    // An expired lock (its holder crashed) is taken over.
+    quick.memory.locks.set(route.id, { holder: 'replica-2', until: Date.now() - 1 });
+    expect(await quick.engine.fireNow(route, 'admin-7')).toMatchObject({ outcome: 'done' });
   });
 
   it('arms every stored trigger route at boot, one broken route not stopping the rest', async () => {

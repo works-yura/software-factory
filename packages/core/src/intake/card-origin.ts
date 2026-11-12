@@ -19,6 +19,8 @@ export interface IntakeRouteCardOrigin {
   /** ISO time of the fire. */
   firedAt: string;
   fireKey: string;
+  /** Who fired the route by hand («Запустити зараз»); absent for the trigger's own fire. */
+  triggeredBy?: string;
 }
 
 export function intakeRouteOrigin(
@@ -34,5 +36,6 @@ export function intakeRouteOrigin(
     triggerKind: typeof origin.triggerKind === 'string' ? origin.triggerKind : 'schedule',
     firedAt: typeof origin.firedAt === 'string' ? origin.firedAt : '',
     fireKey: typeof origin.fireKey === 'string' ? origin.fireKey : '',
+    ...(typeof origin.triggeredBy === 'string' ? { triggeredBy: origin.triggeredBy } : {}),
   };
 }

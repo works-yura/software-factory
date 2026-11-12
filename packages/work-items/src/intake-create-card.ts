@@ -1,5 +1,6 @@
 import {
   createCardActionConfigSchema,
+  externalSourceForWorkItem,
   INTAKE_ROUTE_CARD_SOURCE,
   INTAKE_ROUTE_METADATA_KEY,
   INTAKE_ROUTE_ORIGIN_METADATA_KEY,
@@ -12,6 +13,7 @@ import {
 import type {
   BoardRegistry,
   CreateCardActionConfig,
+  ExternalWorkItemSource,
   IntakeActionKind,
   IntakeRouteCardOrigin,
   IntakeScope,
@@ -25,11 +27,21 @@ export const CREATE_CARD_ACTION_KIND = 'create-card';
 /** The actor a trigger route's commits are made under; the route's id follows it. */
 export const INTAKE_ROUTE_ACTOR = 'factory-intake-route';
 
+type CardSourceLookup = IntakeScope & { source: ExternalWorkItemSource };
+
 export interface CreateCardActionOptions {
   workItems: Pick<WorkItemsStorage, 'commitRuleEvaluation'>;
   boards: { load(scope: IntakeScope): Promise<BoardRegistry> };
   configVersion: string;
   now?: () => Date;
+  /**
+   * Finds the card a fire filed (by its source). With `cardWaitMs`, a fire waits up to that long for
+   * the dispatcher to file its card and returns the card's id: the route's fire lock is held until
+   * then, so the next fire's `skip-if-open` sees the card, and a manual fire can link to it.
+   */
+  reader?: { getByProjectSource(input: CardSourceLookup): Promise<{ id: string } | null> };
+  cardWaitMs?: number;
+  cardPollMs?: number;
 }
 
 function targetProblem(registry: BoardRegistry, target: IntakeTriggerRoute['target']): string | undefined {
@@ -45,6 +57,17 @@ function targetProblem(registry: BoardRegistry, target: IntakeTriggerRoute['targ
  */
 export function createCardAction(options: CreateCardActionOptions): IntakeActionKind<CreateCardActionConfig> {
   const now = options.now ?? (() => new Date());
+  const waitForCard = async (input: CardSourceLookup): Promise<string | null> => {
+    const { reader, cardWaitMs = 0, cardPollMs = 100 } = options;
+    if (!reader || cardWaitMs <= 0) return null;
+    const deadline = Date.now() + cardWaitMs;
+    for (;;) {
+      const card = await reader.getByProjectSource(input);
+      if (card) return card.id;
+      if (Date.now() >= deadline) return null;
+      await new Promise(resolve => setTimeout(resolve, cardPollMs));
+    }
+  };
   return {
     kind: CREATE_CARD_ACTION_KIND,
     label: { uk: 'Створити картку', en: 'Create a card' },
@@ -74,6 +97,7 @@ export function createCardAction(options: CreateCardActionOptions): IntakeAction
         triggerKind: fired.triggerKind,
         firedAt: fired.firedAt.toISOString(),
         fireKey,
+        ...(fired.triggeredBy ? { triggeredBy: fired.triggeredBy } : {}),
       };
       const identity = `intake-route:${route.id}:${fireKey}`;
       const result = await options.workItems.commitRuleEvaluation({
@@ -113,8 +137,9 @@ export function createCardAction(options: CreateCardActionOptions): IntakeAction
         throw new Error(`The card for this fire could not be filed (${result.status}).`);
       }
       // The dispatcher files the card right after the commit and writes its id back onto this fire
-      // (`cardFiled` → `IntakeRouteFiresStorage.setFireCard`).
-      return { workItemId: null, ...(result.status === 'replayed' ? { note: 'This fire had already filed its card.' } : {}) };
+      // (`cardFiled` → `IntakeRouteFiresStorage.setFireCard`); waiting for it names it here already.
+      const workItemId = await waitForCard({ ...scope, source: externalSourceForWorkItem(INTAKE_ROUTE_CARD_SOURCE, `${route.id}:${fireKey}`) });
+      return { workItemId, ...(result.status === 'replayed' ? { note: 'This fire had already filed its card.' } : {}) };
     },
   };
 }

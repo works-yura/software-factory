@@ -1572,6 +1572,9 @@ export class MastraFactory {
               reader: workItemsStorage,
               boards: toBoardSource(boards),
               configVersion,
+              // A fire waits for the dispatcher to file its card (woken by the commit): the route's
+              // next fire sees it, and «Запустити зараз» answers with it.
+              cardWaitMs: 15_000,
             },
           })
         : undefined;

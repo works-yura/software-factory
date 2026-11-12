@@ -89,8 +89,12 @@ export interface IntakePolicyContext {
   lastWork: IntakeRouteFire | null;
 }
 
-/** Whether a fire goes ahead: `{ go: false, reason }` records it as skipped. */
-export type IntakePolicyDecision = { go: true } | { go: false; reason: string };
+/**
+ * Whether a fire goes ahead: `{ go: false, reason }` records it as skipped. `workItemId` names the
+ * card that held it back (the open card of `skip-if-open`), recorded on the skipped fire so the
+ * history and a manual fire's answer can link to it.
+ */
+export type IntakePolicyDecision = { go: true } | { go: false; reason: string; workItemId?: string };
 
 export interface IntakePolicyKind {
   readonly kind: string;

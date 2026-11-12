@@ -861,6 +861,31 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect((await names(boards, scope)).sort()).toEqual(['a2', 'c', 'w', 'x', 'y', 'z']);
   });
 
+  it('gives a trigger route’s fire lock to one holder at a time, across replicas, until it is released or expires', async () => {
+    const { boards, scope, secondClient } = await setup();
+    const other = await secondClient();
+    const later = new Date(Date.now() + 60_000);
+    const claims = await Promise.all([
+      boards.claimIntakeRouteFire(scope, 'route-1', 'schedule:claim-1', later),
+      other.claimIntakeRouteFire(scope, 'route-1', 'manual:1', later),
+    ]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    const [holder, waiting] = claims[0] ? ['schedule:claim-1', 'manual:1'] : ['manual:1', 'schedule:claim-1'];
+    // The holder takes it again (a redelivered fire); another route's lock is its own.
+    expect(await boards.claimIntakeRouteFire(scope, 'route-1', holder, later)).toBe(true);
+    expect(await other.claimIntakeRouteFire(scope, 'route-2', waiting, later)).toBe(true);
+    // Only the holder lets it go.
+    await other.releaseIntakeRouteFire(scope, 'route-1', waiting);
+    expect(await boards.claimIntakeRouteFire(scope, 'route-1', waiting, later)).toBe(false);
+    await boards.releaseIntakeRouteFire(scope, 'route-1', holder);
+    expect(await other.claimIntakeRouteFire(scope, 'route-1', waiting, new Date(Date.now() - 1))).toBe(true);
+    // An expired lock (its holder crashed) is taken over.
+    expect(await boards.claimIntakeRouteFire(scope, 'route-1', 'manual:2', later)).toBe(true);
+    // A project whose routes were never read gets its lock row on the first claim.
+    const fresh = { ...scope, factoryProjectId: 'project-2' };
+    expect(await boards.claimIntakeRouteFire(fresh, 'route-9', 'manual:3', later)).toBe(true);
+  });
+
   it('leaves the board definition version alone', async () => {
     const { boards, scope } = await setup();
     const created = await boards.createIntakeRoute(scope, route('a'), 'u');

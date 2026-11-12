@@ -87,6 +87,8 @@ async function setup() {
       findFire: (routeId, key) => domains.fires.findFire(routeId, key),
       listFires: (scope, routeId, options) => domains.fires.listFires(scope, routeId, options),
       lastDoneFire: routeId => domains.fires.lastDoneFire(routeId),
+      claimFire: (route, holder, until) => domains.boards.claimIntakeRouteFire(route, route.id, holder, until),
+      releaseFire: (route, holder) => domains.boards.releaseIntakeRouteFire(route, route.id, holder),
     },
     kinds: intakeKinds({ triggers: [kinds.trigger], actions: [kinds.action], policies: [alwaysPolicy] }),
     now: () => new Date('2026-11-16T07:00:00Z'),
@@ -103,8 +105,9 @@ async function setup() {
   });
   const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => userId === ADMIN });
   const app = new Hono();
+  const caller = { id: ADMIN };
   app.use('*', async (c, next) => {
-    c.set('factoryAuthUser' as never, { id: ADMIN, organizationId: orgId } as never);
+    c.set('factoryAuthUser' as never, { id: caller.id, organizationId: orgId } as never);
     await next();
   });
   mountApiRoutes(app, [
@@ -126,7 +129,7 @@ async function setup() {
     const text = await response.text();
     return { status: response.status, body: text ? JSON.parse(text) : null };
   };
-  return { send, base, kinds, scope: { orgId, factoryProjectId: project.id } };
+  return { send, base, kinds, caller, domains, scope: { orgId, factoryProjectId: project.id } };
 }
 
 const TICKER_ROUTE = {
@@ -209,5 +212,47 @@ describe('routes with a trigger of their own, over HTTP', () => {
       when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'x' }] },
     });
     expect(conditioned.status).toBe(422);
+  });
+});
+
+describe('running a route «За розкладом» now, over HTTP', () => {
+  it('fires the route once through its own action, recorded as started by the admin', async () => {
+    const { send, base, kinds } = await setup();
+    const route = (await send('POST', base, TICKER_ROUTE)).body.intakeRoute;
+    const fired = await send('POST', `${base}/${route.id}/fire`);
+    expect(fired.status).toBe(200);
+    expect(fired.body.fire).toMatchObject({ outcome: 'done', triggerKind: 'test-ticker', triggeredBy: ADMIN, workItemId: null });
+    expect(kinds.notes).toEqual(['Ticker: hello']);
+    const history = await send('GET', `${base}/${route.id}/fires`);
+    expect(history.body.fires).toEqual([expect.objectContaining({ id: fired.body.fire.id, triggeredBy: ADMIN })]);
+    // The trigger's own fire is not marked as manual.
+    await kinds.fire({ routeId: route.id, firedAt: new Date('2026-11-16T07:30:00Z'), triggerKind: 'test-ticker', fireKey: 'tick-1' });
+    const after = await send('GET', `${base}/${route.id}/fires`);
+    expect(after.body.fires.map((fire: { triggeredBy: string | null }) => fire.triggeredBy).sort()).toEqual([ADMIN, null]);
+  });
+
+  it('refuses a non-admin (403), a switched-off route (409), a route without a schedule (422) and an unknown one (404)', async () => {
+    const { send, base, kinds, caller } = await setup();
+    const route = (await send('POST', base, TICKER_ROUTE)).body.intakeRoute;
+    caller.id = 'member-user';
+    expect(await send('POST', `${base}/${route.id}/fire`)).toMatchObject({
+      status: 403,
+      body: { error: 'organization_admin_required' },
+    });
+    caller.id = ADMIN;
+    const paused = await send('PATCH', `${base}/${route.id}`, { enabled: false, expectedRevision: route.revision });
+    expect(paused.status).toBe(200);
+    expect(await send('POST', `${base}/${route.id}/fire`)).toMatchObject({
+      status: 409,
+      body: { error: 'intake_route_disabled', message: expect.stringMatching(/switched off/) },
+    });
+    const plain = await send('POST', base, { name: 'Plain', target: { boardKey: 'audits', phaseKey: 'intake' } });
+    expect(plain.status).toBe(201);
+    expect(await send('POST', `${base}/${plain.body.intakeRoute.id}/fire`)).toMatchObject({
+      status: 422,
+      body: { error: 'intake_route_not_scheduled', message: expect.stringMatching(/За розкладом/) },
+    });
+    expect((await send('POST', `${base}/${randomUUID()}/fire`)).status).toBe(404);
+    expect(kinds.notes).toEqual([]);
   });
 });

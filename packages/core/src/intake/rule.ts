@@ -56,7 +56,7 @@ export interface IntakeRouteFire extends IntakeScope {
   /** The trigger kind that fired it (`schedule`, an event kind, …). */
   triggerKind: string;
   outcome: IntakeFireOutcome;
-  /** What the action made, when it made a card. */
+  /** What the action made, when it made a card; on a skipped fire, the card that held it back (`skip-if-open`). */
   workItemId: string | null;
   reason: string | null;
   /**
@@ -64,6 +64,11 @@ export interface IntakeRouteFire extends IntakeScope {
    * twice carries the same key, so it is recorded and acted on once. Null for a fire without one.
    */
   fireKey: string | null;
+  /**
+   * The person who fired the route by hand («Запустити зараз»); null for a fire of the trigger
+   * itself. A manual fire otherwise runs exactly like the trigger's own.
+   */
+  triggeredBy: string | null;
 }
 
 /** One fire of a route's trigger, as the trigger emits it. */
@@ -75,6 +80,8 @@ export interface IntakeTriggerFired {
   fireKey?: string;
   /** What the trigger knows about this fire (an event's fields); template placeholders may read it. */
   payload?: Record<string, unknown>;
+  /** Set on a fire a person started by hand; see `IntakeRouteFire.triggeredBy`. */
+  triggeredBy?: string;
 }
 
 /** Where a trigger sends its fires; the engine is the only one listening. */
@@ -86,10 +93,21 @@ export interface IntakeTriggerRouteRepository {
   getTriggerRoute(id: string): Promise<IntakeTriggerRoute | null>;
   /** Every trigger route in every project, to arm their triggers at boot. */
   listTriggerRoutes(): Promise<IntakeTriggerRoute[]>;
-  recordFire(input: Omit<IntakeRouteFire, 'id'>): Promise<IntakeRouteFire>;
+  recordFire(input: IntakeRouteFireInput): Promise<IntakeRouteFire>;
   /** The fire recorded under `fireKey` for the route, if any. */
   findFire(routeId: string, fireKey: string): Promise<IntakeRouteFire | null>;
   listFires(scope: IntakeScope, routeId: string, options?: { limit?: number }): Promise<IntakeRouteFire[]>;
   /** The route's last fire that went ahead (`done`): what an overlap policy checks. */
   lastDoneFire(routeId: string): Promise<IntakeRouteFire | null>;
+  /**
+   * Takes the route's fire lock for `holder` until `until`, so two fires of one route (its trigger's
+   * and a manual one, or two replicas) never run their policy and action at the same time. True when
+   * taken: free, expired, or already this holder's (a redelivered fire). False while another holds it.
+   */
+  claimFire(route: IntakeScope & { id: string }, holder: string, until: Date): Promise<boolean>;
+  /** Lets the route's fire lock go, if `holder` still holds it. */
+  releaseFire(route: IntakeScope & { id: string }, holder: string): Promise<void>;
 }
+
+/** What recording a fire takes: the fire without its id; `triggeredBy` defaults to null (the trigger's own fire). */
+export type IntakeRouteFireInput = Omit<IntakeRouteFire, 'id' | 'triggeredBy'> & { triggeredBy?: string | null };

@@ -1,7 +1,7 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema } from '@mastra/core/storage';
 
-import type { IntakeFireOutcome, IntakeRouteFire, IntakeScope } from '@factory/core';
+import type { IntakeFireOutcome, IntakeRouteFire, IntakeRouteFireInput, IntakeScope } from '@factory/core';
 
 /**
  * The fire log of trigger routes (intake routes with a schedule of their own): what each fire of a
@@ -30,6 +30,8 @@ export const INTAKE_ROUTE_FIRES_SCHEMA: CollectionSchema = {
     reason: { type: 'text', nullable: true },
     /** The trigger's id for the fire; a redelivered fire carries the same one. */
     fire_key: { type: 'text', nullable: true },
+    /** Who fired the route by hand («Запустити зараз»); null for the trigger's own fire (and every older row). */
+    triggered_by: { type: 'text', nullable: true },
   },
   indexes: [
     { name: 'factory_intake_route_fires_route_idx', columns: ['route_id', 'fired_at'] },
@@ -107,6 +109,7 @@ interface FireRow extends Record<string, unknown> {
   work_item_id: string | null;
   reason: string | null;
   fire_key: string | null;
+  triggered_by?: string | null;
 }
 
 interface LegacyFireRow extends Record<string, unknown> {
@@ -153,6 +156,7 @@ function toFire(row: FireRow): IntakeRouteFire {
     workItemId: row.work_item_id,
     reason: row.reason,
     fireKey: row.fire_key ?? null,
+    triggeredBy: row.triggered_by ?? null,
   };
 }
 
@@ -175,7 +179,7 @@ export class IntakeRouteFiresStorage extends FactoryStorageDomain {
    * Records one fire. A fire with a key that is already recorded for the route returns that
    * record: the same fire, redelivered, is recorded once.
    */
-  async recordFire(input: Omit<IntakeRouteFire, 'id'>): Promise<IntakeRouteFire> {
+  async recordFire(input: IntakeRouteFireInput): Promise<IntakeRouteFire> {
     if (input.fireKey) {
       const earlier = await this.findFire(input.routeId, input.fireKey);
       if (earlier) return earlier;
@@ -190,6 +194,7 @@ export class IntakeRouteFiresStorage extends FactoryStorageDomain {
       work_item_id: input.workItemId,
       reason: input.reason,
       fire_key: input.fireKey,
+      triggered_by: input.triggeredBy ?? null,
     });
     return toFire(row);
   }

@@ -6,7 +6,8 @@
  * kinds on offer, a trigger's preview and a route's fire history have endpoints of their own.
  *
  * Reads need a signed-in user of the project's organization; writes need an organization admin in
- * tenant mode. A route's target must be an installed board and a phase new cards can reach when it
+ * tenant mode; so does running a route «За розкладом» now (`/:routeId/fire`), which fires it through
+ * the same engine path as its schedule. A route's target must be an installed board and a phase new cards can reach when it
  * is written; a target that
  * stops existing later is reported in `problems` and skipped when cards arrive.
  */
@@ -96,6 +97,7 @@ function presentFire(fire: IntakeRouteFire, workItemId: string | null): IntakeRo
     outcome: fire.outcome,
     workItemId,
     reason: fire.reason,
+    triggeredBy: fire.triggeredBy,
   };
 }
 
@@ -171,7 +173,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     return parsed.success ? (parsed.data.locale ?? 'en') : 'en';
   }
 
-  /** The card a fire filed, once the dispatcher has put it on the board. */
+  /** The card a fire filed, once the dispatcher has put it on the board (or the open card that held it back). */
   async #fireCard(fire: IntakeRouteFire): Promise<string | null> {
     if (fire.workItemId) return fire.workItemId;
     if (fire.outcome !== 'done' || !fire.fireKey || !this.deps.triggers) return null;
@@ -330,6 +332,30 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const presented = [];
         for (const fire of fires) presented.push(presentFire(fire, await this.#fireCard(fire)));
         return c.json({ fires: presented });
+      }),
+
+      this.#route(contracts.intakeRouteFire, async c => {
+        const scope = await this.#resolve(c);
+        await this.#requireAdmin(c, scope);
+        const stored = await storage.getIntakeRoute(scope, this.#routeId(c));
+        if (!stored) throw new Refusal(404, { error: 'intake_route_not_found' });
+        const route = storedTriggerRoute(stored);
+        if (!route) {
+          throw new Refusal(422, {
+            error: 'intake_route_not_scheduled',
+            message: 'Only a route «За розкладом» can be run now; this one places cards that arrive from a source.',
+          });
+        }
+        if (!route.enabled) {
+          throw new Refusal(409, {
+            error: 'intake_route_disabled',
+            message: 'The route is switched off; switch it on to run it.',
+          });
+        }
+        // The same fire its schedule makes (policy, card, lock, history), started by this person.
+        const fire = await this.#triggers().engine.fireNow(route, scope.userId);
+        if (!fire) throw new Refusal(404, { error: 'intake_route_not_found' });
+        return c.json({ fire: presentFire(fire, await this.#fireCard(fire)) });
       }),
 
       this.#route(contracts.intakeRouteList, async c => this.#list(c, await this.#resolve(c))),

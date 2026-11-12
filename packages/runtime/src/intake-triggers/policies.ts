@@ -15,7 +15,7 @@ export interface IntakeCardReader {
     orgId: string;
     factoryProjectId: string;
     source: ExternalWorkItemSource;
-  }): Promise<{ title: string; board?: string | null; stages: readonly string[] } | null>;
+  }): Promise<{ id: string; title: string; board?: string | null; stages: readonly string[] } | null>;
 }
 
 export interface IntakeBoardsLoader {
@@ -28,8 +28,9 @@ export function intakeRouteCardSource(routeId: string, fireKey: string): Externa
 }
 
 /**
- * Skips a fire while the card the last fire filed is still open (not in a terminal phase). A last
- * fire whose card isn't there (deleted, or never filed) doesn't hold the next one back.
+ * Skips a fire while the card the last fire filed is still open (not in a terminal phase), naming
+ * that card on the skipped fire. A last fire whose card isn't there (deleted, or never filed)
+ * doesn't hold the next one back.
  */
 export function skipIfOpenPolicy(options: { cards: IntakeCardReader; boards: IntakeBoardsLoader }): IntakePolicyKind {
   return {
@@ -46,7 +47,7 @@ export function skipIfOpenPolicy(options: { cards: IntakeCardReader; boards: Int
       const registry = await options.boards.load(route);
       const kind = card.board ? registry.get(card.board)?.phaseKind(card.stages[0]!) : undefined;
       if (kind === 'terminal' || kind === undefined) return { go: true };
-      return { go: false, reason: `The card from the last fire («${card.title}») is still open.` };
+      return { go: false, reason: `The card from the last fire («${card.title}») is still open.`, workItemId: card.id };
     },
   };
 }

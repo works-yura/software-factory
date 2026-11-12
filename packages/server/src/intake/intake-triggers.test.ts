@@ -51,7 +51,7 @@ const SECURITY = {
   policyKind: 'skip-if-open',
 };
 
-async function setup() {
+async function setup(options: { cardWaitMs?: number } = {}) {
   const seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({ orgId: 'org-1', userId: 'admin-1', input: { name: 'Syncta' } });
   const scope = { orgId: 'org-1', factoryProjectId: project.id };
@@ -69,7 +69,9 @@ async function setup() {
       boards: { load: async () => boards },
       configVersion: 'test-v1',
       now: () => clock,
+      ...(options.cardWaitMs ? { cardWaitMs: options.cardWaitMs, cardPollMs: 10 } : {}),
     },
+    fireLock: { waitMs: 10_000, pollMs: 10 },
   });
   await engine.start();
   const dispatcher = new FactoryDecisionDispatcher({
@@ -110,7 +112,34 @@ async function setup() {
       ...scope,
       source: externalSourceForWorkItem('intake-route', `${routeId}:schedule:${claimId}`),
     });
-  return { seed, scope, engine, rows, schedules, add, fireSchedule, dispatch, card, setClock: (at: string) => (clock = new Date(at)) };
+  /** The dispatcher as the server runs it: woken all the time, filing cards while fires wait for them. */
+  const dispatchInBackground = () => {
+    let running = true;
+    const loop = (async () => {
+      let pass = 0;
+      while (running) {
+        await dispatcher.runOnce(new Date(clock.getTime() + 60_000 * ++pass));
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
+    })();
+    return async () => {
+      running = false;
+      await loop;
+    };
+  };
+  return {
+    seed,
+    scope,
+    engine,
+    rows,
+    schedules,
+    add,
+    fireSchedule,
+    dispatch,
+    dispatchInBackground,
+    card,
+    setClock: (at: string) => (clock = new Date(at)),
+  };
 }
 
 describe('a route «За розкладом» files its own cards', () => {
@@ -171,6 +200,64 @@ describe('a route «За розкладом» files its own cards', () => {
       { expectedRevision: stored.revision, actor: 'admin-1' },
     );
     expect(await ctx.fireSchedule(route.id, 'claim-1')).toMatchObject({ outcome: 'failed', reason: expect.stringMatching(/gone/) });
+  });
+});
+
+describe('running a route «За розкладом» now («Запустити зараз»)', () => {
+  it('files the card like a scheduled fire, dated now, and records the fire as started by the person', async () => {
+    const ctx = await setup({ cardWaitMs: 5_000 });
+    const route = await ctx.add();
+    ctx.setClock('2026-11-18T13:05:00Z');
+    const stop = ctx.dispatchInBackground();
+    const fire = (await ctx.engine.fireNow(route, 'admin-1'))!;
+    await stop();
+    expect(fire).toMatchObject({ outcome: 'done', triggerKind: 'schedule', triggeredBy: 'admin-1', firedAt: new Date('2026-11-18T13:05:00Z') });
+    expect(fire.fireKey).toMatch(/^manual:/);
+    // The fire waited for its card, so it names it already.
+    const card = (await ctx.seed.workItems.getByProjectSource({
+      ...ctx.scope,
+      source: externalSourceForWorkItem('intake-route', `${route.id}:${fire.fireKey}`),
+    }))!;
+    expect(fire.workItemId).toBe(card.id);
+    expect(card).toMatchObject({ title: 'Аудит безпеки — 2026-11-18', board: 'audits', stages: ['intake'] });
+    expect(card.metadata?.description).toBe('Аудит: security. Route Security audit, fired 2026-11-18 15:05.');
+    expect(card.metadata?.[INTAKE_ROUTE_ORIGIN_METADATA_KEY]).toMatchObject({
+      id: route.id,
+      triggerKind: 'schedule',
+      firedAt: '2026-11-18T13:05:00.000Z',
+      fireKey: fire.fireKey,
+      triggeredBy: 'admin-1',
+    });
+    expect(await ctx.seed.intakeRouteFires.listFires(ctx.scope, route.id)).toEqual([
+      expect.objectContaining({ id: fire.id, triggeredBy: 'admin-1', workItemId: card.id }),
+    ]);
+  });
+
+  it('is held back by skip-if-open like a scheduled fire, naming the open card', async () => {
+    const ctx = await setup();
+    const route = await ctx.add();
+    await ctx.fireSchedule(route.id, 'claim-1');
+    await ctx.dispatch();
+    const open = (await ctx.card(route.id, 'claim-1'))!;
+    expect(await ctx.engine.fireNow(route, 'admin-1')).toMatchObject({
+      outcome: 'skipped',
+      triggeredBy: 'admin-1',
+      workItemId: open.id,
+      reason: expect.stringMatching(/still open/),
+    });
+  });
+
+  it('never double-files when the schedule and a person fire the route at the same moment', async () => {
+    const ctx = await setup({ cardWaitMs: 5_000 });
+    const route = await ctx.add();
+    const stop = ctx.dispatchInBackground();
+    const [scheduled, byHand] = await Promise.all([ctx.fireSchedule(route.id, 'claim-1'), ctx.engine.fireNow(route, 'admin-1')]);
+    await stop();
+    expect([scheduled.outcome, byHand!.outcome].sort()).toEqual(['done', 'skipped']);
+    const done = scheduled.outcome === 'done' ? scheduled : byHand!;
+    const skipped = scheduled.outcome === 'done' ? byHand! : scheduled;
+    expect(skipped.workItemId).toBe(done.workItemId);
+    expect((await ctx.seed.workItems.listShared(ctx.scope)).filter(item => item.board === 'audits')).toHaveLength(1);
   });
 });
 

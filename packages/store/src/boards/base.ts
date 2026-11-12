@@ -345,6 +345,16 @@ interface IntakeRouteRow extends Record<string, unknown> {
 interface IntakeRouteLockRow extends Record<string, unknown> {
   /** Keys of the `DEFAULT_INTAKE_ROUTES` added to the project; null on rows written before the list. */
   seeded_defaults: string[] | null;
+  /** Trigger routes' fire locks: route id → holder and ISO expiry. Null (or absent) when none was taken. */
+  fire_leases?: FireLeases | string | null;
+}
+
+type FireLeases = Record<string, { holder: string; until: string }>;
+
+function fireLeases(row: IntakeRouteLockRow): FireLeases {
+  const value = row.fire_leases;
+  if (!value) return {};
+  return typeof value === 'string' ? (JSON.parse(value) as FireLeases) : value;
 }
 
 function seededDefaults(lock: IntakeRouteLockRow): string[] {
@@ -695,6 +705,37 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   async listTriggerRoutes(): Promise<StoredIntakeRouteRecord[]> {
     const rows = await this.ops.findMany<IntakeRouteRow>(INTAKE_ROUTES, {});
     return rows.filter(row => Boolean(row.trigger_kind)).map(toIntakeRouteRecord);
+  }
+
+  /**
+   * Takes a trigger route's fire lock for `holder` until `until`: one fire of a route at a time,
+   * across replicas (its trigger's and a manual «Запустити зараз»). The lock is kept on the
+   * project's route lock row (`fire_leases`: route id → holder and expiry) and changed under that
+   * row's lock, the one every route write takes, in a short transaction of its own. True when taken
+   * — free, expired (a crashed holder), or already `holder`'s; false while another holds it.
+   */
+  async claimIntakeRouteFire(scope: StoredBoardScope, routeId: string, holder: string, until: Date): Promise<boolean> {
+    // A project whose routes were never read has no lock row yet.
+    if (!(await this.ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))) await this.#ensureIntakeRoutes(scope);
+    return this.#transact(async ops => {
+      const leases = await lockFireLeases(ops, scope);
+      const current = leases[routeId];
+      if (current && current.holder !== holder && new Date(current.until).getTime() > Date.now()) return false;
+      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), {
+        fire_leases: { ...leases, [routeId]: { holder, until: until.toISOString() } },
+      });
+      return true;
+    });
+  }
+
+  /** Lets a route's fire lock go, if `holder` still holds it. */
+  async releaseIntakeRouteFire(scope: StoredBoardScope, routeId: string, holder: string): Promise<void> {
+    await this.#transact(async ops => {
+      const leases = await lockFireLeases(ops, scope);
+      if (leases[routeId]?.holder !== holder) return;
+      const { [routeId]: _released, ...rest } = leases;
+      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { fire_leases: rest });
+    });
   }
 
   async getIntakeRoute(scope: StoredBoardScope, id: string): Promise<StoredIntakeRouteRecord | null> {
@@ -1280,6 +1321,14 @@ async function insertIntakeRoute(
  * Takes the project's route lock and reads the routes. Writes that add, delete or move routes
  * call this first, so they run one after another and each reads what the one before committed.
  */
+/** Takes the project's route lock and reads the trigger routes' fire locks under it. */
+async function lockFireLeases(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<FireLeases> {
+  if ((await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { locked_at: new Date() })) !== 1) {
+    throw new ConcurrentBoardWrite();
+  }
+  return fireLeases((await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!);
+}
+
 async function lockIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<IntakeRouteRow[]> {
   if ((await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { locked_at: new Date() })) !== 1) {
     throw new ConcurrentBoardWrite();

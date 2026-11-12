@@ -115,6 +115,9 @@ export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
     // Keys of the default routes Factory added to the project (`DEFAULT_INTAKE_ROUTES`), so each is
     // added once. Null on rows written before the list: those projects got `outside-authors`.
     seeded_defaults: { type: 'json', nullable: true },
+    // Trigger routes' fire locks (route id → holder and expiry), so one route runs one fire at a
+    // time across replicas (`claimIntakeRouteFire`). Null on rows from before, and when none was taken.
+    fire_leases: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_intake_route_locks_project', columns: ['org_id', 'factory_project_id'] }],
 };

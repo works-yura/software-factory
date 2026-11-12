@@ -4,7 +4,8 @@
  * config shape is a domain schema (`@factory/core`) re-exported here, shared by the server's kinds
  * (which parse with it) and the UI's forms (which build it). The routes themselves are written
  * through the intake-route contracts (`contracts.ts`); this module adds what only trigger routes
- * need: the kinds on offer, a preview of a trigger's next fires, and a route's fire history.
+ * need: the kinds on offer, a preview of a trigger's next fires, a route's fire history, and
+ * firing a route now («Запустити зараз»).
  */
 
 import { z } from 'zod';
@@ -43,9 +44,14 @@ export const intakeRouteFireSchema = z.object({
   firedAt: z.string(),
   triggerKind: z.string(),
   outcome: z.enum(INTAKE_FIRE_OUTCOMES),
-  /** The card the fire filed, once it is on the board; null when it filed none or isn't there yet. */
+  /**
+   * The card the fire filed, once it is on the board; on a fire `skip-if-open` held back, the card
+   * that is still open. Null when there is none (or it isn't on the board yet).
+   */
   workItemId: z.string().nullable(),
   reason: z.string().nullable(),
+  /** The person who fired the route by hand («Запустити зараз»); null for the trigger's own fire. */
+  triggeredBy: z.string().nullable(),
 });
 export type IntakeRouteFire = z.infer<typeof intakeRouteFireSchema>;
 
@@ -112,5 +118,13 @@ export const INTAKE_TRIGGER_ROUTE_CONTRACTS = {
     description: "A trigger route's latest fires: the cards it filed, and what it skipped or failed",
     pathSchema: routePathSchema,
     responseSchema: z.object({ fires: z.array(intakeRouteFireSchema) }),
+  },
+  intakeRouteFire: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes/:routeId/fire',
+    description:
+      'Fires a route «За розкладом» once, now, exactly as its schedule would (policy, card, history), recorded as started by the caller. Organization admins only; a switched-off route is refused with 409, a route without a schedule with 422.',
+    pathSchema: routePathSchema,
+    responseSchema: z.object({ fire: intakeRouteFireSchema }),
   },
 } as const;

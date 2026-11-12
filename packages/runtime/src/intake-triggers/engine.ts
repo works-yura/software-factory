@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import {
   IntakeConfigError,
   IntakeError,
@@ -25,6 +27,11 @@ import type {
  *
  * A fire carrying a `fireKey` (a scheduler claim, an event id) is handled once: a redelivered fire
  * returns the fire already recorded for that key, and the action is keyed by it too.
+ *
+ * A route runs one fire at a time: each fire holds the route's fire lock (the repository's
+ * `claimFire`, keyed by the fire's key) from its policy to its record, so its trigger's fire and a
+ * manual one («Запустити зараз», `fireNow`), on one replica or two, can't both pass `skip-if-open`
+ * before either filed its card. A fire that can't get the lock in time is recorded as skipped.
  */
 
 export interface IntakeTriggerEngineOptions {
@@ -32,7 +39,17 @@ export interface IntakeTriggerEngineOptions {
   kinds: IntakeKinds;
   logger?: { warn(message: string, meta?: Record<string, unknown>): void };
   now?: () => Date;
+  /** The route's fire lock: how long one fire may hold it, and how long the next waits for it. */
+  fireLock?: { holdMs?: number; waitMs?: number; pollMs?: number };
 }
+
+/** Long enough for a fire's policy, action and the wait for its card; a crashed holder frees it after this. */
+const FIRE_LOCK_HOLD_MS = 120_000;
+const FIRE_LOCK_WAIT_MS = 30_000;
+const FIRE_LOCK_POLL_MS = 250;
+
+/** The reason a fire that could not get the route's fire lock is recorded with. */
+export const FIRE_LOCK_BUSY_REASON = 'Another fire of this route was still running.';
 
 export interface IntakeKindListing {
   kind: string;
@@ -66,6 +83,7 @@ export class IntakeTriggerEngine {
   readonly #routes: IntakeTriggerRouteRepository;
   readonly #logger: NonNullable<IntakeTriggerEngineOptions['logger']>;
   readonly #now: () => Date;
+  readonly #fireLock: Required<NonNullable<IntakeTriggerEngineOptions['fireLock']>>;
   #started = false;
 
   constructor(options: IntakeTriggerEngineOptions) {
@@ -75,6 +93,11 @@ export class IntakeTriggerEngine {
       warn: (message, meta) => console.warn(`[intake-triggers] ${message}`, meta ?? {}),
     };
     this.#now = options.now ?? (() => new Date());
+    this.#fireLock = {
+      holdMs: options.fireLock?.holdMs ?? FIRE_LOCK_HOLD_MS,
+      waitMs: options.fireLock?.waitMs ?? FIRE_LOCK_WAIT_MS,
+      pollMs: options.fireLock?.pollMs ?? FIRE_LOCK_POLL_MS,
+    };
   }
 
   /** Connects every trigger kind to the engine, once. */
@@ -177,28 +200,70 @@ export class IntakeTriggerEngine {
         workItemId,
         reason,
         fireKey: fired.fireKey ?? null,
+        triggeredBy: fired.triggeredBy ?? null,
       });
 
     if (!route.enabled) return record('skipped', null, 'The route is switched off.');
+    // The fire's key holds the lock, so a redelivered fire (a retried workflow step) takes it back.
+    const holder = fired.fireKey ?? `fire:${randomUUID()}`;
+    if (!(await this.#claimFireLock(route, holder))) {
+      this.#logger.warn("a trigger route fire waited too long for the route's previous fire", { routeId: route.id });
+      return record('skipped', null, FIRE_LOCK_BUSY_REASON);
+    }
     try {
-      const action = this.#kinds.actions.get(route.action.kind);
-      if (!action) throw new IntakeUnknownKindError('action', route.action.kind);
-      const policy = this.#kinds.policies.get(route.policyKind);
-      if (!policy) throw new IntakeUnknownKindError('policy', route.policyKind);
-      const decision = await policy.decide({ route, fired, lastWork: await this.#routes.lastDoneFire(route.id) });
-      if (!decision.go) return record('skipped', null, decision.reason);
-      const trigger = this.#kinds.triggers.get(route.trigger.kind);
-      const timeZone = trigger?.timeZone?.(trigger.parse(route.trigger.config));
-      const outcome = await action.run({
-        route,
-        config: action.parse(route.action.config),
-        fired,
-        ...(timeZone ? { timeZone } : {}),
-      });
-      return record('done', outcome.workItemId, outcome.note ?? null);
-    } catch (error) {
-      this.#logger.warn('a trigger route fire failed', { routeId: route.id, error: errorMessage(error) });
-      return record('failed', null, errorMessage(error));
+      if (fired.fireKey) {
+        // The same fire delivered twice at once: the other delivery recorded it while this one waited.
+        const recorded = await this.#routes.findFire(route.id, fired.fireKey);
+        if (recorded) return recorded;
+      }
+      try {
+        const action = this.#kinds.actions.get(route.action.kind);
+        if (!action) throw new IntakeUnknownKindError('action', route.action.kind);
+        const policy = this.#kinds.policies.get(route.policyKind);
+        if (!policy) throw new IntakeUnknownKindError('policy', route.policyKind);
+        const decision = await policy.decide({ route, fired, lastWork: await this.#routes.lastDoneFire(route.id) });
+        if (!decision.go) return await record('skipped', decision.workItemId ?? null, decision.reason);
+        const trigger = this.#kinds.triggers.get(route.trigger.kind);
+        const timeZone = trigger?.timeZone?.(trigger.parse(route.trigger.config));
+        const outcome = await action.run({
+          route,
+          config: action.parse(route.action.config),
+          fired,
+          ...(timeZone ? { timeZone } : {}),
+        });
+        return await record('done', outcome.workItemId, outcome.note ?? null);
+      } catch (error) {
+        this.#logger.warn('a trigger route fire failed', { routeId: route.id, error: errorMessage(error) });
+        return await record('failed', null, errorMessage(error));
+      }
+    } finally {
+      await this.#routes.releaseFire(route, holder).catch((error: unknown) =>
+        this.#logger.warn("could not release a trigger route's fire lock", { routeId: route.id, error: errorMessage(error) }),
+      );
+    }
+  }
+
+  /**
+   * Fires a route now, by hand («Запустити зараз»): the same fire as its trigger's — the same
+   * policy, action, lock and record, `{date}`/`{time}` of this moment — under a key of its own and
+   * with the person who started it.
+   */
+  async fireNow(route: IntakeTriggerRoute, by: string): Promise<IntakeRouteFire | null> {
+    return this.fire({
+      routeId: route.id,
+      firedAt: this.#now(),
+      triggerKind: route.trigger.kind,
+      fireKey: `manual:${randomUUID()}`,
+      triggeredBy: by,
+    });
+  }
+
+  async #claimFireLock(route: IntakeTriggerRoute, holder: string): Promise<boolean> {
+    const deadline = Date.now() + this.#fireLock.waitMs;
+    for (;;) {
+      if (await this.#routes.claimFire(route, holder, new Date(Date.now() + this.#fireLock.holdMs))) return true;
+      if (Date.now() >= deadline) return false;
+      await new Promise(resolve => setTimeout(resolve, this.#fireLock.pollMs));
     }
   }
 

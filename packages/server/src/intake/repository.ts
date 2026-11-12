@@ -5,10 +5,14 @@ import type { IntakeRouteFiresStorage, StoredBoardsStorage } from '@factory/stor
 
 /**
  * The trigger-route repository the engine runs on: the routes live with every other intake route
- * (`StoredBoardsStorage`), their fires in the route fire log.
+ * (`StoredBoardsStorage`), their fires in the route fire log; a route's fire lock is on the
+ * project's route lock row (`factory_intake_route_locks`).
  */
 export function intakeTriggerRouteRepository(
-  boards: Pick<StoredBoardsStorage, 'findIntakeRouteById' | 'listTriggerRoutes'>,
+  boards: Pick<
+    StoredBoardsStorage,
+    'findIntakeRouteById' | 'listTriggerRoutes' | 'claimIntakeRouteFire' | 'releaseIntakeRouteFire'
+  >,
   fires: Pick<IntakeRouteFiresStorage, 'recordFire' | 'findFire' | 'listFires' | 'lastDoneFire'>,
 ): IntakeTriggerRouteRepository {
   return {
@@ -25,6 +29,8 @@ export function intakeTriggerRouteRepository(
     findFire: (routeId, fireKey) => fires.findFire(routeId, fireKey),
     listFires: (scope, routeId, options) => fires.listFires(scope, routeId, options),
     lastDoneFire: routeId => fires.lastDoneFire(routeId),
+    claimFire: (route, holder, until) => boards.claimIntakeRouteFire(route, route.id, holder, until),
+    releaseFire: (route, holder) => boards.releaseIntakeRouteFire(route, route.id, holder),
   };
 }
 

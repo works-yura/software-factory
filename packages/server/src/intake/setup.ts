@@ -29,7 +29,7 @@ export function setupIntakeTriggers(options: IntakeTriggersSetupOptions) {
   const { reader, ...cards } = options.cards;
   const kinds = intakeKinds({
     triggers: [schedule.trigger, ...(options.extra?.triggers ?? [])],
-    actions: [createCardAction(cards), ...(options.extra?.actions ?? [])],
+    actions: [createCardAction({ ...cards, reader }), ...(options.extra?.actions ?? [])],
     policies: [skipIfOpenPolicy({ cards: reader, boards: cards.boards }), alwaysPolicy, ...(options.extra?.policies ?? [])],
   });
   const { schedule: _schedule, cards: _cards, extra: _extra, ...engineOptions } = options;
