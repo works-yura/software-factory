@@ -110,7 +110,7 @@ export function RepositoryEnvFiles({
           {t('envFiles.add')}
         </Button>
       </SettingsRow>
-      <div className="flex flex-col gap-2 px-4 pb-3">
+      <div className="flex flex-col gap-2 px-4 pb-3 empty:hidden">
         {filesQuery.isError && (
           <Notice variant="destructive">{errorMessage(filesQuery.error, t('envFiles.loadFailed'))}</Notice>
         )}
@@ -121,8 +121,10 @@ export function RepositoryEnvFiles({
             {t('envFiles.empty')}
           </Txt>
         )}
-        {files.length > 0 && (
-          <Table variant="inset" aria-label={t('envFiles.tableOf', { name: repositoryName })}>
+      </div>
+      {files.length > 0 && (
+        <div className="border-t border-border1 [&_td:first-child]:pl-4 [&_th:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:last-child]:pr-4">
+          <Table aria-label={t('envFiles.tableOf', { name: repositoryName })}>
             <Table.Header>
               <Table.Row>
                 <Table.Head>{t('envFiles.path')}</Table.Head>
@@ -184,8 +186,8 @@ export function RepositoryEnvFiles({
               ))}
             </Table.Body>
           </Table>
-        )}
-      </div>
+        </div>
+      )}
       {editing && (
         <EnvFileDialog
           factoryId={factoryId}
