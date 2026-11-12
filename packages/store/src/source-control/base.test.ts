@@ -125,6 +125,92 @@ describe('SourceControlStorage', () => {
     ).rejects.toThrow(/has not been registered/);
   });
 
+  describe('removing an installation that projects use', () => {
+    async function scenario() {
+      const first = await createProject({ name: 'post-airborne' });
+      const second = await createProject({ name: 'syncts' });
+      const removed = await createInstallation(github, { externalId: 'token-account' });
+      const other = await createInstallation(github, { externalId: 'app-installation' });
+      const repository = (externalId: string, slug: string, installationId = removed.id) =>
+        github.repositories.upsert({ orgId: 'org-1', input: { ...repositoryInput, installationId, externalId, slug } });
+      const reachable = await repository('101', 'acme/app');
+      const lost = await repository('102', 'client/site');
+      const connection = async (factoryProjectId: string, installationId: string) =>
+        github.connections.create({ orgId: 'org-1', factoryProjectId, installationId, createdByUserId: 'user-1' });
+      const link = (connectionId: string, repositoryId: string) =>
+        github.projectRepositories.link({ orgId: 'org-1', connectionId, repositoryId, ...projectRepositoryInput });
+      const firstConnection = await connection(first.id, removed.id);
+      const secondConnection = await connection(second.id, removed.id);
+      const appLink = await link(firstConnection.id, reachable.id);
+      const siteLink = await link(firstConnection.id, lost.id);
+      const secondAppLink = await link(secondConnection.id, reachable.id);
+      // The second project already reaches acme/app through the other installation too.
+      const knownThere = await repository('101', 'acme/app', other.id);
+      const existingConnection = await connection(second.id, other.id);
+      const existingLink = await link(existingConnection.id, knownThere.id);
+      return { first, second, removed, other, reachable, lost, appLink, siteLink, secondAppLink, knownThere, existingLink };
+    }
+
+    it('moves reachable repositories with their links and unlinks the rest, then deletes the installation', async () => {
+      const s = await scenario();
+      const summary = await github.installations.removeMovingRepositories({
+        orgId: 'org-1',
+        id: s.removed.id,
+        moves: { [s.reachable.id]: s.other.id },
+      });
+      expect(summary.moved).toEqual([
+        expect.objectContaining({ slug: 'acme/app', toInstallationId: s.other.id, projectRepositoryIds: expect.arrayContaining([s.appLink.id, s.secondAppLink.id]) }),
+      ]);
+      expect(summary.unlinked).toEqual([expect.objectContaining({ slug: 'client/site', projectRepositoryIds: [s.siteLink.id] })]);
+
+      expect(await github.installations.get({ orgId: 'org-1', id: s.removed.id })).toBeNull();
+      // The first project's link kept its id and now goes through the other installation's row.
+      const moved = await github.projectRepositories.get({ orgId: 'org-1', id: s.appLink.id });
+      expect(moved?.repositoryId).toBe(s.knownThere.id);
+      const movedConnection = await github.connections.get({ orgId: 'org-1', id: moved!.connectionId });
+      expect(movedConnection).toMatchObject({ factoryProjectId: s.first.id, installationId: s.other.id });
+      // The second project already had the repository there: its old link went, the existing one stays.
+      expect(await github.projectRepositories.get({ orgId: 'org-1', id: s.secondAppLink.id })).toBeNull();
+      expect(await github.projectRepositories.get({ orgId: 'org-1', id: s.existingLink.id })).not.toBeNull();
+      expect(await github.projectRepositories.get({ orgId: 'org-1', id: s.siteLink.id })).toBeNull();
+      expect(await github.repositories.list({ orgId: 'org-1', installationId: s.other.id })).toEqual([
+        expect.objectContaining({ slug: 'acme/app' }),
+      ]);
+      expect((await github.connections.list({ orgId: 'org-1', factoryProjectId: s.first.id })).map(c => c.installationId)).toEqual([
+        s.other.id,
+      ]);
+    });
+
+    it('changes nothing when a step fails inside the transaction', async () => {
+      const s = await scenario();
+      const original = backend.withTransaction.bind(backend);
+      vi.spyOn(backend, 'withTransaction').mockImplementation(((fn: (ops: never) => Promise<unknown>) =>
+        original(async ops =>
+          fn(
+            new Proxy(ops, {
+              get(target, property) {
+                const value = Reflect.get(target, property, target);
+                if (typeof value !== 'function') return value;
+                if (property !== 'deleteMany') return value.bind(target);
+                return async (collection: string, where: unknown) => {
+                  if (collection === 'source_control_installations') throw new Error('disk full');
+                  return value.call(target, collection, where);
+                };
+              },
+            }) as never,
+          ),
+        )) as never);
+      await expect(
+        github.installations.removeMovingRepositories({ orgId: 'org-1', id: s.removed.id, moves: { [s.reachable.id]: s.other.id } }),
+      ).rejects.toThrow('disk full');
+      vi.restoreAllMocks();
+      expect(await github.installations.get({ orgId: 'org-1', id: s.removed.id })).not.toBeNull();
+      expect(await github.projectRepositories.get({ orgId: 'org-1', id: s.appLink.id })).toMatchObject({ repositoryId: s.reachable.id });
+      expect(await github.projectRepositories.get({ orgId: 'org-1', id: s.siteLink.id })).not.toBeNull();
+      expect(await github.installations.usage({ orgId: 'org-1', id: s.removed.id })).toEqual({ repositories: 2, projectConnections: 2 });
+    });
+  });
+
   it('reports what still references an installation and replaces its provider metadata', async () => {
     const project = await createProject();
     const installation = await createInstallation(github);

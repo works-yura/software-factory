@@ -45,7 +45,7 @@ function fakeGithub(routes: Record<string, Answer | ((call: Call) => Answer)>) {
     }
     const route = routes[key];
     const answer = typeof route === 'function' ? route(calls.at(-1)!) : route;
-    const reply = isAnswer(answer) ? answer : { status: 200, body: answer };
+    const reply: Reply = isAnswer(answer) ? answer : { status: 200, body: answer };
     return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
       status: reply.status,
       headers: { 'content-type': 'application/json', ...reply.headers },
@@ -73,7 +73,7 @@ async function mounted(
       sourceControl: seeded.sourceControl.forIntegration(integration.id),
       projects: seeded.projects,
       intake: seeded.intake,
-    },
+    } as never,
   });
   integration.versionControl.initialize({ storage: seeded.sourceControl.forIntegration(integration.id) });
   return { integration, routes, storage: seeded };
@@ -159,7 +159,7 @@ describe('GithubIntegration: how each installation authenticates', () => {
   it('lists only the repositories a token account can push to, past the first hundred', async () => {
     const github = fakeGithub({
       'GET /user': account,
-      'GET /user/repos': call =>
+      'GET /user/repos': (call: Call) =>
         call.url.searchParams.get('page') === '2'
           ? [repo(101), repo(102, 'acme/docs', { admin: false, push: false, pull: true })]
           : {
@@ -432,7 +432,7 @@ describe('GithubIntegration: token connections through the routes', () => {
       connections: [expect.objectContaining({ kind: 'token', repositoryCount: 2, status: 'ok' })],
     });
     // Another org does not see it.
-    expect(await (await t.request('/web/github/status', undefined, 'org-2')).json()).toMatchObject({ connected: false });
+    expect((await (await t.request('/web/github/status', undefined, 'org-2')).json()) as any).toMatchObject({ connected: false });
   });
 
   it('explains a token GitHub refuses, and stores nothing', async () => {
@@ -450,7 +450,7 @@ describe('GithubIntegration: token connections through the routes', () => {
     expect((await t.request('/web/github/token-connections', t.json('POST', { token: TOKEN }))).status).toBe(403);
     expect((await t.request('/web/github/token-connections/x', t.json('PUT', { token: TOKEN }))).status).toBe(403);
     expect((await t.request('/web/github/connections/x', { method: 'DELETE' })).status).toBe(403);
-    expect(await (await t.request('/web/github/status')).json()).toMatchObject({ canManage: false });
+    expect((await (await t.request('/web/github/status')).json()) as any).toMatchObject({ canManage: false });
   });
 
   it('replaces the token of the same account, refuses another account, and moves a legacy row to a stored token', async () => {
@@ -461,7 +461,7 @@ describe('GithubIntegration: token connections through the routes', () => {
     });
     // The legacy row the former token mode registered: no metadata, the env account's id.
     const legacy = await t.storage.installations.upsert({ orgId: 'org-1', connectedByUserId: 'u', externalId: '4242', accountName: 'Yura' });
-    expect((await (await t.request('/web/github/status')).json()).installations).toEqual([
+    expect(((await (await t.request('/web/github/status')).json()) as any).installations).toEqual([
       expect.objectContaining({ id: legacy.id, kind: 'token', tokenSource: 'env' }),
     ]);
 
@@ -478,27 +478,114 @@ describe('GithubIntegration: token connections through the routes', () => {
     expect((await t.request('/web/github/token-connections/missing', t.json('PUT', { token: 'ghp_x' }))).status).toBe(404);
   });
 
-  it('disconnects a token connection unless projects still use it', async () => {
+  it('disconnects an unused token connection straight away', async () => {
     const t = await app({ routes: { 'GET /user': account, 'GET /user/repos': [repo(1)] } });
-    const { connection } = await (await t.request('/web/github/token-connections', t.json('POST', { token: TOKEN }))).json();
-    const project = await t.projects.create({ orgId: 'org-1', userId: 'u', input: { name: 'Factory' } });
-    const used = await t.storage.connections.create({
-      orgId: 'org-1',
-      factoryProjectId: project.id,
-      installationId: connection.id,
-      createdByUserId: 'u',
-    });
-
-    const refused = await t.request(`/web/github/connections/${connection.id}`, { method: 'DELETE' });
-    expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({ error: 'connection_in_use', projectConnections: 1 });
-
-    await t.storage.connections.delete({ orgId: 'org-1', id: used.id });
+    const { connection } = (await (await t.request('/web/github/token-connections', t.json('POST', { token: TOKEN }))).json()) as any;
     const removed = await t.request(`/web/github/connections/${connection.id}`, { method: 'DELETE' });
-    expect(await removed.json()).toEqual({ removed: true });
+    expect(await removed.json()).toEqual({ removed: true, moved: [], unlinked: [] });
     expect(await t.storage.installations.list({ orgId: 'org-1' })).toEqual([]);
     expect(await t.integration.tokens.hasStoredToken('org-1', 4242)).toBe(false);
-    expect(t.audits.at(-1)).toMatchObject({ action: 'factory.integration.token_removed' });
+    expect(t.audits.at(-1)).toMatchObject({ action: 'factory.integration.connection_removed', metadata: { account: 'Yura', kind: 'token' } });
+  });
+
+  describe('deleting a connection Factories still use', () => {
+    const CLIENT = { id: 7001, login: 'client-bot', type: 'User' };
+    async function used() {
+      // ghp_yura reaches acme/app (1) and client/site (2); ghp_client reaches only acme/app.
+      const t = await app({
+        routes: {
+          'GET /user': (call: Call) => (call.authorization === 'token ghp_client' ? CLIENT : account),
+          'GET /user/repos': (call: Call) =>
+            call.authorization === 'token ghp_client' ? [repo(1, 'acme/app')] : [repo(1, 'acme/app'), repo(2, 'client/site')],
+        },
+      });
+      const yura = ((await (await t.request('/web/github/token-connections', t.json('POST', { token: 'ghp_yura' }))).json()) as any).connection;
+      const client = ((await (await t.request('/web/github/token-connections', t.json('POST', { token: 'ghp_client' }))).json()) as any).connection;
+      const project = await t.projects.create({ orgId: 'org-1', userId: 'u', input: { name: 'post-airborne' } });
+      const projectConnection = await t.storage.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: yura.id,
+        createdByUserId: 'u',
+      });
+      const links: Record<string, string> = {};
+      for (const [externalId, slug] of [
+        ['1', 'acme/app'],
+        ['2', 'client/site'],
+      ] as const) {
+        const repository = await t.storage.repositories.upsert({
+          orgId: 'org-1',
+          input: { installationId: yura.id, externalId, slug, defaultBranch: 'main' },
+        });
+        links[slug] = (
+          await t.storage.projectRepositories.link({
+            orgId: 'org-1',
+            connectionId: projectConnection.id,
+            repositoryId: repository.id,
+            createdByUserId: 'u',
+            sandboxProvider: 'local',
+            sandboxWorkdir: '/workspace',
+          })
+        ).id;
+      }
+      return { t, yura, client, project, links };
+    }
+
+    it('previews which Factories and repositories move to another connection or get unlinked', async () => {
+      const { t, yura, client, project } = await used();
+      const res = await t.request(`/web/github/connections/${yura.id}/usage`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        connection: expect.objectContaining({ id: yura.id, kind: 'token', accountLogin: 'Yura' }),
+        factories: [{ id: project.id, name: 'post-airborne' }],
+        repositories: [
+          expect.objectContaining({ slug: 'acme/app', factories: ['post-airborne'], target: { id: client.id, kind: 'token', accountLogin: 'client-bot' } }),
+          expect.objectContaining({ slug: 'client/site', factories: ['post-airborne'], target: null }),
+        ],
+      });
+    });
+
+    it('refuses without confirmation, returning the same usage', async () => {
+      const { t, yura } = await used();
+      const refused = await t.request(`/web/github/connections/${yura.id}`, { method: 'DELETE' });
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({
+        error: 'connection_in_use',
+        projectConnections: 1,
+        usage: { repositories: [expect.objectContaining({ slug: 'acme/app' }), expect.objectContaining({ slug: 'client/site', target: null })] },
+      });
+      expect(await t.storage.installations.get({ orgId: 'org-1', id: yura.id })).not.toBeNull();
+    });
+
+    it('on confirmation moves what another connection reaches, unlinks the rest, and deletes the connection and its token', async () => {
+      const { t, yura, client, project, links } = await used();
+      const res = await t.request(`/web/github/connections/${yura.id}?confirm=1`, { method: 'DELETE' });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        removed: true,
+        moved: [{ slug: 'acme/app', to: { id: client.id, kind: 'token', accountLogin: 'client-bot' } }],
+        unlinked: ['client/site'],
+      });
+      expect(await t.storage.installations.get({ orgId: 'org-1', id: yura.id })).toBeNull();
+      expect(await t.integration.tokens.hasStoredToken('org-1', 4242)).toBe(false);
+      const moved = await t.storage.projectRepositories.get({ orgId: 'org-1', id: links['acme/app']! });
+      expect(await t.storage.connections.get({ orgId: 'org-1', id: moved!.connectionId })).toMatchObject({
+        factoryProjectId: project.id,
+        installationId: client.id,
+      });
+      expect(await t.storage.projectRepositories.get({ orgId: 'org-1', id: links['client/site']! })).toBeNull();
+      expect(t.audits.at(-1)).toMatchObject({
+        action: 'factory.integration.connection_removed',
+        metadata: { account: 'Yura', factories: ['post-airborne'], moved: [{ slug: 'acme/app', to: 'client-bot' }], unlinked: ['client/site'] },
+      });
+    });
+
+    it('lets only organization admins delete', async () => {
+      const { t, yura } = await used();
+      void t;
+      const member = await app({ routes: { 'GET /user': account }, admin: false });
+      expect((await member.request(`/web/github/connections/${yura.id}?confirm=1`, { method: 'DELETE' })).status).toBe(403);
+    });
   });
 
   it('keeps two organizations with tokens of one account apart in storage', async () => {

@@ -425,6 +425,25 @@ export interface GithubConnectionView {
   projectConnections: number;
 }
 
+/** What deleting a connection would move or unlink (ADR-0034). */
+export interface GithubConnectionUsage {
+  connection: GithubConnectionView;
+  /** Factories (projects) whose repositories come through this connection. */
+  factories: Array<{ id: string; name: string }>;
+  repositories: Array<{
+    /** Storage id of the repository row. */
+    id: string;
+    slug: string;
+    /** GitHub repository id. */
+    externalId: string;
+    /** Names of the Factories linking it. */
+    factories: string[];
+    projectRepositoryIds: string[];
+    /** Another connection of the organization that reaches it, which it moves to; null: it is unlinked. */
+    target: { id: string; kind: 'app' | 'token'; accountLogin: string | null } | null;
+  }>;
+}
+
 /** How an installation row connects: its stored kind, refined by how its id resolves now. */
 async function describeInstallation(
   github: GithubIntegration,
@@ -837,7 +856,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   const forbidden = (c: RouteContext) =>
     c.json({ error: 'forbidden', message: 'Only organization admins can connect or disconnect GitHub.' }, 403);
   const canManage = async (c: RouteContext, orgId: string) => !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
-  const audit = (c: RouteContext, action: 'token_connected' | 'token_removed', metadata: Record<string, unknown>) =>
+  const audit = (c: RouteContext, action: 'token_connected' | 'token_removed' | 'connection_removed', metadata: Record<string, unknown>) =>
     void Promise.resolve(
       emitAudit?.({
         context: c,
@@ -907,6 +926,71 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         repositoryCount: args.repositoryCount,
       },
     });
+  };
+
+  /**
+   * What depends on a connection: the Factories (projects) linking its repositories, and for each
+   * repository whether another GitHub connection of the organization reaches it (by GitHub repository
+   * id, from each connection's live repository list), so deleting it can move instead of unlink.
+   */
+  const connectionUsage = async (row: SourceControlInstallation, orgId: string): Promise<GithubConnectionUsage> => {
+    const handle = github.sourceControlStorage;
+    const view = await describeInstallation(github, row);
+    const factories = new Map<string, string>();
+    const repositories: GithubConnectionUsage['repositories'] = [];
+    for (const repository of await handle.repositories.list({ orgId, installationId: row.id })) {
+      const targets = (
+        await handle.projectRepositories.listByExternalRepository({
+          installationExternalId: row.externalId,
+          repositoryExternalId: repository.externalId,
+        })
+      ).filter(target => target.orgId === orgId && target.projectRepository.repositoryId === repository.id);
+      if (targets.length === 0) continue;
+      const names: string[] = [];
+      for (const target of targets) {
+        if (!factories.has(target.factoryProjectId)) {
+          const project = await options.projects?.get({ orgId, id: target.factoryProjectId }).catch(() => null);
+          factories.set(target.factoryProjectId, project?.name ?? target.factoryProjectId);
+        }
+        names.push(factories.get(target.factoryProjectId)!);
+      }
+      repositories.push({
+        id: repository.id,
+        slug: repository.slug,
+        externalId: repository.externalId,
+        factories: [...new Set(names)],
+        projectRepositoryIds: targets.map(target => target.projectRepository.id),
+        target: null,
+      });
+    }
+    if (repositories.length > 0) {
+      const others = (await handle.installations.list({ orgId })).filter(other => other.id !== row.id);
+      const reach = await Promise.all(
+        others.map(async other => {
+          const otherView = await describeInstallation(github, other);
+          const ids = await github
+            .listInstallationRepos(otherView.installationId)
+            .then(list => new Set(list.map(repo => String(repo.id))))
+            .catch(() => new Set<string>());
+          return { view: otherView, ids };
+        }),
+      );
+      for (const repository of repositories) {
+        const found = reach.find(other => !other.view.needsAttention && other.ids.has(repository.externalId));
+        if (found) {
+          repository.target = {
+            id: found.view.id,
+            kind: found.view.kind,
+            accountLogin: found.view.accountLogin,
+          };
+        }
+      }
+    }
+    return {
+      connection: view,
+      factories: [...factories].map(([id, name]) => ({ id, name })),
+      repositories,
+    };
   };
 
   routes.push(
@@ -1015,6 +1099,21 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         });
       },
     }),
+    registerApiRoute('/web/github/connections/:id/usage', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId } = resolved.tenant;
+        const existing = await github.sourceControlStorage.installations.get({ orgId, id: c.req.param('id') });
+        if (!existing) return c.json({ error: 'not_found' }, 404);
+        return c.json(await connectionUsage(existing, orgId));
+      },
+    }),
+    // Without `?confirm=1` a connection projects still use answers 409 with what would move or be
+    // unlinked, so no client deletes links it never showed. With it, reachable repositories move to
+    // another connection and the rest are unlinked, in one transaction.
     registerApiRoute('/web/github/connections/:id', {
       method: 'DELETE',
       requiresAuth: false,
@@ -1025,22 +1124,55 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (!(await canManage(loose(c), orgId))) return forbidden(loose(c));
         const existing = await github.sourceControlStorage.installations.get({ orgId, id: c.req.param('id') });
         if (!existing) return c.json({ error: 'not_found' }, 404);
-        const usage = await github.sourceControlStorage.installations.usage({ orgId, id: existing.id });
-        if (usage.projectConnections > 0) {
+        const usage = await connectionUsage(existing, orgId);
+        const confirmed = c.req.query('confirm') === '1';
+        if (usage.factories.length > 0 && !confirmed) {
           return c.json(
             {
               error: 'connection_in_use',
-              message: `Projects still use repositories of @${existing.accountName ?? existing.externalId}. Remove those repositories from the projects first.`,
-              projectConnections: usage.projectConnections,
+              message: `Projects still use repositories of @${existing.accountName ?? existing.externalId}. Confirm to move or unlink them.`,
+              projectConnections: usage.factories.length,
+              usage,
             },
             409,
           );
         }
-        const view = await describeInstallation(github, existing);
+        // Sessions of links that go away are retired first, as unlinking a repository from a project does.
+        const unlinkedLinks = usage.repositories.filter(repository => !repository.target).flatMap(repository => repository.projectRepositoryIds);
+        for (const projectRepositoryId of unlinkedLinks) {
+          const sessions = await github.sourceControlStorage.sessions.listByProjectRepository({ projectRepositoryId });
+          if (sessions.length === 0) continue;
+          if (!sessionRetirement) return c.json({ error: 'session_retirement_unavailable' }, 409);
+          await sessionRetirement.retireProjectRepositorySessions({
+            sourceControl: github.sourceControlStorage,
+            ...(workItems ? { workItems } : {}),
+            orgId,
+            projectRepositoryId,
+          });
+        }
+        const moves: Record<string, string> = {};
+        for (const repository of usage.repositories) {
+          if (repository.target) moves[repository.id] = repository.target.id;
+        }
+        const summary = await github.sourceControlStorage.installations.removeMovingRepositories({
+          orgId,
+          id: existing.id,
+          moves,
+        });
         await github.tokens.remove(orgId, Number(existing.externalId));
-        await github.sourceControlStorage.installations.delete({ orgId, id: existing.id });
-        if (view.kind === 'token') audit(loose(c), 'token_removed', { account: existing.accountName });
-        return c.json({ removed: true });
+        const targetsById = new Map(usage.repositories.flatMap(repository => (repository.target ? [[repository.id, repository.target]] : [])));
+        audit(loose(c), 'connection_removed', {
+          account: existing.accountName,
+          kind: usage.connection.kind,
+          factories: usage.factories.map(factory => factory.name),
+          moved: summary.moved.map(entry => ({ slug: entry.slug, to: targetsById.get(entry.repositoryId)?.accountLogin ?? null })),
+          unlinked: summary.unlinked.map(entry => entry.slug),
+        });
+        return c.json({
+          removed: true,
+          moved: summary.moved.map(entry => ({ slug: entry.slug, to: targetsById.get(entry.repositoryId) ?? null })),
+          unlinked: summary.unlinked.map(entry => entry.slug),
+        });
       },
     }),
   );

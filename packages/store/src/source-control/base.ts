@@ -256,6 +256,12 @@ export interface UpsertSourceControlInstallationInput {
   providerMetadata?: SourceControlProviderMetadata;
 }
 
+/** What `installations.removeMovingRepositories` did. */
+export interface RemovedInstallationSummary {
+  moved: Array<{ repositoryId: string; slug: string; toInstallationId: string; projectRepositoryIds: string[] }>;
+  unlinked: Array<{ repositoryId: string; slug: string; projectRepositoryIds: string[] }>;
+}
+
 export interface SourceControlRepository {
   id: string;
   installationId: string;
@@ -477,6 +483,18 @@ export interface SourceControlStorageHandle {
     }): Promise<SourceControlInstallation | null>;
     /** How many repository rows and project connections still reference the installation. */
     usage(args: { orgId: string; id: string }): Promise<{ repositories: number; projectConnections: number }>;
+    /**
+     * Delete the installation in one transaction, first moving each repository named in `moves` to
+     * another installation of the organization (its project links follow, onto that installation's
+     * connection of the same project) and unlinking every other repository from its projects the
+     * way `projectRepositories.unlink` does. Nothing changes when any step fails.
+     */
+    removeMovingRepositories(args: {
+      orgId: string;
+      id: string;
+      /** Repository row id → the installation row id it moves to. */
+      moves: Record<string, string>;
+    }): Promise<RemovedInstallationSummary>;
     /** Names the connection («Перейменувати»); `null` goes back to the account name. Kept across re-installs. */
     rename(args: { orgId: string; id: string; name: string | null }): Promise<SourceControlInstallation | null>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
@@ -833,6 +851,20 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
   if (input.position !== undefined) patch.position = input.position;
   if (input.inEnvironment !== undefined) patch.in_environment = input.inEnvironment;
   return patch;
+}
+
+/**
+ * Removes a repository link and everything filed under it (its sessions and their repository rows).
+ * The one deletion path for a link: `projectRepositories.unlink`, `connections.delete` and
+ * `installations.removeMovingRepositories` all use it.
+ */
+async function unlinkProjectRepositoryRows(ops: FactoryStorageOps, projectRepositoryId: string): Promise<void> {
+  for (const session of await ops.findMany<SessionDbRow>(SESSIONS, { project_repository_id: projectRepositoryId })) {
+    await ops.deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
+  }
+  await ops.deleteMany(SESSION_REPOSITORIES, { project_repository_id: projectRepositoryId });
+  await ops.deleteMany(SESSIONS, { project_repository_id: projectRepositoryId });
+  await ops.deleteMany(PROJECT_REPOSITORIES, { id: projectRepositoryId });
 }
 
 export class SourceControlStorage extends FactoryStorageDomain {
@@ -1203,6 +1235,89 @@ export class SourceControlStorage extends FactoryStorageDomain {
           await db().updateMany(INSTALLATIONS, { id, integration_id: integrationId, org_id: orgId }, { display_name: name });
           return getInstallation({ orgId, id });
         },
+        removeMovingRepositories: async ({ orgId, id, moves }) => {
+          await requireInstallation({ orgId, id });
+          for (const target of new Set(Object.values(moves))) {
+            if (target === id) throw new Error('A repository cannot move to the installation being removed.');
+            await requireInstallation({ orgId, id: target });
+          }
+          return this.storage.withTransaction(async ops => {
+            const summary: RemovedInstallationSummary = { moved: [], unlinked: [] };
+            const connectionsOf = await ops.findMany<ConnectionDbRow>(CONNECTIONS, {
+              installation_id: id,
+              integration_id: integrationId,
+            });
+            const connectionById = new Map(connectionsOf.map(row => [row.id, row]));
+            const targetConnection = async (factoryProjectId: string, installationId: string): Promise<string> => {
+              const existing = await ops.findOne<ConnectionDbRow>(CONNECTIONS, {
+                factory_project_id: factoryProjectId,
+                integration_id: integrationId,
+                installation_id: installationId,
+              });
+              if (existing) return existing.id;
+              const created = await ops.insertOne<ConnectionDbRow>(CONNECTIONS, {
+                factory_project_id: factoryProjectId,
+                integration_id: integrationId,
+                installation_id: installationId,
+                created_by_user_id: connectionById.values().next().value?.created_by_user_id ?? 'system',
+                created_at: new Date(),
+              });
+              return created.id;
+            };
+            for (const repository of await ops.findMany<RepositoryDbRow>(REPOSITORIES, { installation_id: id })) {
+              const links = await ops.findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+                repository_id: repository.id,
+              });
+              const projectRepositoryIds = links.map(link => link.id);
+              const to = moves[repository.id];
+              if (!to) {
+                for (const link of links) await unlinkProjectRepositoryRows(ops, link.id);
+                await ops.deleteMany(REPOSITORIES, { id: repository.id });
+                if (links.length > 0) summary.unlinked.push({ repositoryId: repository.id, slug: repository.slug, projectRepositoryIds });
+                continue;
+              }
+              // The target installation may already know the repository; then its row is the one kept.
+              const known = await ops.findOne<RepositoryDbRow>(REPOSITORIES, {
+                installation_id: to,
+                external_id: repository.external_id,
+              });
+              const targetRepositoryId = known?.id ?? repository.id;
+              if (!known) {
+                await ops.updateMany(REPOSITORIES, { id: repository.id }, { installation_id: to, updated_at: new Date() });
+              }
+              for (const link of links) {
+                const connection = connectionById.get(link.connection_id);
+                if (!connection) continue;
+                const connectionId = await targetConnection(connection.factory_project_id, to);
+                const duplicate = await ops.findOne<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+                  connection_id: connectionId,
+                  repository_id: targetRepositoryId,
+                });
+                // The project already links the repository through the target: that link stays.
+                if (duplicate && duplicate.id !== link.id) {
+                  await unlinkProjectRepositoryRows(ops, link.id);
+                  continue;
+                }
+                await ops.updateMany(
+                  PROJECT_REPOSITORIES,
+                  { id: link.id },
+                  { connection_id: connectionId, repository_id: targetRepositoryId, updated_at: new Date() },
+                );
+              }
+              if (known) await ops.deleteMany(REPOSITORIES, { id: repository.id });
+              summary.moved.push({ repositoryId: repository.id, slug: repository.slug, toInstallationId: to, projectRepositoryIds });
+            }
+            // Every link was moved or unlinked above; the connections are empty now.
+            for (const connection of connectionsOf) {
+              for (const link of await ops.findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, { connection_id: connection.id })) {
+                await unlinkProjectRepositoryRows(ops, link.id);
+              }
+            }
+            await ops.deleteMany(CONNECTIONS, { installation_id: id, integration_id: integrationId });
+            await ops.deleteMany(INSTALLATIONS, { id, integration_id: integrationId, org_id: orgId });
+            return summary;
+          });
+        },
         delete: async ({ orgId, id }) => {
           const installation = await getInstallation({ orgId, id });
           if (!installation) return false;
@@ -1400,15 +1515,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
           });
           // Same cleanup as `projectRepositories.unlink`, for every link of the connection.
           for (const projectRepository of projectRepositories) {
-            for (const session of await db().findMany<SessionDbRow>(SESSIONS, {
-              project_repository_id: projectRepository.id,
-            })) {
-              await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
-            }
-            await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: projectRepository.id });
-            await db().deleteMany(SESSIONS, { project_repository_id: projectRepository.id });
+            await unlinkProjectRepositoryRows(db(), projectRepository.id);
           }
-          await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
           await db().deleteMany(CONNECTIONS, { id, integration_id: integrationId });
           return true;
         },
@@ -1582,12 +1690,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         unlink: async ({ orgId, id }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return false;
-          for (const session of await db().findMany<SessionDbRow>(SESSIONS, { project_repository_id: id })) {
-            await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
-          }
-          await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: id });
-          await db().deleteMany(SESSIONS, { project_repository_id: id });
-          await db().deleteMany(PROJECT_REPOSITORIES, { id });
+          await unlinkProjectRepositoryRows(db(), id);
           return true;
         },
       },

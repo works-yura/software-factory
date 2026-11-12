@@ -26,7 +26,8 @@ export const AUDIT_ACTIONS = {
   intake_rule: ['created', 'updated', 'deleted'],
   observability: ['connected', 'disconnected', 'mapping_updated'],
   // An organization's integration token (ClickUp, …; ADR-0032): connected, replaced or removed. Never the token.
-  integration: ['token_connected', 'token_removed'],
+  // `connection_removed`: a GitHub connection deleted, with the repositories moved and unlinked (ADR-0034).
+  integration: ['token_connected', 'token_removed', 'connection_removed'],
   sandbox_env: ['set', 'updated', 'deleted', 'stages_updated', 'file_created', 'file_updated', 'file_deleted'],
   // External MCP servers: their config, and each agent call to one of their tools (no payloads).
   mcp_server: ['created', 'updated', 'deleted', 'tool_called', 'tool_tried', 'reconnected'],

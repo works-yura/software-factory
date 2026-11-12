@@ -9,6 +9,7 @@ import type {
   ProjectConnectionWithRepositories,
   ProjectRepository,
   ProjectSourceControlConnection,
+  RemovedInstallationSummary,
   SessionBranchKey,
   SetProjectRepositoryBuildStatusInput,
   SourceControlInstallation,
@@ -107,6 +108,39 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       row.displayName = name;
       return row;
     },
+    removeMovingRepositories: async ({
+      orgId,
+      id,
+      moves,
+    }: {
+      orgId: string;
+      id: string;
+      moves: Record<string, string>;
+    }): Promise<RemovedInstallationSummary> => {
+      if (!(await this.installations.get({ orgId, id }))) throw new Error('Source-control installation not found.');
+      for (const target of new Set(Object.values(moves))) {
+        if (target === id || !(await this.installations.get({ orgId, id: target }))) {
+          throw new Error('Source-control installation not found.');
+        }
+      }
+      // All or nothing, like the database transaction: restore every table in place on failure.
+      const tables = [
+        this.installationsRows,
+        this.repositoriesRows,
+        this.connectionsRows,
+        this.projectRepositoriesRows,
+        this.sessionsRows,
+      ] as unknown as Array<Array<Record<string, unknown>>>;
+      const snapshot = tables.map(rows => rows.map(row => ({ ...row })));
+      const sessionRepositories = this.sessionRepositoriesRows;
+      try {
+        return this.#removeMovingRepositories(id, moves);
+      } catch (error) {
+        tables.forEach((rows, index) => rows.splice(0, rows.length, ...snapshot[index]!));
+        this.sessionRepositoriesRows = sessionRepositories;
+        throw error;
+      }
+    },
     delete: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       const index = this.installationsRows.findIndex(row => row.orgId === orgId && row.id === id);
       if (index < 0) return false;
@@ -114,6 +148,69 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       return true;
     },
   };
+
+  #unlinkRows(projectRepositoryId: string): void {
+    const sessionIds = new Set(
+      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId).map(r => r.sessionId),
+    );
+    this.sessionRepositoriesRows = this.sessionRepositoriesRows.filter(
+      row => row.projectRepositoryId !== projectRepositoryId && !sessionIds.has(row.sessionId),
+    );
+    const remove = <T,>(rows: T[], keep: (row: T) => boolean) =>
+      rows.splice(0, rows.length, ...rows.filter(keep));
+    remove(this.sessionsRows, row => row.projectRepositoryId !== projectRepositoryId);
+    remove(this.projectRepositoriesRows, row => row.id !== projectRepositoryId);
+  }
+
+  #removeMovingRepositories(id: string, moves: Record<string, string>): RemovedInstallationSummary {
+    const summary: RemovedInstallationSummary = { moved: [], unlinked: [] };
+    const connectionsOf = this.connectionsRows.filter(row => row.installationId === id);
+    for (const repository of this.repositoriesRows.filter(row => row.installationId === id)) {
+      const links = this.projectRepositoriesRows.filter(row => row.repositoryId === repository.id);
+      const projectRepositoryIds = links.map(link => link.id);
+      const to = moves[repository.id];
+      if (!to) {
+        for (const link of links) this.#unlinkRows(link.id);
+        this.repositoriesRows.splice(this.repositoriesRows.indexOf(repository), 1);
+        if (links.length > 0) summary.unlinked.push({ repositoryId: repository.id, slug: repository.slug, projectRepositoryIds });
+        continue;
+      }
+      const known = this.repositoriesRows.find(row => row.installationId === to && row.externalId === repository.externalId);
+      const targetRepositoryId = known?.id ?? repository.id;
+      if (!known) repository.installationId = to;
+      for (const link of links) {
+        const connection = connectionsOf.find(row => row.id === link.connectionId);
+        if (!connection) continue;
+        let target = this.connectionsRows.find(
+          row => row.factoryProjectId === connection.factoryProjectId && row.installationId === to,
+        );
+        if (!target) {
+          target = { ...connection, id: globalThis.crypto.randomUUID(), installationId: to, createdAt: new Date() };
+          this.connectionsRows.push(target);
+        }
+        const duplicate = this.projectRepositoriesRows.find(
+          row => row.connectionId === target!.id && row.repositoryId === targetRepositoryId && row.id !== link.id,
+        );
+        if (duplicate) {
+          this.#unlinkRows(link.id);
+          continue;
+        }
+        link.connectionId = target.id;
+        link.repositoryId = targetRepositoryId;
+      }
+      if (known) this.repositoriesRows.splice(this.repositoriesRows.indexOf(repository), 1);
+      summary.moved.push({ repositoryId: repository.id, slug: repository.slug, toInstallationId: to, projectRepositoryIds });
+    }
+    for (const connection of connectionsOf) {
+      for (const link of this.projectRepositoriesRows.filter(row => row.connectionId === connection.id)) this.#unlinkRows(link.id);
+      this.connectionsRows.splice(this.connectionsRows.indexOf(connection), 1);
+    }
+    this.installationsRows.splice(
+      this.installationsRows.findIndex(row => row.id === id),
+      1,
+    );
+    return summary;
+  }
 
   readonly repositories = {
     list: async ({ orgId, installationId }: { orgId: string; installationId: string }) => {
