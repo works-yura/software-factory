@@ -6,6 +6,7 @@ import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import type { FirebaseState } from '../../../services/firebase';
 import type { McpServer } from '../../../services/mcpServers';
+import { ConnectionsPageHeader } from '../../connections/ConnectionsPageHeader';
 import { ConnectionsSection } from '../../connections/ConnectionsSection';
 
 export const FACTORY_ID = 'factory-1';
@@ -77,6 +78,7 @@ export function renderConnections(search = '') {
           path="/factories/:factoryId/settings/integrations"
           element={
             <>
+              <ConnectionsPageHeader />
               <ConnectionsSection />
               <Search />
               <Toaster />

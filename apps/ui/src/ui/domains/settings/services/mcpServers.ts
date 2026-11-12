@@ -58,6 +58,9 @@ export interface McpServer {
   callTimeoutMs?: number;
   /** What the last check and session use found. */
   health?: McpServerHealth;
+  /** When and by whom it was added (`integration:<id>` for one an integration manages). */
+  createdAt?: string;
+  createdBy?: string;
   updatedAt: string;
   updatedBy: string;
 }

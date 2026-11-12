@@ -7,6 +7,7 @@ import { Navigate, useLocation, useParams } from 'react-router';
 
 import { AnalyticsControls } from '../domains/analytics/components/AnalyticsSection';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { ConnectionsPageHeader } from '../domains/settings/components/connections/ConnectionsPageHeader';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import {
@@ -43,6 +44,9 @@ export function SettingsPage() {
   return (
     <SettingsPageLayout
       header={
+        section === 'integrations' ? (
+          <ConnectionsPageHeader />
+        ) : (
         <PageHeader>
           <AnnouncedSectionTitle key={section}>{SETTINGS_SECTION_LABELS[section]}</AnnouncedSectionTitle>
           {section === 'analytics' ? (
@@ -54,6 +58,7 @@ export function SettingsPage() {
             </>
           ) : null}
         </PageHeader>
+        )
       }
     >
       <SettingsPanel />

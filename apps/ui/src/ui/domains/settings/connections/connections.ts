@@ -101,6 +101,11 @@ export interface ConnectionRow {
   accountId?: string;
   /** Managed by an integration: config is that integration's, only tool policy and masking change here. */
   managed?: boolean;
+  /** When and by whom the connection was made, where the integration records it. */
+  createdAt?: string;
+  createdBy?: string;
+  /** What «Перейменувати» renames: the binding's own name, or the server's label; absent — not renamable. */
+  rename?: 'binding' | 'server';
 }
 
 export interface ConnectionSources {
@@ -144,7 +149,10 @@ function googleCloudRows(factoryId: string, firebase: FirebaseState, servers: re
       return {
         id: connectionId.binding(binding.id),
         kind: 'google-cloud',
-        title: binding.projectId,
+        title: binding.name ?? binding.projectId,
+        rename: 'binding',
+        ...(binding.createdAt ? { createdAt: binding.createdAt } : {}),
+        ...(binding.createdBy ? { createdBy: binding.createdBy } : {}),
         mcp: false,
         ...(account ? { account: { name: account.name, detail: account.clientEmail } } : {}),
         capabilities,
@@ -184,6 +192,9 @@ function mcpRows(factoryId: string, mcp: McpServersState, firebase: FirebaseStat
         kind: integration ?? 'mcp',
         title: integration ? (project ?? 'Firestore') : server.label,
         mcp: !integration,
+        ...(!integration && !server.owner ? { rename: 'server' as const } : {}),
+        ...(server.createdAt ? { createdAt: server.createdAt } : {}),
+        ...(server.createdBy ? { createdBy: server.createdBy } : {}),
         ...(option ? { account: { name: option.name, ...(option.detail ? { detail: option.detail } : {}) } } : {}),
         capabilities: integration ? [{ key: 'database' }] : tools ? [{ key: 'tools', count: tools }] : [],
         state: mcpServerState(server),
@@ -357,4 +368,40 @@ export function filterCatalog<Item extends { category: ConnectionCategory }>(
       account => inFilter('tools') && (!needle || `${account.name} ${account.detail ?? ''}`.toLowerCase().includes(needle)),
     ),
   };
+}
+
+/**
+ * The row's state as a short verdict for the detail header and for rows that need attention:
+ * `ok` (working, connected, set up, from the environment), `error`, `warning` (needs access, reads
+ * nothing), `idle` (not checked yet, off).
+ */
+export function connectionHealth(state: ConnectionState): 'ok' | 'error' | 'warning' | 'idle' {
+  if (state === 'error') return 'error';
+  if (state === 'needs_auth' || state === 'reads-nothing') return 'warning';
+  if (state === 'unchecked' || state === 'disabled') return 'idle';
+  return 'ok';
+}
+
+export interface ActivityFilter {
+  fieldId: 'connection' | 'tool' | 'outcome';
+  operatorId: 'is' | 'is-not' | 'contains';
+  value: string | string[] | number | boolean | Array<string | number | boolean>;
+}
+
+/** Calls kept by «Фільтр запитів»: every filter must match (`is`, `is-not`, `contains`; `is` with several values matches any). */
+export function filterActivity<Call extends { serverLabel: string; tool: string; outcome: 'ok' | 'error' }>(
+  calls: readonly Call[],
+  filters: readonly ActivityFilter[],
+): Call[] {
+  const field = (call: Call, fieldId: ActivityFilter['fieldId']) =>
+    fieldId === 'connection' ? call.serverLabel : fieldId === 'tool' ? call.tool : call.outcome;
+  return calls.filter(call =>
+    filters.every(filter => {
+      const actual = field(call, filter.fieldId).toLowerCase();
+      const values = (Array.isArray(filter.value) ? filter.value : [filter.value]).map(value => String(value).toLowerCase());
+      if (filter.operatorId === 'contains') return values.some(value => actual.includes(value));
+      const hit = values.includes(actual);
+      return filter.operatorId === 'is-not' ? !hit : hit;
+    }),
+  );
 }

@@ -30,6 +30,8 @@ export interface FirebaseApp {
 
 /** What a binding reads: a Factory reads one Google Cloud project through one account. */
 export interface FirebaseBindingInput {
+  /** A name people give the connection; absent shows the project id. */
+  name?: string;
   factoryProjectId: string;
   accountId: string;
   projectId: string;
@@ -43,6 +45,9 @@ export interface FirebaseBindingInput {
 
 export interface FirebaseBinding extends FirebaseBindingInput {
   id: string;
+  /** When and by whom it was made; absent on bindings saved before that was recorded. */
+  createdAt?: string;
+  createdBy?: string;
 }
 
 export interface FirebaseState {

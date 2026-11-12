@@ -376,6 +376,8 @@ export function BindingCard({
   const updateApp = (index: number, next: Partial<FirebaseApp>) =>
     update({ apps: draft.apps.map((app, at) => (at === index ? { ...app, ...next } : app)) });
   const payload = (): FirebaseBindingInput => ({
+    // The connection's own name («Перейменувати») rides along, so saving the settings keeps it.
+    ...(draft.name ? { name: draft.name } : {}),
     factoryProjectId: draft.factoryProjectId,
     accountId: draft.accountId,
     projectId: draft.projectId.trim(),

@@ -47,48 +47,69 @@ function useHandlers(options: { activity?: McpActivity } = {}) {
   return writes;
 }
 
-const rows = async () => within(await screen.findByRole('list', { name: "This Factory's connections" })).getAllByRole('listitem');
-const rowNamed = async (name: string) => (await rows()).find(row => within(row).queryByRole('button', { name: new RegExp(`^${name}`) }))!;
+const rows = async () => within(await screen.findByRole('table', { name: "This Factory's connections" })).getAllByTestId('connection-row');
+const rowNamed = async (name: string) => (await rows()).find(row => within(row).queryByRole('link', { name }))!;
 
 async function openMenu(name: string) {
   await userEvent.click(screen.getByRole('button', { name: `Actions for ${name}` }));
 }
 
 describe('Підключення', () => {
-  it("lists the Factory's connections as one list: Google Cloud with its «База», organization-wide sources, MCP servers last by badge; never another Factory's", async () => {
+  it("lists the Factory's connections in one table: Google Cloud with its «База», organization-wide sources, MCP servers last by badge; never another Factory's", async () => {
     useHandlers();
     renderConnections();
 
+    expect(screen.getByRole('heading', { name: 'Connections', level: 1 })).toBeInTheDocument();
     const list = await rows();
-    expect(list.map(row => within(row).getAllByRole('button')[0]!.textContent)).toEqual([
-      'syncta-57c6aGoogle Cloud',
-      'ClickUp',
-      'GitHub',
-      'SentryMCPMCP server',
-    ]);
+    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'ClickUp', 'GitHub', 'Sentry']);
     const google = await rowNamed('syncta-57c6a');
+    expect(google).toHaveTextContent('Google Cloud');
     expect(google).toHaveTextContent('Syncta');
-    expect(google).toHaveTextContent('factory@syncta-57c6a.iam.gserviceaccount.com');
-    expect(google).toHaveTextContent('Logs');
-    expect(google).toHaveTextContent('Database');
-    // A first-party integration says what it gives, never how it runs.
+    // Capabilities are icons, each named.
+    expect(within(google).getByRole('img', { name: 'Logs' })).toBeInTheDocument();
+    expect(within(google).getByRole('img', { name: 'Database' })).toBeInTheDocument();
+    // A first-party integration says what it gives, never how it runs; a working one says nothing about its state.
     expect(google).not.toHaveTextContent('MCP');
-    expect(google).toHaveTextContent('Working');
+    expect(google).not.toHaveTextContent('Working');
     // The «База» server is the binding's, not a row of its own.
-    expect(screen.queryByRole('button', { name: /^Firestore syncta-57c6a/ })).not.toBeInTheDocument();
-    expect(await rowNamed('Sentry')).toHaveTextContent('The account was refused access');
+    expect(screen.queryByRole('link', { name: /^Firestore syncta-57c6a/ })).not.toBeInTheDocument();
+    const sentry = await rowNamed('Sentry');
+    expect(sentry).toHaveTextContent('MCP');
+    expect(within(sentry).getByText('Error').closest('[data-state]')).toHaveAttribute('title', expect.stringContaining('The account was refused access'));
     expect(await rowNamed('ClickUp')).toHaveTextContent('eclipt.ai');
-    expect(await rowNamed('GitHub')).toHaveTextContent('From the server environment');
-    expect(screen.queryByRole('button', { name: /^Notes/ })).not.toBeInTheDocument();
+    expect(await rowNamed('GitHub')).toHaveTextContent('Whole organization');
+    expect(screen.queryByRole('link', { name: /^Notes/ })).not.toBeInTheDocument();
+  });
+
+  it("names the binding's creation and lets it be renamed on «Overview», keeping its settings", async () => {
+    useHandlers();
+    const saved: unknown[] = [];
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/firebase/bindings/:id`, async ({ request }) => {
+        saved.push(await request.json());
+        return HttpResponse.json(firebaseState);
+      }),
+    );
+    renderConnections('?connection=google-cloud:bnd-1');
+    expect(await screen.findByRole('heading', { name: 'syncta-57c6a', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Connections' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/settings/integrations`);
+    expect(screen.getAllByText('Active').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Overview', 'Activity', 'Tools', 'Settings', 'Diagnostics']);
+    const name = screen.getByRole('textbox', { name: 'Name' });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Syncta prod');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saved).toEqual([expect.objectContaining({ name: 'Syncta prod', projectId: 'syncta-57c6a', logs: true, database: { enabled: true } })]));
   });
 
   it('opens a row as its own view in the URL and comes back to the list', async () => {
     useHandlers();
     renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: /^ClickUp/ }));
+    await userEvent.click(await screen.findByRole('link', { name: 'ClickUp' }));
     expect(screen.getByTestId('search')).toHaveTextContent('?connection=clickup');
+    await userEvent.click(screen.getByRole('tab', { name: 'Settings' }));
     expect(await screen.findByRole('switch', { name: 'Import ClickUp tasks' })).toBeChecked();
-    await userEvent.click(screen.getByRole('button', { name: 'All connections' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Connections' }));
     expect(screen.getByTestId('search')).toBeEmptyDOMElement();
     expect(await rows()).toHaveLength(4);
   });
@@ -142,7 +163,7 @@ describe('Підключення', () => {
     expect(await screen.findByText('Reconnected: 3 tools')).toBeInTheDocument();
 
     await openMenu('Sentry');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete from organization' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete connection' }));
     await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(writes.at(-1)).toMatchObject({ method: 'DELETE', url: expect.stringContaining('/srv-sentry') }));
   });
@@ -267,7 +288,8 @@ describe('Підключення', () => {
     expect(await screen.findByRole('dialog', { name: 'Connect GitLab' })).toBeInTheDocument();
   });
 
-  it('shows the last 24 hours of agent calls with counts, newest first', async () => {
+  it('shows the agents’ calls of the chosen period in a table, filters them, and asks the server for another period', async () => {
+    const periods: string[] = [];
     useHandlers({
       activity: {
         since: new Date(Date.now() - 86_400_000).toISOString(),
@@ -280,12 +302,27 @@ describe('Підключення', () => {
         ],
       },
     });
+    server.events.on('request:start', ({ request }) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/activity')) periods.push(url.searchParams.get('hours') ?? '');
+    });
     renderConnections();
-    expect(await screen.findByText('2 calls · errors: 1')).toBeInTheDocument();
-    const calls = screen.getByRole('list', { name: 'Latest calls' });
-    expect(within(calls).getAllByRole('listitem')[0]).toHaveTextContent('Firestore syncta-57c6a');
-    expect(within(calls).getAllByRole('listitem')[0]).toHaveTextContent('list_collections');
+    const calls = await screen.findByRole('table', { name: 'Requests' });
+    const [first] = within(calls).getAllByRole('row').slice(1);
+    expect(first).toHaveTextContent('Firestore syncta-57c6a');
+    expect(first).toHaveTextContent('list_collections');
     expect(within(calls).getByRole('link', { name: 'Open session' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/workspaces/session-1`);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Period' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
+    await waitFor(() => expect(periods).toContain('168'));
+    server.events.removeAllListeners();
+  });
+
+  it('says so when there are no requests yet', async () => {
+    useHandlers();
+    renderConnections();
+    expect(await screen.findByRole('heading', { name: 'No requests yet' })).toBeInTheDocument();
   });
 });
 
@@ -309,8 +346,11 @@ describe('Підключення on a phone', () => {
       }) as MediaQueryList;
     useHandlers();
     renderConnections();
-    await rows();
-    expect(screen.getByRole('button', { name: 'Actions for Sentry' })).toHaveClass('size-11');
+    // Rows stack into a list instead of the table.
+    const list = await screen.findByRole('list', { name: "This Factory's connections" });
+    expect(within(list).getByRole('link', { name: /^Sentry/ })).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: "This Factory's connections" })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Actions for Sentry' })).toHaveClass('max-sm:size-11');
     await userEvent.click(screen.getByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
     expect(dialog.className).toContain('max-sm:h-[calc(100dvh+3rem)]');

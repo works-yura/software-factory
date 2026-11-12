@@ -6,7 +6,34 @@ import toolboxOverlay from '../../../../../../../packages/server/src/mcp-servers
 import toolboxManifest from '../../../../../../../packages/server/src/mcp-servers/catalog/mcp-toolbox.server.json';
 import type { FirebaseState } from '../services/firebase';
 import type { McpServer, McpServersState } from '../services/mcpServers';
-import { connectionCatalog, factoryConnections, filterCatalog, linkableAccounts } from './connections';
+import { connectionCatalog, connectionHealth, factoryConnections, filterActivity, filterCatalog, linkableAccounts } from './connections';
+import type { ConnectionState } from './connections';
+
+describe('filterActivity', () => {
+  const calls = [
+    { serverLabel: 'Firestore syncta', tool: 'list_collections', outcome: 'ok' as const },
+    { serverLabel: 'Sentry', tool: 'search_issues', outcome: 'error' as const },
+    { serverLabel: 'Firestore syncta', tool: 'query_collection', outcome: 'error' as const },
+  ];
+
+  it('keeps calls every filter matches: is, is not, contains, and is with several values', () => {
+    expect(filterActivity(calls, [{ fieldId: 'outcome', operatorId: 'is', value: 'error' }]).map(call => call.tool)).toEqual(['search_issues', 'query_collection']);
+    expect(
+      filterActivity(calls, [
+        { fieldId: 'connection', operatorId: 'is-not', value: 'Sentry' },
+        { fieldId: 'tool', operatorId: 'contains', value: 'QUERY' },
+      ]).map(call => call.tool),
+    ).toEqual(['query_collection']);
+    expect(filterActivity(calls, [{ fieldId: 'tool', operatorId: 'is', value: ['search_issues', 'list_collections'] }])).toHaveLength(2);
+  });
+});
+
+describe('connectionHealth', () => {
+  it('turns a row state into the header verdict', () => {
+    const states: ConnectionState[] = ['ok', 'connected', 'env', 'configured', 'error', 'needs_auth', 'reads-nothing', 'unchecked', 'disabled'];
+    expect(states.map(connectionHealth)).toEqual(['ok', 'ok', 'ok', 'ok', 'error', 'warning', 'warning', 'idle', 'idle']);
+  });
+});
 
 const firebase: FirebaseState = {
   accounts: [

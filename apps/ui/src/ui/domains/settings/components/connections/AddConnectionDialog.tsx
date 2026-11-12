@@ -4,8 +4,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { ChevronRight, GitBranch, Inbox, Plus, Wrench } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -21,6 +20,7 @@ import type {
 } from '../../connections/connections';
 import { serverToInput } from '../../services/mcpServers';
 import { localized } from '../mcp-servers/McpCatalogFields';
+import { CapabilityDots, useCatalogDots } from './CapabilityDots';
 import { ConnectionIcon } from './ConnectionIcon';
 import { GoogleCloudConnect, SourceConnect } from './ConnectSteps';
 import type { ConnectionTarget, FirstParty } from './ConnectSteps';
@@ -28,13 +28,6 @@ import type { ConnectionTarget, FirstParty } from './ConnectSteps';
 export type { ConnectionTarget };
 
 const FILTERS: CatalogFilter[] = ['all', 'tools', 'sources'];
-
-/** Each capability's icon and badge tint (tools violet, task sources green, code blue), as in Mastra's dialog. */
-const CAPABILITY: Record<CatalogCapability, { icon: typeof Wrench; tint: string }> = {
-  tools: { icon: Wrench, tint: 'bg-badge-purple-subtle text-badge-purple-foreground' },
-  tasks: { icon: Inbox, tint: 'bg-badge-green-subtle text-badge-green-foreground' },
-  code: { icon: GitBranch, tint: 'bg-badge-blue-subtle text-badge-blue-foreground' },
-};
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -44,28 +37,6 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
  */
 export const CONNECT_DIALOG_SHELL =
   'max-sm:h-[calc(100dvh+3rem)] max-sm:max-h-none max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top)]';
-
-function CapabilityIcons({ capabilities }: { capabilities: CatalogCapability[] }) {
-  const { t } = useTranslation('settings');
-  return (
-    <span className="flex shrink-0 items-center gap-1.5">
-      {capabilities.map(capability => {
-        const { icon: Icon, tint } = CAPABILITY[capability];
-        const label = t(`connections.addDialog.capability.${capability}`);
-        return (
-          <Tooltip key={capability}>
-            <TooltipTrigger render={<span role="img" aria-label={label} className="flex shrink-0 items-center" />}>
-              <span className={`shadow-inset grid size-5 place-items-center rounded-full ${tint}`}>
-                <Icon aria-hidden className="size-icon-xs! text-current!" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-          </Tooltip>
-        );
-      })}
-    </span>
-  );
-}
 
 /**
  * One row, as the kit's command item: logo, name (MCP badge only for third-party servers), then «+»
@@ -95,6 +66,7 @@ function CatalogRow({
   disabled?: boolean;
 }) {
   const { t } = useTranslation('settings');
+  const dots = useCatalogDots();
   return (
     <CommandItem value={value} onSelect={onSelect} disabled={disabled} aria-label={label} className="group/row">
       <ConnectionIcon kind={kind} />
@@ -116,7 +88,7 @@ function CatalogRow({
             {trailing === 'add' ? <Plus /> : <ChevronRight />}
           </Button>
         </span>
-        <CapabilityIcons capabilities={capabilities} />
+        <CapabilityDots dots={dots(capabilities)} />
       </span>
     </CommandItem>
   );

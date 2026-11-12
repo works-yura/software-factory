@@ -1,12 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router';
 
 import { factoryConnections } from '../../connections/connections';
-import { SettingsSubsection } from '../SettingsSubsection';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { AddConnectionDialog } from './AddConnectionDialog';
 import type { ConnectionTarget } from './ConnectSteps';
@@ -19,24 +18,27 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 
 /** Links from before the one list (`?tab=services&service=clickup`, `?tab=mcp`) land on the same thing now. */
 const LEGACY_SERVICES = new Set(['google-cloud', 'clickup', 'github', 'gitlab']);
+const LEGACY_TABS = new Set(['services', 'mcp']);
+
+/** The `?connection=` link of a connection's page. */
+export const connectionHref = (id: string) => `?${new URLSearchParams({ connection: id }).toString()}`;
 
 /**
- * Settings › Підключення: everything this Factory's agents connect to, in one list modelled on
- * Mastra Platform's Connect page — integration, account, capabilities, status, a «⋮» menu — with
- * «Додати підключення» (integrations and the organization's accounts in one searchable dialog, with each first-party integration's connect step) and
- * «Активність» below. MCP is a badge on a row, not a section. A row opens its own view
- * (`?connection=`), which keeps each integration's full settings.
+ * Settings › Підключення, as Mastra's Connect page: the connections in the kit's table (the page
+ * header carries «+ Додати підключення», which opens the dialog through `?add=1`), then «Активність».
+ * A row links to its own page (`?connection=`), whose header and tabs `ConnectionDetail` and
+ * `ConnectionsPageHeader` draw.
  */
 export function ConnectionsSection() {
   const { t } = useTranslation('settings');
   const { factoryId } = useParams<{ factoryId: string }>();
   const [params, setParams] = useSearchParams();
-  const [adding, setAdding] = useState(false);
   const { sources, pending, errors } = useConnectionSources();
 
   const legacyService = params.get('service');
+  const legacyTab = params.get('tab');
   useEffect(() => {
-    if (!params.has('tab') && !legacyService) return;
+    if (!(legacyTab && LEGACY_TABS.has(legacyTab)) && !legacyService) return;
     setParams(
       current => {
         const next = new URLSearchParams(current);
@@ -47,16 +49,16 @@ export function ConnectionsSection() {
       },
       { replace: true },
     );
-  }, [params, legacyService, setParams]);
+  }, [legacyTab, legacyService, setParams]);
 
   if (!factoryId) return null;
 
   const open = params.get('connection');
+  const adding = params.get('add') === '1';
   const go = (target: ConnectionTarget | null) =>
     setParams(current => {
       const next = new URLSearchParams(current);
-      next.delete('connection');
-      next.delete('account');
+      for (const key of ['connection', 'account', 'add', 'view']) next.delete(key);
       if (target) {
         next.set('connection', target.connection);
         if (target.account) next.set('account', target.account);
@@ -84,17 +86,10 @@ export function ConnectionsSection() {
 
   return (
     <div className="flex min-w-0 flex-col gap-8">
-      <SettingsSubsection
-        title={t('connections.title')}
-        description={t('connections.description')}
-        scope="factory"
-        action={
-          <Button size="sm" className="min-h-11 md:min-h-0" onClick={() => setAdding(true)}>
-            <Plus aria-hidden className="size-4" />
-            {t('connections.add')}
-          </Button>
-        }
-      >
+      <section aria-labelledby="connections-list-heading" className="flex min-w-0 flex-col gap-3">
+        <h2 id="connections-list-heading" className="text-subheading text-foreground">
+          {t('connections.listHeading')}
+        </h2>
         {errors.map(failure => (
           <div key={failure.kind} className="flex flex-wrap items-center justify-between gap-2">
             <Txt as="p" variant="caption" className="text-destructive-foreground">
@@ -108,29 +103,31 @@ export function ConnectionsSection() {
         {pending ? (
           <SkeletonRows label={t('connections.loading')} rows={3} />
         ) : rows.length === 0 ? (
-          <Txt as="p" variant="caption" tone="muted">
-            {t('connections.empty')}
-          </Txt>
+          <EmptyState iconSlot={null} titleSlot={t('connections.empty')} className="py-10" />
         ) : (
           <ConnectionList
             rows={rows}
             factoryId={factoryId}
             sources={sources}
             canEditMcp={sources.mcp?.canEdit ?? false}
+            hrefOf={connectionHref}
             onOpen={id => go({ connection: id })}
           />
         )}
-      </SettingsSubsection>
+      </section>
       <ConnectionActivity factoryId={factoryId} />
       <AddConnectionDialog
         open={adding}
         factoryId={factoryId}
         sources={sources}
-        onClose={() => setAdding(false)}
-        onPick={target => {
-          setAdding(false);
-          go(target);
-        }}
+        onClose={() =>
+          setParams(current => {
+            const next = new URLSearchParams(current);
+            next.delete('add');
+            return next;
+          })
+        }
+        onPick={go}
       />
     </div>
   );

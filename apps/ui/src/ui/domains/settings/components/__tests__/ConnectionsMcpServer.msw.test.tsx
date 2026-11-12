@@ -120,11 +120,13 @@ function useHandlers(servers: McpServer[] = [], canEdit = true, firebase: typeof
   return writes;
 }
 
-/** The page at `search`: the list, a stored server (`?connection=mcp:srv-1`) or a new one from the catalog. */
+/**
+ * The page at `search`: the list, a connection's tab (`?connection=mcp:srv-1&view=tools`) or a new
+ * server from the catalog. Waits until the integrations have loaded.
+ */
 async function render(search = '') {
   renderConnections(search);
-  // A connection's own view shows once the integrations have loaded.
-  if (search) await screen.findByRole('button', { name: 'All connections' });
+  await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading connections…' })).not.toBeInTheDocument());
 }
 const NEW_TOOLBOX = '?connection=mcp-new:mcp-toolbox';
 
@@ -217,9 +219,9 @@ describe('Підключення: MCP servers', () => {
     });
   });
 
-  it('assigns a stored server to a Factory board and sets one tool to forbidden after a check', async () => {
+  it('assigns a stored server to a Factory board on «Access», and forbids one tool after a check on «Tools»', async () => {
     const writes = useHandlers([stored]);
-    await render('?connection=mcp:srv-1');
+    await render('?connection=mcp:srv-1&view=access');
 
     const access = await screen.findByRole('group', { name: 'Access for syncts' });
     // A row from before session kinds with a board limit meant cards only.
@@ -229,52 +231,55 @@ describe('Підключення: MCP servers', () => {
     expect(within(access).getByRole('button', { name: 'Audits', pressed: true })).toBeInTheDocument();
     expect(within(access).getByRole('button', { name: 'Partners' })).toBeInTheDocument();
     await userEvent.click(within(access).getByRole('button', { name: 'Analysis' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(1));
+    expect(writes.find(write => write.method === 'PUT')).toMatchObject({
+      body: { assignments: [{ factoryProjectId: 'factory-1', sessions: ['cards'], boards: ['audits'], phases: ['analysis'] }] },
+    });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Tools' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Check' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Running: 2 tools.');
     expect(within(screen.getByRole('listitem', { name: 'delete_documents' })).getByText('writes')).toBeInTheDocument();
     await pick('Policy for delete_documents', 'Forbidden');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(1));
-    expect(writes.find(write => write.method === 'PUT')).toMatchObject({
+    await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(2));
+    expect(writes.filter(write => write.method === 'PUT')[1]).toMatchObject({
       method: 'PUT',
       body: {
         name: 'syncta-firestore',
         launch: { credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } } },
-        assignments: [{ factoryProjectId: 'factory-1', sessions: ['cards'], boards: ['audits'], phases: ['analysis'] }],
         toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
       },
     });
-    expect(writes.find(write => write.method === 'PUT')!.body.secrets).toBeUndefined();
-    // The form filled the database from discovery, so the check ran the form as it was, with the stored id for its secrets.
-    expect(writes.find(write => write.method === 'CHECK')!.body).toMatchObject({ id: 'srv-1', server: { name: 'syncta-firestore' } });
+    expect(writes.filter(write => write.method === 'PUT').every(write => write.body.secrets === undefined)).toBe(true);
   });
 
   it('shows a member the servers without letting them change anything', async () => {
     useHandlers([stored], false);
-    await render('?connection=mcp:srv-1');
-    expect(await screen.findByRole('textbox', { name: 'Name' })).toBeInTheDocument();
+    await render('?connection=mcp:srv-1&view=settings');
+    expect(await screen.findByRole('combobox', { name: 'What to connect' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
   });
 
   it('shows the «База» Google Cloud manages on its binding’s page: config and access read-only, tool policy editable, no delete', async () => {
     const writes = useHandlers([{ ...managedServer, health: undefined }], true, firebaseState);
-    await render('?connection=google-cloud:bnd-1');
+    await render('?connection=google-cloud:bnd-1&view=settings');
 
     expect(await screen.findByRole('heading', { name: 'Database (Firestore)' })).toBeInTheDocument();
-    // How it runs only under «Diagnostics», folded.
-    expect(screen.queryByText(/MCP Toolbox|@toolbox-sdk/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
-    expect(screen.getByText(/Under the hood: MCP · @toolbox-sdk\/server/)).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Add Factory' })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'What to connect' })).toBeDisabled();
+    // A managed server has no «Access» tab and nothing to delete; how it runs is only under «Diagnostics».
+    expect(screen.queryByRole('tab', { name: 'Access' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/MCP Toolbox|@toolbox-sdk/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Diagnostics' }));
+    expect(await screen.findByText(/Under the hood: MCP · @toolbox-sdk\/server/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Tools' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Check' }));
     await pick('Policy for delete_documents', 'Forbidden');
-    await userEvent.click(screen.getAllByRole('button', { name: 'Save' }).at(-1)!);
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes.at(-1)?.body.toolPolicies).toEqual({ default: 'allow', tools: { delete_documents: 'deny' } }));
   });
 
@@ -341,7 +346,7 @@ describe('Підключення: MCP servers', () => {
     }));
   });
 
-  it('shows each server’s state in its row: tools and when checked, or the error in plain words', async () => {
+  it('marks a row only when it needs attention: tools as a capability, a failure in plain words', async () => {
     const recent = new Date(Date.now() - 5 * 60_000).toISOString();
     const own = { ...stored, launch: { transport: 'http' as const, url: 'https://mcp.example.test/mcp', headers: {} } };
     useHandlers([
@@ -363,13 +368,16 @@ describe('Підключення: MCP servers', () => {
       { ...own, id: 'srv-3', name: 'fresh', label: 'Fresh DB' },
     ]);
     await render();
-    const rowOf = async (name: string) => (await screen.findByRole('button', { name: new RegExp(`^${name}`) })).closest('li')!;
-    expect(await rowOf('Syncta Firestore')).toHaveTextContent('2 tools');
-    expect(await rowOf('Syncta Firestore')).toHaveTextContent('Working');
-    expect(await rowOf('Broken DB')).toHaveTextContent(
+    const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('tr')!;
+    const working = await rowOf('Syncta Firestore');
+    expect(within(working).getByRole('img', { name: '2 tools' })).toBeInTheDocument();
+    expect(working).not.toHaveTextContent('Error');
+    const broken = await rowOf('Broken DB');
+    expect(within(broken).getByText('Error').closest('[data-state]')).toHaveAttribute(
+      'title',
       'The account was refused access; give it the role the server needs. (7 PERMISSION_DENIED)',
     );
-    expect(await rowOf('Fresh DB')).toHaveTextContent('Not checked yet');
+    expect(await rowOf('Fresh DB')).not.toHaveTextContent('Error');
   });
 
   it('inspects tools: risk from annotations, parameters, a quarantined tool highlighted, and tries a read-only one', async () => {
@@ -400,7 +408,7 @@ describe('Підключення: MCP servers', () => {
         return HttpResponse.json({ trial: { ok: true, output: { collections: ['bookings'] }, durationMs: 42 } });
       }),
     );
-    await render('?connection=mcp:srv-1');
+    await render('?connection=mcp:srv-1&view=tools');
 
     const list = within(screen.getByRole('listitem', { name: 'list_collections' }));
     expect(list.getByText('reads')).toBeInTheDocument();
@@ -433,36 +441,43 @@ describe('Підключення: MCP servers', () => {
         }),
       ),
     );
-    await render('?connection=mcp:srv-1');
-    await userEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await render('?connection=mcp:srv-1&view=tools');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconnect' }));
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Does not start: The server did not answer in time. (find_user timed out after 60 s)',
     );
   });
 
-  it('lists the server’s recent calls', async () => {
+  it('lists the connection’s own calls on its «Activity» tab', async () => {
     useHandlers([stored]);
+    const now = new Date().toISOString();
     server.use(
-      http.get(`${BASE}/:id/calls`, () =>
+      http.get(`${BASE}/activity`, () =>
         HttpResponse.json({
+          since: now,
+          total: 3,
+          errors: 1,
+          truncated: false,
           calls: [
-            { at: new Date().toISOString(), tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-123456789', factoryProjectId: 'factory-1', tried: false },
-            { at: new Date().toISOString(), tool: 'get_documents', outcome: 'error', durationMs: 900, tried: true },
+            { at: now, serverId: 'srv-1', serverLabel: 'Syncta Firestore', tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-123456789', tried: false },
+            { at: now, serverId: 'srv-1', serverLabel: 'Syncta Firestore', tool: 'get_documents', outcome: 'error', durationMs: 900, tried: true },
+            { at: now, serverId: 'srv-other', serverLabel: 'Sentry', tool: 'search_issues', outcome: 'ok', tried: false },
           ],
         }),
       ),
     );
-    await render('?connection=mcp:srv-1');
-    const calls = await screen.findByRole('list', { name: 'Recent calls' });
+    await render('?connection=mcp:srv-1&view=activity');
+    const calls = await screen.findByRole('table', { name: 'Requests' });
     expect(calls).toHaveTextContent('list_collections');
-    expect(calls).toHaveTextContent('ok · 120 ms · session session-');
-    expect(calls).toHaveTextContent('failed · 900 ms · tried in settings');
+    expect(calls).toHaveTextContent('120 ms');
+    expect(calls).toHaveTextContent('Error · tried from settings');
+    expect(calls).not.toHaveTextContent('search_issues');
     expect(within(calls).getByRole('link', { name: 'Open session' })).toHaveAttribute('href', '/factories/factory-1/workspaces/session-123456789');
   });
 
   it('gives access by session kind, keeps one row per Factory, and drops board limits with cards', async () => {
     const writes = useHandlers([{ ...stored, assignments: [] }]);
-    await render('?connection=mcp:srv-1');
+    await render('?connection=mcp:srv-1&view=access');
     await userEvent.click(await screen.findByRole('button', { name: 'Add Factory' }));
     const access = await screen.findByRole('group', { name: 'Access for syncts' });
     // A new row reaches every kind of session; with the only Factory listed, no second row can be added.

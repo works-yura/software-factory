@@ -1572,7 +1572,9 @@
       "account": "Account",
       "capabilities": "Capabilities",
       "state": "Status",
-      "actions": "Actions"
+      "actions": "Actions",
+      "connection": "Connection",
+      "created": "Created"
     },
     "mcpBadge": "MCP",
     "organizationWide": "Whole organization",
@@ -1613,7 +1615,8 @@
       "reconnect": "Reconnect",
       "unlink": "Unlink from Factory",
       "delete": "Delete from organization",
-      "deleteAccount": "Remove account from organization"
+      "deleteAccount": "Remove account from organization",
+      "deleteConnection": "Delete connection"
     },
     "rename": {
       "title": "Rename “{{name}}”",
@@ -1642,27 +1645,80 @@
     "reconnectFailed": "Could not reconnect: {{error}}",
     "back": "All connections",
     "detail": {
-      "account": "Google Cloud account",
+      "account": "Account",
       "database": "Database (Firestore)",
       "databaseHint": "What agents may do with the database and whether personal data is masked. The binding above sets the project.",
       "notFound": "This connection is gone: it was unlinked or deleted.",
       "newMcp": "New MCP server",
       "diagnostics": "Diagnostics",
-      "transport": "Under the hood: {{transport}} · server {{server}}"
+      "transport": "Under the hood: {{transport}} · server {{server}}",
+      "back": "Connections",
+      "tabs": {
+        "label": "Connection sections",
+        "overview": "Overview",
+        "activity": "Activity",
+        "access": "Access",
+        "tools": "Tools",
+        "settings": "Settings",
+        "diagnostics": "Diagnostics"
+      },
+      "name": "Name",
+      "save": "Save",
+      "saved": "Renamed",
+      "created": "Created",
+      "checked": "Checked",
+      "state": "Status",
+      "id": "Connection ID",
+      "by": "{{who}}",
+      "byYou": "you",
+      "notRecorded": "not recorded",
+      "scope": "Scope",
+      "noActivity": "Calls are not recorded for this integration."
     },
     "activity": {
       "title": "Activity",
-      "description": "Tool calls by this Factory's agents in the last 24 hours. Calls to the Google Cloud database and MCP servers are recorded so far; reading logs and crashes is not logged.",
+      "description": "Tool calls by this Factory's agents. Calls to the Google Cloud database and MCP servers are recorded so far; reading logs and crashes is not logged.",
       "none": "No calls by agents in the last 24 hours.",
       "summary_one": "{{count}} call · errors: {{errors}}",
       "summary_other": "{{count}} calls · errors: {{errors}}",
       "truncated": "Not everything is shown: there are more calls than were read.",
       "unavailable": "Activity is unavailable right now.",
-      "listLabel": "Latest calls",
-      "ok": "ok",
-      "error": "error",
+      "listLabel": "Requests",
+      "ok": "OK",
+      "error": "Error",
       "tried": "tried from settings",
-      "session": "Open session"
+      "session": "Open session",
+      "range": {
+        "label": "Period",
+        "h1": "Last hour",
+        "h24": "Last 24 hours",
+        "h168": "Last 7 days"
+      },
+      "filter": "Filter requests",
+      "filterLabel": "Request filters",
+      "clear": "Clear filters",
+      "fields": {
+        "connection": "Connection",
+        "tool": "Tool",
+        "outcome": "Outcome"
+      },
+      "operators": {
+        "is": "is",
+        "isNot": "is not",
+        "contains": "contains",
+        "in": "is any of"
+      },
+      "emptyTitle": "No requests yet",
+      "emptyBody": "Requests this Factory's agents make through connections appear here.",
+      "noMatch": "No request matches the filters.",
+      "columns": {
+        "time": "Time",
+        "connection": "Connection",
+        "tool": "Tool",
+        "outcome": "Outcome",
+        "duration": "Duration",
+        "session": "Session"
+      }
     },
     "connect": {
       "title": "Connect {{name}}",
@@ -1721,6 +1777,17 @@
         "code": "Repositories"
       },
       "googleAccount": "Google Cloud account"
+    },
+    "listHeading": "Connections",
+    "addShort": "Add",
+    "health": {
+      "ok": "Active",
+      "error": "Error",
+      "warning": "Needs attention",
+      "idle": "Not checked"
+    },
+    "time": {
+      "ago": "{{time}} ago"
     }
   }
 }

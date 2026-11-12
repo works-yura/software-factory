@@ -1,26 +1,31 @@
 import type { McpCatalogEntry } from '@factory/core';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../../hooks/useFactories';
+import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
+import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
 import { serverIntegration } from '../../connections/connections';
-import type { ConnectionKind, ConnectionRow, ConnectionSources } from '../../connections/connections';
+import type { ConnectionRow, ConnectionSources } from '../../connections/connections';
 import type { McpServer, McpServersState } from '../../services/mcpServers';
 import { ClickUpService } from '../ClickUpService';
 import { AccountCard, BindingCard, draftOf, GoogleCloudService } from '../GoogleCloudService';
-import { localized } from '../mcp-servers/McpCatalogFields';
 import { McpServerEditor } from '../mcp-servers/McpServerEditor';
-import { McpServerHealthLine } from '../mcp-servers/McpServerInspect';
-import type { McpServerStart } from '../mcp-servers/McpServerEditor';
+import type { McpServerSection, McpServerStart } from '../mcp-servers/McpServerEditor';
+import { McpServerHealthLine, mcpErrorText } from '../mcp-servers/McpServerInspect';
 import { SettingsSubsection } from '../SettingsSubsection';
 import { GitHubService, GitLabService } from '../SourceControlServices';
-import { ConnectionIcon } from './ConnectionIcon';
+import { ConnectionActivity } from './ConnectionActivity';
+import { HealthBadge, useRenameConnection } from './ConnectionList';
+import { TimeAgo } from './TimeAgo';
 
 /** Where a stored server starts its form from: its catalog entry, or an own server. */
 export function mcpStartOf(server: McpServer, catalog: readonly McpCatalogEntry[]): McpServerStart {
@@ -28,74 +33,121 @@ export function mcpStartOf(server: McpServer, catalog: readonly McpCatalogEntry[
   return entry ? { kind: 'catalog', entry } : { kind: 'custom' };
 }
 
-function DetailHeader({ kind, title, mcp, onBack }: { kind: ConnectionKind; title: string; mcp: boolean; onBack: () => void }) {
+type DetailTab = 'overview' | 'activity' | 'access' | 'tools' | 'settings' | 'diagnostics';
+
+/** «Хто»: a member's name, «вами», the integration that manages it, or nothing when unknown. */
+function useWho(factoryId: string) {
   const { t } = useTranslation('settings');
+  const me = useFactoryAuth().data?.user?.userId;
+  const members = useFactoryMembers(factoryId).data ?? [];
+  return (userId: string | undefined) => {
+    if (!userId) return undefined;
+    if (userId === me) return t('connections.detail.byYou');
+    if (userId.startsWith('integration:')) return t('connections.kinds.google-cloud');
+    return members.find(member => member.id === userId)?.name;
+  };
+}
+
+/** «Назва» with «Зберегти», when the connection's name is stored; otherwise just the name. */
+function NameRow({ row }: { row: ConnectionRow }) {
+  const { t } = useTranslation('settings');
+  const { rename, pending } = useRenameConnection();
+  const [name, setName] = useState(row.title);
+  const next = name.trim();
   return (
-    <div className="flex flex-col gap-3">
-      <Button size="sm" variant="ghost" className="min-h-11 self-start md:min-h-0" onClick={onBack}>
-        <ChevronLeft aria-hidden className="size-4" />
-        {t('connections.back')}
-      </Button>
-      <div className="flex min-w-0 items-center gap-3">
-        <ConnectionIcon kind={kind} />
-        <Txt as="h2" variant="body" tone="ink" className="min-w-0 truncate text-base font-medium">
-          {title}
-        </Txt>
-        {mcp && (
-          <Badge size="xs" variant="neutral">
-            {t('connections.mcpBadge')}
-          </Badge>
-        )}
-      </div>
-    </div>
+    <SettingsRow label={t('connections.detail.name')}>
+      {row.rename ? (
+        <form
+          className="flex w-full items-center justify-end gap-2"
+          onSubmit={event => {
+            event.preventDefault();
+            if (next && next !== row.title) rename(row, next);
+          }}
+        >
+          <Input aria-label={t('connections.detail.name')} value={name} onChange={event => setName(event.target.value)} className="min-w-0 flex-1 sm:w-56 sm:flex-none" />
+          <Button type="submit" size="sm" variant="primary" disabled={!next || next === row.title || pending}>
+            {t('connections.detail.save')}
+          </Button>
+        </form>
+      ) : (
+        <span className="text-body-sm text-foreground">{row.title}</span>
+      )}
+    </SettingsRow>
+  );
+}
+
+/** «Огляд», as Mastra's: name, account, created (when and by whom), last check, state, the connection's id. */
+function Overview({ row, factoryId }: { row: ConnectionRow; factoryId: string }) {
+  const { t } = useTranslation('settings');
+  const who = useWho(factoryId);
+  const health = row.server?.health;
+  const failure = health && (row.state === 'error' || row.state === 'needs_auth') ? mcpErrorText(t, health.errorKind, health.error) : undefined;
+  const connectionId = row.binding?.id ?? row.server?.id ?? row.id;
+  const by = who(row.createdBy);
+  return (
+    <SettingsContainer>
+      <NameRow row={row} />
+      <SettingsRow label={t('connections.detail.account')}>
+        <span className="text-body-sm flex min-w-0 flex-col items-end text-right max-sm:items-start max-sm:text-left">
+          <span className="text-foreground truncate">{row.account?.name ?? (row.scope === 'organization' ? t('connections.organizationWide') : '—')}</span>
+          {row.account?.detail && <span className="text-meta text-muted-foreground truncate">{row.account.detail}</span>}
+        </span>
+      </SettingsRow>
+      <SettingsRow label={t('connections.detail.created')}>
+        <span className="text-body-sm text-foreground flex items-center gap-1.5">
+          {row.createdAt ? <TimeAgo value={row.createdAt} /> : <span className="text-muted-foreground">{t('connections.detail.notRecorded')}</span>}
+          {row.createdAt && by && <span className="text-muted-foreground">· {by}</span>}
+        </span>
+      </SettingsRow>
+      {health?.checkedAt && (
+        <SettingsRow label={t('connections.detail.checked')}>
+          <TimeAgo value={health.checkedAt} className="text-body-sm text-foreground" />
+        </SettingsRow>
+      )}
+      <SettingsRow label={t('connections.detail.state')} description={failure}>
+        <span className="flex items-center gap-2">
+          <HealthBadge row={row} />
+          {row.state !== 'ok' && row.state !== 'connected' && <span className="text-body-sm text-muted-foreground">{t(`connections.states.${row.state}`)}</span>}
+        </span>
+      </SettingsRow>
+      <SettingsRow label={t('connections.detail.id')}>
+        <span className="bg-surface-panel shadow-inset flex min-w-0 items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2">
+          <span className="text-meta text-muted-foreground truncate font-mono">{connectionId}</span>
+          <CopyButton content={connectionId} size="icon-sm" variant="ghost" />
+        </span>
+      </SettingsRow>
+    </SettingsContainer>
   );
 }
 
 /**
- * «Діагностика», folded: how a first-party capability runs under the hood (the MCP package and the
- * server's identifier) and its last check — for when something does not work, not for every day.
+ * «Діагностика»: how a first-party capability runs under the hood (the MCP package, its version and
+ * the server's identifier) and its last check — for when something does not work.
  */
 function Diagnostics({ server, catalog }: { server: McpServer; catalog: readonly McpCatalogEntry[] }) {
   const { t } = useTranslation('settings');
   const entry = server.launch.transport === 'catalog' ? catalog.find(candidate => candidate.id === (server.launch as { entry: string }).entry) : undefined;
   const transport = entry ? `MCP · ${entry.package.identifier} ${entry.package.version}` : 'MCP';
-  const [open, setOpen] = useState(false);
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border-border1 rounded-lg border">
-      <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left">
-        <ChevronRight aria-hidden className={`size-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-        <Txt as="span" variant="body" tone="ink">
-          {t('connections.detail.diagnostics')}
+    <SettingsContainer>
+      <SettingsRow label={t('connections.detail.tabs.diagnostics')} description={t('connections.detail.transport', { transport, server: server.name })}>
+        <Txt as="span" variant="caption" tone="muted">
+          <McpServerHealthLine server={server} />
         </Txt>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="border-border1 flex flex-col gap-2 border-t px-4 py-3">
-          <Txt as="p" variant="caption" tone="muted" className="break-words">
-            {t('connections.detail.transport', { transport, server: server.name })}
-          </Txt>
-          <Txt as="span" variant="caption" tone="muted">
-            <McpServerHealthLine server={server} />
-          </Txt>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </SettingsRow>
+    </SettingsContainer>
   );
 }
 
-function Frame({ header, children }: { header: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-6">
-      {header}
-      <div className="flex min-w-0 flex-col gap-5">{children}</div>
-    </div>
-  );
+/** Pages without tabs: the organization's Google Cloud accounts, a new MCP server, an organization-wide source opened by link. */
+function Plain({ children }: { children: ReactNode }) {
+  return <div className="flex min-w-0 flex-col gap-5">{children}</div>;
 }
 
 /**
- * One connection's own view, reached by `?connection=` (so a phone's back button returns to the
- * list): the integration's existing settings, unchanged — a Google Cloud binding with its account
- * and its «База» server's tool policy, an MCP server's form (access, tools, check, calls, masking),
- * or ClickUp / GitHub / GitLab.
+ * One connection's page (`?connection=`), as Mastra's: the page header names it (`ConnectionsPageHeader`),
+ * then tabs — «Огляд», «Активність», and ours: «Доступ», «Інструменти», «Налаштування»,
+ * «Діагностика» — each only where the connection has it. The tab is kept in the URL (`&view=`).
  */
 export function ConnectionDetail({
   id,
@@ -103,7 +155,6 @@ export function ConnectionDetail({
   factoryId,
   rows,
   sources,
-  onBack,
 }: {
   id: string;
   linkAccountId?: string;
@@ -113,23 +164,16 @@ export function ConnectionDetail({
   onBack: () => void;
 }) {
   const { t } = useTranslation('settings');
+  const [params, setParams] = useSearchParams();
   const factories = (useFactoriesQuery().data ?? []).map(factory => ({ id: factory.id, name: factory.name }));
   const factoryName = (factoryProjectId: string) => factories.find(factory => factory.id === factoryProjectId)?.name ?? factoryProjectId;
   const mcp: McpServersState | undefined = sources.mcp;
-  const header = (kind: ConnectionKind, title: string, isMcp = false) => <DetailHeader kind={kind} title={title} mcp={isMcp} onBack={onBack} />;
 
   if (id === 'google-cloud') {
     return (
-      <Frame header={header('google-cloud', t('connections.kinds.google-cloud'))}>
+      <Plain>
         <GoogleCloudService factoryId={factoryId} {...(linkAccountId ? { linkAccountId } : {})} />
-      </Frame>
-    );
-  }
-  if (id === 'clickup' || id === 'github' || id === 'gitlab') {
-    return (
-      <Frame header={header(id, t(`connections.kinds.${id}`))}>
-        {id === 'clickup' ? <ClickUpService /> : id === 'github' ? <GitHubService /> : <GitLabService />}
-      </Frame>
+      </Plain>
     );
   }
   if (id.startsWith('mcp-new:') && mcp) {
@@ -137,59 +181,116 @@ export function ConnectionDetail({
     const entry = mcp.catalog.find(candidate => candidate.id === entryId);
     const start: McpServerStart = entry ? { kind: 'catalog', entry } : { kind: 'custom' };
     return (
-      <Frame header={header('mcp', entry ? localized(entry.label) : t('connections.detail.newMcp'), true)}>
-        <McpServerEditor start={start} state={mcp} onSaved={onBack} />
-      </Frame>
+      <Plain>
+        <McpServerEditor start={start} state={mcp} onSaved={() => setParams(new URLSearchParams())} />
+      </Plain>
     );
   }
 
-  const row = rows.find(candidate => candidate.id === id);
-  // An MCP server of the organization, linked to this Factory or not (just unlinked, or linked from
-  // «Додати підключення» before the list caught up): its form says which Factories have access.
-  const server = id.startsWith('mcp:') ? mcp?.servers.find(candidate => `mcp:${candidate.id}` === id && (!candidate.owner || row !== undefined)) : undefined;
-  if (server && mcp) {
-    const integration = serverIntegration(server, mcp.catalog);
-    if (integration) {
-      // A database a first-party integration runs: that integration's «База», its transport only under «Діагностика».
-      return (
-        <Frame header={header(integration, row?.title ?? t(`connections.kinds.${integration}`))}>
-          <SettingsSubsection title={t('connections.detail.database')} description={t('connections.detail.databaseHint')}>
-            <McpServerEditor key={server.id} server={server} start={mcpStartOf(server, mcp.catalog)} state={mcp} onSaved={() => {}} embedded />
-          </SettingsSubsection>
-          <Diagnostics server={server} catalog={mcp.catalog} />
-        </Frame>
-      );
-    }
-    return (
-      <Frame header={header('mcp', server.label, true)}>
-        <McpServerEditor key={server.id} server={server} start={mcpStartOf(server, mcp.catalog)} state={mcp} onSaved={() => {}} />
-      </Frame>
-    );
+  const listed = rows.find(candidate => candidate.id === id);
+  // An MCP server of the organization this Factory is not linked to (just unlinked, or linked from
+  // «Додати підключення» before the list caught up): its page, with its form saying who has access.
+  const orphan = !listed && id.startsWith('mcp:') ? mcp?.servers.find(candidate => `mcp:${candidate.id}` === id && !candidate.owner) : undefined;
+  const row: ConnectionRow | undefined =
+    listed ??
+    (orphan && mcp
+      ? {
+          id,
+          kind: serverIntegration(orphan, mcp.catalog) ?? 'mcp',
+          title: orphan.label,
+          mcp: !serverIntegration(orphan, mcp.catalog),
+          capabilities: [],
+          state: orphan.enabled ? (orphan.health?.state ?? 'unchecked') : 'disabled',
+          scope: 'factory',
+          server: orphan,
+          rename: 'server',
+        }
+      : undefined);
+  const sourceKind = id === 'clickup' || id === 'github' || id === 'gitlab' ? id : undefined;
+
+  if (!row && sourceKind) {
+    // An organization-wide source not connected yet (from its connect step or an old link): its own controls.
+    return <Plain>{sourceKind === 'clickup' ? <ClickUpService /> : sourceKind === 'github' ? <GitHubService /> : <GitLabService />}</Plain>;
   }
-  if (row?.kind === 'google-cloud' && row.binding && sources.firebase) {
-    const account = sources.firebase.accounts.find(candidate => candidate.id === row.accountId);
+  if (!row) {
     return (
-      <Frame header={header('google-cloud', row.title)}>
-        <BindingCard stored={row.binding} draft={draftOf(row.binding)} accounts={sources.firebase.accounts} factories={factories} defaultOpen />
-        {account && (
-          <SettingsSubsection title={t('connections.detail.account')}>
-            <AccountCard account={account} bindings={sources.firebase.bindings} factoryName={factoryName} />
-          </SettingsSubsection>
-        )}
-        {row.server && mcp && (
-          <SettingsSubsection title={t('connections.detail.database')} description={t('connections.detail.databaseHint')}>
-            <McpServerEditor key={row.server.id} server={row.server} start={mcpStartOf(row.server, mcp.catalog)} state={mcp} onSaved={() => {}} embedded />
-          </SettingsSubsection>
-        )}
-        {row.server && mcp && <Diagnostics server={row.server} catalog={mcp.catalog} />}
-      </Frame>
-    );
-  }
-  return (
-    <Frame header={<DetailHeader kind="mcp" title={t('connections.title')} mcp={false} onBack={onBack} />}>
       <Txt as="p" variant="caption" tone="muted">
         {t('connections.detail.notFound')}
       </Txt>
-    </Frame>
+    );
+  }
+
+  const server = row.server;
+  const internal = server && mcp ? serverIntegration(server, mcp.catalog) : undefined;
+  const editor = (section: McpServerSection) =>
+    server && mcp ? (
+      <McpServerEditor key={`${server.id}:${server.updatedAt}:${section}`} server={server} start={mcpStartOf(server, mcp.catalog)} state={mcp} onSaved={() => {}} embedded={Boolean(internal)} section={section} />
+    ) : null;
+  const account = row.binding ? sources.firebase?.accounts.find(candidate => candidate.id === row.accountId) : undefined;
+
+  const settings: ReactNode = row.binding ? (
+    <>
+      <BindingCard stored={row.binding} draft={draftOf(row.binding)} accounts={sources.firebase?.accounts ?? []} factories={factories} defaultOpen />
+      {account && (
+        <SettingsSubsection title={t('connections.detail.account')}>
+          <AccountCard account={account} bindings={sources.firebase?.bindings ?? []} factoryName={factoryName} />
+        </SettingsSubsection>
+      )}
+      {server && (
+        <SettingsSubsection title={t('connections.detail.database')} description={t('connections.detail.databaseHint')}>
+          {editor('config')}
+        </SettingsSubsection>
+      )}
+    </>
+  ) : server ? (
+    editor('config')
+  ) : sourceKind === 'clickup' ? (
+    <ClickUpService />
+  ) : sourceKind === 'github' ? (
+    <GitHubService />
+  ) : sourceKind === 'gitlab' ? (
+    <GitLabService />
+  ) : null;
+
+  const tabs: Array<{ value: DetailTab; content: ReactNode }> = [
+    { value: 'overview', content: <Overview row={row} factoryId={factoryId} /> },
+    ...(server ? [{ value: 'activity' as const, content: <ConnectionActivity factoryId={factoryId} serverId={server.id} heading={false} /> }] : []),
+    ...(server && !row.managed ? [{ value: 'access' as const, content: editor('access') }] : []),
+    ...(server ? [{ value: 'tools' as const, content: editor('tools') }] : []),
+    ...(settings ? [{ value: 'settings' as const, content: settings }] : []),
+    ...(server && internal && mcp ? [{ value: 'diagnostics' as const, content: <Diagnostics server={server} catalog={mcp.catalog} /> }] : []),
+  ];
+  const requested = params.get('view') as DetailTab | null;
+  const current = tabs.some(tab => tab.value === requested) ? (requested as DetailTab) : 'overview';
+
+  return (
+    <Tabs<DetailTab>
+      defaultTab="overview"
+      value={current}
+      onValueChange={value =>
+        setParams(
+          previous => {
+            const next = new URLSearchParams(previous);
+            if (value === 'overview') next.delete('view');
+            else next.set('view', value);
+            return next;
+          },
+          { replace: true },
+        )
+      }
+    >
+      <TabList aria-label={t('connections.detail.tabs.label')} size="sm">
+        {tabs.map(tab => (
+          <Tab key={tab.value} value={tab.value}>
+            {t(`connections.detail.tabs.${tab.value}`)}
+          </Tab>
+        ))}
+      </TabList>
+      {tabs.map(tab => (
+        <TabContent key={tab.value} value={tab.value} className="flex min-w-0 flex-col gap-5 pt-4">
+          {tab.content}
+        </TabContent>
+      ))}
+    </Tabs>
   );
 }

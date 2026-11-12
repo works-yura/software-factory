@@ -81,14 +81,23 @@ interface Props {
    * banner and no catalog wording about how it runs — the page says what it is.
    */
   embedded?: boolean;
+  /**
+   * One part of the form, for a connection's tabs: `config` (how it runs, masking, on/off, advanced),
+   * `access` (which sessions get it), `tools` (check and per-tool policy). Each part saves the whole
+   * server from what it shows; `all` (default) is the full form for a new server.
+   */
+  section?: McpServerSection;
 }
+
+export type McpServerSection = 'all' | 'config' | 'access' | 'tools';
 
 /**
  * The form for a server: its name, then the inputs its catalog entry declares (or a local command /
  * an address for an own server), then access, tool policy and masking. The identifier is made from
  * the name and kept under «Додатково».
  */
-export function McpServerEditor({ server, start, state, onSaved, embedded = false }: Props) {
+export function McpServerEditor({ server, start, state, onSaved, embedded = false, section = 'all' }: Props) {
+  const show = (part: Exclude<McpServerSection, 'all'>) => section === 'all' || section === part;
   const { t } = useTranslation('settings');
   const { factoryId } = useParams<{ factoryId: string }>();
   const canEdit = state.canEdit;
@@ -257,7 +266,7 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
 
   return (
     <SettingsContainer>
-      {managedBy && !embedded && (
+      {managedBy && !embedded && section === 'all' && (
         <SettingsRow label={t('mcpServers.managed.title', { integration: t(`mcpServers.managed.by.${managedBy}`, { defaultValue: managedBy }) })} description={t('mcpServers.managed.hint')}>
           {factoryId && (
             <Link to={connectionsPath(factoryId, 'google-cloud')} className="underline">
@@ -266,11 +275,13 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
           )}
         </SettingsRow>
       )}
-      <SettingsRow label={t('mcpServers.label')} description={t('mcpServers.labelHint')}>
-        <Input aria-label={t('mcpServers.label')} value={label} disabled={configLocked} onChange={event => setLabel(event.target.value)} />
-      </SettingsRow>
+      {section === 'all' && (
+        <SettingsRow label={t('mcpServers.label')} description={t('mcpServers.labelHint')}>
+          <Input aria-label={t('mcpServers.label')} value={label} disabled={configLocked} onChange={event => setLabel(event.target.value)} />
+        </SettingsRow>
+      )}
 
-      {entry && entry.variants.length > 1 && (
+      {show('config') && entry && entry.variants.length > 1 && (
         <SettingsRow label={t('mcpServers.variant')} description={variant?.summary ? localized(variant.summary) : embedded ? undefined : localized(entry.summary)}>
           <Select value={variantId ?? ''} disabled={configLocked} onValueChange={setVariantId}>
             <SelectTrigger aria-label={t('mcpServers.variant')} className="w-56">
@@ -286,7 +297,7 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
           </Select>
         </SettingsRow>
       )}
-      {variant && (
+      {show('config') && variant && (
         <McpCatalogFields
           variant={variant}
           values={fieldValues}
@@ -298,7 +309,7 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
         />
       )}
 
-      {!entry && (
+      {show('config') && !entry && (
         <>
           <SettingsRow label={t('mcpServers.custom.how')} description={t(mode === 'address' ? 'mcpServers.custom.addressHint' : 'mcpServers.custom.localHint')}>
             <div className="flex gap-1" role="group" aria-label={t('mcpServers.custom.how')}>
@@ -352,6 +363,7 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
         </>
       )}
 
+      {show('access') && (
       <SettingsRow label={t('mcpServers.access.title')} description={managedBy ? t('mcpServers.managed.accessHint') : t('mcpServers.access.hint')}>
         <div className="flex w-full flex-col gap-2">
           {managedBy &&
@@ -393,9 +405,14 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
         </div>
       </SettingsRow>
 
+      )}
+
+      {show('tools') && (
       <SettingsRow label={t('mcpServers.tools.default')} description={t('mcpServers.tools.defaultHint')}>
         <PolicySelect label={t('mcpServers.tools.default')} value={toolPolicies.default} onChange={value => setToolPolicies(current => ({ ...current, default: value }))} />
       </SettingsRow>
+      )}
+      {show('tools') && (
       <SettingsRow label={t('mcpServers.tools.title')} description={t('mcpServers.tools.checkFirst')}>
         <div className="flex w-full flex-col gap-2">
           <div className="flex flex-wrap gap-2">
@@ -446,12 +463,16 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
         </div>
       </SettingsRow>
 
-      {server && (
+      )}
+
+      {server && section === 'all' && (
         <SettingsRow label={t('mcpServers.calls.title')} description={t('mcpServers.calls.hint')}>
           <McpRecentCalls serverId={server.id} />
         </SettingsRow>
       )}
 
+      {show('config') && (
+      <>
       <SettingsRow label={t('mcpServers.mask')} description={t('mcpServers.maskHint')}>
         <Switch aria-label={t('mcpServers.mask')} checked={maskPersonalData} disabled={!canEdit} onCheckedChange={setMask} />
       </SettingsRow>
@@ -496,12 +517,15 @@ export function McpServerEditor({ server, start, state, onSaved, embedded = fals
         )}
       </div>
 
+      </>
+      )}
+
       {canEdit && (
         <div className="flex gap-2">
           <Button size="sm" disabled={save.isPending || !ready} onClick={submit}>
             {t('mcpServers.save')}
           </Button>
-          {server && !managedBy && (
+          {server && !managedBy && section === 'all' && (
             <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
               {t('mcpServers.delete')}
             </Button>
