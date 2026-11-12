@@ -141,6 +141,8 @@ export interface FailureEvidence {
   /** A rejected `rate_limit_event` seen in the stream. */
   rateLimitResetsAt?: Date;
   exitCode?: number | null;
+  /** The signal that ended the process, when one did (a crash, an out-of-memory kill). */
+  signal?: NodeJS.Signals | null;
 }
 
 /** Classifies a failed turn. Deterministic failures win over the transient patterns they may also mention. */
@@ -181,6 +183,9 @@ export function classifyFailure(evidence: FailureEvidence, now = new Date()): Cl
   }
   if (status === 529 || status === 503 || evidence.errorMarker === 'server_error' || OVERLOADED_RE.test(haystack)) {
     return new ClaudeCodeError('overloaded', describe('Claude is overloaded.'), details);
+  }
+  if (!message && evidence.signal) {
+    return new ClaudeCodeError('process', `Claude Code was killed by ${evidence.signal}.`, details);
   }
   if (!message && evidence.exitCode !== undefined) {
     return new ClaudeCodeError('process', `Claude Code exited with code ${String(evidence.exitCode)}.`, details);

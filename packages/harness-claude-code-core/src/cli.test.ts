@@ -583,4 +583,66 @@ describe('runClaude process handling', () => {
       } catch {}
     }
   });
+
+  const isAlive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it.skipIf(process.platform === 'win32')(
+    'ends what a crashed CLI started, even a process that still holds its stdout',
+    async () => {
+      const lines: string[] = [];
+      // The CLI starts a tool (inheriting its stdout, as a shell tool may), then dies without a word.
+      const turn = runClaude({
+        command: '/bin/sh',
+        args: ['-c', 'sleep 30 & echo $!; kill -KILL $$'],
+        cwd: process.cwd(),
+        env: { PATH: '/usr/bin:/bin' },
+        prompt: '',
+        onLine: line => lines.push(line),
+        killGraceMs: 100,
+      });
+      try {
+        const exit = await turn.exited;
+        expect(exit).toMatchObject({ signal: 'SIGKILL', terminated: false });
+        await vi.waitFor(() => expect(isAlive(Number(lines[0]))).toBe(false), { timeout: 2_000 });
+      } finally {
+        if (lines[0]) isAlive(Number(lines[0])) && process.kill(Number(lines[0]), 'SIGKILL');
+      }
+    },
+    10_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'kills what ignores SIGTERM after the grace period, though the CLI itself stopped at once',
+    async () => {
+      const lines: string[] = [];
+      // The tool ignores SIGTERM and holds none of the CLI's pipes; the CLI stops at once.
+      const turn = runClaude({
+        command: '/bin/sh',
+        args: ['-c', 'trap "" TERM; sleep 30 >/dev/null 2>&1 & echo $!; trap - TERM; wait'],
+        cwd: process.cwd(),
+        env: { PATH: '/usr/bin:/bin' },
+        prompt: '',
+        onLine: line => lines.push(line),
+        killGraceMs: 200,
+      });
+      try {
+        await vi.waitFor(() => expect(lines).toHaveLength(1));
+        const tool = Number(lines[0]);
+        turn.terminate();
+        expect(await turn.exited).toMatchObject({ terminated: true });
+        expect(isAlive(tool)).toBe(true);
+        await vi.waitFor(() => expect(isAlive(tool)).toBe(false), { timeout: 2_000 });
+      } finally {
+        if (lines[0]) isAlive(Number(lines[0])) && process.kill(Number(lines[0]), 'SIGKILL');
+      }
+    },
+    10_000,
+  );
 });

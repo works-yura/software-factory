@@ -352,7 +352,7 @@ export class TurnTranslator {
   }
 
   /** How the turn went once the process exited. Aborts are the session's call, not the stream's. */
-  outcome(exit: { exitCode: number | null; stderr: string }, now = new Date()): TurnOutcome {
+  outcome(exit: { exitCode: number | null; signal?: NodeJS.Signals | null; stderr: string }, now = new Date()): TurnOutcome {
     if (this.#gate) return { kind: 'gate', gate: this.#gate };
     if (this.#permission) return { kind: 'permission', request: this.#permission };
     const result = this.#result;
@@ -382,6 +382,7 @@ export class TurnTranslator {
               : {}),
         ...(resetsAt ? { rateLimitResetsAt: resetsAt } : {}),
         exitCode: exit.exitCode,
+        ...(exit.signal ? { signal: exit.signal } : {}),
       },
       now,
     );

@@ -193,6 +193,8 @@ export interface ClaudeChildProcess {
   readonly stdout: { setEncoding?(encoding: 'utf8'): unknown; on(event: 'data', listener: (chunk: string | Buffer) => void): unknown } | null;
   readonly stderr: { setEncoding?(encoding: 'utf8'): unknown; on(event: 'data', listener: (chunk: string | Buffer) => void): unknown } | null;
   kill(signal?: NodeJS.Signals): boolean;
+  /** The process itself ended; its pipes may stay open while something it started still holds them. */
+  on(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
   on(event: 'close', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
   on(event: 'error', listener: (error: Error) => void): unknown;
 }
@@ -326,14 +328,38 @@ export function runClaude(input: RunClaudeInput): ClaudeRun {
       // Already exited.
     }
   };
+  const killGraceMs = input.killGraceMs ?? 5_000;
   const terminate = () => {
     if (!alive || terminated) return;
     terminated = true;
     signal('SIGTERM');
     killTimer = setTimeout(() => {
       if (alive) signal('SIGKILL');
-    }, input.killGraceMs ?? 5_000);
+    }, killGraceMs);
     killTimer.unref?.();
+  };
+  /**
+   * Ends what is left of the CLI's process group once the CLI itself is gone: the tools and MCP
+   * servers it started outlive a CLI that crashed or was stopped, and one holding stdout would keep
+   * the turn from ever ending. SIGTERM now, SIGKILL after the grace period for whatever ignored it.
+   * A CLI that finished on its own keeps what it chose to leave running.
+   */
+  const reapGroup = () => {
+    if (!usesNodeSpawn || !child.pid) return;
+    const group = -child.pid;
+    try {
+      process.kill(group, 'SIGTERM');
+    } catch {
+      return; // The group is empty.
+    }
+    const timer = setTimeout(() => {
+      try {
+        process.kill(group, 'SIGKILL');
+      } catch {
+        // Everything in it exited.
+      }
+    }, killGraceMs);
+    timer.unref?.();
   };
 
   const finish = (exit: Omit<ClaudeExit, 'stderr' | 'timedOut' | 'terminated'>) => {
@@ -355,6 +381,9 @@ export function runClaude(input: RunClaudeInput): ClaudeRun {
     // Node reports a missing or non-executable file here (`spawn claude ENOENT`): the resolver looks again next time.
     reportHarnessSpawnFailure(input.command, error);
     finish({ exitCode: null, signal: null, spawnError: error });
+  });
+  child.on('exit', (_code: number | null, sig: NodeJS.Signals | null) => {
+    if (terminated || sig) reapGroup();
   });
   child.on('close', (code: number | null, sig: NodeJS.Signals | null) => finish({ exitCode: code, signal: sig }));
   // The CLI may exit before reading stdin; a broken pipe is not the turn's failure, it only ends the input.

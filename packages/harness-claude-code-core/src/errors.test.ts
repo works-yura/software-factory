@@ -58,6 +58,11 @@ describe('classifyFailure', () => {
     expect(error).toMatchObject({ kind: 'process', message: 'Claude Code exited with code 137.' });
   });
 
+  it('names the signal that killed a silent process, instead of a null exit code', () => {
+    const error = classifyFailure({ exitCode: null, signal: 'SIGKILL' }, NOW);
+    expect(error).toMatchObject({ kind: 'process', message: 'Claude Code was killed by SIGKILL.' });
+  });
+
   it.each([
     [{ subtype: 'error_max_turns' }, 'Claude Code hit its turn limit.'],
     [{ errors: [], stderr: '', status: 401 }, 'Claude Code authentication failed.'],
