@@ -3838,6 +3838,33 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
+  it('settles a move queued for a card deleted since as superseded, without retrying it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'transition',
+      board: 'work',
+      stage: 'review',
+      idempotencyKey: 'move-deleted-card',
+    });
+    // A card filed by hand has no source, so deleting it leaves its queued decisions behind.
+    await storage.delete({ orgId: 'org-1', id: item.id, purgeRuleState: false });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([
+      expect.objectContaining({ status: 'superseded', attempts: 1, lastError: null }),
+    ]);
+  });
+
   it('retries the skill kickoff when the wake signal is rejected instead of marking it succeeded', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

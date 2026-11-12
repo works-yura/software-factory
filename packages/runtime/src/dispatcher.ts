@@ -2373,7 +2373,9 @@ export class FactoryDecisionDispatcher {
   async #requireItem(record: FactoryDeferredDecisionRecord) {
     if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
-    if (!item) throw new Error('Factory work item not found.');
+    // The card was deleted after the decision was queued: there is nothing left to act on, and
+    // every retry would find it gone the same way.
+    if (!item) throw new FactoryDecisionSuperseded();
     return item;
   }
 
