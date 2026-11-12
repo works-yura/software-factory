@@ -27,6 +27,7 @@ import {
 } from '@factory/credentials';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
+import type { HarnessExecutableReport } from '@factory/harness/executable';
 import type { HarnessModelContext, HarnessModelInstanceInfo } from '@factory/harness/models/facet';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { MASTRA_INSTANCE_ID, mastraModelInstance } from '@factory/credentials/mastra-models';
@@ -316,6 +317,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   };
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
   readPackages?: () => Promise<RunningPackage[]>;
+  /** The CLIs the turn-based harnesses spawn: path, source and version, or where it looked (ADR-0038). */
+  harnessExecutables?: () => Promise<HarnessExecutableReport[]>;
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -478,8 +481,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           await auth.ensureUser(loose(c));
           if (!auth.tenant(loose(c)) && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
-          const packages = await (options.readPackages ?? readRunningPackages)();
-          return c.json({ packages, nodeVersion: process.version });
+          const [packages, harnessExecutables] = await Promise.all([
+            (options.readPackages ?? readRunningPackages)(),
+            options.harnessExecutables?.() ?? Promise.resolve([]),
+          ]);
+          return c.json({ packages, nodeVersion: process.version, harnessExecutables });
         },
       }),
 

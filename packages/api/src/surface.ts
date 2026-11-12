@@ -78,6 +78,7 @@ import {
 import type { WorkItemBranchSource } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
+import type { HarnessExecutableReport } from '@factory/harness/executable';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
 import { createAgentAccountsConnections } from './agent-connections.ts';
@@ -181,6 +182,8 @@ export interface FactoryApiRoutesDeps {
   codexEnabled?: boolean;
   /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
   harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession' | 'forInstance'> | undefined;
+  /** The CLIs the turn-based harnesses spawn, for `/web/config/versions` (ADR-0038). */
+  harnessExecutables?: () => Promise<HarnessExecutableReport[]>;
   /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
   deviceEnabled?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
@@ -992,6 +995,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       },
       deploymentProviders: deps.deploymentModelProviders,
       ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
+      ...(deps.harnessExecutables ? { harnessExecutables: deps.harnessExecutables } : {}),
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
