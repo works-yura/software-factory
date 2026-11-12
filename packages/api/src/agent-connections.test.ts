@@ -9,6 +9,8 @@ import { buildConnectionRoutes } from '@factory/integrations';
 import type { SignInCredentialKind } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 
+import { describeConnectorContract } from '@factory/integrations/testing';
+
 import { createAgentAccountsConnections } from './agent-connections.ts';
 import type { AccountSignInFlows, AccountSignInFlowView } from './credential-accounts.ts';
 
@@ -109,7 +111,12 @@ async function setup({ harness, kind, signInName }: HarnessCase, options: { sign
     });
     return { status: response.status, body: (await response.json()) as any };
   };
-  return { seed, cli, send, addSignIn, connector, provider };
+  return { seed, cli, send, addSignIn, connector, provider, connections };
+}
+
+/** The same connector `setup` builds, over a seeded storage, for the conformance kit. */
+function connectionsOf(seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>, signIn: AccountSignInFlows, { harness, kind, signInName }: HarnessCase) {
+  return createAgentAccountsConnections({ harness, kind, signInName, credentials: seed.credentials, signIn, usage: { storage: seed.usage }, projects: seed.projects, now: () => now });
 }
 
 describe.each(CASES)('$harness.label accounts as a connector', harnessCase => {
@@ -299,3 +306,24 @@ describe.each(CASES)('$harness.label accounts as a connector', harnessCase => {
     expect(other.body.sections[2].fields[0].disabled).toEqual({ reason: expect.any(String) });
   });
 });
+
+// The connector conformance kit (`@factory/integrations/testing`) for each harness's accounts.
+for (const harnessCase of CASES) {
+  describeConnectorContract(`${harnessCase.harness.label} accounts`, async () => {
+    const { seed, cli, addSignIn } = await setup(harnessCase);
+    await addSignIn('admin', { plan: 'max' });
+    const limited = await addSignIn('member');
+    await seed.credentials.markAccountLimited('org1', limited.id, { until: new Date('2026-11-12T17:00:00.000Z'), error: 'out of usage' });
+    return {
+      registration: { id: harnessCase.harness.setup.accounts!.connector, connections: connectionsOf(seed, cli.service, harnessCase) },
+      orgId: 'org1',
+      admin: 'admin',
+      member: 'member',
+      secrets: ['access', 'refresh'].map(token => `"${token}"`),
+      expectsConnections: true,
+      authorize: { as: 'member', method: 'sign-in', finish: authId => cli.finish(authId) },
+      rename: true,
+      remove: true,
+    };
+  });
+}

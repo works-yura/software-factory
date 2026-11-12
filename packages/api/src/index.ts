@@ -1,3 +1,4 @@
+export * from './agent-connections.ts';
 export * from './attachments.ts';
 export * from './automation-runs.ts';
 export * from './config.ts';

@@ -26,3 +26,6 @@ export function mountApiRoutes(app: Hono, routes: ApiRoute[]): void {
     if ('handler' in route) app.on(route.method, route.path, route.handler as never);
   }
 }
+
+export { describeConnectorContract } from './connector-contract.ts';
+export type { ConnectorContractFixture } from './connector-contract.ts';

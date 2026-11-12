@@ -9,6 +9,7 @@ import type { TestAuthUser } from '@factory/http/testing';
 import { FirebaseIntegration } from './integration.ts';
 import { buildFirebaseRoutes } from './routes.ts';
 import { buildConnectionRoutes } from '@factory/integrations';
+import { describeConnectorContract } from '@factory/integrations/testing';
 import { GoogleCloudConnections } from './connections.ts';
 import { newBindingId, saveBinding } from './settings.ts';
 import type { FirebaseStateView } from './routes.ts';
@@ -371,4 +372,32 @@ describe('Google Cloud «База»', () => {
     const refused = await run({ google: { fail: { firestore: { status: 403, body: { error: { code: 403, message: 'Missing or insufficient permissions.', status: 'PERMISSION_DENIED' } } } } } });
     expect(refused).toEqual([expect.objectContaining({ tone: 'error', title: 'Database · syncta-prod/(default)', message: expect.stringContaining('roles/datastore.viewer') })]);
   });
+});
+
+// The connector conformance kit (`@factory/integrations/testing`): a Factory's binding of a service account.
+describeConnectorContract('Google Cloud', async () => {
+  const storage = memoryIntegrationStorage();
+  const google = fakeGoogle(observabilityContractSeed(), {});
+  const projects = { get: async ({ orgId, id }: { orgId: string; id: string }) => (orgId === 'org-1' && FACTORIES.has(id) ? ({ id, name: id } as never) : null) };
+  const hooks = { emitAudit: async () => {}, onManagedMcpServersChanged: async () => {} };
+  const key = syncta();
+  return {
+    registration: { id: 'google-cloud', connections: new GoogleCloudConnections({ storage, projects, hooks: hooks as never, fetch: google.fetch, now: () => OBSERVABILITY_CONTRACT_NOW }) },
+    orgId: 'org-1',
+    admin: 'admin',
+    member: 'member',
+    factoryProjectId: 'factory-1',
+    // The private key in any form must never come back.
+    secrets: [key.private_key, 'PRIVATE KEY'],
+    expectsConnections: true,
+    seed: async ({ send }) => {
+      const connected = await send('admin', 'POST', '/web/connections?factoryProjectId=factory-1', {
+        connector: 'google-cloud',
+        method: 'key',
+        input: { serviceAccountJson: JSON.stringify(key) },
+      });
+      if (connected.status !== 200) throw new Error(`seed failed: ${JSON.stringify(connected.body)}`);
+    },
+    remove: true,
+  };
 });

@@ -5,6 +5,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import type { McpServerInput } from '@factory/core';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { buildConnectionRoutes } from '@factory/integrations';
+import { describeConnectorContract } from '@factory/integrations/testing';
 import { createFactorySecretEncryption, McpServersStorage } from '@factory/store';
 
 import { McpConnections } from './connections.ts';
@@ -116,4 +117,36 @@ describe('MCP servers as a connector (ADR-0035)', () => {
     const [row] = (await call('GET', `/web/connections${Q}`)).body.connections;
     expect(row.actions.remove).toEqual({ reason: 'Only organization admins change connections.' });
   });
+});
+
+// The connector conformance kit (`@factory/integrations/testing`): a Factory's MCP servers, one with a secret header.
+describeConnectorContract('MCP servers', async () => {
+  const backend = new LibSQLFactoryStorage({ id: 'mcp-connections-contract', url: ':memory:' });
+  const servers = backend.registerDomain(new McpServersStorage(createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(3) } })));
+  await backend.init();
+  onTestFinished(() => backend.close());
+  const secret = 'Bearer mcp-contract-secret';
+  await servers.create('org-1', { ...own('sentry', 'Sentry', ['syncts']), launch: { transport: 'http', url: 'https://sentry.example.test/mcp', headers: { Authorization: secret } } }, 'u1');
+  await servers.create('org-1', own('notes', 'Notes', ['other']), 'u1');
+  return {
+    registration: {
+      id: 'mcp',
+      connections: new McpConnections({
+        servers,
+        hub: { reconnect: async () => ({ tools: [], checkedAt: 'now', connected: true, toolCount: 3 }) },
+        credentials: { options: async () => ({}) },
+        catalog: [],
+        projects: { get: async ({ id }) => (['syncts', 'other'].includes(id) ? ({ id, name: id } as never) : null) },
+        audit: { record: async () => {} },
+      }),
+    },
+    orgId: 'org-1',
+    admin: 'admin',
+    member: 'member',
+    factoryProjectId: 'syncts',
+    secrets: [secret],
+    expectsConnections: true,
+    rename: true,
+    remove: true,
+  };
 });

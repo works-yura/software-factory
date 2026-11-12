@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { buildConnectionRoutes } from '@factory/integrations';
+import { describeConnectorContract } from '@factory/integrations/testing';
 
 import { GitLabConnections } from './connections.ts';
 import type { GitLabConnectionsSource } from './connections.ts';
@@ -91,3 +92,34 @@ describe('GitLab connections (ADR-0035)', () => {
     expect((await call('POST', '/web/connections', { connector: 'gitlab', method: 'token' })).status).toBe(409);
   });
 });
+
+// The connector conformance kit (`@factory/integrations/testing`): Platform accounts, connected through a Nango session.
+describeConnectorContract('GitLab (Mastra Platform)', async () => {
+  const connections: Array<{ id: string; status: 'active' | 'needs_reauth'; accountLabel: string | null; displayName?: string | null }> = [
+    { id: 'c-1', status: 'active', accountLabel: 'yura', displayName: 'Client' },
+  ];
+  return {
+    registration: { id: 'gitlab', connections: new GitLabConnections(platform(connections).source) },
+    orgId: 'org-1',
+    admin: 'admin',
+    member: 'member',
+    expectsConnections: true,
+    authorize: { method: 'platform', finish: async authId => void connections.push({ id: authId, status: 'active', accountLabel: 'new' }) },
+  };
+});
+
+describeConnectorContract('GitLab (server token)', async () => ({
+  registration: {
+    id: 'gitlab',
+    connections: new GitLabConnections({
+      diagnostics: () => ({ mode: 'direct', endpointHost: 'gitlab.example.com' }),
+      statusConnections: async () => undefined,
+      verifyStatus: async () => {},
+      platformSessions: () => undefined,
+    }),
+  },
+  orgId: 'org-1',
+  admin: 'admin',
+  member: 'member',
+  expectsConnections: true,
+}));

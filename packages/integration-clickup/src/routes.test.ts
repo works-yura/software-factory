@@ -10,6 +10,7 @@ import type { ClickUpApi, ClickUpConnectionStorage } from './connection.ts';
 import { ClickUpIntake } from './intake.ts';
 import { buildClickUpRoutes } from './routes.ts';
 import { buildConnectionRoutes } from '@factory/integrations';
+import { describeConnectorContract } from '@factory/integrations/testing';
 import { ClickUpConnections } from './connections.ts';
 
 /** `integration_connections` rows of the ClickUp integration, by organization. */
@@ -279,4 +280,38 @@ describe('ClickUp connections (ADR-0035)', () => {
     expect((await connect('pk_a')).status).toBe(200);
     expect(isAdmin).not.toHaveBeenCalled();
   });
+});
+
+// The connector conformance kit (`@factory/integrations/testing`): the organization's ClickUp token.
+describeConnectorContract('ClickUp', async () => {
+  const { storage } = memoryConnections();
+  const clickup = fakeClickUp();
+  const clients = new ClickUpClients({ storage: () => storage, create: clickup.create });
+  let intakeConfig: Record<string, { enabled: boolean; sourceIds: string[] | null }> = { clickup: { enabled: false, sourceIds: null } };
+  const connections = new ClickUpConnections({
+    clients,
+    storage: () => storage,
+    intervalSeconds: 60,
+    projects: { listAll: async () => [{ id: 'fp-1', orgId: 'org-a', name: 'post-airborne' }] as never },
+    intakeRoutes: () => ({ listIntakeRoutes: async () => [{ id: 'r-1', when: { combinator: 'and', conditions: [{ field: 'source.list', operator: 'equals', value: 'A-1' }] } }] }) as never,
+    intake: {
+      ensureReady: async () => {},
+      getConfig: async () => intakeConfig as never,
+      saveConfig: async ({ config }: { config: unknown }) => void (intakeConfig = config as typeof intakeConfig),
+    } as never,
+  });
+  return {
+    registration: { id: 'clickup', connections },
+    orgId: 'org-a',
+    admin: 'admin-a',
+    member: 'member-a',
+    secrets: ['pk_a'],
+    expectsConnections: true,
+    seed: async ({ send }) => {
+      const connected = await send('admin-a', 'POST', '/web/connections', { connector: 'clickup', method: 'token', input: { token: 'pk_a' } });
+      if (connected.status !== 200) throw new Error(`seed failed: ${JSON.stringify(connected.body)}`);
+    },
+    rename: true,
+    remove: true,
+  };
 });
