@@ -14,6 +14,7 @@ import type {
   ConversationChannel,
   ConversationRouterOptions,
   FactoryIntegration,
+  IntegrationConnections,
   IntegrationContext,
   IntegrationMigrationContext,
   IntegrationTools,
@@ -24,6 +25,7 @@ import type { IntegrationStorageHandle } from '@factory/store';
 import { ClickUpIntake } from './intake.ts';
 import { createClickUpPoller } from './poller.ts';
 import { buildClickUpRoutes } from './routes.ts';
+import { ClickUpConnections } from './connections.ts';
 import { CLICKUP_PLATFORM, createClickUpChannel, createClickUpConversationPoller } from './conversation.ts';
 import { adoptDeploymentClickUpToken, ClickUpClients } from './connection.ts';
 import type { ClickUpClientFactory, ClickUpConnectionStorage } from './connection.ts';
@@ -91,10 +93,21 @@ export class ClickUpIntegration implements FactoryIntegration {
         intake: this.intake,
         intervalSeconds: this.#intervalSeconds,
         ...(ctx.hooks ? { hooks: ctx.hooks } : {}),
-        usage: { projects: ctx.storage.projects, intakeRoutes: () => ctx.runtime?.intakeRoutes },
       }),
       buildConnectCodeRoute({ platform: CLICKUP_PLATFORM, auth: ctx.auth, codes: this.#codes }),
     ];
+  }
+
+  /** The organization's ClickUp token for Settings › Підключення (ADR-0035). */
+  connections(ctx: IntegrationContext): IntegrationConnections {
+    return new ClickUpConnections({
+      clients: this.#clients,
+      storage: () => this.#connections(),
+      intervalSeconds: this.#intervalSeconds,
+      projects: ctx.storage.projects,
+      intakeRoutes: () => ctx.runtime?.intakeRoutes,
+      intake: ctx.storage.intake,
+    });
   }
 
   /**

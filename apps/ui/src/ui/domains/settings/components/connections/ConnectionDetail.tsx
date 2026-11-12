@@ -16,7 +16,6 @@ import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
 import { serverIntegration } from '../../connections/connections';
 import type { ConnectionRow, ConnectionSources } from '../../connections/connections';
 import type { McpServer, McpServersState } from '../../services/mcpServers';
-import { ClickUpService } from '../ClickUpService';
 import { AccountCard, BindingCard, draftOf, GoogleCloudService } from '../GoogleCloudService';
 import { McpServerEditor } from '../mcp-servers/McpServerEditor';
 import type { McpServerSection, McpServerStart } from '../mcp-servers/McpServerEditor';
@@ -224,11 +223,11 @@ export function ConnectionDetail({
         }
       : undefined);
   const sourceKind =
-    listed && (listed.kind === 'clickup' || listed.kind === 'gitlab') ? listed.kind : id === 'clickup' || id === 'gitlab' ? id : undefined;
+    listed && listed.kind === 'gitlab' ? listed.kind : id === 'gitlab' ? id : undefined;
 
   if (!row && sourceKind) {
     // An organization-wide source not connected yet (from its connect step or an old link): its own controls.
-    return <Plain>{sourceKind === 'clickup' ? <ClickUpService /> : <GitLabService />}</Plain>;
+    return <Plain><GitLabService /></Plain>;
   }
   if (!row) {
     return (
@@ -262,8 +261,6 @@ export function ConnectionDetail({
     </>
   ) : server ? (
     editor('config')
-  ) : sourceKind === 'clickup' ? (
-    <ClickUpService />
   ) : sourceKind === 'gitlab' ? (
     <GitLabService />
   ) : null;

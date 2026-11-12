@@ -36,36 +36,6 @@
     "saved": "Intake sources updated",
     "saveFailed": "Failed to save intake sources",
     "connectedTo": "Connected to {{name}}",
-    "clickup": {
-      "title": "ClickUp tasks",
-      "checking": "Checking the ClickUp connection…",
-      "notConfigured": "ClickUp is not installed on this server.",
-      "authRequired": "Sign in again to manage ClickUp syncing.",
-      "organizationRequired": "Select an organization to manage ClickUp syncing.",
-      "statusUnavailable": "ClickUp status could not be loaded.",
-      "rejected": "ClickUp rejected the organization's token. An admin can replace it.",
-      "ready": "Tasks are checked every {{seconds}} s in the Lists that intake routes name (Settings › Work Intake, source ClickUp, the «List» condition): a route decides whether a task is imported, where its card goes and what a status change does.",
-      "sync": "Import ClickUp tasks",
-      "notConnected": "ClickUp is not connected for this organization yet. Paste a ClickUp personal API token (pk_…, ClickUp › Settings › Apps): ClickUp checks it, and Factory stores it encrypted for your organization only.",
-      "notConnectedMember": "ClickUp is not connected for this organization yet. An organization admin can connect it.",
-      "account": "ClickUp account: {{username}}",
-      "token": {
-        "label": "ClickUp API token",
-        "placeholder": "pk_…",
-        "connect": "Connect",
-        "checking": "Checking…",
-        "replace": "Replace token",
-        "disconnect": "Disconnect",
-        "cancel": "Cancel",
-        "connected": "ClickUp connected",
-        "disconnected": "ClickUp disconnected",
-        "failed": "ClickUp could not be connected",
-        "adminOnly": "Only an organization admin connects, replaces or disconnects the token.",
-        "confirmTitle": "Disconnect ClickUp?",
-        "confirmBody": "The token is deleted. The organization stops importing ClickUp tasks and answering in comments until an admin connects a token again. Intake routes and cards stay.",
-        "confirm": "Disconnect"
-      }
-    },
     "sources": {
       "title": "Sources",
       "description": "Where cards come from: the connections. What happens to cards — which List to import from, where to put them, what to file on a schedule — is decided by the intake routes below."
@@ -1667,7 +1637,6 @@
     "kinds": {
       "google-cloud": "Google Cloud",
       "mcp": "MCP server",
-      "clickup": "ClickUp",
       "gitlab": "GitLab"
     },
     "capabilities": {
@@ -1809,7 +1778,6 @@
       "title": "Connect {{name}}",
       "subtitle": {
         "google-cloud": "Logs, crashes and the Firestore database — read-only, through a service account.",
-        "clickup": "Tasks from ClickUp Lists land on boards by the intake routes.",
         "gitlab": "GitLab repositories and issues."
       },
       "back": "Back",
@@ -1878,18 +1846,6 @@
       "admin": "Organization admins only",
       "platform": "Managed on Mastra Platform"
     },
-    "removeOrg": {
-      "title": "Delete the “{{name}}” connection?",
-      "body": "The token goes for the whole organization.",
-      "counting": "Counting what stops…",
-      "uncounted": "Could not count what stops.",
-      "stops": "This stops:",
-      "factoryLists_one": "“{{factory}}” — {{count}} ClickUp List in intake routes",
-      "factoryLists_other": "“{{factory}}” — {{count}} ClickUp Lists in intake routes",
-      "nothing": "No Factory of the organization reads ClickUp Lists now.",
-      "confirm": "Delete",
-      "done": "Connection deleted"
-    },
     "organizationNote": "Connections belong to the organization: all its Factories see them. Google Cloud and MCP servers are also opened to each Factory separately.",
     "connector": {
       "reading": "Reading what depends on it…",
@@ -1901,7 +1857,8 @@
       "method": "How it connects",
       "dependents": "Depends on it",
       "manage": "Manage elsewhere",
-      "detailFailed": "Couldn't read the details"
+      "detailFailed": "Couldn't read the details",
+      "saveFailed": "Couldn't save"
     }
   }
 }

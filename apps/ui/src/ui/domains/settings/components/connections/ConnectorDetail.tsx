@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useConnectionDetail } from '../../../../../hooks/useConnections';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { SettingsSubsection } from '../SettingsSubsection';
+import { ConnectorSettings } from './ConnectorSettings';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -21,8 +22,8 @@ function MaybeLink({ href, children }: { href?: string; children: string }) {
   );
 }
 
-/** One block the server laid out: facts as settings rows, a table, or a notice. */
-function Section({ section }: { section: ConnectionDetailSection }) {
+/** One block the server laid out: facts as settings rows, settings, a table, or a notice. */
+function Section({ connectionId, section }: { connectionId: string; section: ConnectionDetailSection }) {
   if (section.type === 'notice') {
     const variant = section.tone === 'error' ? 'destructive' : section.tone === 'warning' ? 'warning' : 'info';
     return (
@@ -37,7 +38,9 @@ function Section({ section }: { section: ConnectionDetailSection }) {
     );
   }
   const body =
-    section.type === 'facts' ? (
+    section.type === 'settings' ? (
+      <ConnectorSettings connectionId={connectionId} section={section} />
+    ) : section.type === 'facts' ? (
       <SettingsContainer>
         {section.rows.map(row => (
           <SettingsRow key={row.label} label={row.label} {...(row.detail ? { description: row.detail } : {})}>
@@ -96,7 +99,7 @@ export function ConnectorDetailSections({ id }: { id: string }) {
   return (
     <>
       {detail.data.sections.map((section, index) => (
-        <Section key={`${section.type}:${section.title ?? ''}:${index}`} section={section} />
+        <Section key={`${section.type}:${section.title ?? ''}:${index}`} connectionId={id} section={section} />
       ))}
     </>
   );

@@ -56,19 +56,16 @@ describe('filterActivity', () => {
 });
 
 describe('organization connections', () => {
-  it('give ClickUp and GitLab rename, reconnect and delete where their credential lives, or say why not; a server connector says its own', () => {
+  it('give GitLab rename, reconnect and delete where their credential lives, or say why not; a server connector says its own', () => {
     const rows = factoryConnections('syncts', {
-      clickup: { configured: true, connected: true, workspaces: ['Eclipt'], intervalSeconds: 60, canManage: true, name: 'Eclipt', connectedAt: '2026-11-01T00:00:00.000Z', connectedBy: 'u1' },
       gitlab: { enabled: true, configured: true, mode: 'direct', reauthRequired: false },
       connections: listed(fakeView('1', { createdAt: '2026-11-02T00:00:00.000Z', createdBy: 'u2', actions: { rename: { reason: 'Admins only' } } })),
     });
     expect(rows.map(row => [row.id, row.title, row.scope, row.orgActions ?? row.view?.actions])).toEqual([
-      ['clickup', 'Eclipt', 'organization', { rename: true, reconnect: true, remove: true }],
       ['gitlab', 'GitLab', 'organization', { rename: 'env', reconnect: 'env', remove: 'env' }],
       ['acme:1', 'Acme 1', 'organization', { rename: { reason: 'Admins only' } }],
     ]);
-    expect(rows[0]).toMatchObject({ createdAt: '2026-11-01T00:00:00.000Z', createdBy: 'u1' });
-    expect(rows[2]).toMatchObject({ kind: 'connector', createdBy: 'u2' });
+    expect(rows[1]).toMatchObject({ kind: 'connector', createdAt: '2026-11-02T00:00:00.000Z', createdBy: 'u2' });
   });
 });
 
@@ -144,7 +141,6 @@ describe('factoryConnections', () => {
   const rows = factoryConnections('syncts', {
     firebase,
     mcp,
-    clickup: { configured: true, connected: true, workspaces: ['Eclipt'], intervalSeconds: 60 },
     gitlab: { enabled: true, configured: false, reauthRequired: false },
     connections: listed(fakeView('4242', { accountLabel: 'yura', status: 'needs_reauth', state: { tone: 'warning', label: 'Needs a look' } })),
   });
@@ -154,7 +150,6 @@ describe('factoryConnections', () => {
       ['google-cloud:b-1', 'google-cloud', 'factory'],
       ['google-cloud:b-2', 'google-cloud', 'factory'],
       ['mcp:srv-toolbox', 'google-cloud', 'factory'],
-      ['clickup', 'clickup', 'organization'],
       ['acme:4242', 'connector', 'organization'],
       ['mcp:srv-sentry', 'mcp', 'factory'],
     ]);
@@ -181,7 +176,7 @@ describe('factoryConnections', () => {
   });
 
   it('marks an own server MCP', () => {
-    expect(rows[5]).toMatchObject({ kind: 'mcp', title: 'Sentry', mcp: true });
+    expect(rows[4]).toMatchObject({ kind: 'mcp', title: 'Sentry', mcp: true });
   });
 
 });
@@ -199,7 +194,6 @@ describe('connectionCatalog', () => {
   it('offers first-party integrations, then third-party and own MCP servers under «Інше»; never an entry an integration runs', () => {
     expect(connectionCatalog({ firebase, mcp, connectors: [fakeConnector] }).map(item => [item.id, item.section, item.mcp])).toEqual([
       ['google-cloud', 'integrations', false],
-      ['clickup', 'integrations', false],
       ['gitlab', 'integrations', false],
       ['connector:acme', 'integrations', false],
       ['mcp-entry:weather', 'other', true],
@@ -214,7 +208,7 @@ describe('filterCatalog', () => {
 
   it('narrows by category: sources leave out tools and accounts', () => {
     const result = filterCatalog(items, linkableAccounts('syncts', { firebase, mcp }), { query: '', filter: 'sources', textOf: text });
-    expect(result.items.map(item => item.id)).toEqual(['clickup', 'gitlab', 'connector:acme']);
+    expect(result.items.map(item => item.id)).toEqual(['gitlab', 'connector:acme']);
     expect(result.accounts).toEqual([]);
   });
 

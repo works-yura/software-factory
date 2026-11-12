@@ -99,26 +99,3 @@ export async function fetchClickUpListStatuses(baseUrl: string, listId: string):
     await request<{ statuses: ClickUpListStatus[] }>(baseUrl, `/web/clickup/lists/${encodeURIComponent(listId)}/statuses`)
   ).statuses;
 }
-
-/** Connect or replace the organization's token; ClickUp checks it first, and a refusal says why. */
-export async function connectClickUp(baseUrl: string, token: string): Promise<ClickUpStatus> {
-  return request<ClickUpStatus>(baseUrl, '/web/clickup/connection', { method: 'PUT', body: JSON.stringify({ token }) });
-}
-
-export async function disconnectClickUp(baseUrl: string): Promise<ClickUpStatus> {
-  return request<ClickUpStatus>(baseUrl, '/web/clickup/connection', { method: 'DELETE' });
-}
-
-/** «Перейменувати»: the organization's own name for its ClickUp connection (`null` goes back to «ClickUp»). */
-export async function renameClickUp(baseUrl: string, name: string | null): Promise<ClickUpStatus> {
-  return request<ClickUpStatus>(baseUrl, '/web/clickup/connection/name', { method: 'PATCH', body: JSON.stringify({ name }) });
-}
-
-/** The organization's Factories whose intake routes read ClickUp Lists: what stops when the token goes. */
-export interface ClickUpUsage {
-  factories: Array<{ id: string; name: string; lists: number }>;
-}
-
-export async function fetchClickUpUsage(baseUrl: string): Promise<ClickUpUsage> {
-  return request<ClickUpUsage>(baseUrl, '/web/clickup/usage');
-}

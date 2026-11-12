@@ -1,4 +1,3 @@
-import { useClickUpStatusQuery } from '../../../../../hooks/useClickUp';
 import { useFirebaseStateQuery } from '../../../../../hooks/useFirebase';
 import { useAllConnections, useConnectors } from '../../../../../hooks/useConnections';
 import { useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
@@ -18,7 +17,6 @@ export function useConnectionSources(): {
   const { factoryId } = useParams<{ factoryId: string }>();
   const firebase = useFirebaseStateQuery();
   const mcp = useMcpServersQuery();
-  const clickup = useClickUpStatusQuery();
   const connections = useAllConnections(factoryId);
   const connectors = useConnectors();
   const gitlab = useGitLabStatusQuery();
@@ -26,12 +24,11 @@ export function useConnectionSources(): {
     sources: {
       ...(firebase.data ? { firebase: firebase.data } : {}),
       ...(mcp.data ? { mcp: mcp.data } : {}),
-      ...(clickup.data ? { clickup: clickup.data } : {}),
       ...(connections.data ? { connections: connections.data } : {}),
       ...(connectors.data ? { connectors: connectors.data.connectors } : {}),
       ...(gitlab.data ? { gitlab: gitlab.data } : {}),
     },
-    pending: firebase.isPending || mcp.isPending || (Boolean(factoryId) && connections.isPending),
+    pending: firebase.isPending || mcp.isPending || (Boolean(factoryId) && connections.isPending) || connectors.isPending,
     errors: [
       ...(firebase.isError ? [{ kind: 'google-cloud' as const, error: firebase.error, retry: () => void firebase.refetch() }] : []),
       ...(mcp.isError ? [{ kind: 'mcp' as const, error: mcp.error, retry: () => void mcp.refetch() }] : []),

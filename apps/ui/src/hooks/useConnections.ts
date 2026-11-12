@@ -1,3 +1,4 @@
+import type { ConnectionSettingsValues } from '@factory/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
@@ -77,6 +78,17 @@ export function useUnlinkConnection() {
   const { baseUrl } = useApiConfig();
   const refresh = useRefreshAll();
   return useMutation({ mutationFn: (id: string) => connectionsApi.unlink(baseUrl, id), onSuccess: refresh });
+}
+
+/** Save a `settings` section of a connection's page. */
+export function useUpdateConnectionSettings() {
+  const { baseUrl } = useApiConfig();
+  const refresh = useRefreshAll();
+  return useMutation({
+    mutationFn: ({ id, section, values }: { id: string; section: string; values: ConnectionSettingsValues }) =>
+      connectionsApi.updateSettings(baseUrl, id, section, values),
+    onSuccess: refresh,
+  });
 }
 
 /** What removing a connection would do; read fresh each time the dialog opens. */

@@ -261,7 +261,7 @@ function PickStep({
 /**
  * «Додати підключення»: one dialog for picking and connecting. Step one lists what can be added; a
  * first-party integration opens its connect step in the same dialog (Google Cloud: an account and
- * its key; ClickUp, GitLab: their state and controls); a connector the server describes opens its
+ * its key; GitLab: its state and controls); a connector the server describes opens its
  * methods (a form, or a redirect to the provider); an MCP server or an organization account goes
  * straight to its page. «Перепідключити» on a server connection opens here at its reconnect method.
  */
@@ -278,7 +278,7 @@ export function AddConnectionDialog({
   sources: ConnectionSources;
   onPick: (target: ConnectionTarget) => void;
   onClose: () => void;
-  /** Open straight into one connect step («Перепідключити»): ClickUp, GitLab, Google Cloud, or a server connection's. */
+  /** Open straight into one connect step («Перепідключити»): GitLab, Google Cloud, or a server connection's. */
   initialStep?: Step;
 }) {
   const [chosen, setStep] = useState<Step>();

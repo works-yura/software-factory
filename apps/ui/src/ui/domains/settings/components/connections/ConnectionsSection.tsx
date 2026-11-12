@@ -17,13 +17,14 @@ import { useConnectionSources } from './useConnectionSources';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** Links from before the one list (`?tab=services&service=clickup`, `?tab=mcp`) land on the same thing now. */
-const LEGACY_SERVICES = new Set(['google-cloud', 'clickup', 'gitlab']);
+/**
+ * Links from before the one list (`?tab=services&service=<id>`, `?tab=mcp`) land on the same thing
+ * now: the service becomes `?connection=<id>`, which opens a connector's only connection, or the list.
+ */
 const LEGACY_TABS = new Set(['services', 'mcp']);
 
 /** A connect step «Перепідключити» opens straight into (`&step=`): a first-party kind's, or a server connection's. */
 const isStep = (value: string | null): value is Step =>
-  value === 'clickup' ||
   value === 'gitlab' ||
   value === 'google-cloud' ||
   Boolean(value?.startsWith('connector:') || value?.startsWith('reconnect:'));
@@ -52,16 +53,35 @@ export function ConnectionsSection() {
         const next = new URLSearchParams(current);
         next.delete('tab');
         next.delete('service');
-        if (legacyService && LEGACY_SERVICES.has(legacyService)) next.set('connection', legacyService);
+        if (legacyService) next.set('connection', legacyService);
         return next;
       },
       { replace: true },
     );
   }, [legacyTab, legacyService, setParams]);
 
+  const open = params.get('connection');
+  const rows = factoryConnections(factoryId ?? '', sources);
+  // `?connection=<connector>` (a link to a connector, not one connection) becomes its only connection, else the list.
+  const connectorLink =
+    open !== null && !rows.some(row => row.id === open) && (sources.connectors ?? []).some(connector => connector.id === open);
+  const ofConnector = connectorLink ? rows.filter(row => row.view?.connector.id === open) : [];
+  const resolvedLink = connectorLink && !pending ? (ofConnector.length === 1 ? ofConnector[0]!.id : '') : undefined;
+  useEffect(() => {
+    if (resolvedLink === undefined) return;
+    setParams(
+      current => {
+        const next = new URLSearchParams(current);
+        if (resolvedLink) next.set('connection', resolvedLink);
+        else next.delete('connection');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [resolvedLink, setParams]);
+
   if (!factoryId) return null;
 
-  const open = params.get('connection');
   const adding = params.get('add') === '1';
   const go = (target: ConnectionTarget | null) =>
     setParams(current => {
@@ -73,10 +93,6 @@ export function ConnectionsSection() {
       }
       return next;
     });
-
-  const rows = factoryConnections(factoryId, sources);
-  // `?connection=<connector>` (an older link to a connector's page) opens the list it is part of now.
-  const connectorLink = open !== null && !rows.some(row => row.id === open) && (sources.connectors ?? []).some(connector => connector.id === open);
 
   if (open && !connectorLink) {
     if (pending) return <SkeletonRows label={t('connections.loading')} rows={3} />;

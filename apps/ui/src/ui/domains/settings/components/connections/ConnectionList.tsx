@@ -10,7 +10,6 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { useApiConfig } from '../../../../../api/config';
-import { useClickUpConnectionMutations, useClickUpUsageQuery } from '../../../../../hooks/useClickUp';
 import { useReconnect, useUnlinkConnection, useUpdateConnection } from '../../../../../hooks/useConnections';
 import { useFactoriesQuery } from '../../../../../hooks/useFactories';
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
@@ -54,7 +53,6 @@ export function useRenameConnection() {
   const { t } = useTranslation('settings');
   const mcp = useMcpServerMutations();
   const firebase = useFirebaseMutations();
-  const clickup = useClickUpConnectionMutations();
   const update = useUpdateConnection();
   const rename = (row: ConnectionRow, name: string, onDone?: () => void) => {
     const options = {
@@ -67,11 +65,10 @@ export function useRenameConnection() {
     if (row.view) update.mutate({ id: row.view.id, label: name }, options);
     else if (row.rename === 'binding' && row.binding) firebase.saveBinding.mutate({ ...bindingInput(row.binding), name, id: row.binding.id }, options);
     else if (row.rename === 'server' && row.server) mcp.save.mutate({ ...serverToInput(row.server), label: name, id: row.server.id }, options);
-    else if (row.rename === 'clickup') clickup.rename.mutate(name, options);
   };
   return {
     rename,
-    pending: mcp.save.isPending || firebase.saveBinding.isPending || clickup.rename.isPending || update.isPending,
+    pending: mcp.save.isPending || firebase.saveBinding.isPending || update.isPending,
   };
 }
 
@@ -106,7 +103,7 @@ export function HealthBadge({ row }: { row: ConnectionRow }) {
 }
 
 export type PendingAction = {
-  kind: 'rename' | 'unlink' | 'delete' | 'delete-account' | 'remove-org' | 'remove-connector' | 'unlink-connector';
+  kind: 'rename' | 'unlink' | 'delete' | 'delete-account' | 'remove-connector' | 'unlink-connector';
   row: ConnectionRow;
 };
 
@@ -212,7 +209,7 @@ function ConnectorRowActions({
 }
 
 /**
- * ClickUp and GitLab belong to the organization: their menu renames, reconnects and removes the
+ * GitLab belongs to the organization: their menu renames, reconnects and removes the
  * organization's connection. An action the credential's home decides elsewhere (the server's
  * environment, Mastra Platform) stays in the menu, disabled, saying where.
  */
@@ -254,51 +251,13 @@ function OrgRowActions({
         <BlockedItem icon={RefreshCw} label={t('connections.actions.reconnect')} reason={blocked(actions.reconnect)} />
       )}
       <DropdownMenu.Separator />
-      {actions.remove === true ? (
-        <DropdownMenu.Item variant="destructive" onSelect={() => onPending({ kind: 'remove-org', row })}>
-          <Trash2 aria-hidden />
-          {t('connections.actions.deleteConnection')}
-        </DropdownMenu.Item>
-      ) : (
+      {actions.remove !== true && (
         <BlockedItem icon={Trash2} label={t('connections.actions.deleteConnection')} reason={blocked(actions.remove)} variant="destructive" />
       )}
     </DropdownMenu.Content>
   );
 }
 
-/** «Видалити підключення» for ClickUp: the token goes for the whole organization; what stops is counted from the Factories' routes. */
-function RemoveOrgConnection({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
-  const { t } = useTranslation('settings');
-  const usage = useClickUpUsageQuery(true);
-  const { disconnect } = useClickUpConnectionMutations();
-  const factories = usage.data?.factories ?? [];
-  const body = usage.isPending
-    ? t('connections.removeOrg.counting')
-    : usage.isError
-      ? t('connections.removeOrg.uncounted')
-      : factories.length
-        ? `${t('connections.removeOrg.stops')} ${factories.map(factory => t('connections.removeOrg.factoryLists', { factory: factory.name, count: factory.lists })).join('; ')}.`
-        : t('connections.removeOrg.nothing');
-  return (
-    <ConfirmDialog
-      title={t('connections.removeOrg.title', { name: row.title })}
-      body={`${t('connections.removeOrg.body')} ${body}`}
-      confirm={t('connections.removeOrg.confirm')}
-      cancel={t('connections.delete.cancel')}
-      pending={disconnect.isPending || usage.isPending}
-      onClose={onClose}
-      onConfirm={() =>
-        disconnect.mutate(undefined, {
-          onSuccess: () => {
-            toast.success(t('connections.removeOrg.done'));
-            onClose();
-          },
-          onError: error => toast.error(errorMessage(error)),
-        })
-      }
-    />
-  );
-}
 
 /**
  * The «⋯» menu: rename, reconnect, unlink from this Factory, and — after a separator — delete,
@@ -420,7 +379,6 @@ export function PendingDialog({
     onError: (error: unknown) => toast.error(errorMessage(error)),
   });
 
-  if (pending.kind === 'remove-org') return <RemoveOrgConnection row={row} onClose={onClose} />;
   if (pending.kind === 'remove-connector' && row.view) return <RemoveConnectionDialog id={row.view.id} onClose={onClose} />;
   if (pending.kind === 'unlink-connector' && row.view) {
     const id = row.view.id;

@@ -10,12 +10,10 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useClickUpStatusQuery } from '../../../../../hooks/useClickUp';
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
 import { useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
 import type { FIRST_PARTY } from '../../connections/connections';
 import type { FirebaseAccount } from '../../services/firebase';
-import { ClickUpService } from '../ClickUpService';
 import { GitLabService } from '../SourceControlServices';
 import { ConnectionIcon } from './ConnectionIcon';
 
@@ -25,7 +23,7 @@ export type ConnectionTarget = { connection: string; account?: string };
 export type FirstParty = (typeof FIRST_PARTY)[number];
 
 /** The organization-wide sources whose connect step shows their state and their own controls. */
-export type SourceKind = 'clickup' | 'gitlab';
+export type SourceKind = 'gitlab';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -239,27 +237,18 @@ export function GoogleCloudConnect({
   );
 }
 
-/** ClickUp's or GitLab's state: whether it is connected, in one line, and how to retry reading it. */
-function useSourceState(kind: SourceKind) {
+/** GitLab's state: whether it is connected, in one line, and how to retry reading it. */
+function useSourceState(_kind: SourceKind) {
   const { t } = useTranslation('settings');
-  const clickup = useClickUpStatusQuery();
-  const gitlab = useGitLabStatusQuery();
-  const query = kind === 'clickup' ? clickup : gitlab;
-  const connected = kind === 'clickup' ? clickup.data?.connected === true : gitlab.data?.configured === true;
-  const fromEnv = kind === 'gitlab' && gitlab.data?.mode === 'direct';
-  const detail =
-    kind === 'clickup' && clickup.data?.workspaces.length
-      ? clickup.data.workspaces.join(', ')
-      : fromEnv
-        ? t('connections.states.env')
-        : undefined;
+  const query = useGitLabStatusQuery();
+  const connected = query.data?.configured === true;
+  const detail = query.data?.mode === 'direct' ? t('connections.states.env') : undefined;
   return { pending: query.isPending, error: query.isError ? query.error : undefined, retry: () => void query.refetch(), connected, detail };
 }
 
 /**
- * Connect ClickUp or GitLab: their state at the top — connected (and as what), not yet, or a tinted
- * panel when it could not be read — and their own controls below (GitLab's connect, ClickUp's
- * import switch); «Відкрити налаштування» goes to the connection's page.
+ * Connect GitLab: its state at the top — connected, not yet, or a tinted panel when it could not be
+ * read — and its own controls below; «Відкрити налаштування» goes to the connection's page.
  */
 export function SourceConnect({
   kind,
@@ -306,7 +295,7 @@ export function SourceConnect({
           {state.detail && <Notice.Message>{state.detail}</Notice.Message>}
         </Notice>
       )}
-      {!state.pending && !state.error && (kind === 'clickup' ? <ClickUpService /> : <GitLabService />)}
+      {!state.pending && !state.error && <GitLabService />}
     </StepFrame>
   );
 }

@@ -174,8 +174,29 @@ export interface RemovalImpact {
   requiresConfirm: boolean;
 }
 
+/**
+ * A setting of a connection, shown on its page: a {@link ConnectFormField} with its current value,
+ * plus `select` (its `options`). `disabled` says why it cannot be changed here.
+ */
+export interface ConnectionSettingField extends Omit<ConnectFormField, 'type'> {
+  type: ConnectFormField['type'] | 'select';
+  options?: Array<{ value: string; label: string }>;
+  value: string | boolean | null;
+  disabled?: ConnectionBlocked;
+}
+
 /** One block of a connection's detail page, as the server lays it out. */
 export type ConnectionDetailSection =
+  | {
+      /** Settings saved through `PATCH /web/connections/:id/settings` with this section's id. */
+      type: 'settings';
+      id: string;
+      title?: string;
+      description?: string;
+      fields: ConnectionSettingField[];
+      /** The save button; absent saves each change at once (a switch). */
+      saveLabel?: string;
+    }
   | {
       type: 'facts';
       title?: string;
@@ -254,3 +275,9 @@ export const reconnectRequestSchema = z.object({
 });
 
 export const renameConnectionSchema = z.object({ name: z.string().max(80) });
+
+export const updateConnectionSettingsSchema = z.object({
+  section: z.string().min(1).max(64),
+  values: z.record(z.string(), z.union([z.string().max(65_536), z.boolean(), z.null()])),
+});
+export type ConnectionSettingsValues = z.infer<typeof updateConnectionSettingsSchema>['values'];

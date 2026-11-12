@@ -46,13 +46,13 @@ function MethodRow({ method, onSelect }: { method: ConnectMethod; onSelect: () =
 }
 
 /** One field of a form method, as the server describes it; `file` reads a picked file into the value. */
-function FormField({
+export function FormField({
   field,
   value,
   error,
   onChange,
 }: {
-  field: ConnectFormField;
+  field: Pick<ConnectFormField, 'name' | 'displayName' | 'description' | 'placeholder' | 'accept' | 'required' | 'default'> & { type: string };
   value: string;
   error?: string;
   onChange: (value: string) => void;

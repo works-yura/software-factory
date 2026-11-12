@@ -9,6 +9,7 @@ import type {
   ConnectionDetailView,
   ConnectionErrorBody,
   ConnectionRemoved,
+  ConnectionSettingsValues,
   ConnectionsListResponse,
   ConnectorsResponse,
   ConnectResult,
@@ -75,5 +76,7 @@ export const connectionsApi = {
   unlink: (baseUrl: string, id: string) => request<{ message: string }>(baseUrl, 'POST', path(id, '/unlink')),
   authStatus: (baseUrl: string, connector: string, authId: string) =>
     request<AuthorizationStatusResponse>(baseUrl, 'GET', `/web/connections/authorizations/${encodeURIComponent(authId)}?${new URLSearchParams({ connector })}`),
+  updateSettings: (baseUrl: string, id: string, section: string, values: ConnectionSettingsValues) =>
+    request<{ message: string }>(baseUrl, 'PATCH', path(id, '/settings'), { section, values }),
   detail: (baseUrl: string, id: string) => request<ConnectionDetailView>(baseUrl, 'GET', path(id, '/detail')),
 };

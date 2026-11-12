@@ -72,7 +72,7 @@ describe('Підключення', () => {
 
     expect(screen.getByRole('heading', { name: 'Connections', level: 1 })).toBeInTheDocument();
     const list = await rows();
-    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'ClickUp', 'Acme main', 'Sentry']);
+    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'Acme main', 'Sentry']);
     const google = await rowNamed('syncta-57c6a');
     expect(google).toHaveTextContent('Google Cloud');
     expect(google).toHaveTextContent('Syncta');
@@ -87,7 +87,6 @@ describe('Підключення', () => {
     const sentry = await rowNamed('Sentry');
     expect(sentry).toHaveTextContent('MCP');
     expect(within(sentry).getByText('Error').closest('[data-state]')).toHaveAttribute('title', expect.stringContaining('The account was refused access'));
-    expect(await rowNamed('ClickUp')).toHaveTextContent('eclipt.ai');
     // A server connector's row is all the server's: its name, account and what it provides.
     const acme = await rowNamed('Acme main');
     expect(acme).toHaveTextContent('Acme Cloud');
@@ -120,13 +119,53 @@ describe('Підключення', () => {
   it('opens a row as its own view in the URL and comes back to the list', async () => {
     useHandlers();
     renderConnections();
-    await userEvent.click(await screen.findByRole('link', { name: 'ClickUp' }));
-    expect(screen.getByTestId('search')).toHaveTextContent('?connection=clickup');
-    await userEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    expect(await screen.findByRole('switch', { name: 'Import ClickUp tasks' })).toBeChecked();
+    await userEvent.click(await screen.findByRole('link', { name: 'Acme main' }));
+    expect(screen.getByTestId('search')).toHaveTextContent('?connection=acme%3Amain');
+    expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('link', { name: 'Connections' }));
     expect(screen.getByTestId('search')).toBeEmptyDOMElement();
-    expect(await rows()).toHaveLength(4);
+    expect(await rows()).toHaveLength(3);
+  });
+
+  it("saves a server connection's setting the moment its switch changes", async () => {
+    useHandlers();
+    const saved: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, () =>
+        HttpResponse.json({
+          sections: [
+            {
+              type: 'settings',
+              id: 'sync',
+              title: 'Import',
+              fields: [
+                { name: 'enabled', displayName: 'Import Acme tickets', type: 'boolean', required: false, value: true },
+                { name: 'paused', displayName: 'Pause', type: 'boolean', required: false, value: false, disabled: { reason: 'Only admins pause.' } },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.patch(`${TEST_BASE_URL}/web/connections/:id/settings`, async ({ request, params }) => {
+        saved.push({ id: params.id, body: await request.json() });
+        return HttpResponse.json({ message: 'Import is off' });
+      }),
+    );
+    renderConnections('?connection=acme%3Amain');
+    const toggle = await screen.findByRole('switch', { name: 'Import Acme tickets' });
+    expect(toggle).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Pause' })).toBeDisabled();
+    expect(screen.getByText('Only admins pause.')).toBeInTheDocument();
+    await userEvent.click(toggle);
+    await waitFor(() => expect(saved).toEqual([{ id: 'acme:main', body: { section: 'sync', values: { enabled: false } } }]));
+    expect(await screen.findByText('Import is off')).toBeInTheDocument();
+  });
+
+  it('opens a connector link (`?connection=<connector>`) on its only connection', async () => {
+    useHandlers();
+    renderConnections('?connection=acme');
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=acme%3Amain'));
+    expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
   });
 
   it('lands links from before the one list on the same thing', async () => {
@@ -181,59 +220,6 @@ describe('Підключення', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete connection' }));
     await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(writes.at(-1)).toMatchObject({ method: 'DELETE', url: expect.stringContaining('/srv-sentry') }));
-  });
-
-  it('renames ClickUp for the organization and deletes it after naming what stops — never «Unlink» from one Factory', async () => {
-    const writes = useHandlers();
-    const sent: Array<{ method: string; body: unknown }> = [];
-    server.use(
-      http.patch(`${TEST_BASE_URL}/web/clickup/connection/name`, async ({ request }) => {
-        const body = await request.json();
-        sent.push({ method: 'PATCH', body });
-        return HttpResponse.json({ configured: true, connected: true, workspaces: ['eclipt.ai'], intervalSeconds: 60, canManage: true, name: 'Eclipt' });
-      }),
-      http.get(`${TEST_BASE_URL}/web/clickup/usage`, () =>
-        HttpResponse.json({ factories: [{ id: FACTORY_ID, name: 'syncts', lists: 2 }, { id: 'f-2', name: 'book_fate', lists: 1 }] }),
-      ),
-      http.delete(`${TEST_BASE_URL}/web/clickup/connection`, () => {
-        sent.push({ method: 'DELETE', body: null });
-        return HttpResponse.json({ configured: false, connected: false, workspaces: [], intervalSeconds: 60, canManage: true });
-      }),
-    );
-    renderConnections();
-    await rows();
-    await openMenu('ClickUp');
-    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Open', 'Rename', 'Reconnect', 'Delete connection']);
-    // Each item carries its icon, as Mastra's menu does.
-    expect(screen.getAllByRole('menuitem').every(item => item.querySelector('svg'))).toBe(true);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
-    const rename = await screen.findByRole('dialog');
-    await userEvent.clear(within(rename).getByRole('textbox', { name: 'Name' }));
-    await userEvent.type(within(rename).getByRole('textbox', { name: 'Name' }), 'Eclipt');
-    await userEvent.click(within(rename).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(sent).toEqual([{ method: 'PATCH', body: { name: 'Eclipt' } }]));
-    // The row now carries the organization's name for it.
-    expect(await screen.findByRole('link', { name: 'Eclipt' })).toBeInTheDocument();
-
-    await openMenu('Eclipt');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete connection' }));
-    const confirm = await screen.findByRole('dialog', { name: 'Delete the “Eclipt” connection?' });
-    await waitFor(() =>
-      expect(confirm).toHaveTextContent('“syncts” — 2 ClickUp Lists in intake routes; “book_fate” — 1 ClickUp List in intake routes'),
-    );
-    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(sent.at(-1)).toEqual({ method: 'DELETE', body: null }));
-    expect(writes).toEqual([]);
-  });
-
-  it('opens ClickUp’s connect step for «Reconnect», where the token is replaced', async () => {
-    useHandlers();
-    renderConnections();
-    await rows();
-    await openMenu('ClickUp');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Reconnect' }));
-    expect(await screen.findByRole('dialog', { name: 'Connect ClickUp' })).toBeInTheDocument();
-    expect(screen.getByTestId('search')).toHaveTextContent('add=1&step=clickup');
   });
 
   it("offers a server connector's actions as the server decides them, a blocked one with the server's reason", async () => {
@@ -339,17 +325,22 @@ describe('Підключення', () => {
     expect(within(table).getByRole('link', { name: 'ACME-web' })).toHaveAttribute('href', 'https://acme.test/web');
   });
 
-  it('tells a member the organization’s connections are changed by an admin', async () => {
+  it('tells a member the organization’s connections are changed by an admin, in the server’s words', async () => {
+    const reason = { reason: 'Only organization admins change connections.' };
     useHandlers();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/clickup/status`, () =>
-        HttpResponse.json({ configured: true, connected: true, workspaces: ['eclipt.ai'], intervalSeconds: 60, canManage: false }),
+      http.get(`${TEST_BASE_URL}/web/connections`, () =>
+        HttpResponse.json({
+          connections: [{ ...acmeConnection, actions: { rename: reason, reconnect: reason, remove: reason } }],
+          failures: [],
+          copy: { organizationWide: 'Whole organization' },
+        }),
       ),
     );
     renderConnections();
     await rows();
-    await openMenu('ClickUp');
-    expect(screen.getByRole('menuitem', { name: 'Delete connection' })).toHaveAccessibleDescription('Organization admins only');
+    await openMenu('Acme main');
+    expect(screen.getByRole('menuitem', { name: 'Delete connection' })).toHaveAccessibleDescription('Only organization admins change connections.');
     expect(screen.getByRole('menuitem', { name: /^Rename/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
@@ -362,7 +353,6 @@ describe('Підключення', () => {
     const integrations = within(dialog).getByRole('group', { name: 'Integrations' });
     expect(within(integrations).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual([
       'Connect Google Cloud',
-      'Connect ClickUp',
       'Connect GitLab',
       'Connect Acme Cloud',
     ]);
@@ -439,20 +429,6 @@ describe('Підключення', () => {
     expect(posted).toHaveLength(2);
   });
 
-  it('shows ClickUp connected in its step and goes to its settings; «Back» returns to the list', async () => {
-    useHandlers();
-    renderConnections();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect ClickUp' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect ClickUp' });
-    expect(await within(dialog).findByRole('status')).toHaveTextContent('Connected');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
-    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('option', { name: 'Connect ClickUp' }));
-    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Connect ClickUp' })).getByRole('button', { name: 'Open settings' }));
-    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=clickup'));
-  });
-
   it("connects through a server connector's form: asks which way first, says why one is unavailable, shows a refusal on its field", async () => {
     useHandlers();
     const posted: unknown[] = [];
@@ -520,8 +496,8 @@ describe('Підключення', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
     await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'cl');
-    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect Google Cloud', 'Connect ClickUp', 'Connect Acme Cloud']);
-    await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect Google Cloud', 'Connect Acme Cloud']);
+    await userEvent.keyboard('{ArrowDown}{Enter}');
     expect(await screen.findByRole('dialog', { name: 'Connect Acme Cloud' })).toBeInTheDocument();
   });
 

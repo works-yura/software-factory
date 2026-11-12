@@ -22,12 +22,14 @@ import {
   connectRequestSchema,
   reconnectRequestSchema,
   renameConnectionSchema,
+  updateConnectionSettingsSchema,
 } from '@factory/contracts';
 import type {
   AuthFlowStatus,
   ConnectionDetailSection,
   ConnectionErrorBody,
   ConnectionLanguage,
+  ConnectionSettingsValues,
   ConnectionView,
   ConnectorRef,
   ConnectorView,
@@ -107,6 +109,16 @@ export interface IntegrationConnections {
   remove?(request: ConnectionRequest, id: string, options: { confirm: boolean }): Promise<ConnectionOutcome<{ message: string }>>;
   /** Drops the asking Factory's link and keeps the organization's account. */
   unlink?(request: ConnectionRequest, id: string): Promise<ConnectionOutcome<{ message: string }>>;
+  /**
+   * Saves a `settings` section of the detail page. Not gated by the registry: the connector decides
+   * who may change what (a field a member may not change is `disabled` with a reason).
+   */
+  updateSettings?(
+    request: ConnectionRequest,
+    id: string,
+    section: string,
+    values: ConnectionSettingsValues,
+  ): Promise<ConnectionOutcome<{ message: string }>>;
   /** The detail page's sections; null when it does not exist. */
   detail?(request: ConnectionRequest, id: string): Promise<ConnectionDetailSection[] | null>;
 }
@@ -405,6 +417,20 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
         const { request, connector, localId, copy } = found;
         if (!connector.connections.unlink) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
         return respond(c, await connector.connections.unlink(request, localId), value => value);
+      },
+    }),
+    registerApiRoute('/web/connections/:id/settings', {
+      method: 'PATCH',
+      requiresAuth: false,
+      handler: async c => {
+        const found = await target(c, false);
+        if ('response' in found) return found.response;
+        const { request, connector, localId, copy } = found;
+        const parsed = updateConnectionSettingsSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) return refuse(c, 400, { error: 'invalid_body', message: copy.invalidBody });
+        if (!connector.connections.updateSettings) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
+        const outcome = await connector.connections.updateSettings(request, localId, parsed.data.section, parsed.data.values);
+        return respond(c, outcome, value => value);
       },
     }),
     registerApiRoute('/web/connections/:id/detail', {

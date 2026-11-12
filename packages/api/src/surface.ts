@@ -238,6 +238,10 @@ function guardConnections(registration: IntegrationRegistration, facet: Integrat
     ...(facet.remove ? { remove: ready((request, id, options) => facet.remove!(request, id, options)) } : {}),
     ...(facet.unlink ? { unlink: ready((request, id) => facet.unlink!(request, id)) } : {}),
     ...(facet.detail ? { detail: ready((request, id) => facet.detail!(request, id)) } : {}),
+    ...(facet.updateSettings
+      ? { updateSettings: ready((request, id, section, values) => facet.updateSettings!(request, id, section, values)) }
+      : {}),
+    ...(facet.getAuthStatus ? { getAuthStatus: ready((request, authId) => facet.getAuthStatus!(request, authId)) } : {}),
   };
 }
 
