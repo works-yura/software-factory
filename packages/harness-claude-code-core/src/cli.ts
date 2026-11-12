@@ -1,5 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 
+import { harnessCommandPath, reportHarnessSpawnFailure, type HarnessCommand } from '@factory/harness/executable';
+
 import { createLineSplitter } from './stream.ts';
 
 /**
@@ -239,7 +241,8 @@ export function userMessage(text: string): Record<string, unknown> {
 }
 
 export interface RunClaudeInput {
-  command?: string;
+  /** The CLI: a path, or the server's resolver (`@factory/harness/executable`); `claude` on PATH by default. */
+  command?: HarnessCommand;
   args: string[];
   cwd: string;
   env: Record<string, string>;
@@ -276,7 +279,8 @@ export function runClaude(input: RunClaudeInput): ClaudeRun {
 
   let child: ClaudeChildProcess;
   try {
-    child = spawn(input.command ?? 'claude', input.args, {
+    // A resolver with no `claude` throws here: the turn fails at once with why, as a failed spawn does.
+    child = spawn(harnessCommandPath(input.command, 'claude'), input.args, {
       cwd: input.cwd,
       env: input.env,
       detached: usesNodeSpawn,
@@ -284,6 +288,7 @@ export function runClaude(input: RunClaudeInput): ClaudeRun {
     });
   } catch (error) {
     alive = false;
+    reportHarnessSpawnFailure(input.command, error);
     resolveExit({
       exitCode: null,
       signal: null,
@@ -346,7 +351,11 @@ export function runClaude(input: RunClaudeInput): ClaudeRun {
   child.stderr?.on('data', chunk => {
     if (stderr.length < STDERR_LIMIT) stderr += String(chunk);
   });
-  child.on('error', (error: Error) => finish({ exitCode: null, signal: null, spawnError: error }));
+  child.on('error', (error: Error) => {
+    // Node reports a missing or non-executable file here (`spawn claude ENOENT`): the resolver looks again next time.
+    reportHarnessSpawnFailure(input.command, error);
+    finish({ exitCode: null, signal: null, spawnError: error });
+  });
   child.on('close', (code: number | null, sig: NodeJS.Signals | null) => finish({ exitCode: code, signal: sig }));
   // The CLI may exit before reading stdin; a broken pipe is not the turn's failure, it only ends the input.
   let inputOpen = !!child.stdin;

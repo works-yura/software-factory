@@ -22,6 +22,7 @@ import type {
   TurnHandoffContext,
   TurnHandoffHook,
 } from '@factory/harness';
+import type { HarnessCommand } from '@factory/harness/executable';
 import { promptWithTurnHandoff } from '@factory/harness/turn-handoff';
 import {
   isUsageLimitFailure,
@@ -296,8 +297,8 @@ export interface ClaudeCodeSessionConfig
    */
   gateServer?: GateServerCommand;
   spawn?: ClaudeSpawn;
-  /** The CLI binary; `claude` on PATH by default. */
-  command?: string;
+  /** The CLI: a path, or the server's resolver (`@factory/harness/executable`); `claude` on PATH by default. */
+  command?: HarnessCommand;
   /** Mode a new thread starts in; `planning` to start with a plan for approval. */
   mode?: ClaudeSessionMode;
   /** Mode after a person approves a plan; `acceptEdits` by default. */
@@ -1722,7 +1723,11 @@ export class ClaudeCodeSession implements AgentSession {
         this.#reportUsage(run, true);
         if (run.abortRequested) return { kind: 'aborted' };
         if (exit.spawnError) {
-          return { kind: 'error', error: new ClaudeCodeError('process', `Unable to start Claude Code: ${exit.spawnError.message}`) };
+          // The spawn failure stays the cause: a missing CLI is told apart from a crash by it (`isHarnessExecutableUnavailable`).
+          return {
+            kind: 'error',
+            error: new ClaudeCodeError('process', `Unable to start Claude Code: ${exit.spawnError.message}`, { cause: exit.spawnError }),
+          };
         }
         if (exit.timedOut) {
           return { kind: 'error', error: new ClaudeCodeError('timeout', 'Claude Code turn timed out.') };

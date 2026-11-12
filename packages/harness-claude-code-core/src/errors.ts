@@ -26,9 +26,9 @@ export class ClaudeCodeError extends Error {
   constructor(
     kind: ClaudeCodeErrorKind,
     message: string,
-    details: { status?: number; resetsAt?: Date; now?: Date } = {},
+    details: { status?: number; resetsAt?: Date; now?: Date; cause?: unknown } = {},
   ) {
-    super(message);
+    super(message, details.cause === undefined ? undefined : { cause: details.cause });
     this.name = 'ClaudeCodeError';
     this.kind = kind;
     if (details.status !== undefined) this.status = details.status;

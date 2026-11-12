@@ -7,6 +7,7 @@ import { basename, dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentEvent, AgentRunEndReason } from '@factory/harness';
+import { HarnessExecutableUnavailableError, isHarnessExecutableUnavailable } from '@factory/harness/executable';
 
 import { deferred, fakeClaude, fixture, type FakeTurn } from './__fixtures__/fake-claude.ts';
 import type { ClaudeSpawn } from './cli.ts';
@@ -2064,6 +2065,58 @@ describe('ClaudeCodeSession turn failures', () => {
     expect(await end).toBe('error');
     const error = events.find(event => event.type === 'error')?.error as ClaudeCodeError;
     expect([error.kind, error.message]).toEqual(['process', 'Unable to start Claude Code: spawn claude ENOENT']);
+  });
+
+  it('fails a turn whose CLI is not installed once, as a missing executable, and finds it once installed', async () => {
+    let installed = false;
+    const spawned: string[] = [];
+    const command = {
+      command: () => {
+        if (!installed) throw new HarnessExecutableUnavailableError({ harness: 'Claude Code', executable: 'claude', searched: ['/usr/bin/claude'] });
+        return '/home/a/.local/bin/claude';
+      },
+      spawnFailed: vi.fn(),
+    };
+    const fake = fakeClaude([{ lines: fixture('turn-complete.jsonl') }]);
+    const { session, events, signal } = await setup([], {
+      command,
+      spawn: (path, args, options) => {
+        spawned.push(path);
+        return fake.spawn(path, args, options);
+      },
+    });
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('error');
+    const error = events.find(event => event.type === 'error')?.error as ClaudeCodeError;
+    expect(error.kind).toBe('process');
+    expect(error.message).toContain('`claude` was not found');
+    expect(isHarnessExecutableUnavailable(error)).toBe(true);
+    expect(spawned).toEqual([]);
+
+    installed = true;
+    const next = nextEnd(session);
+    await signal('two', 'go');
+    expect(await next).toBe('complete');
+    expect(spawned).toEqual(['/home/a/.local/bin/claude']);
+  });
+
+  it("tells the resolver when the kept CLI is gone, and keeps the spawn failure as the error's cause", async () => {
+    const enoent = Object.assign(new Error('spawn /home/a/.local/bin/claude ENOENT'), { code: 'ENOENT', syscall: 'spawn /home/a/.local/bin/claude' });
+    const command = { command: () => '/home/a/.local/bin/claude', spawnFailed: vi.fn() };
+    const { session, events, signal } = await setup([], {
+      command,
+      spawn: () => {
+        throw enoent;
+      },
+    });
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('error');
+    const error = events.find(event => event.type === 'error')?.error as ClaudeCodeError;
+    expect(error.cause).toBe(enoent);
+    expect(isHarnessExecutableUnavailable(error)).toBe(true);
+    expect(command.spawnFailed).toHaveBeenCalledWith(enoent);
   });
 
   it('stops a turn past its time budget', async () => {

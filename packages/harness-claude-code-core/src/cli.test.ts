@@ -2,6 +2,8 @@ import { EventEmitter } from 'node:events';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { HarnessExecutableUnavailableError } from '@factory/harness/executable';
+
 import { fakeClaude } from './__fixtures__/fake-claude.ts';
 import { buildClaudeArgs, buildClaudeEnv, runClaude } from './cli.ts';
 import type { ClaudeChildProcess, ClaudeSpawn } from './cli.ts';
@@ -318,6 +320,46 @@ describe('runClaude process handling', () => {
       throw 'no binary';
     });
     expect((await failed.exited).spawnError).toEqual(new Error('no binary'));
+  });
+
+  it("spawns the resolver's path, and fails without a spawn when it has none", async () => {
+    const scripted = scriptedChild();
+    const commands: string[] = [];
+    const source = { command: () => '/home/a/.local/bin/claude', spawnFailed: vi.fn() };
+    run((command, args, spawnOptions) => {
+      commands.push(command);
+      return scripted.spawn(command, args, spawnOptions);
+    }, { command: source });
+    expect(commands).toEqual(['/home/a/.local/bin/claude']);
+
+    const missing = new HarnessExecutableUnavailableError({ harness: 'Claude Code', executable: 'claude' });
+    const spawn = vi.fn();
+    const failed = run(spawn as unknown as ClaudeSpawn, {
+      command: {
+        command: () => {
+          throw missing;
+        },
+        spawnFailed: source.spawnFailed,
+      },
+    });
+    expect((await failed.exited).spawnError).toBe(missing);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('tells the resolver when the process could not start for good, and not for other errors', async () => {
+    const source = { command: () => '/gone/claude', spawnFailed: vi.fn() };
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn, { command: source });
+    const enoent = Object.assign(new Error('spawn /gone/claude ENOENT'), { code: 'ENOENT', syscall: 'spawn /gone/claude' });
+    scripted.child.emit('error', enoent);
+    expect((await turn.exited).spawnError).toBe(enoent);
+    expect(source.spawnFailed).toHaveBeenCalledWith(enoent);
+
+    const other = scriptedChild();
+    const second = run(other.spawn, { command: source });
+    other.child.emit('error', new Error('EPIPE'));
+    await second.exited;
+    expect(source.spawnFailed).toHaveBeenCalledTimes(1);
   });
 
   it('reports a process error as a spawn error', async () => {
