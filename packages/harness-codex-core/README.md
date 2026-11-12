@@ -56,9 +56,11 @@ does. Nothing here stores OpenAI credentials: the Factory server keeps the membe
 3. **Chat UI.** Codex sessions emit the same transcript the Claude Code session does, so the chat
    channel, routes and projector of `@factory/harness-claude-code-ui` serve them unchanged
    (their session type is structural); `@factory/harness-codex-ui` holds the Codex glue.
-4. **Server.** Register the harness (routing, model facet, session UI) when the `codex` CLI is
-   found; otherwise the facet reports it unavailable with a reason (`needsSetup` when not signed
-   in). A Factory's harness can be `codex`; sessions start on it like Claude Code ones. Moving a
+4. **Server.** Register the harness (routing, model facet, session UI) wherever it is configured.
+   The `codex` it spawns comes from the server's resolver (`@factory/harness/executable`,
+   ADR-0038: `FACTORY_CODEX_COMMAND`, PATH, then where CLIs install); while it is missing the facet
+   reports it unavailable (`reasonCode: 'executable_missing'`), and without a sign-in of the
+   viewer's it needs setup. A Factory's harness can be `codex`; sessions start on it like Claude Code ones. Moving a
    session between harnesses stays a 409 (a handoff, not a model switch).
 
 ## Parity with Claude Code

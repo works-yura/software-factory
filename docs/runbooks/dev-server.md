@@ -7,7 +7,8 @@ cd apps/server
 corepack pnpm dev:local
 ```
 
-- Вхід через Google (`FACTORY_AUTH=google`; `GOOGLE_CLIENT_ID`, `claude` з `~/.local/bin` (без нього сесії Claude Code падають з `spawn claude ENOENT`), `GOOGLE_CLIENT_SECRET`, `FACTORY_AUTH_SECRET` у `apps/server/.env`, див. README).
+- Вхід через Google (`FACTORY_AUTH=google`; `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACTORY_AUTH_SECRET` у `apps/server/.env`, див. README).
+- CLI агентів (`claude`, `codex`) сервер знаходить сам (ADR-0038): `FACTORY_CLAUDE_CODE_COMMAND` / `FACTORY_CODEX_COMMAND`, якщо задано (тоді лише цей шлях), інакше `PATH`, далі `~/.local/bin`, `~/.claude/local`, bin node сервера і `NVM_BIN`, `/opt/homebrew/bin`, `/usr/local/bin`. На старті в лозі — `[factory] Claude Code: <шлях> (<звідки>, <версія>).` або `… not found (looked in …)`; те саме — у Settings › Налагодження (`/web/config/versions`). Без CLI харнес недоступний з причиною («Claude Code не встановлено на цьому сервері»), а запуск картки падає одразу з `harness_not_configured`, без повторів; встановлений пізніше CLI підхоплюється без перезапуску, невдале рішення — «Повторити».
 - Порт `5874` (API — `http://127.0.0.1:5874/api`). Перевірка: `curl -s -o /dev/null -w '%{http_code}' http://localhost:5874/auth/me` → `200` (решта шляхів без входу — `401` або перенаправлення на `/signin`).
 - Під час старту `sync:skills` копіює `packages/harness-mastra/factory-skills` у `apps/server/src/mastra/public/factory-skills`.
 - Сервер стежить за файлами й сам перезапускається після зміни коду пакетів (`Restarting server...` у лозі).
@@ -58,6 +59,7 @@ scripts/mac-mini/deploy.sh --status   # що працює зараз
 | Автозапуск сервера | LaunchAgent `ai.eclipt.factory` (шаблон `scripts/mac-mini/ai.eclipt.factory.plist`): `RunAtLoad`, `KeepAlive` лише при невдалому виході, `ThrottleInterval` 30 с |
 | Скрипт запуску | `scripts/mac-mini/start-server.sh`: node з `nvm` (`default`), чекає `.env` викоченого слота (диск монтується пізно, до 5 хв), читає `server.env` (`FACTORY_REPO` = `…/v4-runtime/current`) і запускає `corepack pnpm dev:local` в `apps/server` |
 | Сторож | той самий скрипт: кожні 20 с `GET http://127.0.0.1:5874/health` (відповідає без входу); 6 невдач поспіль (2 хв) — зупиняє всю групу процесів і виходить з 1, launchd піднімає знову. Потрібен, бо `mastra dev` живе далі, коли сервер у ньому впав. Старт до першої здорової відповіді — до 15 хв. Рядки `[watchdog …]` у лозі |
+| CLI агентів | `claude` — у `~/.local/bin`, `codex` — з node nvm. launchd дає голий `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`); сервер однаково знаходить їх сам (ADR-0038), а `start-server.sh` ще й дописує ці теки в `PATH`. Перевірити: `grep -E 'Claude Code:|Codex:' ~/Library/Logs/factory.log` або Settings › Налагодження. Закріпити конкретний бінарник — `FACTORY_CLAUDE_CODE_COMMAND` / `FACTORY_CODEX_COMMAND` (абсолютний шлях) у `apps/server/.env` |
 | Лог | `~/Library/Logs/factory.log` |
 | Tailscale | Login Items (System Settings › General › Login Items); serve-конфіг сервісу зберігається між перезавантаженнями |
 | Google sign-in | клієнт OAuth у Google Console: origin `https://factory.tail5c61c7.ts.net`, redirect URI `https://factory.tail5c61c7.ts.net/auth/api/callback/google` |
