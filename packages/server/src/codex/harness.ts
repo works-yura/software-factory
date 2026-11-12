@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { HarnessRoute, TurnHandoffHook } from '@factory/harness';
+import { harnessCommandAvailable, type HarnessCommand } from '@factory/harness/executable';
 import type { ModelSelection } from '@factory/harness/models/contracts';
 import type { ClaudeToolPermissions } from '@factory/harness-claude-code';
 import {
@@ -12,7 +13,6 @@ import {
   createCodexHarness,
   createCodexHarnessModels,
   createJsonFileCodexSessionStore,
-  findCodexBinary,
   type CodexCatalogSource,
   type CodexHarness,
   type CodexHarnessModels,
@@ -137,8 +137,8 @@ export interface CodexFactoryHarnessOptions {
   phaseFor?: (session: SessionCoordinates) => Promise<string | undefined>;
   workItemFor?: (session: SessionCoordinates) => Promise<string | undefined>;
   sessionsFor?: (session: SessionCoordinates & { userId: string }) => Promise<string | undefined>;
-  /** The CLI binary; `codex` on PATH by default. */
-  command?: string;
+  /** The CLI: a path, or the server's resolver (`harnessExecutableFor`); `codex` on PATH by default. */
+  command?: HarnessCommand;
   /** Extra `codex` launch arguments; `FACTORY_CODEX_LAUNCH_ARGS` wins. */
   launchArgs?: string;
   /**
@@ -274,7 +274,7 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
   const catalog =
     options.catalog ??
     createCodexCatalogSource({
-      installed: () => findCodexBinary(options.command ?? 'codex', env) !== undefined,
+      installed: () => harnessCommandAvailable(options.command, 'codex', env),
       probeInput: () => {
         mkdirSync(probeHome, { recursive: true, mode: 0o700 });
         return {

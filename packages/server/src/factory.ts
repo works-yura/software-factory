@@ -56,6 +56,7 @@ import {
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem, REVIEW_CONTEXT } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import { factoryBootMigrations } from './migrations/factory-migrations.ts';
+import { CLAUDE_CODE_EXECUTABLE, CODEX_EXECUTABLE, harnessExecutableFor, reportHarnessExecutables } from './harness-executables.ts';
 import { runBootMigrations } from './migrations/run.ts';
 import { intakeTriggerRouteRepository, writeFireCardBack } from './intake/repository.ts';
 import { canonicalizeProjectRoutes } from './intake/canonical-routes.ts';
@@ -113,10 +114,11 @@ import type {
 } from './claude/index.ts';
 import type { ChatTranscriptSession, ClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import type { ModelSelection } from '@factory/harness/models/contracts';
-import { withConnectionAvailability } from '@factory/harness/models/facet';
+import { harnessCommandAvailable, type HarnessExecutable } from '@factory/harness/executable';
+import { withConnectionAvailability, withExecutableAvailability } from '@factory/harness/models/facet';
 import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
 import { chainSessionResolvers, codexAwareModelSelectionReader } from '@factory/harness-codex-ui';
-import { findCodexBinary } from '@factory/harness-codex';
+import { CODEX_NOT_INSTALLED_REASON } from '@factory/harness-codex';
 import type { CodexSession, CodexSessionMode } from '@factory/harness-codex';
 import {
   combineTurnHarnessUserSessions,
@@ -654,6 +656,8 @@ export class MastraFactory {
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
+  /** The CLIs the turn-based harnesses spawn (ADR-0038), for the boot log and `/web/config/versions`. */
+  #harnessExecutables: HarnessExecutable[] = [];
   #device: FactoryDevice | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
@@ -2064,6 +2068,17 @@ export class MastraFactory {
     // through `claudeSessionUi`. Everything else stays on Mastra.
     const claudeCodeConfig = this.#config.claudeCode;
     const codexConfig = this.#config.codex;
+    // The CLIs they spawn, resolved once for the server (configured command, PATH, then where the CLIs
+    // install; ADR-0038) and logged at boot: a launchd service's bare PATH no longer hides them, and one
+    // installed later is found on the next run without a restart.
+    const claudeExecutable = claudeCodeConfig ? harnessExecutableFor(claudeCodeConfig, CLAUDE_CODE_EXECUTABLE) : undefined;
+    const codexExecutable = codexConfig ? harnessExecutableFor(codexConfig, CODEX_EXECUTABLE) : undefined;
+    this.#harnessExecutables = [claudeExecutable, codexExecutable].filter(
+      (executable): executable is HarnessExecutable => executable !== undefined,
+    );
+    void reportHarnessExecutables(this.#harnessExecutables).catch(error =>
+      console.warn('[factory] Could not report the harness executables.', error),
+    );
     const sessionTokens =
       claudeCodeConfig || codexConfig
         ? createFactorySessionTokenSigner(claudeCodeConfig?.sessionTokenSecret ?? this.#config.stateSecret)
@@ -2204,6 +2219,7 @@ export class MastraFactory {
     const claudeCode: ClaudeFactoryHarness | undefined = claudeCodeConfig
       ? createClaudeFactoryHarness({
           ...claudeCodeConfig,
+          ...(claudeExecutable ? { command: claudeExecutable } : {}),
           // A move from another harness left the thread's history pending, or the CLI lost the conversation.
           handoffContextFor: turnHandoffHook('claude-code', { handoffs: () => sessionHandoffs, memory: handoffMemory }),
           sessions: sourceControlSessions,
@@ -2336,7 +2352,8 @@ export class MastraFactory {
         // Offered only to whoever has a Claude sign-in to run on (ADR-0036); otherwise the UI points at its connector.
         const claudeUsable = 'usable' in claudeCodeCredentials ? claudeCodeCredentials.usable : undefined;
         harnessModels.register(
-          withConnectionAvailability(claudeModels, {
+          // Without its CLI on this server it is offered to nobody, whatever their sign-ins (ADR-0038).
+          withConnectionAvailability(claudeExecutable ? withExecutableAvailability(claudeModels, claudeExecutable) : claudeModels, {
             connector: CLAUDE_CODE_HARNESS.setup.accounts!.connector,
             ...(claudeUsable
               ? {
@@ -2376,15 +2393,15 @@ export class MastraFactory {
     // same session UI as Claude Code's. Each run signs in with its owner's ChatGPT sign-in (the members'
     // `openai-codex` accounts), never with this host's `codex login`. Without the CLI, or without a
     // sign-in the person may use, the facet lists Codex as needing setup.
-    const codexInstalled = codexConfig
-      ? findCodexBinary(codexConfig.command ?? 'codex', codexConfig.env ?? process.env) !== undefined
-      : false;
+    // Asked each time: a CLI installed after boot makes Codex available without a restart.
+    const codexInstalled = (): boolean =>
+      codexConfig !== undefined && harnessCommandAvailable(codexExecutable ?? codexConfig.command, 'codex', codexConfig.env ?? process.env);
     const codex: CodexFactoryHarness | undefined = codexConfig
       ? createCodexFactoryHarness({
           handoffContextFor: turnHandoffHook('codex', { handoffs: () => sessionHandoffs, memory: handoffMemory }),
           ...(codexConfig.store ? { store: codexConfig.store } : {}),
           ...(codexConfig.storeDir ? { storeDir: codexConfig.storeDir } : {}),
-          ...(codexConfig.command ? { command: codexConfig.command } : {}),
+          ...((codexExecutable ?? codexConfig.command) ? { command: codexExecutable ?? codexConfig.command } : {}),
           ...(codexConfig.launchArgs ? { launchArgs: codexConfig.launchArgs } : {}),
           ...(codexConfig.sessionHomeRoot ? { sessionHomeRoot: codexConfig.sessionHomeRoot } : {}),
           credentials: codexConfig.credentials ?? createCodexCredentials({ credentials: modelCredentialsStorage }),
@@ -2462,7 +2479,11 @@ export class MastraFactory {
       // Its models in the picker, Settings and `factory_switch_session_model`, through its facet: `model/list`
       // of the installed CLI, its next turn's `turn/start` carrying the pick (model, effort, service tier).
       // Its facet already asks for a ChatGPT sign-in of the viewer's; the connector names where to add one (ADR-0036).
-      harnessModels.register(withConnectionAvailability(codex.models, { connector: CODEX_HARNESS.setup.accounts!.connector }));
+      harnessModels.register(
+        withConnectionAvailability(codexExecutable ? withExecutableAvailability(codex.models, codexExecutable) : codex.models, {
+          connector: CODEX_HARNESS.setup.accounts!.connector,
+        }),
+      );
       // Its Factory chat is a Codex session too, created when the chat first reaches it (as a Claude Code Factory's).
       const codexSessions = (sessionId: string) => codex.resolveSession(sessionId);
       this.#claudeSessionUi.setSessionResolver(chainSessionResolvers(claudeResolveSession, codexSessions));
@@ -2526,7 +2547,7 @@ export class MastraFactory {
             ...(claudeCode ? { 'claude-code': turnHarnessBinding(claudeCode.harness) } : {}),
             ...(codex ? { codex: turnHarnessBinding(codex.harness) } : {}),
           },
-          available: instanceId => instanceId !== 'codex' || codexInstalled,
+          available: instanceId => instanceId !== 'codex' || codexInstalled(),
         }),
       );
     }
@@ -3069,9 +3090,10 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             claudeCodeEnabled: claudeCode !== undefined,
-            // Factories may pick Codex where its CLI is installed; Settings shows why not otherwise.
-            codexEnabled: codex !== undefined && codexInstalled,
+            // Factories may pick Codex where its CLI is installed; while it is not, its facet says why (ADR-0038).
+            codexEnabled: codex !== undefined,
             harnessModels: () => harnessModels,
+            harnessExecutables: () => Promise.all(this.#harnessExecutables.map(executable => executable.report())),
             deviceEnabled: device !== undefined,
             // New chats of a Claude Code Factory are Claude Code sessions, checked out like a card's.
             ...(claudeCode || codex
@@ -3092,7 +3114,8 @@ export class MastraFactory {
                           codex: createCodexUserSessions({
                             harness: codex.harness,
                             checkout: codexConfig?.cwdFor ? { custom: true } : { custom: false, sandboxProvider: sandboxConfig?.provider },
-                            unavailable: () => (codexInstalled ? undefined : 'The codex CLI is not installed on this server.'),
+                            unavailable: () =>
+                              codexExecutable?.unavailableReason() ?? (codexInstalled() ? undefined : CODEX_NOT_INSTALLED_REASON),
                           }),
                         }
                       : {}),
@@ -3111,13 +3134,18 @@ export class MastraFactory {
             // Signing in (`claude auth login`, `codex login`) opens the CLI's browser page on this
             // machine: only where it is the person's own.
             ...(claudeCode !== undefined && claudeCodeConfig?.localDevelopment === true && modelCredentialsStorage
-              ? { claudeSignIn: createClaudeSignInService({ credentials: modelCredentialsStorage }) }
+              ? {
+                  claudeSignIn: createClaudeSignInService({
+                    credentials: modelCredentialsStorage,
+                    ...((claudeExecutable ?? claudeCodeConfig.command) ? { command: claudeExecutable ?? claudeCodeConfig.command } : {}),
+                  }),
+                }
               : {}),
-            ...(codex !== undefined && codexConfig?.localDevelopment === true && codexInstalled && modelCredentialsStorage
+            ...(codex !== undefined && codexConfig?.localDevelopment === true && modelCredentialsStorage
               ? {
                   codexSignIn: createCodexSignInService({
                     credentials: modelCredentialsStorage,
-                    ...(codexConfig.command ? { command: codexConfig.command } : {}),
+                    ...((codexExecutable ?? codexConfig.command) ? { command: codexExecutable ?? codexConfig.command } : {}),
                     ...(codexConfig.env ? { env: codexConfig.env } : {}),
                   }),
                 }

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { HarnessExecutableUnavailableError } from '@factory/harness/executable';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { ClaudeLoginOAuth } from '@factory/store';
 
@@ -126,6 +127,24 @@ describe('captureClaudeSignIn', () => {
     };
     return { run, calls, keychain };
   }
+
+  it("runs the resolver's path, and says the CLI is not installed as an error the person may read", async () => {
+    const cli = fakeCli({ platform: 'linux' });
+    await captureClaudeSignIn({ run: cli.run, platform: 'linux', tempRoot, env: {}, command: { command: () => '/Users/a/.local/bin/claude', spawnFailed: () => {} } });
+    expect(cli.calls.map(call => call.command)).toEqual(['/Users/a/.local/bin/claude']);
+
+    const missing = {
+      command: () => {
+        throw new HarnessExecutableUnavailableError({ harness: 'Claude Code', executable: 'claude', message: 'Claude Code is not installed on this server.' });
+      },
+      spawnFailed: () => {},
+    };
+    await expect(captureClaudeSignIn({ run: cli.run, platform: 'linux', tempRoot, env: {}, command: missing })).rejects.toThrow(
+      new ClaudeSignInError('Claude Code is not installed on this server.'),
+    );
+    expect(cli.calls).toHaveLength(1);
+    expect(await readdir(tempRoot)).toEqual([]);
+  });
 
   it('captures the pair and who signed in on Linux, and leaves no throwaway dir', async () => {
     const cli = fakeCli({ platform: 'linux' });

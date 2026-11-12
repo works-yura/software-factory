@@ -144,6 +144,26 @@ export function harnessCommandPath(command: HarnessCommand | undefined, fallback
   return typeof command === 'string' ? command : command.command();
 }
 
+/**
+ * Whether a {@link HarnessCommand} can be spawned now: a source that resolves, or a fixed command
+ * that is an executable path or found on PATH (where Node's spawn looks for it).
+ */
+export function harnessCommandAvailable(
+  command: HarnessCommand | undefined,
+  name: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  if (command !== undefined && typeof command !== 'string') {
+    try {
+      command.command();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return resolveHarnessExecutable({ harness: name, name, ...(command ? { configured: command } : {}), env, wellKnownDirs: [] }).found;
+}
+
 /** Tells a command source that spawning it failed, when the failure means the executable is gone. */
 export function reportHarnessSpawnFailure(command: HarnessCommand | undefined, error: unknown): void {
   if (command && typeof command !== 'string' && isHarnessExecutableUnavailable(error)) command.spawnFailed(error);

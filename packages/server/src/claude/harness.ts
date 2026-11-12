@@ -15,6 +15,7 @@ import type {
   ClaudeToolPermissions,
 } from '@factory/harness-claude-code';
 import type { HarnessRoute, TurnHandoffHook } from '@factory/harness';
+import type { HarnessCommand } from '@factory/harness/executable';
 import { BUNDLED_FACTORY_SKILLS_PATH, resolveLocalFactorySkillsPath } from '@factory/harness-mastra';
 import { FACTORY_SESSION_TOKEN_HEADER, FACTORY_TOOL_ANNOTATIONS } from '@factory/mcp';
 import { peekSessionEnvironment, renderSessionEnvironment } from '@factory/sandbox';
@@ -219,7 +220,8 @@ export interface ClaudeFactoryHarnessOptions {
   turnTimeoutMs?: number;
   /** Factory skills; the bundled ones plus the project's local `factory-skills` by default. */
   skillsDir?: string | string[];
-  command?: string;
+  /** The CLI: a path, or the server's resolver (`harnessExecutableFor`); `claude` on PATH by default. */
+  command?: HarnessCommand;
   spawn?: ClaudeSpawn;
   env?: Record<string, string | undefined>;
   /** Every session object the harness builds, before anyone drives it (chat UI, run audit, reports). */

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { HarnessExecutableUnavailableError } from '@factory/harness/executable';
 import { createFactoryStorageForTests } from '@factory/testing';
 
 import {
@@ -107,6 +108,24 @@ describe('captureCodexSignIn', () => {
     const cli = fakeCli();
     await captureCodexSignIn({ run: cli.run, command: '/opt/codex', tempRoot, env: {} });
     expect(cli.calls[0]).toMatchObject({ command: '/opt/codex', timeoutMs: CODEX_SIGN_IN_TIMEOUT_MS });
+  });
+
+  it("runs the resolver's path, and says the CLI is not installed as an error the person may read", async () => {
+    const cli = fakeCli();
+    await captureCodexSignIn({ run: cli.run, command: { command: () => '/opt/homebrew/bin/codex', spawnFailed: () => {} }, tempRoot, env: {} });
+    expect(cli.calls[0]).toMatchObject({ command: '/opt/homebrew/bin/codex' });
+
+    const missing = {
+      command: () => {
+        throw new HarnessExecutableUnavailableError({ harness: 'Codex', executable: 'codex', message: 'Codex is not installed on this server.' });
+      },
+      spawnFailed: () => {},
+    };
+    await expect(captureCodexSignIn({ run: cli.run, command: missing, tempRoot, env: {} })).rejects.toThrow(
+      new CodexSignInError('Codex is not installed on this server.'),
+    );
+    expect(cli.calls).toHaveLength(1);
+    expect(await readdir(tempRoot)).toEqual([]);
   });
 
   it('fails when the CLI did not finish, stored no login, or runs out of time, and removes the home each time', async () => {

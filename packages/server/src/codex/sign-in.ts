@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { buildCodexEnv } from '@factory/harness-codex';
+import { harnessCommandPath, isHarnessExecutableUnavailable, type HarnessCommand } from '@factory/harness/executable';
 import { CODEX_FILE_CREDENTIALS_ARGS } from '@factory/harness-codex/launchArgs';
 import type { ModelCredentialsStorage, SignInOAuth } from '@factory/store';
 
@@ -60,8 +61,8 @@ export function codexSignInArgs(): string[] {
 
 export interface CaptureCodexSignInOptions {
   run?: CodexSignInRunner;
-  /** The `codex` executable; `codex` on the PATH by default. */
-  command?: string;
+  /** The `codex` executable, or the server's resolver (`harnessExecutableFor`); `codex` on the PATH by default. */
+  command?: HarnessCommand;
   /** Where the throwaway home is made; the OS temp dir by default. */
   tempRoot?: string;
   /** The server's env, which the CLI inherits only the allowed part of. */
@@ -78,7 +79,7 @@ export async function captureCodexSignIn(options: CaptureCodexSignInOptions = {}
   const home = await realpath(await mkdtemp(join(options.tempRoot ?? tmpdir(), 'factory-codex-sign-in-')));
   try {
     await writeFile(join(home, 'config.toml'), CODEX_FILE_CREDENTIALS_CONFIG, { mode: 0o600 });
-    const login = await run(options.command ?? 'codex', codexSignInArgs(), {
+    const login = await run(signInCommand(options.command), codexSignInArgs(), {
       env: buildCodexEnv(options.env ?? process.env, { CODEX_HOME: home }),
       timeoutMs: options.timeoutMs ?? CODEX_SIGN_IN_TIMEOUT_MS,
       ...(options.signal ? { signal: options.signal } : {}),
@@ -90,6 +91,16 @@ export async function captureCodexSignIn(options: CaptureCodexSignInOptions = {}
     return oauth;
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+}
+
+/** The path to run; a CLI the server cannot find is the person's to read, not a generic failure. */
+function signInCommand(command: HarnessCommand | undefined): string {
+  try {
+    return harnessCommandPath(command, 'codex');
+  } catch (error) {
+    if (isHarnessExecutableUnavailable(error)) throw new CodexSignInError((error as Error).message);
+    throw error;
   }
 }
 
@@ -108,7 +119,7 @@ export function createCodexSignInService({
 }: {
   credentials: ModelCredentialsStorage;
   capture?: (options: { signal: AbortSignal }) => Promise<SignInOAuth>;
-  command?: string;
+  command?: HarnessCommand;
   run?: CodexSignInRunner;
   env?: Record<string, string | undefined>;
   now?: () => number;

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createHarnessExecutable,
   formatHarnessExecutableReport,
+  harnessCommandAvailable,
   harnessCommandPath,
   HarnessExecutableUnavailableError,
   isHarnessExecutableUnavailable,
@@ -219,5 +220,27 @@ describe('harnessCommandPath and reportHarnessSpawnFailure', () => {
     reportHarnessSpawnFailure(source, spawnEnoent('/bin/claude'));
     expect(source.spawnFailed).toHaveBeenCalledTimes(1);
     reportHarnessSpawnFailure('/bin/claude', spawnEnoent('/bin/claude'));
+  });
+});
+
+describe('harnessCommandAvailable', () => {
+  it('asks a source, and looks a fixed command up where spawn would', () => {
+    const dir = binDir('exe-available-', ['codex']);
+    expect(harnessCommandAvailable({ command: () => '/x/codex', spawnFailed: () => {} }, 'codex')).toBe(true);
+    expect(
+      harnessCommandAvailable(
+        {
+          command: () => {
+            throw new HarnessExecutableUnavailableError({ harness: 'Codex', executable: 'codex' });
+          },
+          spawnFailed: () => {},
+        },
+        'codex',
+      ),
+    ).toBe(false);
+    expect(harnessCommandAvailable(undefined, 'codex', { PATH: `/nowhere:${dir}` })).toBe(true);
+    expect(harnessCommandAvailable(join(dir, 'codex'), 'codex', {})).toBe(true);
+    expect(harnessCommandAvailable(undefined, 'codex', { PATH: '/nowhere' })).toBe(false);
+    expect(harnessCommandAvailable(join(dir, 'missing'), 'codex', {})).toBe(false);
   });
 });

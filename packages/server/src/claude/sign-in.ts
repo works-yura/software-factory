@@ -30,6 +30,7 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import { buildClaudeEnv } from '@factory/harness-claude-code';
+import { harnessCommandPath, isHarnessExecutableUnavailable, type HarnessCommand } from '@factory/harness/executable';
 import type { ClaudeLoginOAuth, ModelCredentialsStorage } from '@factory/store';
 
 import { createSignInCommandRunner } from '../accounts/sign-in-command.ts';
@@ -89,8 +90,8 @@ export function parseClaudeStoredCredentials(raw: string): Omit<ClaudeLoginOAuth
 
 export interface CaptureClaudeSignInOptions {
   run?: ClaudeSignInRunner;
-  /** The `claude` executable; `claude` on the PATH by default. */
-  command?: string;
+  /** The `claude` executable, or the server's resolver (`harnessExecutableFor`); `claude` on the PATH by default. */
+  command?: HarnessCommand;
   platform?: NodeJS.Platform;
   /** Where the throwaway config dir is made; the OS temp dir by default. */
   tempRoot?: string;
@@ -114,7 +115,7 @@ function keychainUser(): string {
 /** Sign in once with the CLI in a throwaway config dir and return the pair it stored, with who signed in. */
 export async function captureClaudeSignIn(options: CaptureClaudeSignInOptions = {}): Promise<ClaudeLoginOAuth> {
   const run = options.run ?? runClaudeSignInCommand;
-  const command = options.command ?? 'claude';
+  const command = signInCommand(options.command);
   const darwin = (options.platform ?? process.platform) === 'darwin';
   const user = options.user ?? keychainUser();
   // The resolved path: the CLI hashes the dir it is given, and macOS temp dirs sit behind a symlink.
@@ -161,6 +162,16 @@ export async function captureClaudeSignIn(options: CaptureClaudeSignInOptions = 
   }
 }
 
+/** The path to run; a CLI the server cannot find is the person's to read, not a generic failure. */
+function signInCommand(command: HarnessCommand | undefined): string {
+  try {
+    return harnessCommandPath(command, 'claude');
+  } catch (error) {
+    if (isHarnessExecutableUnavailable(error)) throw new ClaudeSignInError((error as Error).message);
+    throw error;
+  }
+}
+
 /** Who signed in, from the `oauthAccount` the CLI wrote; nothing when it wrote none. */
 async function signedInAccount(dir: string): Promise<Pick<ClaudeLoginOAuth, 'email' | 'accountUuid' | 'organizationUuid'>> {
   try {
@@ -199,10 +210,13 @@ export type ClaudeSignInService = AccountSignInService;
  */
 export function createClaudeSignInService({
   credentials,
-  capture = captureClaudeSignIn,
+  command,
+  capture = options => captureClaudeSignIn({ ...options, ...(command ? { command } : {}) }),
   now,
 }: {
   credentials: ModelCredentialsStorage;
+  /** The `claude` the sign-in runs: the harness's own (`harnessExecutableFor`); `claude` on the PATH by default. */
+  command?: HarnessCommand;
   capture?: (options: { signal: AbortSignal }) => Promise<ClaudeLoginOAuth>;
   now?: () => number;
 }): ClaudeSignInService {
