@@ -38,6 +38,7 @@ corepack pnpm dev:local
 | Адреса | `https://factory.tail5c61c7.ts.net` — лише в tailnet; Tailscale Service `svc:factory` (машина з тегом `tag:server`), проксі на `http://127.0.0.1:5874` |
 | Автозапуск сервера | LaunchAgent `~/Library/LaunchAgents/ai.eclipt.factory.plist` (`RunAtLoad`, `KeepAlive` при падінні, `ThrottleInterval` 30 с) |
 | Скрипт запуску | `~/.mastracode/factory-v4/start-server.sh`: чекає зовнішній диск `/Volumes/dot` (до 5 хв), ставить `MASTRACODE_PUBLIC_URL=https://factory.tail5c61c7.ts.net` і запускає `corepack pnpm dev:google` в `apps/server` |
+| Сторож | той самий скрипт: кожні 20 с `GET http://127.0.0.1:5874/health` (відповідає без входу); 6 невдач поспіль (2 хв) — зупиняє всю групу процесів і виходить з 1, launchd піднімає знову. Потрібен, бо `mastra dev` живе далі, коли сервер у ньому впав. Старт до першої здорової відповіді — до 15 хв. Рядки `[watchdog …]` у лозі |
 | Лог | `~/Library/Logs/factory.log` |
 | Tailscale | Login Items (System Settings › General › Login Items); serve-конфіг сервісу зберігається між перезавантаженнями |
 | Google sign-in | клієнт OAuth у Google Console: origin `https://factory.tail5c61c7.ts.net`, redirect URI `https://factory.tail5c61c7.ts.net/auth/api/callback/google` |
@@ -54,6 +55,7 @@ launchctl print gui/$UID/ai.eclipt.factory | grep -E 'state|pid'               #
 ```
 
 - **Не вбивати за PID і не запускати `pnpm dev:*` поруч**: launchd підніме сервер знову через 30 с, і два екземпляри впадуть на «Another development server instance is already running». Для повного перезапуску — `kickstart -k`; для e2e чи ручного запуску — спершу `bootout`, після — `bootstrap`.
+- Поки сервер не відповідає, сторінка показує зверху плашку «Сервер не відповідає — можливо, перезапускається» з відліком до наступної перевірки й «Спробувати зараз»; коли `/health` відповів — «Сервер знову доступний», дані сторінки оновлюються (`apps/ui/src/ui/lib/serverReachability`). Сторінка, відкрита вже під час простою, бачить «502 Bad Gateway» від Tailscale.
 - Після зміни імені машини чи tailnet адреса сервісу не змінюється; змінилась адреса — оновити скрипт і клієнт Google.
 - Щоб мак вмикався сам після вимкнення світла: `sudo pmset autorestart 1`; LaunchAgent і Tailscale стартують лише після входу користувача (автологін; з FileVault — пароль на самому маку).
 

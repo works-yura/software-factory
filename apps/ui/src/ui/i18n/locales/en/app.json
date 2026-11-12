@@ -39,6 +39,14 @@
     "changed": "{{label}}, {{changed}} changed",
     "reset": "Reset to default"
   },
+  "serverReachability": {
+    "down": "The server is not responding — it may be restarting",
+    "checking": "Checking…",
+    "nextCheck_one": "Next check in {{count}} second",
+    "nextCheck_other": "Next check in {{count}} seconds",
+    "tryNow": "Try now",
+    "back": "The server is back"
+  },
   "pwa": {
     "installApp": "Install app",
     "installHint": "Get faster access from your home screen",
