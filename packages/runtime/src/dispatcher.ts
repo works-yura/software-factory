@@ -198,12 +198,12 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
 
 /**
  * The code a dispatch failure is filed under. A harness that cannot start on this server fails the
- * same way however it surfaced (a run's error event, or a send the harness refused before any run),
- * so it is told apart by the error itself rather than by where it was caught.
+ * same way however it surfaced (a run's error event, a send the harness refused before any run, or
+ * a notification whose wake never got its run going, which delivery wraps as its own failure), so
+ * it is told apart by the error and its causes rather than by where it was caught.
  */
 function dispatchFailureCode(error: unknown): FactoryDispatchFailureCode {
-  const code = factoryDispatchFailureCode(error);
-  return code === 'unknown' && isHarnessExecutableUnavailable(error) ? 'harness_not_configured' : code;
+  return isHarnessExecutableUnavailable(error) ? 'harness_not_configured' : factoryDispatchFailureCode(error);
 }
 
 /** A run in the review seat: a pull request review, unless it is the card's board's self-review. */

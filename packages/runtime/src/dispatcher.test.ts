@@ -7692,6 +7692,40 @@ describe('a skill run that ends in error (#27740)', () => {
       });
     });
 
+    it('files a message whose wake could not start the CLI the same way', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Changes were requested on the pull request.',
+        idempotencyKey: 'message-cli-missing',
+      });
+      await bindWorkRun(storage, item.id);
+      // The notification woke the idle session, but the run it started could not spawn the CLI.
+      const runError = Object.assign(new Error('Unable to start Claude Code: spawn claude ENOENT'), { kind: 'process', cause: spawnEnoent() });
+      const { controller } = createSession(
+        Promise.resolve({ action: 'wake', output: { consumeStream: vi.fn(async () => Promise.reject(runError)) } }),
+      );
+      const dispatcher = new FactoryDecisionDispatcher({
+        harness: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        boards: autoStartingBoards(),
+        staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+      });
+      const start = Date.parse('2030-01-01T00:00:00Z');
+      await dispatcher.runOnce(new Date(start));
+      await dispatcher.runOnce(new Date(start + 2 * 60 * 60_000));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        attempts: 1,
+        failureCode: 'harness_not_configured',
+        lastError: expect.stringContaining('spawn claude ENOENT'),
+      });
+    });
+
     it('keeps retrying a run that failed for any other reason', async () => {
       const { controller } = createSession(undefined, { agentEndReason: 'error', runError: new Error('spawn claude ENOENT') });
       const { storage } = await dispatchWith(controller, 'skill-words-only');
