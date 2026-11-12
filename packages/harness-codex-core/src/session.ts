@@ -1063,6 +1063,7 @@ export class CodexSession implements AgentSession {
     let reason: AgentRunEndReason = 'complete';
     let keepServer = false;
     let failure: unknown;
+    let threw = false;
     try {
       await previous;
       let result: TurnResult;
@@ -1115,7 +1116,7 @@ export class CodexSession implements AgentSession {
       }
     } catch (error) {
       if (run.settled) return;
-      run.markStarted(error);
+      threw = true;
       failure = error;
       reason = 'error';
     } finally {
@@ -1136,6 +1137,9 @@ export class CodexSession implements AgentSession {
       // A parked run says so instead of failing: the chat shows when it resumes, not an error.
       if (!park) this.#emit({ type: 'error', error: failure });
     }
+    // A run that could not start says so only once it settled: a send that follows at once starts a
+    // run of its own, instead of joining this one's queue and ending with its failure.
+    if (threw) run.markStarted(failure);
     this.#settle(run, reason, { ...(park ? { park } : {}) });
   }
 

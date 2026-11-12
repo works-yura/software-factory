@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type { AgentEvent } from '@factory/harness';
@@ -88,6 +91,34 @@ describe('CodexSession', () => {
     installed = true;
     expect(await session.sendMessage({ content: 'Fix the bug' })).toEqual({ reason: 'complete' });
     expect(spawn.calls.map(call => call.command)).toEqual(['/opt/homebrew/bin/codex']);
+  });
+
+  it('runs a message sent right after a run that could not start, instead of failing it with that run', async () => {
+    let installed = false;
+    const spawn = scripted([reply('Done.')]);
+    const { session } = await harnessWith(spawn, {
+      command: {
+        command: () => {
+          if (!installed) throw new HarnessExecutableUnavailableError({ harness: 'Codex', executable: 'codex' });
+          return '/opt/homebrew/bin/codex';
+        },
+        spawnFailed: () => {},
+      },
+      // A host sign-in: the failed run clears it from the session's home before it settles.
+      codexHomeFor: () => join(tmpdir(), 'codex-race-home'),
+      credentials: async () => ({ tokens: { accessToken: 'at', chatgptAccountId: 'ws', planType: 'plus' }, accountId: 'acc', credential: { label: 'a', ownerId: 'u1' } }),
+    });
+
+    // Sent the moment the first is refused: the failed run must be over by then.
+    let refused: unknown;
+    const second = session.sendMessage({ content: 'Fix the bug' }).catch((error: unknown) => {
+      refused = error;
+      installed = true;
+      return session.sendMessage({ content: 'Fix the bug' });
+    });
+    expect(await second).toEqual({ reason: 'complete' });
+    expect(isHarnessExecutableUnavailable(refused)).toBe(true);
+    expect(spawn.calls).toHaveLength(1);
   });
 
   it('runs a turn: opens the thread with its instructions and MCP servers, sends the model and streams the reply', async () => {

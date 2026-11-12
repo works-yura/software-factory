@@ -1165,6 +1165,7 @@ export class ClaudeCodeSession implements AgentSession {
     let next = first;
     let reason: AgentRunEndReason = 'complete';
     let failure: unknown;
+    let threw = false;
     try {
       await previous;
       while (true) {
@@ -1206,7 +1207,7 @@ export class ClaudeCodeSession implements AgentSession {
       }
     } catch (error) {
       if (run.settled) return;
-      run.markStarted(error);
+      threw = true;
       failure = error;
       reason = 'error';
     }
@@ -1223,6 +1224,9 @@ export class ClaudeCodeSession implements AgentSession {
       // A parked run says so instead of failing: the chat shows when it resumes, not an error.
       if (!park) this.#emit({ type: 'error', error: failure });
     }
+    // A run that could not start says so only once it settled: a send that follows at once starts a
+    // run of its own, instead of joining this one's queue and ending with its failure.
+    if (threw) run.markStarted(failure);
     this.#settle(run, reason, { ...(park ? { park } : {}) });
   }
 

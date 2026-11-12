@@ -2067,6 +2067,27 @@ describe('ClaudeCodeSession turn failures', () => {
     expect([error.kind, error.message]).toEqual(['process', 'Unable to start Claude Code: spawn claude ENOENT']);
   });
 
+  it('runs a message sent right after a run that could not start, instead of failing it with that run', async () => {
+    let calls = 0;
+    const { fake, session } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+      credentials: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('The account store is down.');
+        return { ANTHROPIC_API_KEY: 'sk-test' };
+      },
+    });
+
+    // Sent the moment the first is refused: the failed run must be over by then.
+    let refused: unknown;
+    const second = session.sendMessage({ content: 'one' }).catch((error: unknown) => {
+      refused = error;
+      return session.sendMessage({ content: 'two' });
+    });
+    expect(await second).toEqual({ reason: 'complete' });
+    expect(refused).toMatchObject({ message: 'The account store is down.' });
+    expect(fake.calls.map(call => call.stdin)).toEqual([expect.stringContaining('two')]);
+  });
+
   it('fails a turn whose CLI is not installed once, as a missing executable, and finds it once installed', async () => {
     let installed = false;
     const spawned: string[] = [];
