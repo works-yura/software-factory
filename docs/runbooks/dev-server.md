@@ -25,7 +25,37 @@ corepack pnpm dev:local
 2. Зупинити **за PID**: `kill <pid>`; дочекатися, поки процес зникне (`kill -0 <pid>`).
 3. Запустити знову (`corepack pnpm dev:local`) і перевірити `200`.
 
+На Mac mini сервер тримає launchd — там перезапуск інакший (див. нижче).
+
 Процес може тримати блокування, навіть коли порт уже не відповідає — тоді теж зупинити за PID. Сервер часто перезапускають інші сесії: перед зупинкою подивитись, чий він і чи не йде e2e.
+
+## Mac mini: сервер піднімається сам (launchd + Tailscale)
+
+На Mac mini (`Mac-mini-Yura`, у Tailscale — `mac-mini`) сервер Factory працює постійно й сам піднімається після перезавантаження. Налаштовано поза репозиторієм:
+
+| Що | Де |
+| --- | --- |
+| Адреса | `https://factory.tail5c61c7.ts.net` — лише в tailnet; Tailscale Service `svc:factory` (машина з тегом `tag:server`), проксі на `http://127.0.0.1:5874` |
+| Автозапуск сервера | LaunchAgent `~/Library/LaunchAgents/ai.eclipt.factory.plist` (`RunAtLoad`, `KeepAlive` при падінні, `ThrottleInterval` 30 с) |
+| Скрипт запуску | `~/.mastracode/factory-v4/start-server.sh`: чекає зовнішній диск `/Volumes/dot` (до 5 хв), ставить `MASTRACODE_PUBLIC_URL=https://factory.tail5c61c7.ts.net` і запускає `corepack pnpm dev:google` в `apps/server` |
+| Лог | `~/Library/Logs/factory.log` |
+| Tailscale | Login Items (System Settings › General › Login Items); serve-конфіг сервісу зберігається між перезавантаженнями |
+| Google sign-in | клієнт OAuth у Google Console: origin `https://factory.tail5c61c7.ts.net`, redirect URI `https://factory.tail5c61c7.ts.net/auth/api/callback/google` |
+
+`MASTRACODE_PUBLIC_URL` задає скрипт, не `.env`: `dev:google` у `package.json` сам ставить `http://localhost:5874`, якщо змінної немає, і це перекриває `.env`. Без неї Google після входу повертає на `localhost`.
+
+Керування (на Mac mini):
+
+```sh
+launchctl kickstart -k gui/$UID/ai.eclipt.factory   # перезапустити
+launchctl bootout gui/$UID/ai.eclipt.factory        # зупинити (наприклад, для e2e)
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/ai.eclipt.factory.plist   # увімкнути знову
+launchctl print gui/$UID/ai.eclipt.factory | grep -E 'state|pid'               # стан
+```
+
+- **Не вбивати за PID і не запускати `pnpm dev:*` поруч**: launchd підніме сервер знову через 30 с, і два екземпляри впадуть на «Another development server instance is already running». Для повного перезапуску — `kickstart -k`; для e2e чи ручного запуску — спершу `bootout`, після — `bootstrap`.
+- Після зміни імені машини чи tailnet адреса сервісу не змінюється; змінилась адреса — оновити скрипт і клієнт Google.
+- Щоб мак вмикався сам після вимкнення світла: `sudo pmset autorestart 1`; LaunchAgent і Tailscale стартують лише після входу користувача (автологін; з FileVault — пароль на самому маку).
 
 ## e2e
 
