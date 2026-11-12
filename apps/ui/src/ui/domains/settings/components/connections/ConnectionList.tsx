@@ -265,16 +265,14 @@ export function ConnectionList({
               <button
                 type="button"
                 onClick={() => onOpen(row.id)}
-                className="flex min-h-11 min-w-0 items-center gap-3 pr-12 text-left md:pr-0"
+                className="flex min-h-11 min-w-0 items-center gap-2.5 pr-12 text-left md:pr-0"
               >
                 <ConnectionIcon kind={row.kind} />
                 <span className="flex min-w-0 flex-col">
                   <span className="flex min-w-0 items-center gap-2">
-                    <Txt as="span" variant="body" tone="ink" className="truncate">
-                      {title}
-                    </Txt>
+                    <span className="text-body-sm text-foreground truncate">{title}</span>
                     {row.mcp && (
-                      <Badge size="xs" variant="neutral" emphasis="subtle">
+                      <Badge size="sm" variant="neutral" className="shrink-0">
                         {t('connections.mcpBadge')}
                       </Badge>
                     )}
@@ -286,7 +284,7 @@ export function ConnectionList({
                   )}
                 </span>
               </button>
-              <span className="flex min-w-0 flex-col pl-12 md:pl-0">
+              <span className="flex min-w-0 flex-col pl-11 md:pl-0">
                 {row.account ? (
                   <>
                     <Txt as="span" variant="caption" tone="ink" className="truncate">
@@ -309,14 +307,14 @@ export function ConnectionList({
                   </Txt>
                 )}
               </span>
-              <span className="flex min-w-0 flex-wrap gap-1 pl-12 md:pl-0">
+              <span className="flex min-w-0 flex-wrap gap-1 pl-11 md:pl-0">
                 {row.capabilities.map(capability => (
                   <Badge key={capability.key} size="sm" variant="neutral" emphasis="subtle">
                     {capabilityLabel(capability)}
                   </Badge>
                 ))}
               </span>
-              <span className="pl-12 md:pl-0">
+              <span className="pl-11 md:pl-0">
                 <StateCell row={row} />
               </span>
               <span className="absolute top-2 right-1 md:static md:flex md:justify-end">

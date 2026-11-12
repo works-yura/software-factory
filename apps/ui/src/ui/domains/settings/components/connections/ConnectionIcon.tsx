@@ -18,22 +18,19 @@ const BRANDS: Partial<Record<ConnectionKind, { icon: SimpleIcon; ink?: boolean }
 
 export function BrandLogo({ kind, size = 20 }: { kind: ConnectionKind; size?: number }) {
   const brand = BRANDS[kind];
-  if (!brand) return <Server aria-hidden className="text-icon3" style={{ width: size, height: size }} />;
+  if (!brand) return <Server aria-hidden className="text-muted-foreground" style={{ width: size, height: size }} />;
   return (
-    <svg aria-hidden role="img" viewBox="0 0 24 24" width={size} height={size} className={brand.ink ? 'text-icon6 fill-current' : undefined}>
+    <svg aria-hidden role="img" viewBox="0 0 24 24" width={size} height={size} className={brand.ink ? 'text-foreground fill-current' : undefined}>
       <path d={brand.icon.path} fill={brand.ink ? undefined : `#${brand.icon.hex}`} />
     </svg>
   );
 }
 
-/** The integration's mark on a quiet tile, the same in the list, a connection's page and «Додати підключення». */
-export function ConnectionIcon({ kind, size = 'md' }: { kind: ConnectionKind; size?: 'md' | 'lg' }) {
+/** The integration's mark in a plain 32px slot (no box), as the kit's command rows draw logos. */
+export function ConnectionIcon({ kind }: { kind: ConnectionKind }) {
   return (
-    <span
-      aria-hidden
-      className={`border-border1 bg-surface3 flex shrink-0 items-center justify-center rounded-lg border ${size === 'lg' ? 'size-10' : 'size-9'}`}
-    >
-      <BrandLogo kind={kind} size={size === 'lg' ? 22 : 18} />
+    <span aria-hidden className="grid size-8 shrink-0 place-items-center p-1.5">
+      <BrandLogo kind={kind} size={20} />
     </span>
   );
 }

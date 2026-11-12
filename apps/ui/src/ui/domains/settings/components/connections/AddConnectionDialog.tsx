@@ -1,19 +1,11 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@mastra/playground-ui/components/Command';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight, GitBranch, Inbox, Plus, Wrench } from 'lucide-react';
-import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -33,25 +25,54 @@ import { ConnectionIcon } from './ConnectionIcon';
 import { GoogleCloudConnect, SourceConnect } from './ConnectSteps';
 import type { ConnectionTarget, FirstParty } from './ConnectSteps';
 
+export type { ConnectionTarget };
+
 const FILTERS: CatalogFilter[] = ['all', 'tools', 'sources'];
 
-const CAPABILITY_ICON: Record<CatalogCapability, typeof Wrench> = { tools: Wrench, tasks: Inbox, code: GitBranch };
+/** Each capability's icon and badge tint (tools violet, task sources green, code blue), as in Mastra's dialog. */
+const CAPABILITY: Record<CatalogCapability, { icon: typeof Wrench; tint: string }> = {
+  tools: { icon: Wrench, tint: 'bg-badge-purple-subtle text-badge-purple-foreground' },
+  tasks: { icon: Inbox, tint: 'bg-badge-green-subtle text-badge-green-foreground' },
+  code: { icon: GitBranch, tint: 'bg-badge-blue-subtle text-badge-blue-foreground' },
+};
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/**
+ * The dialog's size is the kit's `md`; below 640px the kit turns it into a bottom drawer, which this
+ * makes full height and square, clear of the notch, with the list taking what is left.
+ */
+export const CONNECT_DIALOG_SHELL =
+  'max-sm:h-[calc(100dvh+3rem)] max-sm:max-h-none max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top)]';
 
-export type { ConnectionTarget };
+function CapabilityIcons({ capabilities }: { capabilities: CatalogCapability[] }) {
+  const { t } = useTranslation('settings');
+  return (
+    <span className="flex shrink-0 items-center gap-1.5">
+      {capabilities.map(capability => {
+        const { icon: Icon, tint } = CAPABILITY[capability];
+        const label = t(`connections.addDialog.capability.${capability}`);
+        return (
+          <Tooltip key={capability}>
+            <TooltipTrigger render={<span role="img" aria-label={label} className="flex shrink-0 items-center" />}>
+              <span className={`shadow-inset grid size-5 place-items-center rounded-full ${tint}`}>
+                <Icon aria-hidden className="size-icon-xs! text-current!" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </span>
+  );
+}
 
 /**
- * Phones get the whole screen (the dialog turns into a bottom drawer below 640px; this makes it full
- * height, square and clear of the notch); wider screens a centred 560px modal of fixed height, so
- * filtering does not make it jump.
+ * One row, as the kit's command item: logo, name (MCP badge only for third-party servers), then «+»
+ * — shown on the selected row with a mouse, always on touch — and the capability icons.
  */
-const SHELL =
-  'gap-0 sm:max-w-[35rem] sm:h-[min(40rem,calc(100dvh-4rem))] max-sm:h-[calc(100dvh+3rem)] max-sm:max-h-none max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top)]';
-
-/** A row of the list: logo, name, capability icons, and «+» (on touch always; with a mouse on hover or focus). */
 function CatalogRow({
+  value,
   kind,
   name,
   detail,
@@ -62,6 +83,7 @@ function CatalogRow({
   onSelect,
   disabled,
 }: {
+  value: string;
   kind: ConnectionKind;
   name: string;
   detail?: string;
@@ -74,78 +96,36 @@ function CatalogRow({
 }) {
   const { t } = useTranslation('settings');
   return (
-    <li>
-      <button
-        type="button"
-        aria-label={label}
-        disabled={disabled}
-        onClick={onSelect}
-        className="group hover:bg-fill-subtle focus-visible:bg-fill-subtle focus-visible:ring-accent1 flex min-h-14 w-full items-center gap-3 rounded-lg px-2 text-left outline-none focus-visible:ring-2 disabled:opacity-60"
-      >
-        <ConnectionIcon kind={kind} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="flex min-w-0 items-center gap-2">
-            <Txt as="span" variant="body" tone="ink" className="truncate">
-              {name}
-            </Txt>
-            {mcp && (
-              <Badge size="xs" variant="neutral" emphasis="subtle" className="shrink-0">
-                {t('connections.mcpBadge')}
-              </Badge>
-            )}
-          </span>
-          {detail && (
-            <Txt as="span" variant="meta" tone="muted" className="truncate">
-              {detail}
-            </Txt>
-          )}
-        </span>
-        <span className="flex shrink-0 items-center gap-1">
-          {capabilities.map(capability => {
-            const Icon = CAPABILITY_ICON[capability];
-            return (
-              <Tooltip key={capability}>
-                <TooltipTrigger
-                  render={
-                    <span
-                      aria-label={t(`connections.addDialog.capability.${capability}`)}
-                      className="border-border1 text-icon3 flex size-7 items-center justify-center rounded-full border"
-                    />
-                  }
-                >
-                  <Icon aria-hidden className="size-3.5" />
-                </TooltipTrigger>
-                <TooltipContent>{t(`connections.addDialog.capability.${capability}`)}</TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </span>
+    <CommandItem value={value} onSelect={onSelect} disabled={disabled} aria-label={label} className="group/row">
+      <ConnectionIcon kind={kind} />
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="text-body-sm text-foreground truncate">{name}</span>
+        {detail && <span className="text-meta text-muted-foreground truncate">{detail}</span>}
+        {mcp && (
+          <Badge size="sm" variant="neutral" className="shrink-0">
+            {t('connections.mcpBadge')}
+          </Badge>
+        )}
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
         <span
           aria-hidden
-          className="bg-fill text-icon5 flex size-8 shrink-0 items-center justify-center rounded-full transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
+          className="pointer-coarse:translate-x-0 pointer-coarse:opacity-100 translate-x-1 opacity-0 transition duration-150 group-data-[selected=true]/row:translate-x-0 group-data-[selected=true]/row:opacity-100 motion-reduce:transition-none"
         >
-          {trailing === 'add' ? <Plus className="size-4" /> : <ChevronRight className="size-4" />}
+          <Button type="button" tabIndex={-1} variant="ghost" size="icon-sm" onClick={onSelect}>
+            {trailing === 'add' ? <Plus /> : <ChevronRight />}
+          </Button>
         </span>
-      </button>
-    </li>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section aria-label={title} className="flex flex-col gap-1">
-      <Txt as="h3" variant="meta" tone="muted" className="px-2 pt-3 pb-1">
-        {title}
-      </Txt>
-      <ul className="flex flex-col">{children}</ul>
-    </section>
+        <CapabilityIcons capabilities={capabilities} />
+      </span>
+    </CommandItem>
   );
 }
 
 /**
- * Step one: search, the type filter, then the organization's accounts this Factory can link, the
- * first-party integrations, and «Інше» — MCP servers, third-party or own. First-party rows name what
- * they give agents (icons with tooltips), never how they run.
+ * Step one, as Mastra's «Add connection to project»: the kit's command list with search and the
+ * type filter on one line, then the organization's accounts this Factory can link, the first-party
+ * integrations, and «Інше» — MCP servers, third-party or own. Keyboard: arrows move, Enter picks.
  */
 function PickStep({
   factoryId,
@@ -204,93 +184,99 @@ function PickStep({
     );
   };
 
+  const heading = (text: string) => <span className="text-column text-muted-foreground tracking-normal normal-case">{text}</span>;
+
   return (
     <>
       <DialogHeader>
         <DialogTitle>{t('connections.addDialog.title')}</DialogTitle>
         <DialogDescription className="sr-only">{t('connections.addDialog.description')}</DialogDescription>
       </DialogHeader>
-      <div className="border-border1 flex shrink-0 flex-col gap-2 border-b px-5 pt-1 pb-3 sm:flex-row sm:items-center">
-        <SearchInput
-          className="min-w-0 sm:flex-1"
-          label={t('connections.addDialog.searchLabel')}
+      <Command shouldFilter={false} label={t('connections.addDialog.searchLabel')} className="min-h-0 flex-1 bg-transparent">
+        <CommandInput
+          aria-label={t('connections.addDialog.searchLabel')}
           placeholder={t('connections.addDialog.search')}
           value={query}
           onValueChange={setQuery}
+          wrapperClassName="max-sm:flex-wrap max-sm:pb-2 max-sm:[&>[data-slot=command-input-right-slot]]:ml-0"
+          className="max-sm:basis-[calc(100%-1.5rem)]"
+          rightSlot={
+            <SegmentedControl aria-label={t('connections.addDialog.filters.label')} size="sm" value={filter} onValueChange={setFilter}>
+              {FILTERS.map(option => (
+                <SegmentedControlItem key={option} value={option}>
+                  {t(`connections.addDialog.filters.${option}`)}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
+          }
         />
-        <div className="-mx-1 shrink-0 overflow-x-auto px-1">
-          <SegmentedControl aria-label={t('connections.addDialog.filters.label')} size="sm" value={filter} onValueChange={setFilter}>
-            {FILTERS.map(option => (
-              <SegmentedControlItem key={option} value={option}>
-                {t(`connections.addDialog.filters.${option}`)}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControl>
-        </div>
-      </div>
-      <DialogBody flush className="gap-2 px-3 pb-4">
-        {shown.accounts.length > 0 && (
-          <Section title={t('connections.addDialog.accounts')}>
-            {shown.accounts.map(account => (
-              <CatalogRow
-                key={account.id}
-                kind={account.kind}
-                name={account.name}
-                detail={account.server ? undefined : t('connections.addDialog.googleAccount')}
-                mcp={account.kind === 'mcp'}
-                capabilities={account.kind === 'mcp' || account.kind === 'google-cloud' ? ['tools'] : []}
-                label={t('connections.addDialog.link', { name: account.name })}
-                trailing="add"
-                disabled={linking !== undefined}
-                onSelect={() => link(account)}
-              />
-            ))}
-          </Section>
-        )}
-        {integrations.length > 0 && (
-          <Section title={t('connections.addDialog.integrations')}>
-            {integrations.map(item => (
-              <CatalogRow
-                key={item.id}
-                kind={item.kind}
-                name={nameOf(item)}
-                capabilities={item.capabilities}
-                label={t('connections.addDialog.add', { name: nameOf(item) })}
-                trailing={item.connected ? 'open' : 'add'}
-                onSelect={() => pick(item)}
-              />
-            ))}
-          </Section>
-        )}
-        {other.length > 0 && (
-          <Section title={t('connections.addDialog.other')}>
-            {other.map(item => (
-              <CatalogRow
-                key={item.id}
-                kind={item.kind}
-                name={nameOf(item)}
-                mcp
-                capabilities={item.capabilities}
-                label={t('connections.addDialog.add', { name: nameOf(item) })}
-                trailing="add"
-                onSelect={() => pick(item)}
-              />
-            ))}
-          </Section>
-        )}
-        {shown.items.length === 0 && shown.accounts.length === 0 && (
-          <Txt as="p" variant="caption" tone="muted" className="py-8 text-center">
-            {t('connections.addDialog.nothing')}
-          </Txt>
-        )}
-      </DialogBody>
+        <CommandList
+          scrollArea
+          scrollAreaClassName="h-[min(26rem,calc(100dvh-16rem))] max-sm:h-auto max-sm:flex-1"
+          className="px-2 py-2"
+        >
+          <CommandEmpty>{t('connections.addDialog.nothing')}</CommandEmpty>
+          {shown.accounts.length > 0 && (
+            <CommandGroup heading={heading(t('connections.addDialog.accounts'))} aria-label={t('connections.addDialog.accounts')}>
+              {shown.accounts.map(account => (
+                <CatalogRow
+                  key={account.id}
+                  value={account.id}
+                  kind={account.kind}
+                  name={account.name}
+                  detail={account.server ? undefined : t('connections.addDialog.googleAccount')}
+                  mcp={account.kind === 'mcp'}
+                  capabilities={['tools']}
+                  label={t('connections.addDialog.link', { name: account.name })}
+                  trailing="add"
+                  disabled={linking !== undefined}
+                  onSelect={() => link(account)}
+                />
+              ))}
+            </CommandGroup>
+          )}
+          {integrations.length > 0 && (
+            <CommandGroup heading={heading(t('connections.addDialog.integrations'))} aria-label={t('connections.addDialog.integrations')}>
+              {integrations.map(item => (
+                <CatalogRow
+                  key={item.id}
+                  value={item.id}
+                  kind={item.kind}
+                  name={nameOf(item)}
+                  capabilities={item.capabilities}
+                  label={t('connections.addDialog.add', { name: nameOf(item) })}
+                  trailing={item.connected ? 'open' : 'add'}
+                  onSelect={() => pick(item)}
+                />
+              ))}
+            </CommandGroup>
+          )}
+          {other.length > 0 && (
+            <CommandGroup heading={heading(t('connections.addDialog.other'))} aria-label={t('connections.addDialog.other')}>
+              {other.map(item => (
+                <CatalogRow
+                  key={item.id}
+                  value={item.id}
+                  kind={item.kind}
+                  name={nameOf(item)}
+                  mcp
+                  capabilities={item.capabilities}
+                  label={t('connections.addDialog.add', { name: nameOf(item) })}
+                  trailing="add"
+                  onSelect={() => pick(item)}
+                />
+              ))}
+            </CommandGroup>
+          )}
+        </CommandList>
+      </Command>
     </>
   );
 }
 
 /**
- * «Додати підключення»: one modal for picking and connecting. Step one lists what can be added;
- * a first-party integration opens its connect step in the same modal (Google Cloud: an account and
+ * «Додати підключення»: one dialog for picking and connecting. Step one lists what can be added; a
+ * first-party integration opens its connect step in the same dialog (Google Cloud: an account and
  * its key; ClickUp, GitHub, GitLab: their state and controls); an MCP server or an organization
  * account goes straight to its page.
  */
@@ -318,7 +304,7 @@ export function AddConnectionDialog({
         onClose();
       }}
     >
-      <DialogContent size="md" className={SHELL}>
+      <DialogContent size="md" className={CONNECT_DIALOG_SHELL}>
         {step === 'google-cloud' ? (
           <GoogleCloudConnect accounts={sources.firebase?.accounts ?? []} onBack={back} onPick={onPick} />
         ) : step ? (

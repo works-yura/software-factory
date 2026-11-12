@@ -163,22 +163,22 @@ describe('Підключення', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
 
-    const integrations = within(dialog).getByRole('region', { name: 'Integrations' });
-    expect(within(integrations).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
+    const integrations = within(dialog).getByRole('group', { name: 'Integrations' });
+    expect(within(integrations).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual([
       'Connect Google Cloud',
       'Connect ClickUp',
       'Connect GitHub',
       'Connect GitLab',
     ]);
     expect(within(integrations).queryByText('MCP')).not.toBeInTheDocument();
-    expect(within(within(dialog).getByRole('region', { name: 'Other' })).getByRole('button', { name: 'Connect Own MCP server' })).toBeInTheDocument();
+    expect(within(within(dialog).getByRole('group', { name: 'Other' })).getByRole('option', { name: 'Connect Own MCP server' })).toBeInTheDocument();
     expect(within(dialog).queryByText(/Toolbox/)).not.toBeInTheDocument();
 
     // Sources leave out tools and the organization's accounts.
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Sources' }));
-    expect(within(dialog).queryByRole('region', { name: 'Organization accounts' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('group', { name: 'Organization accounts' })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Connect Google Cloud' })).not.toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Connect GitLab' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('option', { name: 'Connect GitLab' })).toBeInTheDocument();
   });
 
   it('links an organization server with access for every session kind', async () => {
@@ -186,8 +186,8 @@ describe('Підключення', () => {
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.type(within(dialog).getByRole('searchbox', { name: 'Search integrations and accounts' }), 'notes');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Link Notes' }));
+    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'notes');
+    await userEvent.click(within(dialog).getByRole('option', { name: 'Link Notes' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]!.body).toMatchObject({
@@ -201,7 +201,7 @@ describe('Підключення', () => {
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Link Syncta' }));
+    await userEvent.click(within(dialog).getByRole('option', { name: 'Link Syncta' }));
 
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=google-cloud&account=acc-1'));
     expect(await screen.findByRole('combobox', { name: 'Google Cloud account' })).toHaveTextContent('Syncta');
@@ -223,7 +223,7 @@ describe('Підключення', () => {
     );
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Connect Google Cloud' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Google Cloud' }));
     const dialog = await screen.findByRole('dialog', { name: 'Connect Google Cloud' });
 
     // The organization already has an account: pick it, or add a new key.
@@ -246,14 +246,25 @@ describe('Підключення', () => {
     useHandlers();
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Connect ClickUp' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect ClickUp' }));
     const dialog = await screen.findByRole('dialog', { name: 'Connect ClickUp' });
     expect(await within(dialog).findByRole('status')).toHaveTextContent('Connected');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
     expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Connect ClickUp' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('option', { name: 'Connect ClickUp' }));
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Connect ClickUp' })).getByRole('button', { name: 'Open settings' }));
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=clickup'));
+  });
+
+  it('picks with the keyboard: the search narrows the list, arrows move, Enter opens', async () => {
+    useHandlers();
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search integrations and accounts' }), 'git');
+    expect(within(dialog).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['Connect GitHub', 'Connect GitLab']);
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    expect(await screen.findByRole('dialog', { name: 'Connect GitLab' })).toBeInTheDocument();
   });
 
   it('shows the last 24 hours of agent calls with counts, newest first', async () => {

@@ -32,16 +32,16 @@ function StepFrame({ kind, children, onBack, action }: { kind: FirstParty; child
   const { t } = useTranslation('settings');
   return (
     <>
-      <DialogHeader className="flex-row items-center gap-3">
-        <ConnectionIcon kind={kind} size="lg" />
+      <DialogHeader className="flex-row items-start gap-2.5">
+        <ConnectionIcon kind={kind} />
         <span className="flex min-w-0 flex-col gap-0.5">
           <DialogTitle>{t('connections.connect.title', { name: t(`connections.kinds.${kind}`) })}</DialogTitle>
-          <DialogDescription>{t(`connections.connect.subtitle.${kind}`)}</DialogDescription>
+          <DialogDescription className="text-body-sm">{t(`connections.connect.subtitle.${kind}`)}</DialogDescription>
         </span>
       </DialogHeader>
-      <DialogBody className="gap-4 pt-3">{children}</DialogBody>
-      <DialogFooter className="border-border1 mt-auto justify-between border-t pt-3 max-sm:pb-[max(env(safe-area-inset-bottom),0.5rem)]">
-        <Button variant="ghost" size="sm" className="max-sm:min-h-11" onClick={onBack}>
+      <DialogBody className="gap-4">{children}</DialogBody>
+      <DialogFooter className="mt-auto justify-between pt-3 max-sm:pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+        <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft aria-hidden className="size-4" />
           {t('connections.connect.back')}
         </Button>
@@ -58,20 +58,14 @@ function ChoiceRow({ icon, name, detail, onSelect }: { icon: ReactNode; name: st
       <button
         type="button"
         onClick={onSelect}
-        className="hover:bg-fill-subtle focus-visible:bg-fill-subtle focus-visible:ring-accent1 flex min-h-14 w-full items-center gap-3 rounded-lg px-2 text-left outline-none focus-visible:ring-2"
+        className="text-body-sm text-muted-foreground hover:bg-fill hover:text-foreground focus-visible:bg-fill focus-visible:text-foreground flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left outline-none"
       >
         {icon}
         <span className="flex min-w-0 flex-1 flex-col">
-          <Txt as="span" variant="body" tone="ink" className="truncate">
-            {name}
-          </Txt>
-          {detail && (
-            <Txt as="span" variant="meta" tone="muted" className="truncate">
-              {detail}
-            </Txt>
-          )}
+          <span className="text-body-sm text-foreground truncate">{name}</span>
+          {detail && <span className="text-meta text-muted-foreground truncate">{detail}</span>}
         </span>
-        <ChevronRight aria-hidden className="text-icon3 size-4 shrink-0" />
+        <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0" />
       </button>
     </li>
   );
@@ -107,7 +101,7 @@ export function GoogleCloudConnect({
         kind="google-cloud"
         onBack={onBack}
         action={
-          <Button size="sm" variant="primary" className="max-sm:min-h-11" onClick={() => onPick({ connection: 'google-cloud', account: added.id })}>
+          <Button size="sm" variant="primary" onClick={() => onPick({ connection: 'google-cloud', account: added.id })}>
             {t('connections.connect.bindProject')}
           </Button>
         }
@@ -125,7 +119,7 @@ export function GoogleCloudConnect({
         <Txt as="p" variant="caption" tone="muted">
           {t('connections.connect.chooseAccount')}
         </Txt>
-        <ul className="-mx-2 flex flex-col">
+        <ul className="-mx-2 flex flex-col gap-0.5">
           {accounts.map(account => (
             <ChoiceRow
               key={account.id}
@@ -137,8 +131,8 @@ export function GoogleCloudConnect({
           ))}
           <ChoiceRow
             icon={
-              <span aria-hidden className="border-border1 bg-surface3 flex size-9 shrink-0 items-center justify-center rounded-lg border">
-                <KeyRound className="text-icon3 size-4" />
+              <span aria-hidden className="grid size-8 shrink-0 place-items-center p-1.5">
+                <KeyRound className="text-muted-foreground size-4" />
               </span>
             }
             name={t('connections.connect.newKey')}
@@ -158,7 +152,7 @@ export function GoogleCloudConnect({
         <Button
           size="sm"
           variant="primary"
-          className="max-sm:min-h-11"
+         
           disabled={!keyJson.trim() || addAccount.isPending}
           onClick={submit}
         >
@@ -270,12 +264,12 @@ export function SourceConnect({
       onBack={onBack}
       action={
         state.error ? (
-          <Button size="sm" variant="primary" className="max-sm:min-h-11" onClick={state.retry}>
+          <Button size="sm" variant="primary" onClick={state.retry}>
             <RotateCw aria-hidden className="size-4" />
             {t('connections.connect.retry')}
           </Button>
         ) : (
-          <Button size="sm" variant="primary" className="max-sm:min-h-11" disabled={state.pending} onClick={() => onPick({ connection: kind })}>
+          <Button size="sm" variant="primary" disabled={state.pending} onClick={() => onPick({ connection: kind })}>
             {t('connections.connect.openSettings')}
           </Button>
         )
