@@ -2547,7 +2547,13 @@ export class MastraFactory {
             ...(claudeCode ? { 'claude-code': turnHarnessBinding(claudeCode.harness) } : {}),
             ...(codex ? { codex: turnHarnessBinding(codex.harness) } : {}),
           },
-          available: instanceId => instanceId !== 'codex' || codexInstalled(),
+          // A harness whose CLI is not on this server takes no session (ADR-0038); asked each time, so an install shows up.
+          available: instanceId =>
+            instanceId === 'codex'
+              ? codexInstalled()
+              : instanceId === 'claude-code'
+                ? claudeExecutable?.unavailableReason() === undefined
+                : true,
         }),
       );
     }
