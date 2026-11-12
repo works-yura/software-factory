@@ -1023,7 +1023,12 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   // classic PATs the sandboxes use instead: a `default` worker token, and an
   // optional `reviewer` token that review-board sessions use so PR reviews
   // come from a different account. Tokens are never sent back to the browser —
-  // only whether each is configured.
+  // only whether each is configured. They are the organization's credentials:
+  // only an organization admin sets or removes them.
+  const patAdminRefusal = async (c: Context, orgId: string): Promise<Response | null> =>
+    auth.enabled() && !(await auth.isOrganizationAdmin(c, orgId))
+      ? c.json({ error: 'forbidden', message: 'Only organization admins can change the GitHub CLI tokens.' }, 403)
+      : null;
   const parsePatKind = (value: unknown): GithubPatKind | null => {
     if (value === undefined || value === null || value === 'default') return 'default';
     if (value === 'reviewer') return 'reviewer';
@@ -1045,6 +1050,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
+        const refused = await patAdminRefusal(loose(c), resolved.tenant.orgId);
+        if (refused) return refused;
 
         let body: { token?: unknown; kind?: unknown };
         try {
@@ -1069,6 +1076,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
+        const refused = await patAdminRefusal(loose(c), resolved.tenant.orgId);
+        if (refused) return refused;
         const kind = parsePatKind(c.req.query('kind'));
         if (!kind) return c.json({ error: "kind must be 'default' or 'reviewer'" }, 400);
         await clearGithubPat(github.integrationStorage, resolved.tenant.orgId, kind);

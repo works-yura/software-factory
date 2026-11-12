@@ -590,8 +590,10 @@ const testAuth: RouteAuth = {
     const u = c.get('factoryAuthUser') as { id: string; organizationId?: string } | undefined;
     return u ? { orgId: u.organizationId, userId: u.id } : undefined;
   },
-  isOrganizationAdmin: async () => true,
+  // Everyone is an admin unless a test names the admins.
+  isOrganizationAdmin: async (c: any) => patAdmins === null || patAdmins.has((c.get('factoryAuthUser') as { id: string }).id),
 };
+let patAdmins: Set<string> | null = null;
 
 import type { UserInstallation } from './integration.ts';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.ts';
@@ -1118,6 +1120,22 @@ describe('pat route', () => {
     expect(await removed.json()).toEqual({ configured: false, reviewerConfigured: false });
     const status = await app.request('/web/github/pat');
     expect(await status.json()).toEqual({ configured: false, reviewerConfigured: false });
+  });
+
+  it('lets only an organization admin set or remove a token; a member still sees whether one is set', async () => {
+    patAdmins = new Set(['admin']);
+    try {
+      await buildApp({ id: 'admin' }).request(jsonPost('ghp_admin'));
+      const member = buildApp({ id: 'member' });
+      const refused = await member.request(jsonPost('ghp_member'));
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual({ error: 'forbidden', message: 'Only organization admins can change the GitHub CLI tokens.' });
+      expect((await member.request(del())).status).toBe(403);
+      expect(await (await member.request('/web/github/pat')).json()).toEqual({ configured: true, reviewerConfigured: false });
+      expect((await buildApp({ id: 'admin' }).request(del())).status).toBe(200);
+    } finally {
+      patAdmins = null;
+    }
   });
 
   it('scopes the tokens per org', async () => {
