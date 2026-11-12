@@ -870,6 +870,20 @@ export function buildAuthDisabledRoutes(): ApiRoute[] {
  */
 const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
 
+/**
+ * The header an agent session's MCP token travels in (`@factory/mcp` session tokens; it lives here
+ * because the gate needs it and `@factory/mcp` depends on this package). Separate from
+ * `Authorization` so auth providers never see it.
+ */
+export const FACTORY_SESSION_TOKEN_HEADER = 'x-factory-session-token';
+
+/**
+ * A Factory's MCP endpoint (`FACTORY_MCP_PATH` in `@factory/mcp`). Agent sessions the Factory runs
+ * itself (the `claude` and `codex` CLIs) call it with a session token and no sign-in session; the
+ * route verifies the token and never falls through to the signed-in-person path.
+ */
+const FACTORY_MCP_ENDPOINT = /^\/web\/factory\/projects\/[^/]+\/mcp$/;
+
 // Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
 // so a future route under the same prefix does not inherit the pass.
 const SESSION_FAVICON_PATHS = new Set([
@@ -921,6 +935,12 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     // including one that does not verify signatures. Controller id stays a
     // wildcard because it is whatever the host registered.
     if (c.req.method === 'POST' && SIGNATURE_VERIFYING_CHANNEL_WEBHOOK.test(path)) {
+      return next();
+    }
+    // An agent session's MCP call authenticates by its session token, which the MCP route checks
+    // itself (a bad token is a 401 there). Only that endpoint, and only with the header: people
+    // calling it still pass the gate.
+    if (FACTORY_MCP_ENDPOINT.test(path) && c.req.header(FACTORY_SESSION_TOKEN_HEADER) !== undefined) {
       return next();
     }
     // The Slack account-linking deep link and the Sign-in-with-Slack OIDC

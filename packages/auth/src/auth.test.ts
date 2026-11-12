@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AUTH_UNAVAILABLE_BODY,
+  FACTORY_SESSION_TOKEN_HEADER,
   FACTORY_INTERACTIVE_KEY,
   createFactoryInteractiveMarker,
   ensureFactoryAuthUser,
@@ -386,6 +387,25 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(res.headers.get('Content-Type')).toContain('text/html');
     expect(await res.text()).toContain('http-equiv="refresh"');
     error.mockRestore();
+  });
+
+  it("lets an agent session's MCP call through to the MCP route, which checks its session token itself", async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const agent = await app.request('/web/factory/projects/p1/mcp', {
+      method: 'POST',
+      headers: { Accept: 'application/json', [FACTORY_SESSION_TOKEN_HEADER]: 'fst1.token' },
+    });
+    const person = await app.request('/web/factory/projects/p1/mcp', { method: 'POST', headers: { Accept: 'application/json' } });
+    const elsewhere = await app.request('/web/factory/projects/p1/work-items', {
+      headers: { Accept: 'application/json', [FACTORY_SESSION_TOKEN_HEADER]: 'fst1.token' },
+    });
+
+    expect(agent.status).toBe(200);
+    expect(mockAuthenticate).toHaveBeenCalledTimes(2);
+    expect(person.status).toBe(401);
+    expect(elsewhere.status).toBe(401);
   });
 
   it('still answers 401 for a missing session (the provider returned null)', async () => {

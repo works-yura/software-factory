@@ -10,7 +10,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
  */
 
 /** The header a session token travels in; separate from `Authorization` so auth providers never see it. */
-export const FACTORY_SESSION_TOKEN_HEADER = 'x-factory-session-token';
+export { FACTORY_SESSION_TOKEN_HEADER } from '@factory/auth';
 
 const TOKEN_PREFIX = 'fst1';
 /** Long enough for one agent turn; a turn gets a fresh token. */
