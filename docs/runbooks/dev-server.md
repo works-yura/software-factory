@@ -32,7 +32,7 @@ corepack pnpm dev:local
 
 ## Mac mini: сервер піднімається сам (launchd + Tailscale)
 
-На Mac mini (`Mac-mini-Yura`, у Tailscale — `mac-mini`) сервер Factory працює постійно й сам піднімається після перезавантаження. Скрипти — у репозиторії, `scripts/mac-mini/`; встановлення (і оновлення після зміни скриптів):
+На Mac mini (`Mac-mini-Yura`, у Tailscale — `hab`) сервер Factory працює постійно й сам піднімається після перезавантаження. Скрипти — у репозиторії, `scripts/mac-mini/`; встановлення (і оновлення після зміни скриптів):
 
 ```sh
 scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
@@ -56,9 +56,9 @@ scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
 
 | Публічна адреса | Куди | Секрет |
 | --- | --- | --- |
-| `https://mac-mini.tail5c61c7.ts.net/factory/gitlab` | `http://127.0.0.1:5874/web/gitlab/webhook` | `GITLAB_WEBHOOK_SECRET` → поле Secret token вебхука в GitLab |
+| `https://hab.tail5c61c7.ts.net/factory/gitlab` | `http://127.0.0.1:5874/web/gitlab/webhook` | `GITLAB_WEBHOOK_SECRET` → поле Secret token вебхука в GitLab |
 
-Усе інше на цьому імені (`/`, `/factory`, `/api`, `/web/…`) — 404; UI і API назовні не видно. Обробник відкидає запит без правильного `X-Gitlab-Token` (401). Конфіг зберігає Tailscale, він переживає перезавантаження й не залежить від LaunchAgent.
+Усе інше на цьому імені (`/`, `/factory`, `/api`, `/web/…`) — 404; UI і API назовні не видно. Обробник відкидає запит без правильного `X-Gitlab-Token` (401). Конфіг зберігає Tailscale, він переживає перезавантаження й не залежить від LaunchAgent. Після перейменування машини Funnel лишається на старому імені: перезапустити `tailscale funnel … --set-path=…` для нового імені й оновити URL у GitLab; запис для старого імені в `tailscale funnel status` нешкідливий (старе ім'я вже не резолвиться).
 
 ```sh
 tailscale funnel status                                  # що відкрито
