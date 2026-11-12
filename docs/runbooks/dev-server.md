@@ -44,13 +44,13 @@ scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
 | --- | --- |
 | Адреса | `https://factory.tail5c61c7.ts.net` — лише в tailnet; Tailscale Service `svc:factory` (машина з тегом `tag:server`), проксі на `http://127.0.0.1:5874` |
 | Автозапуск сервера | LaunchAgent `ai.eclipt.factory` (шаблон `scripts/mac-mini/ai.eclipt.factory.plist`): `RunAtLoad`, `KeepAlive` лише при невдалому виході, `ThrottleInterval` 30 с |
-| Скрипт запуску | `scripts/mac-mini/start-server.sh`: node з `nvm` (`default`), чекає диск із проєктом (до 5 хв), читає `server.env` і запускає `corepack pnpm dev:google` в `apps/server` |
+| Скрипт запуску | `scripts/mac-mini/start-server.sh`: node з `nvm` (`default`), чекає диск із проєктом (до 5 хв), читає `server.env` і запускає `corepack pnpm dev:local` в `apps/server` |
 | Сторож | той самий скрипт: кожні 20 с `GET http://127.0.0.1:5874/health` (відповідає без входу); 6 невдач поспіль (2 хв) — зупиняє всю групу процесів і виходить з 1, launchd піднімає знову. Потрібен, бо `mastra dev` живе далі, коли сервер у ньому впав. Старт до першої здорової відповіді — до 15 хв. Рядки `[watchdog …]` у лозі |
 | Лог | `~/Library/Logs/factory.log` |
 | Tailscale | Login Items (System Settings › General › Login Items); serve-конфіг сервісу зберігається між перезавантаженнями |
 | Google sign-in | клієнт OAuth у Google Console: origin `https://factory.tail5c61c7.ts.net`, redirect URI `https://factory.tail5c61c7.ts.net/auth/api/callback/google` |
 
-`MASTRACODE_PUBLIC_URL` задає `server.env`, не `.env` проєкту: `dev:google` у `package.json` сам ставить `http://localhost:5874`, якщо змінної немає, і це перекриває `.env`. Без неї Google після входу повертає на `localhost`.
+`MASTRACODE_PUBLIC_URL` задає `server.env`, не `.env` проєкту: `dev:local` у `package.json` сам ставить `http://localhost:5874`, якщо змінної немає, і це перекриває `.env`. Без неї Google після входу повертає на `localhost`.
 
 Керування (на Mac mini):
 

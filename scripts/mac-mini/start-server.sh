@@ -42,7 +42,7 @@ cd "$DIR" || { log "no $DIR"; exit 1; }
 
 # Own process group (job control), so a restart stops pnpm, varlock, mastra dev and the server together.
 set -m
-corepack pnpm dev:google &
+corepack pnpm dev:local &
 CHILD=$!
 set +m
 
