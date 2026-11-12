@@ -191,6 +191,8 @@ describe('Підключення', () => {
     await rows();
     await openMenu('ClickUp');
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Open', 'Rename', 'Reconnect', 'Delete connection']);
+    // Each item carries its icon, as Mastra's menu does.
+    expect(screen.getAllByRole('menuitem').every(item => item.querySelector('svg'))).toBe(true);
     await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
     const rename = await screen.findByRole('dialog');
     await userEvent.clear(within(rename).getByRole('textbox', { name: 'Name' }));
@@ -231,7 +233,9 @@ describe('Підключення', () => {
     for (const name of [/^Reconnect/, /^Delete connection/]) {
       const item = screen.getByRole('menuitem', { name });
       expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveTextContent('Set in the server environment — change the environment variables');
+      // The reason is its own line under the item (outside the disabled dimming), read out as the item's description.
+      expect(item).toHaveAccessibleDescription('Set in the server environment — change the environment variables');
+      expect(item).not.toHaveTextContent('Set in the server environment');
     }
   });
 
@@ -301,7 +305,7 @@ describe('Підключення', () => {
     renderConnections();
     await rows();
     await openMenu('ClickUp');
-    expect(screen.getByRole('menuitem', { name: /^Delete connection/ })).toHaveTextContent('Organization admins only');
+    expect(screen.getByRole('menuitem', { name: 'Delete connection' })).toHaveAccessibleDescription('Organization admins only');
     expect(screen.getByRole('menuitem', { name: /^Rename/ })).toHaveAttribute('aria-disabled', 'true');
   });
 

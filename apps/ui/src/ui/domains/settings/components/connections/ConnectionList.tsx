@@ -3,8 +3,9 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Table } from '@mastra/playground-ui/components/Table';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { Ellipsis } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowUpRight, Ellipsis, Pencil, RefreshCw, Trash2, Unlink } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -96,16 +97,24 @@ export function HealthBadge({ row }: { row: ConnectionRow }) {
 
 export type PendingAction = { kind: 'rename' | 'unlink' | 'delete' | 'delete-account' | 'remove-org'; row: ConnectionRow };
 
-/** A menu item an organization connection cannot take here: shown, disabled, with the reason under it. */
-function BlockedItem({ label, reason, variant }: { label: string; reason: OrgActionBlock; variant?: 'destructive' }) {
+/**
+ * A menu item an organization connection cannot take here: the item stays disabled (dimmed by the
+ * kit), and the reason is a separate line under it at normal muted contrast, read out as the item's
+ * description — so it is legible, not dimmed with the item.
+ */
+function BlockedItem({ icon: Icon, label, reason, variant }: { icon: LucideIcon; label: string; reason: OrgActionBlock; variant?: 'destructive' }) {
   const { t } = useTranslation('settings');
+  const reasonId = useId();
   return (
-    <DropdownMenu.Item disabled {...(variant ? { variant } : {})} data-blocked={reason}>
-      <span className="flex flex-col gap-0.5">
-        <span>{label}</span>
-        <span className="text-meta text-muted-foreground whitespace-normal">{t(`connections.blocks.${reason}`)}</span>
-      </span>
-    </DropdownMenu.Item>
+    <>
+      <DropdownMenu.Item disabled {...(variant ? { variant } : {})} data-blocked={reason} aria-describedby={reasonId}>
+        <Icon aria-hidden />
+        {label}
+      </DropdownMenu.Item>
+      <div id={reasonId} role="none" className="text-meta text-muted-foreground -mt-1 pr-2 pb-1.5 pl-8 whitespace-normal">
+        {t(`connections.blocks.${reason}`)}
+      </div>
+    </>
   );
 }
 
@@ -137,24 +146,34 @@ function OrgRowActions({
       : onReconnect(row.kind as ReconnectStep);
   return (
     <DropdownMenu.Content align="end" className="w-72">
-      <DropdownMenu.Item onSelect={onOpen}>{t('connections.actions.open')}</DropdownMenu.Item>
+      <DropdownMenu.Item onSelect={onOpen}>
+        <ArrowUpRight aria-hidden />
+        {t('connections.actions.open')}
+      </DropdownMenu.Item>
       {actions.rename === true ? (
-        <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>{t('connections.actions.rename')}</DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>
+          <Pencil aria-hidden />
+          {t('connections.actions.rename')}
+        </DropdownMenu.Item>
       ) : (
-        <BlockedItem label={t('connections.actions.rename')} reason={actions.rename} />
+        <BlockedItem icon={Pencil} label={t('connections.actions.rename')} reason={actions.rename} />
       )}
       {actions.reconnect === true ? (
-        <DropdownMenu.Item onSelect={reconnect}>{t('connections.actions.reconnect')}</DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={reconnect}>
+          <RefreshCw aria-hidden />
+          {t('connections.actions.reconnect')}
+        </DropdownMenu.Item>
       ) : (
-        <BlockedItem label={t('connections.actions.reconnect')} reason={actions.reconnect} />
+        <BlockedItem icon={RefreshCw} label={t('connections.actions.reconnect')} reason={actions.reconnect} />
       )}
       <DropdownMenu.Separator />
       {actions.remove === true ? (
         <DropdownMenu.Item variant="destructive" onSelect={() => onPending({ kind: 'remove-org', row })}>
+          <Trash2 aria-hidden />
           {t('connections.actions.deleteConnection')}
         </DropdownMenu.Item>
       ) : (
-        <BlockedItem label={t('connections.actions.deleteConnection')} reason={actions.remove} variant="destructive" />
+        <BlockedItem icon={Trash2} label={t('connections.actions.deleteConnection')} reason={actions.remove} variant="destructive" />
       )}
     </DropdownMenu.Content>
   );
@@ -274,9 +293,15 @@ export function RowActions({
         <OrgRowActions row={row} onOpen={onOpen} onPending={onPending} onReconnect={onReconnect} />
       ) : (
       <DropdownMenu.Content align="end" className="w-60">
-        <DropdownMenu.Item onSelect={onOpen}>{t('connections.actions.open')}</DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={onOpen}>
+          <ArrowUpRight aria-hidden />
+          {t('connections.actions.open')}
+        </DropdownMenu.Item>
         {row.rename && (row.rename === 'binding' || canEditMcp) && (
-          <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>{t('connections.actions.rename')}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>
+            <Pencil aria-hidden />
+            {t('connections.actions.rename')}
+          </DropdownMenu.Item>
         )}
         {server && canEditMcp && (
           <DropdownMenu.Item
@@ -291,20 +316,26 @@ export function RowActions({
               })
             }
           >
+            <RefreshCw aria-hidden />
             {t('connections.actions.reconnect')}
           </DropdownMenu.Item>
         )}
         {(ownServer || row.binding) && (
-          <DropdownMenu.Item onSelect={() => onPending({ kind: 'unlink', row })}>{t('connections.actions.unlink')}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => onPending({ kind: 'unlink', row })}>
+            <Unlink aria-hidden />
+            {t('connections.actions.unlink')}
+          </DropdownMenu.Item>
         )}
         {destructive && <DropdownMenu.Separator />}
         {ownServer && (
           <DropdownMenu.Item variant="destructive" onSelect={() => onPending({ kind: 'delete', row })}>
+            <Trash2 aria-hidden />
             {t('connections.actions.deleteConnection')}
           </DropdownMenu.Item>
         )}
         {row.kind === 'google-cloud' && row.accountId && (
           <DropdownMenu.Item variant="destructive" onSelect={() => onPending({ kind: 'delete-account', row })}>
+            <Trash2 aria-hidden />
             {t('connections.actions.deleteAccount')}
           </DropdownMenu.Item>
         )}
