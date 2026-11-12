@@ -109,23 +109,22 @@ describe('deferred instance mode', () => {
     warn.mockRestore();
   });
 
-  it('authContext() runs the migrations first and hands back the better-auth context', async () => {
+  it('organization lookups run the migrations first', async () => {
     const provider = new MastraAuthBetterAuth({ secret: SECRET, google: GOOGLE });
     await provider.init({ database: memoryDb(), publicUrl: 'http://localhost:3000' });
 
-    const ctx = await provider.authContext();
+    await expect(provider.isOrganizationAdmin('org_1', 'user_1')).resolves.toBe(false);
 
     expect(runMigrations).toHaveBeenCalledOnce();
-    expect(typeof ctx.adapter.create).toBe('function');
   });
 
-  it('authContext() fails loudly when the migrations fail', async () => {
+  it('organization lookups fail loudly when the migrations fail', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     runMigrations.mockRejectedValueOnce(new Error('database locked'));
     const provider = new MastraAuthBetterAuth({ secret: SECRET, google: GOOGLE });
     await provider.init({ database: memoryDb(), publicUrl: 'http://localhost:3000' });
 
-    await expect(provider.authContext()).rejects.toThrow('database locked');
+    await expect(provider.isOrganizationAdmin('org_1', 'user_1')).rejects.toThrow('database locked');
     warn.mockRestore();
   });
 

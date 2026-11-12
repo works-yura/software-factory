@@ -1,0 +1,99 @@
+import { createTestGoogleAuth } from '@factory/auth-better-auth/testing';
+import type { GoogleProfile, TestGoogleAuth } from '@factory/auth-better-auth/testing';
+import { Hono } from 'hono';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { createFactoryRouteAuth, factoryAuthTenant, mountFactoryAuth } from './auth.ts';
+
+/**
+ * The Factory gate over the real Google provider (better-auth on libSQL, Google's token check
+ * replaced): who is an organization admin, and how long a removed member keeps reaching `/web/*`.
+ */
+
+const ADA: GoogleProfile = { sub: 'google-ada', email: 'ada@example.com', name: 'Ada' };
+const BOB: GoogleProfile = { sub: 'google-bob', email: 'bob@example.com', name: 'Bob' };
+const CAROL: GoogleProfile = { sub: 'google-carol', email: 'carol@example.com', name: 'Carol' };
+
+let google: TestGoogleAuth;
+let app: Hono;
+
+beforeEach(async () => {
+  // Only the clock moves; libSQL and better-auth keep their real timers.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  google = await createTestGoogleAuth();
+  const routeAuth = createFactoryRouteAuth(google.provider);
+  app = new Hono();
+  mountFactoryAuth(app, { provider: google.provider });
+  app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? null));
+  app.get('/web/admin/:organizationId', async c =>
+    c.json({ admin: await routeAuth.isOrganizationAdmin(c, c.req.param('organizationId')) }),
+  );
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function web(path: string, cookie: string): Promise<Response> {
+  return app.request(path, { headers: { cookie, Accept: 'application/json' } });
+}
+
+async function tenant(cookie: string): Promise<{ orgId?: string; userId: string }> {
+  const res = await web('/web/whoami', cookie);
+  expect(res.status).toBe(200);
+  return (await res.json()) as { orgId?: string; userId: string };
+}
+
+async function isAdmin(cookie: string, organizationId: string): Promise<boolean> {
+  const res = await web(`/web/admin/${organizationId}`, cookie);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as { admin: boolean }).admin;
+}
+
+/** Ada owns her organization (created by the gate on her first request); Bob joins as admin, Carol as member. */
+async function organization() {
+  const ada = await google.signIn(ADA);
+  const { orgId } = await tenant(ada);
+  if (!orgId) throw new Error('the gate gave Ada no organization');
+  async function join(profile: GoogleProfile, role: 'admin' | 'member'): Promise<string> {
+    const invited = await google.api('/organization/invite-member', ada, { body: { email: profile.email, role, organizationId: orgId } });
+    const { id } = (await invited.json()) as { id: string };
+    const cookie = await google.signIn(profile);
+    expect((await google.api('/organization/accept-invitation', cookie, { body: { invitationId: id } })).status).toBe(200);
+    return cookie;
+  }
+  return { orgId, ada, bob: await join(BOB, 'admin'), carol: await join(CAROL, 'member') };
+}
+
+describe('Factory gate on the Google provider', () => {
+  it('confirms owner and admin as organization admins and denies a member', async () => {
+    const { orgId, ada, bob, carol } = await organization();
+
+    expect(await tenant(bob)).toMatchObject({ orgId });
+    expect(await isAdmin(ada, orgId)).toBe(true);
+    expect(await isAdmin(bob, orgId)).toBe(true);
+    expect(await isAdmin(carol, orgId)).toBe(false);
+  });
+
+  it('takes a removed member out of the organization on /web/* once the membership cache expires', async () => {
+    const { orgId, ada, carol } = await organization();
+    expect(await tenant(carol)).toMatchObject({ orgId });
+
+    const removed = await google.api('/organization/remove-member', ada, {
+      body: { memberIdOrEmail: CAROL.email, organizationId: orgId },
+    });
+    expect(removed.status).toBe(200);
+
+    // Within the minute the confirmed membership is still cached.
+    expect(await tenant(carol)).toMatchObject({ orgId });
+
+    vi.setSystemTime(Date.now() + 61_000);
+    const after = await tenant(carol);
+    expect(after.orgId).toBeDefined();
+    expect(after.orgId).not.toBe(orgId);
+    expect(await isAdmin(carol, orgId)).toBe(false);
+    // Her own organization is hers to administer; Ada's stays Ada's.
+    expect(await isAdmin(carol, after.orgId!)).toBe(true);
+    expect(await tenant(ada)).toMatchObject({ orgId });
+  });
+});

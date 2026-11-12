@@ -2,11 +2,13 @@
  * Derived from @mastra/auth-better-auth 1.1.8 (auth/better-auth/src/index.ts),
  * Copyright (c) Mastra AI, Inc., licensed under the Apache License 2.0.
  * Changed for Factory v4: Google is the only way in (no email/password, no
- * ICredentialsProvider), organizations come without email sending and users
- * cannot create them through the API, invitations last 7 days, Google sign-in
- * links to an existing user row with the same email, and a session's active
- * organization is honored only while the user is still a member of it.
- * See THIRD_PARTY_NOTICES.md and MIGRATION.md.
+ * ICredentialsProvider), organizations come without email sending, users
+ * cannot create or delete them through the API, nobody is made `owner` through
+ * an invitation or a role change, invitations last 7 days, Google sign-in links
+ * to an existing user row with the same email, a session's active organization
+ * is honored only while the user is still a member of it, and a membership
+ * lookup that fails refuses the request instead of acting in another
+ * organization. See THIRD_PARTY_NOTICES.md and MIGRATION.md.
  */
 import type {
   AuthInitContext,
@@ -22,11 +24,12 @@ import { LibsqlDialect } from '@libsql/kysely-libsql';
 
 import { betterAuth } from 'better-auth';
 import type { Auth, BetterAuthOptions, Session, User } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import { makeSignature } from 'better-auth/crypto';
 import { getMigrations } from 'better-auth/db/migration';
 import { organization } from 'better-auth/plugins';
 
-export type BetterAuthContext = Awaited<Auth['$context']>;
+type BetterAuthContext = Awaited<Auth['$context']>;
 
 function tryDecode(value: string): string {
   try {
@@ -52,7 +55,10 @@ export interface BetterAuthUser {
   user: User;
 }
 
-/** The user shape this provider reports to `IUserProvider` consumers. */
+/**
+ * The user shape this provider reports to `IUserProvider` consumers (upstream
+ * reports `EEUser` from `@internal/auth/ee`, which v4 does not export).
+ */
 export interface BetterAuthProfile {
   id: string;
   email: string;
@@ -61,6 +67,9 @@ export interface BetterAuthProfile {
   metadata: { emailVerified: boolean; createdAt: Date; updatedAt: Date };
 }
 
+/**
+ * Maps Better Auth User to the profile format.
+ */
 function mapBetterAuthUser(user: User): BetterAuthProfile {
   return {
     id: user.id,
@@ -84,15 +93,31 @@ export interface GoogleClientOptions {
 /** How long an invitation link stays valid. */
 export const INVITATION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
 
+/** The organization plugin's creator role: the one role nobody is given through the API. */
+const OWNER_ROLE = 'owner';
+
+/**
+ * Organization endpoints Factory turns off (better-auth answers 404). Roles are
+ * deferred: invitations are for `member`, and nobody changes a role until there
+ * is a UI and a decision for it.
+ */
+const DISABLED_PATHS = ['/organization/update-member-role'];
+
 export interface MastraAuthBetterAuthOptions extends MastraAuthProviderOptions<BetterAuthUser> {
   /**
-   * A configured Better Auth instance (tests, custom hosts). When omitted, the
-   * provider builds its own in `init()` on the host's auth database from
-   * `secret` and `google`, and owns its schema migrations.
+   * The Better Auth instance to use for authentication.
+   * This should be the result of calling `betterAuth({ ... })`.
+   *
+   * Optional when `secret` and `google` are provided: the provider then builds
+   * its own `betterAuth()` instance in `init()` on the host's auth database
+   * (deferred instance mode) and owns its schema migrations.
    */
   auth?: Auth;
 
-  /** Secret used for session signing by the provider-built instance. Ignored when `auth` is provided. */
+  /**
+   * Secret used for session signing by the provider-built `betterAuth()`
+   * instance (deferred instance mode). Ignored when `auth` is provided.
+   */
   secret?: string;
 
   /** Google sign-in, the only way in for the provider-built instance. Ignored when `auth` is provided. */
@@ -112,6 +137,10 @@ export interface FactoryBetterAuthConfig {
  * The better-auth options Factory runs on: Google only, organizations without
  * email sending, account linking for rows that already carry the person's
  * email (users moved over from the previous sign-in).
+ *
+ * Returned widened to `BetterAuthOptions`: `betterAuth()`'s return type is
+ * generic over the exact options object, which would make the instance
+ * incompatible with the plain `Auth` alias we store.
  */
 export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): BetterAuthOptions {
   const allowedOrigins = config.allowedOrigins ?? [];
@@ -142,15 +171,32 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
       // `requireLocalEmailVerified` default).
       accountLinking: { enabled: true, trustedProviders: ['google'], updateUserInfoOnLink: true },
     },
+    disabledPaths: DISABLED_PATHS,
     plugins: [
       organization({
         // Personal organizations are created by this provider (ensureOrganization);
         // nobody creates further ones through the API.
         allowUserToCreateOrganization: false,
+        // Every factory, project and connection belongs to an organization;
+        // deleting one would orphan them.
+        disableOrganizationDeletion: true,
         invitationExpiresIn: INVITATION_EXPIRES_IN_SECONDS,
         // The invitation id travels in a link the inviter sends by hand, so a
         // verified email (Google's) is what proves the recipient.
         requireEmailVerificationOnInvitation: true,
+        organizationHooks: {
+          // better-auth lets an owner invite another owner; Factory keeps one
+          // owner per organization (the one who cannot leave it).
+          beforeCreateInvitation: async ({ invitation }) => {
+            const roles = invitation.role.split(',').map(role => role.trim());
+            if (roles.includes(OWNER_ROLE)) {
+              throw APIError.from('FORBIDDEN', {
+                code: 'YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE',
+                message: 'You are not allowed to invite a user with this role',
+              });
+            }
+          },
+        },
       }),
     ],
     // Cross-origin SPA deploys need SameSite=None; Secure for the browser to
@@ -166,6 +212,7 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
  */
 const ORG_CACHE_TTL_MS = 60_000;
 
+/** Loose row shapes read back from better-auth's internal DB adapter. */
 interface MemberRow {
   organizationId?: string;
   role?: string;
@@ -176,9 +223,8 @@ interface OrganizationRow {
 }
 
 /**
- * Tagged auth-database handle shape hosts pass as `AuthInitContext.database`
- * (the factory's storage backends: `{ dialect: 'postgres', pool }` or
- * `{ dialect: 'libsql', client }`).
+ * Tagged auth-database handle shape hosts may pass as `AuthInitContext.database`
+ * (e.g. the Mastra Code web factory's storage backends).
  */
 interface TaggedAuthDatabase {
   dialect?: string;
@@ -187,19 +233,11 @@ interface TaggedAuthDatabase {
   database?: unknown;
 }
 
-/** Map the host's tagged auth-database handle onto better-auth's `database` option. */
-function betterAuthDatabase(authDb: TaggedAuthDatabase): BetterAuthOptions['database'] {
-  if (authDb.dialect === 'postgres') return authDb.pool as Extract<BetterAuthOptions['database'], { query: unknown }>;
-  if (authDb.dialect === 'libsql') {
-    return {
-      dialect: new LibsqlDialect({ client: authDb.client } as ConstructorParameters<typeof LibsqlDialect>[0]),
-      type: 'sqlite' as const,
-    };
-  }
-  return authDb.database as BetterAuthOptions['database'];
-}
-
-/** A TTL cache kept in expiry order (every entry uses the same TTL). */
+/**
+ * Upstream's `#cachedOrgId`/`#storeOrgId` as a small class, because Factory
+ * keeps two caches with the same TTL (resolved default org, confirmed
+ * memberships).
+ */
 class ExpiringMap<V> {
   #entries = new Map<string, { value: V; expiresAt: number }>();
 
@@ -214,9 +252,10 @@ class ExpiringMap<V> {
   }
 
   /**
-   * Writes delete-then-set so refreshed entries move to the back; iteration
-   * order is therefore ascending `expiresAt` and the sweep stops at the first
-   * live entry, making each write amortized O(1).
+   * The map is kept in expiry order: writes delete-then-set so refreshed
+   * entries move to the back, and since every entry uses the same TTL,
+   * iteration order is ascending `expiresAt`. The sweep therefore stops at the
+   * first live entry, making each write amortized O(1) instead of a full scan.
    */
   set(key: string, value: V): void {
     const now = Date.now();
@@ -236,14 +275,16 @@ class ExpiringMap<V> {
 /**
  * Factory authentication provider on Better Auth: Google sign-in, a personal
  * organization for every new user, organizations and invitation links.
+ *
+ * @see https://better-auth.com for Better Auth documentation
  */
 export class MastraAuthBetterAuth
   extends MastraAuthProvider<BetterAuthUser>
   implements IUserProvider<BetterAuthProfile>, IOrganizationsProvider, IAuthInit, IAuthHttpHandler
 {
   #auth: Auth | undefined;
-  #secret: string | undefined;
-  #google: GoogleClientOptions | undefined;
+  /** What `init()` builds the instance from; set exactly when no `auth` was passed. */
+  #deferred: { secret: string; google: GoogleClientOptions } | undefined;
   /** True when `init()` built the instance — then we also own its migrations. */
   #ownsInstance = false;
   /** Once-per-process migration latch; reset on failure so a later call retries. */
@@ -251,35 +292,39 @@ export class MastraAuthBetterAuth
   /**
    * In-process `userId → orgId` cache, shared by `ensureOrganization` and the
    * `authenticateToken` default-org resolution. Only successes are cached, so
-   * membership-less users re-run the lookup per request.
+   * membership-less users re-run the lookup per request. Entries expire after
+   * `ORG_CACHE_TTL_MS` so a membership revoked by an administrator stops being
+   * injected into new sessions within the TTL window instead of persisting for
+   * the process lifetime.
    */
   #orgCache = new ExpiringMap<string>();
-  /** `userId|orgId` pairs confirmed as memberships (positive results only). */
+  /** `userId|orgId` pairs confirmed as memberships (positive results only), same TTL. */
   #membershipCache = new ExpiringMap<true>();
-  /** Set from `init()`: cross-origin SPA deploys need SameSite=None; Secure cookies. */
-  #crossSite = false;
 
   /** @internal Test hook: current org-cache cardinality. */
   get orgCacheSize(): number {
     return this.#orgCache.size;
   }
+  /** Set from `init()`: cross-origin SPA deploys need SameSite=None; Secure cookies. */
+  #crossSite = false;
 
   constructor(options: MastraAuthBetterAuthOptions) {
     super({ name: options?.name ?? 'better-auth' });
 
-    if (!options.auth && !options.secret) {
-      throw new Error(
-        'Better Auth instance is required. Provide the auth option with a Better Auth instance, ' +
-          'or provide `secret` and `google` so the provider can build its own instance in init() on the host database.',
-      );
-    }
-    if (!options.auth && !options.google) {
-      throw new Error('Better Auth needs the Google client (`google: { clientId, clientSecret }`): Google is the only sign-in.');
+    if (!options.auth) {
+      if (!options.secret) {
+        throw new Error(
+          'Better Auth instance is required. Please provide the auth option with your Better Auth instance created via betterAuth({ ... }), ' +
+            'or provide `secret` and `google` so the provider can build its own instance in init() on the host database.',
+        );
+      }
+      if (!options.google) {
+        throw new Error('Better Auth needs the Google client (`google: { clientId, clientSecret }`): Google is the only sign-in.');
+      }
+      this.#deferred = { secret: options.secret, google: options.google };
     }
 
     this.#auth = options.auth;
-    this.#secret = options.secret;
-    this.#google = options.google;
 
     this.registerOptions(options);
   }
@@ -326,11 +371,15 @@ export class MastraAuthBetterAuth
    * One-time host initialization. In deferred instance mode (no `auth` in the
    * options) this builds the provider-owned `betterAuth()` instance on the
    * host's auth database; schema migrations then run lazily behind a
-   * once-per-process latch on first use (or eagerly through `authContext()`).
+   * once-per-process latch on first use.
+   *
+   * Bring-your-own `auth` instances skip construction entirely — the caller
+   * owns their database and migrations.
    */
   async init(ctx: AuthInitContext): Promise<void> {
     this.#crossSite = (ctx.allowedOrigins?.length ?? 0) > 0;
-    if (this.#auth) return; // bring-your-own instance: nothing to build
+    const deferred = this.#deferred;
+    if (this.#auth || !deferred) return; // bring-your-own instance (or already built): nothing to build
 
     const authDb = ctx.database as TaggedAuthDatabase | undefined;
     if (!authDb) {
@@ -339,11 +388,23 @@ export class MastraAuthBetterAuth
           'Use a storage backend that exposes an auth database, or pass your own configured `auth` instance.',
       );
     }
+    // Map the host's tagged auth-database handle onto better-auth's `database`
+    // option: pg pool directly, libsql via its kysely dialect, anything else
+    // passed through as-is (the host owns its compatibility).
+    const database: BetterAuthOptions['database'] =
+      authDb.dialect === 'postgres'
+        ? (authDb.pool as Extract<BetterAuthOptions['database'], { query: unknown }>)
+        : authDb.dialect === 'libsql'
+          ? {
+              dialect: new LibsqlDialect({ client: authDb.client } as ConstructorParameters<typeof LibsqlDialect>[0]),
+              type: 'sqlite' as const,
+            }
+          : (authDb.database as BetterAuthOptions['database']);
     this.#auth = betterAuth(
       factoryBetterAuthOptions({
-        database: betterAuthDatabase(authDb),
-        secret: this.#secret!,
-        google: this.#google!,
+        database,
+        secret: deferred.secret,
+        google: deferred.google,
         publicUrl: ctx.publicUrl,
         allowedOrigins: ctx.allowedOrigins,
       }),
@@ -368,16 +429,6 @@ export class MastraAuthBetterAuth
       console.warn('[BetterAuth] Failed to run auth schema migrations; auth stays unavailable until this succeeds.');
       throw error;
     }
-  }
-
-  /**
-   * The better-auth context with its tables ready, for host-side maintenance
-   * that writes rows directly (moving existing users over at boot). Throws when
-   * the database is not reachable or migrations fail.
-   */
-  async authContext(): Promise<BetterAuthContext> {
-    await this.#ensureDbReady();
-    return await Promise.resolve(this.auth.$context);
   }
 
   // ============================================
@@ -405,17 +456,35 @@ export class MastraAuthBetterAuth
   // IOrganizationsProvider implementation
   // ============================================
 
+  /** The better-auth context for organization lookups; throws when there is none. */
+  async #requireAuthContext(): Promise<BetterAuthContext> {
+    const ctx = await this.getAuthContext();
+    if (!ctx) throw new Error('[BetterAuth] The better-auth context is unavailable; organizations cannot be read.');
+    return ctx;
+  }
+
+  /** The user's membership row in the organization, or null when they are not a member. */
+  #findMember(ctx: BetterAuthContext, organizationId: string, userId: string): Promise<MemberRow | null> {
+    return ctx.adapter.findOne<MemberRow>({
+      model: 'member',
+      where: [
+        { field: 'organizationId', value: organizationId },
+        { field: 'userId', value: userId },
+      ],
+    });
+  }
+
   /**
    * Read-only half of org resolution: the user's oldest existing membership,
    * cached in `#orgCache`. Never creates anything. Ordered by `createdAt` so
    * the resolved default is stable across processes for multi-org users.
    */
   async #findMembershipOrgId(ctx: BetterAuthContext, userId: string): Promise<string | undefined> {
-    const memberships = (await ctx.adapter.findMany({
+    const memberships = await ctx.adapter.findMany<MemberRow>({
       model: 'member',
       where: [{ field: 'userId', value: userId }],
       sortBy: { field: 'createdAt', direction: 'asc' },
-    })) as MemberRow[];
+    });
     const orgId = memberships.find(m => m.organizationId)?.organizationId;
     if (orgId) this.#orgCache.set(userId, orgId);
     return orgId;
@@ -423,63 +492,52 @@ export class MastraAuthBetterAuth
 
   /**
    * Resolve the organization a session should act under when better-auth's
-   * `activeOrganizationId` was never set. Read-only and best-effort: an
-   * existing membership or nothing.
+   * `activeOrganizationId` is not set (or was dropped by `#isMember`): an
+   * existing membership or nothing. Read-only.
    *
-   * Callers must run `#ensureDbReady` first (authenticateToken does); this
-   * method deliberately swallows failures, so an unmigrated DB would
-   * otherwise fail silently.
+   * Callers must run `#ensureDbReady` first (authenticateToken does). A failed
+   * lookup throws: `authenticateToken` then refuses the request rather than
+   * letting it run without (or in another) organization.
    */
   async #resolveActiveOrganizationId(userId: string): Promise<string | undefined> {
     const cached = this.#orgCache.get(userId);
     if (cached) return cached;
-    try {
-      const ctx = await this.getAuthContext();
-      if (!ctx) return undefined;
-      return await this.#findMembershipOrgId(ctx, userId);
-    } catch {
-      return undefined;
-    }
+    const ctx = await this.getAuthContext();
+    if (!ctx) return undefined; // e.g. a partial mock without `$context`: no organizations to resolve
+    return await this.#findMembershipOrgId(ctx, userId);
   }
 
   /**
    * Whether the user still belongs to the organization a session names as
    * active. A member removed by an owner keeps that id on their session row;
    * honoring it would keep them inside the organization until the session
-   * expires. Fails closed.
+   * expires. A failed lookup throws (see `authenticateToken`).
    */
   async #isMember(userId: string, organizationId: string): Promise<boolean> {
     const key = `${userId}|${organizationId}`;
     if (this.#membershipCache.get(key)) return true;
-    try {
-      const ctx = await this.getAuthContext();
-      if (!ctx) return false;
-      const membership = (await ctx.adapter.findOne({
-        model: 'member',
-        where: [
-          { field: 'organizationId', value: organizationId },
-          { field: 'userId', value: userId },
-        ],
-      })) as MemberRow | null;
-      if (!membership) return false;
-      this.#membershipCache.set(key, true);
-      return true;
-    } catch {
-      return false;
-    }
+    const ctx = await this.#requireAuthContext();
+    if (!(await this.#findMember(ctx, organizationId, userId))) return false;
+    this.#membershipCache.set(key, true);
+    return true;
   }
 
   /**
-   * Ensure the user belongs to an organization (personal-org bootstrap on
-   * better-auth's organization tables): ≥1 membership → oldest org id; 0 →
-   * create a personal org with an idempotent slug derived from the user id,
-   * the user its `owner`.
+   * Ensure the user belongs to an organization, mirroring the WorkOS
+   * personal-org bootstrap on better-auth's organization tables:
+   * ≥1 membership → oldest org id; 0 → create a personal org with an
+   * idempotent slug derived from the user id.
    *
    * Concurrent/retried first logins recover via the unique slug instead of
-   * creating duplicates. The slug-matched org is only adopted when nobody else
-   * is a member; otherwise a fresh org with an unguessable slug is created.
+   * creating duplicates. Slug alone is NOT proof of ownership though: in
+   * upstream the organization API is reachable by any authenticated user, so
+   * an attacker could squat `personal-<victimId>` (Factory turns organization
+   * creation off, and keeps the check as the second line). The slug-matched
+   * org is only adopted when nobody else is a member; otherwise a fresh org
+   * with an unguessable slug is created instead.
    *
-   * Best-effort: any failure is swallowed and leaves the user no-org.
+   * Failures are logged and thrown (upstream swallowed them and left the user
+   * without an organization, which made the request run in a personal scope).
    */
   async ensureOrganization(userId: string): Promise<string | undefined> {
     const cached = this.#orgCache.get(userId);
@@ -487,14 +545,13 @@ export class MastraAuthBetterAuth
 
     try {
       await this.#ensureDbReady();
-      const ctx = await this.getAuthContext();
-      if (!ctx) return undefined;
+      const ctx = await this.#requireAuthContext();
 
       const firstExisting = await this.#findMembershipOrgId(ctx, userId);
       if (firstExisting) return firstExisting;
 
       // Build a predictable personal-org name from the user's profile.
-      const userRecord = await ctx.internalAdapter.findUserById(userId).catch(() => null);
+      const userRecord = await ctx.internalAdapter.findUserById(userId);
       const label = userRecord?.email ?? userRecord?.name ?? userId;
       const orgName = `${label}'s org`;
       const orgData = () => ({
@@ -503,30 +560,36 @@ export class MastraAuthBetterAuth
         metadata: JSON.stringify({ mastraPersonalOrg: 'true' }),
       });
 
+      // Create the personal org. The slug is derived from the user id, so a
+      // concurrent/prior bootstrap that already created it makes the insert
+      // reject on the unique slug — recover by looking the org up instead.
       const slug = `personal-${userId}`;
       let organizationId: string;
       try {
-        const created = (await ctx.adapter.create({
+        const created = await ctx.adapter.create<Record<string, unknown>, OrganizationRow>({
           model: 'organization',
           data: { ...orgData(), slug },
-        })) as OrganizationRow;
+        });
         organizationId = created.id;
       } catch (error) {
-        const existing = (await ctx.adapter.findOne({
+        const existing = await ctx.adapter.findOne<OrganizationRow>({
           model: 'organization',
           where: [{ field: 'slug', value: slug }],
-        })) as OrganizationRow | null;
+        });
         if (!existing) throw error;
-        const existingMembers = (await ctx.adapter.findMany({
+        // Only adopt the slug-matched org when nobody else is a member (zero
+        // members = a concurrent bootstrap of this same user that hasn't
+        // attached yet). Otherwise fall back to an unguessable slug.
+        const existingMembers = await ctx.adapter.findMany<MemberRow>({
           model: 'member',
           where: [{ field: 'organizationId', value: existing.id }],
-        })) as MemberRow[];
+        });
         const foreignMember = existingMembers.some(m => m.userId !== userId);
         if (foreignMember) {
-          const fallback = (await ctx.adapter.create({
+          const fallback = await ctx.adapter.create<Record<string, unknown>, OrganizationRow>({
             model: 'organization',
             data: { ...orgData(), slug: `personal-${userId}-${crypto.randomUUID()}` },
-          })) as OrganizationRow;
+          });
           organizationId = fallback.id;
         } else {
           organizationId = existing.id;
@@ -538,51 +601,33 @@ export class MastraAuthBetterAuth
       try {
         await ctx.adapter.create({
           model: 'member',
-          data: { organizationId, userId, role: 'owner', createdAt: new Date() },
+          data: { organizationId, userId, role: OWNER_ROLE, createdAt: new Date() },
         });
       } catch (error) {
-        const member = await ctx.adapter.findOne({
-          model: 'member',
-          where: [
-            { field: 'organizationId', value: organizationId },
-            { field: 'userId', value: userId },
-          ],
-        });
-        if (!member) throw error;
+        if (!(await this.#findMember(ctx, organizationId, userId))) throw error;
       }
 
       this.#orgCache.set(userId, organizationId);
       return organizationId;
     } catch (error) {
-      console.warn(
-        `[BetterAuth] Failed to bootstrap personal organization for user ${userId}. ` +
-          'The user will see organization_required until this succeeds.',
+      console.error(
+        `[BetterAuth] Failed to bootstrap the personal organization for user ${userId}; ` +
+          'their requests are refused until this succeeds.',
         error,
       );
-      return undefined;
+      throw error;
     }
   }
 
   /**
    * Whether the user holds an admin-equivalent role (`owner` or `admin`) in
-   * the organization. Provider errors resolve to `false`.
+   * the organization. A failed lookup throws; the host's gate denies and logs it.
    */
   async isOrganizationAdmin(organizationId: string, userId: string): Promise<boolean> {
-    try {
-      await this.#ensureDbReady();
-      const ctx = await this.getAuthContext();
-      if (!ctx) return false;
-      const membership = (await ctx.adapter.findOne({
-        model: 'member',
-        where: [
-          { field: 'organizationId', value: organizationId },
-          { field: 'userId', value: userId },
-        ],
-      })) as MemberRow | null;
-      return membership?.role === 'owner' || membership?.role === 'admin';
-    } catch {
-      return false;
-    }
+    await this.#ensureDbReady();
+    const ctx = await this.#requireAuthContext();
+    const membership = await this.#findMember(ctx, organizationId, userId);
+    return membership?.role === OWNER_ROLE || membership?.role === 'admin';
   }
 
   // ============================================
@@ -590,14 +635,21 @@ export class MastraAuthBetterAuth
   // ============================================
 
   /**
-   * Get current user from request. Supports both cookie-based sessions and
-   * `Authorization: Bearer <token>` requests.
+   * Get current user from request.
+   *
+   * Supports both cookie-based sessions and `Authorization: Bearer <token>`
+   * requests.
+   *
+   * @param request - Incoming HTTP request
+   * @returns The user profile or null if not authenticated
    */
   async getCurrentUser(request: Request): Promise<BetterAuthProfile | null> {
     try {
       await this.#ensureDbReady();
       const headers = new Headers(request.headers);
 
+      // If the request authenticates via Bearer token instead of cookies,
+      // convert the token to a signed session cookie so getSession accepts it.
       const authHeader = headers.get('Authorization');
       const bearerToken =
         authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ' ? authHeader.slice(7).trim() : undefined;
@@ -614,7 +666,15 @@ export class MastraAuthBetterAuth
     }
   }
 
-  /** Get user by ID through Better Auth's internal adapter. */
+  /**
+   * Get user by ID.
+   *
+   * Uses Better Auth's internal adapter to look up the user record,
+   * so it works with whichever database Better Auth is configured with.
+   *
+   * @param userId - User identifier
+   * @returns The user profile or null if not found
+   */
   async getUser(userId: string): Promise<BetterAuthProfile | null> {
     try {
       const ctx = await this.getAuthContext();
@@ -628,32 +688,42 @@ export class MastraAuthBetterAuth
     }
   }
 
-  /** Get multiple users by ID (null for missing users, order preserved). */
+  /**
+   * Get multiple users by ID.
+   * Optional IUserProvider method used for batch author enrichment.
+   *
+   * @param userIds - User identifiers
+   * @returns User profiles (null for missing users, order preserved)
+   */
   async getUsers(userIds: string[]): Promise<Array<BetterAuthProfile | null>> {
     return Promise.all(userIds.map(userId => this.getUser(userId)));
   }
 
-  /** Get URL to user's profile page. */
+  /**
+   * Get URL to user's profile page.
+   * Optional IUserProvider method.
+   */
   getUserProfileUrl(user: BetterAuthProfile): string {
     return `/profile/${user.id}`;
   }
 
   /**
-   * Get the resolved Better Auth context, or null when unavailable
-   * (e.g. a partial mock without `$context`).
+   * Get the resolved Better Auth context, or null when the instance has none
+   * (e.g. a partial mock without `$context`). A context that fails to resolve
+   * (database unreachable) throws instead of reading as "no context".
    */
   private async getAuthContext(): Promise<BetterAuthContext | null> {
-    try {
-      return (await Promise.resolve(this.auth.$context)) ?? null;
-    } catch {
-      return null;
-    }
+    return (await Promise.resolve(this.auth.$context)) ?? null;
   }
 
   /**
    * Ensure the Cookie header on `headers` carries a Better Auth session cookie
-   * for the given token. Unsigned tokens are signed with the instance secret
-   * (mirroring Better Auth's bearer plugin) before being set as the cookie.
+   * for the given token.
+   *
+   * Better Auth's `getSession` reads the session from a *signed* cookie
+   * (`<token>.<HMAC-SHA256 signature>`). Mirroring Better Auth's bearer
+   * plugin, unsigned tokens are signed with the instance secret before being
+   * set as the session cookie.
    */
   private async ensureSessionCookie(headers: Headers, token: string | undefined): Promise<void> {
     if (!token) return;
@@ -680,10 +750,22 @@ export class MastraAuthBetterAuth
   }
 
   /**
-   * Authenticate a request by verifying the session with Better Auth (cookie,
-   * or a bearer token converted to a signed session cookie).
+   * Authenticate a bearer token by verifying the session with Better Auth.
+   *
+   * This method extracts the session from the request headers using
+   * Better Auth's `api.getSession()` endpoint. Raw (unsigned) session tokens
+   * are signed before being passed to Better Auth as a session cookie,
+   * matching the bearer plugin's semantics.
+   *
+   * A session whose organizations cannot be read is refused (null, logged):
+   * the request must not run in another organization than the one asked for.
+   *
+   * @param token - The bearer token (session token) to authenticate
+   * @param request - The request containing headers
+   * @returns The authenticated user and session, or null if authentication fails
    */
   async authenticateToken(token: string, request: MastraAuthRequest): Promise<BetterAuthUser | null> {
+    let result: { session: BetterAuthUser['session']; user: User } | null;
     try {
       await this.#ensureDbReady();
 
@@ -695,60 +777,87 @@ export class MastraAuthBetterAuth
         headers.set('Cookie', cookieHeader);
       }
 
+      // Convert Bearer token to a signed session cookie if not already present.
       // better-auth ignores the Authorization header — it only reads from Cookie.
       await this.ensureSessionCookie(headers, token);
 
-      const result = await this.auth.api.getSession({
+      result = await this.auth.api.getSession({
         headers,
       });
+    } catch (error) {
+      console.warn('[BetterAuth] Could not verify the session; the request is treated as signed out.', error);
+      return null;
+    }
 
-      if (!result || !result.session || !result.user) {
-        return null;
-      }
+    if (!result || !result.session || !result.user) {
+      return null;
+    }
 
-      // Resolve a default organization from the user's memberships when the
-      // session has none, or names one the user has since been removed from
-      // (read-only; the session row is not mutated). See mastra-ai/mastra#21481.
-      let session: BetterAuthUser['session'] = result.session;
-      const active = session.activeOrganizationId;
-      if (active && !(await this.#isMember(result.user.id, active))) {
+    // Better-auth sets `activeOrganizationId` only through the organization
+    // plugin (`set-active`, accepting an invitation). Resolve a default from
+    // the user's existing memberships when the session has none, or names one
+    // the user has since been removed from (read-only; the session row is not
+    // mutated). See mastra-ai/mastra#21481.
+    const userId = result.user.id;
+    let session: BetterAuthUser['session'] = result.session;
+    const active = session.activeOrganizationId;
+    try {
+      if (active && !(await this.#isMember(userId, active))) {
         session = { ...session, activeOrganizationId: null };
       }
       if (!session.activeOrganizationId) {
-        const organizationId = await this.#resolveActiveOrganizationId(result.user.id);
+        const organizationId = await this.#resolveActiveOrganizationId(userId);
         if (organizationId) session = { ...session, activeOrganizationId: organizationId };
       }
-
-      return {
-        session,
-        user: result.user,
-      };
-    } catch {
+    } catch (error) {
+      console.error(
+        `[BetterAuth] Could not read the organizations of user ${userId} (active organization: ${active ?? 'none'}); ` +
+          'the request is refused instead of running in another organization.',
+        error,
+      );
       return null;
     }
+
+    return {
+      session,
+      user: result.user,
+    };
   }
 
   /**
-   * Authorize a user for access. By default, any authenticated user with a
-   * valid session is authorized; override with `authorizeUser` in the options.
+   * Authorize a user for access.
+   *
+   * By default, any authenticated user with a valid session is authorized.
+   * You can override this behavior by providing a custom `authorizeUser` function
+   * in the constructor options.
+   *
+   * @param user - The authenticated user and session
+   * @returns True if the user is authorized, false otherwise
    */
   async authorizeUser(user: BetterAuthUser): Promise<boolean> {
+    // By default, any authenticated user with a valid session is authorized
     return !!user?.session?.id && !!user?.user?.id;
   }
 
-  /** The underlying Better Auth instance. */
+  /**
+   * Get the underlying Better Auth instance.
+   * Useful for accessing Better Auth APIs directly.
+   */
   getAuth(): Auth {
     return this.auth;
   }
 
   /**
-   * Headers that clear the session cookies on logout (partial
-   * ISessionProvider implementation for logout support).
+   * Get headers to clear the session cookies on logout.
+   * Partial ISessionProvider implementation for logout support.
+   *
+   * Clears Better Auth's default session cookies.
    */
   getClearSessionHeaders(): Record<string, string> {
     // Cross-site deploys set the session cookie with SameSite=None; Secure —
     // the clearing cookie must match those attributes to overwrite it.
     const sameSite = this.#crossSite ? 'None; Secure' : 'Lax';
+    // Clear both the session token and its signature cookie
     const cookies = [
       `${this.sessionCookieName}=; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=0`,
       `${this.sessionCookieName}_sig=; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=0`,

@@ -252,7 +252,8 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
 
 /**
  * Resolve the authenticated user for a request via the provider. Never throws:
- * ordinary invalid/expired sessions resolve to `null`.
+ * ordinary invalid/expired sessions resolve to `null`, and so does a provider
+ * that throws (fail closed: signed out), with the error logged.
  */
 async function authenticateRequest(
   provider: IMastraAuthProvider,
@@ -262,7 +263,11 @@ async function authenticateRequest(
   try {
     const result = await provider.authenticateToken(token, raw);
     return toFactoryAuthUser(result);
-  } catch {
+  } catch (error) {
+    console.error(
+      `[auth] Provider ${provider.name ?? 'unknown'} failed to authenticate ${raw.method} ${new URL(raw.url).pathname}; the request is treated as signed out.`,
+      error,
+    );
     return null;
   }
 }
@@ -272,20 +277,27 @@ async function authenticateRequest(
  * connect) work without leaving the app. Mutates the resolved user so the
  * current request sees the org immediately; subsequent requests resolve it via
  * the provider's own session/membership lookup (providers cache internally).
- * Best-effort: providers swallow their own bootstrap failures, and any
- * unexpected throw leaves the user no-org.
+ *
+ * A provider that answers `undefined` leaves the user genuinely no-org. A
+ * provider that throws fails the request with 503 (logged): running it
+ * without the org would key its rows to the personal `user:<id>` scope instead.
  */
 async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUser): Promise<void> {
   if (getFactoryAuthOrgId(user)) return;
   if (!isOrganizationsProvider(provider)) return;
   const userId = getFactoryAuthUserId(user);
   if (!userId) return;
+  let orgId: string | undefined;
   try {
-    const orgId = await provider.ensureOrganization(userId);
-    if (orgId) user.organizationId = orgId;
-  } catch {
-    // Best-effort: the user stays no-org until a later request succeeds.
+    orgId = await provider.ensureOrganization(userId);
+  } catch (error) {
+    console.error(`[auth] Could not resolve the organization of user ${userId}; the request is refused.`, error);
+    throw new HTTPException(503, {
+      res: Response.json({ error: 'auth_unavailable' }, { status: 503 }),
+      cause: error,
+    });
   }
+  if (orgId) user.organizationId = orgId;
 }
 
 /**
@@ -362,7 +374,11 @@ export async function isOrganizationAdmin(
   if (!userId) return false;
   try {
     return await provider.isOrganizationAdmin(organizationId, userId);
-  } catch {
+  } catch (error) {
+    console.error(
+      `[auth] Could not check whether user ${userId} administers organization ${organizationId}; denied.`,
+      error,
+    );
     return false;
   }
 }

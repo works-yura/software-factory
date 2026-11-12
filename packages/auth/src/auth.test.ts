@@ -1,6 +1,7 @@
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -11,6 +12,7 @@ import {
   getFactoryAuthOrgId,
   getFactoryAuthUser,
   getFactoryAuthUserId,
+  isOrganizationAdmin,
   mountFactoryAuth,
   factoryAuthTenant,
 } from './auth.ts';
@@ -354,12 +356,15 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('treats a thrown provider error as unauthenticated', async () => {
+  it('treats a thrown provider error as unauthenticated and logs it', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockAuthenticate.mockRejectedValue(new Error('boom'));
     const { app } = buildApp();
 
     const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(401);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('sso-fake failed to authenticate GET /web/projects'), expect.any(Error));
+    error.mockRestore();
   });
 
   it('stashes flat-provider avatar URLs on the context for downstream routes', async () => {
@@ -860,18 +865,51 @@ describe('org-tenant identity', () => {
     expect(await res.json()).toEqual({ orgId: null, userId: 'user_solo' });
   });
 
-  it('a thrown bootstrap error leaves the user no-org instead of failing the request', async () => {
+  it('a thrown bootstrap error refuses the request (503, logged) instead of running it without the org', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockEnsureOrganization.mockRejectedValue(new Error('idp unavailable'));
     mockAuthenticate.mockResolvedValue({ id: 'user_err', email: 'err@e.com' });
     const app = new Hono();
     mountFactoryAuth(app, { provider: activeProvider() });
-    app.get('/web/whoami', c => {
-      const tenant = factoryAuthTenant(c);
-      return c.json({ orgId: tenant?.orgId ?? null, userId: tenant?.userId ?? null });
-    });
+    const handler = vi.fn((c: Context) => c.json(factoryAuthTenant(c) ?? null));
+    app.get('/web/whoami', handler);
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: null, userId: 'user_err' });
+    const me = await app.request('/auth/me');
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'auth_unavailable' });
+    expect(handler).not.toHaveBeenCalled();
+    expect(me.status).toBe(503);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('user user_err'), expect.any(Error));
+    error.mockRestore();
+  });
+});
+
+describe('isOrganizationAdmin', () => {
+  beforeEach(enableProvider);
+
+  async function adminCheck(): Promise<boolean> {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', organizationId: 'org_a' });
+    const provider = activeProvider();
+    const app = new Hono();
+    app.get('/web/admin', async c => c.json({ admin: await isOrganizationAdmin(provider, c, 'org_a') }));
+    const res = await app.request('/web/admin');
+    return ((await res.json()) as { admin: boolean }).admin;
+  }
+
+  it('is what the provider confirms', async () => {
+    mockIsOrganizationAdmin.mockResolvedValue(true);
+    expect(await adminCheck()).toBe(true);
+    expect(mockIsOrganizationAdmin).toHaveBeenCalledWith('org_a', 'user_1');
+  });
+
+  it('denies and logs when the provider check fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockIsOrganizationAdmin.mockRejectedValue(new Error('db down'));
+
+    expect(await adminCheck()).toBe(false);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('user user_1 administers organization org_a'), expect.any(Error));
+    error.mockRestore();
   });
 });

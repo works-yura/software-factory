@@ -357,11 +357,13 @@ describe('MastraAuthBetterAuth', () => {
       expect(result?.session.activeOrganizationId).toBe('org_personal');
     });
 
-    it('fails closed on the active organization when the membership check errors', async () => {
+    it('refuses the request and logs when the membership check errors, instead of picking another organization', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
       mockAuth.api.getSession.mockResolvedValue({
         session: { ...mockSession, activeOrganizationId: 'org_chosen' },
         user: mockUser,
       });
+      const findMany = vi.fn(async () => [{ organizationId: 'org_personal' }]);
       const auth = new MastraAuthBetterAuth({
         auth: {
           ...mockAuth,
@@ -369,7 +371,7 @@ describe('MastraAuthBetterAuth', () => {
             authCookies: { sessionToken: { name: 'better-auth.session_token' } },
             adapter: {
               findOne: vi.fn(async () => Promise.reject(new Error('db down'))),
-              findMany: vi.fn(async () => Promise.reject(new Error('db down'))),
+              findMany,
             },
           }),
         } as any,
@@ -377,8 +379,11 @@ describe('MastraAuthBetterAuth', () => {
 
       const result = await auth.authenticateToken('test-token', mockRawRequest());
 
-      expect(result?.user).toEqual(mockUser);
-      expect(result?.session.activeOrganizationId).toBeNull();
+      expect(result).toBeNull();
+      // The user's other membership is never consulted as a substitute.
+      expect(findMany).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith(expect.stringContaining(`user ${mockUser.id} (active organization: org_chosen)`), expect.any(Error));
+      error.mockRestore();
     });
 
     it('still authenticates when no membership exists', async () => {
@@ -402,7 +407,8 @@ describe('MastraAuthBetterAuth', () => {
       expect(result?.user).toEqual(mockUser);
     });
 
-    it('still authenticates when the membership lookup fails', async () => {
+    it('refuses the request and logs when the default-organization lookup fails', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
       mockAuth.api.getSession.mockResolvedValue({
         session: { ...mockSession, activeOrganizationId: null },
         user: mockUser,
@@ -419,8 +425,25 @@ describe('MastraAuthBetterAuth', () => {
 
       const result = await auth.authenticateToken('test-token', mockRawRequest());
 
-      expect(result?.session.activeOrganizationId).toBeNull();
-      expect(result?.user).toEqual(mockUser);
+      expect(result).toBeNull();
+      expect(error).toHaveBeenCalledWith(expect.stringContaining(`user ${mockUser.id}`), expect.any(Error));
+      error.mockRestore();
+    });
+
+    it('refuses the request when the better-auth context cannot be resolved', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, activeOrganizationId: 'org_chosen' },
+        user: mockUser,
+      });
+      const context = Promise.reject(new Error('db unreachable'));
+      context.catch(() => {});
+      const auth = new MastraAuthBetterAuth({ auth: { ...mockAuth, $context: context } as any });
+
+      expect(await auth.authenticateToken('', mockRawRequest())).toBeNull();
+      error.mockRestore();
+      warn.mockRestore();
     });
 
     it('should return null when session is not found', async () => {
@@ -434,7 +457,8 @@ describe('MastraAuthBetterAuth', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null when getSession throws an error', async () => {
+    it('should return null and log when getSession throws an error', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       mockAuth.api.getSession.mockRejectedValue(new Error('Session expired'));
 
       const auth = new MastraAuthBetterAuth({
@@ -443,6 +467,8 @@ describe('MastraAuthBetterAuth', () => {
       const result = await auth.authenticateToken('expired-token', mockRawRequest());
 
       expect(result).toBeNull();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Could not verify the session'), expect.any(Error));
+      warn.mockRestore();
     });
 
     it('should return null when session is missing user', async () => {
@@ -993,11 +1019,11 @@ describe('MastraAuthBetterAuth', () => {
       await expect(provider.isOrganizationAdmin('org_1', 'user_1')).resolves.toBe(false);
     });
 
-    it('fails closed when membership lookup fails', async () => {
+    it('throws when the membership lookup fails (the host gate denies and logs)', async () => {
       const provider = providerWithCtx({
         adapter: { findOne: vi.fn(async () => Promise.reject(new Error('db down'))) },
       });
-      await expect(provider.isOrganizationAdmin('org_1', 'user_1')).resolves.toBe(false);
+      await expect(provider.isOrganizationAdmin('org_1', 'user_1')).rejects.toThrow('db down');
     });
   });
 
@@ -1119,14 +1145,15 @@ describe('MastraAuthBetterAuth', () => {
       expect(await provider.ensureOrganization('user_1')).toBe('org_new');
     });
 
-    it('is best-effort: swallows failures and returns undefined', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('logs and throws a failure instead of leaving the user without an organization', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
       const dbAdapter = mockDbAdapter({ findMany: vi.fn(async () => Promise.reject(new Error('db down'))) });
       const provider = providerWith(dbAdapter);
 
-      expect(await provider.ensureOrganization('user_1')).toBeUndefined();
-      expect(warn).toHaveBeenCalled();
-      warn.mockRestore();
+      await expect(provider.ensureOrganization('user_1')).rejects.toThrow('db down');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('user user_1'), expect.any(Error));
+      expect(dbAdapter.create).not.toHaveBeenCalled();
+      error.mockRestore();
     });
 
     it('caches the resolved org so subsequent calls skip the DB', async () => {
