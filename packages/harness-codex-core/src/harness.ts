@@ -32,7 +32,11 @@ export interface CodexHarness extends AgentHarness {
   getSession(sessionId: string): Promise<CodexSession | undefined>;
   /** Creates the session, or returns the one already stored under this id. */
   createSession(input: { sessionId: string; threadId: string; resourceId?: string }): Promise<CodexSession>;
-  /** Stops a session's run and forgets it in this process; what it persisted stays. */
+  /**
+   * Tears a session down for good: stops its run and processes, forgets it in this process and
+   * removes its record, so `getSession` no longer finds it (the dispatcher's sweep revokes a
+   * binding whose session is gone, ADR-0038). The thread's messages stay in the Factory's memory.
+   */
   deleteSession(sessionId: string): Promise<void>;
   /**
    * Gives a session up: it moved to another harness (a context handoff). Stops it, forgets it in
@@ -93,6 +97,8 @@ export function createCodexHarness(config: CodexHarnessConfig): CodexHarness {
       if (!session) return;
       session.dispose();
       sessions.delete(sessionId);
+      // Left in the store, the next lookup would load it again: a deleted session would still exist.
+      await config.store.delete?.(sessionId);
     },
 
     async releaseSession(sessionId) {

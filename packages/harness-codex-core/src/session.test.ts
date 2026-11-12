@@ -467,6 +467,17 @@ describe('createCodexHarness', () => {
     expect(context.get('controller')).toMatchObject({ session: { id: 's1' } });
   });
 
+  it('deletes a session for good: the next lookup does not load it again', async () => {
+    const store = createInMemoryCodexSessionStore();
+    const harness = createCodexHarness({ store, spawn: scripted([() => {}]), cwdFor: () => '/work', env: {} });
+    await harness.createSession({ sessionId: 's1', threadId: 't1', resourceId: 'r1' });
+    await harness.deleteSession('s1');
+    expect(await harness.getSession('s1')).toBeUndefined();
+    expect(await store.get('s1')).toBeUndefined();
+    const restarted = createCodexHarness({ store, spawn: scripted([() => {}]), cwdFor: () => '/work', env: {} });
+    expect(await restarted.getSession('s1')).toBeUndefined();
+  });
+
   describe('accounts', () => {
     const tokens = (id: string) => ({ accessToken: `at-${id}`, chatgptAccountId: `ws-${id}`, planType: 'plus' });
     const limited: Script = (server, { threadId, turnId }) => {

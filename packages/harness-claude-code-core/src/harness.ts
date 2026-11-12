@@ -40,9 +40,11 @@ export interface ClaudeCodeHarness extends AgentHarness {
   /** Creates the session, or returns the one already stored under this id. */
   createSession(input: { sessionId: string; threadId: string; resourceId?: string }): Promise<ClaudeCodeSession>;
   /**
-   * Tears a session down, as the controller's `deleteSession` does a Mastra
-   * one: stops its run and forgets it in this process; what it persisted stays.
-   * A no-op for a session it does not hold.
+   * Tears a session down for good, as the controller's `deleteSession` does a
+   * Mastra one: stops its run, forgets it in this process and removes its
+   * record, so `getSession` no longer finds it (the dispatcher's sweep revokes
+   * a binding whose session is gone, ADR-0038). The thread's messages stay in
+   * the Factory's memory. A no-op for a session it does not hold.
    */
   deleteSession(sessionId: string): Promise<void>;
   /**
@@ -116,6 +118,8 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
       if (!session) return;
       session.abort();
       sessions.delete(sessionId);
+      // Left in the store, the next lookup would load it again: a deleted session would still exist.
+      await config.store.delete?.(sessionId);
     },
 
     async releaseSession(sessionId) {

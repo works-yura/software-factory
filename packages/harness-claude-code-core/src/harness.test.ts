@@ -24,6 +24,21 @@ async function writeSkill(directory: string, name: string, source: string) {
 }
 
 describe('createClaudeCodeHarness', () => {
+  it('deletes a session for good: neither it nor a restarted server finds it again', async () => {
+    const store = createJsonFileSessionStore(join(root, 'sessions'));
+    const harness = createClaudeCodeHarness({ store, credentials: async () => ({}), cwdFor: () => root });
+    await harness.createSession({ sessionId: 'card-1', threadId: 'thread-1' });
+    await harness.createSession({ sessionId: 'card-2', threadId: 'thread-2' });
+
+    await harness.deleteSession('card-1');
+    expect(await harness.getSession('card-1')).toBeUndefined();
+    expect(await store.get('card-1')).toBeUndefined();
+    const restarted = createClaudeCodeHarness({ store, credentials: async () => ({}), cwdFor: () => root });
+    expect(await restarted.getSession('card-1')).toBeUndefined();
+    expect(await restarted.getSession('card-2')).toBeDefined();
+    await expect(harness.deleteSession('card-1')).resolves.toBeUndefined();
+  });
+
   it('rehydrates a stored session once and hands every caller the same object', async () => {
     const store = createInMemorySessionStore();
     const first = createClaudeCodeHarness({ store, credentials: async () => ({}), cwdFor: () => root });
