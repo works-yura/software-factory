@@ -30,6 +30,15 @@ manifest's `codex` section as fallback, its effort and service-tier descriptors,
 `@factory/harness-codex` (`src/models/`); Mastra's descriptors from its thinking levels in
 `@factory/credentials/mastra-models`.
 
+`executable.ts` (`@factory/harness/executable`, Node only) resolves the CLI a harness spawns (ADR-0038):
+the deployment's configured command, else PATH, else where agent CLIs install (`~/.local/bin`,
+`~/.claude/local`, the server's and nvm's node bin, `/opt/homebrew/bin`, `/usr/local/bin`). A found
+path is kept; a missing one is looked up again on the next ask, so an install after boot needs no
+restart. `createHarnessExecutable` is the `HarnessCommandSource` the Claude Code and Codex cores
+spawn; `withExecutableAvailability` (in `models/facet.ts`) makes the harness unavailable with
+`reasonCode: 'executable_missing'` while it is missing; `isHarnessExecutableUnavailable` tells the
+dispatcher a run failed on a missing CLI, which no retry fixes.
+
 `transcript.ts` (`@factory/harness/transcript`) is the transcript the turn-based harnesses (Claude
 Code, Codex) record and the chat's session UI projects. `elicitation.ts`
 (`@factory/harness/elicitation`) turns an MCP server's elicitation (a form or a link) into that

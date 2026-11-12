@@ -67,6 +67,7 @@ export async function describeHarnessModels(models: HarnessModels, ctx: HarnessM
       available: availability.available && list.length > 0,
       needsSetup: availability.needsSetup ?? false,
       ...(availability.reason ? { reason: availability.reason } : {}),
+      ...(availability.reasonCode ? { reasonCode: availability.reasonCode } : {}),
       defaultModel: defaultSelection?.model ?? null,
       defaultSelection,
       factoryDefaultSelection: factoryDefault,

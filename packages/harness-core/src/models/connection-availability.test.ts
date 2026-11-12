@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { HarnessModelContext } from './facet.ts';
-import { withConnectionAvailability } from './facet.ts';
+import { withConnectionAvailability, withExecutableAvailability } from './facet.ts';
 import { createHarnessModelRegistry } from './registry.ts';
 import { codexStubModels } from './registry.testFixtures.ts';
 
@@ -22,7 +22,14 @@ describe('withConnectionAvailability', () => {
     expect(forAlice!.models.length).toBeGreaterThan(0);
 
     const [forBob] = await registry.describe(bob);
-    expect(forBob).toMatchObject({ available: false, needsSetup: true, reason: 'No Robo sign-in of yours.', connector: 'robo', models: [] });
+    expect(forBob).toMatchObject({
+      available: false,
+      needsSetup: true,
+      reason: 'No Robo sign-in of yours.',
+      reasonCode: 'connection_missing',
+      connector: 'robo',
+      models: [],
+    });
   });
 
   it("keeps the facet's own refusal first, and its methods as they were", async () => {
@@ -34,5 +41,40 @@ describe('withConnectionAvailability', () => {
     expect(await wrapped.availability!(alice)).toEqual({ available: false, reason: 'CLI missing' });
     expect(await wrapped.owns('s1')).toBe(true);
     expect(wrapped.instanceId).toBe(inner.instanceId);
+  });
+});
+
+describe('withExecutableAvailability', () => {
+  it('lists a harness whose CLI is missing as unavailable to everyone, before its connection is asked', async () => {
+    let missing: string | undefined = 'Robo is not installed on this server.';
+    const connection = { connector: 'robo', missing: async () => undefined };
+    const registry = createHarnessModelRegistry();
+    registry.register(withConnectionAvailability(withExecutableAvailability(codexStubModels(new Set()), { unavailableReason: () => missing }), connection));
+
+    const [before] = await registry.describe(alice);
+    expect(before).toMatchObject({
+      available: false,
+      needsSetup: false,
+      reason: 'Robo is not installed on this server.',
+      reasonCode: 'executable_missing',
+      connector: 'robo',
+      models: [],
+    });
+
+    // Installed after boot: the next question finds it.
+    missing = undefined;
+    const [after] = await registry.describe(alice);
+    expect(after).toMatchObject({ available: true, connector: 'robo' });
+    expect(after!.reasonCode).toBeUndefined();
+  });
+
+  it("asks the facet's own availability once the CLI is there", async () => {
+    const inner = codexStubModels(new Set(['s1']));
+    const wrapped = withExecutableAvailability(
+      { ...inner, availability: async (_ctx: HarnessModelContext) => ({ available: false, reason: 'not signed in' }) },
+      { unavailableReason: () => undefined },
+    );
+    expect(await wrapped.availability!(alice)).toEqual({ available: false, reason: 'not signed in' });
+    expect(await wrapped.owns('s1')).toBe(true);
   });
 });

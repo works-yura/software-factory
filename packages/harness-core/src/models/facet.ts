@@ -54,10 +54,22 @@ export interface SessionHarnessHandoff {
   readonly harnessId: string;
 }
 
+/**
+ * Why a harness is unavailable, as data the UI words in the person's language (the `reason` stays
+ * the server's own words, with the details):
+ * - `executable_missing`: its CLI is not installed on the server (`withExecutableAvailability`);
+ *   only whoever runs the server can fix it.
+ * - `connection_missing`: the viewer has no connection it can run on (`withConnectionAvailability`);
+ *   they fix it in Settings › Підключення.
+ */
+export type HarnessUnavailableCode = 'executable_missing' | 'connection_missing';
+
 export interface HarnessModelAvailability {
   readonly available: boolean;
   /** Why not, for the picker (no credential yet, the CLI is missing, …). */
   readonly reason?: string;
+  /** Why not, as a code the UI translates; absent for a reason it can only show as is. */
+  readonly reasonCode?: HarnessUnavailableCode;
   /** Nothing is configured yet: the picker offers the provider setup instead of models. */
   readonly needsSetup?: boolean;
 }
@@ -138,6 +150,8 @@ export interface HarnessModelInstanceInfo {
   needsSetup: boolean;
   /** Why not, in words, when unavailable. */
   reason?: string;
+  /** Why not, as a code the UI translates (`HarnessUnavailableCode`). */
+  reasonCode?: HarnessUnavailableCode;
   /** The connector to connect for it to become available (`HarnessModels.connector`). */
   connector?: string;
   /** The model a new session starts on (`defaultSelection`), when the harness names one. */
@@ -173,7 +187,27 @@ export function withConnectionAvailability<Models extends HarnessModels>(
       const own = (await inner?.(ctx)) ?? { available: true };
       if (!own.available || !connection.missing) return own;
       const missing = await connection.missing(ctx);
-      return missing ? { available: false, needsSetup: true, reason: missing } : own;
+      return missing ? { available: false, needsSetup: true, reason: missing, reasonCode: 'connection_missing' } : own;
+    },
+  });
+}
+
+/**
+ * The facet of a harness that runs a CLI on the server (Claude Code, Codex): unavailable to everyone
+ * while its executable is not installed, with why (`executable_missing`), before anything else is
+ * asked. `executable` is the server's resolver (`@factory/harness/executable`), which looks again
+ * each time while the CLI is missing, so an install shows up without a restart.
+ */
+export function withExecutableAvailability<Models extends HarnessModels>(
+  models: Models,
+  executable: { unavailableReason(): string | undefined },
+): Models {
+  const inner = models.availability?.bind(models);
+  return Object.assign(Object.create(Object.getPrototypeOf(models) as object) as Models, models, {
+    async availability(ctx: HarnessModelContext): Promise<HarnessModelAvailability> {
+      const missing = executable.unavailableReason();
+      if (missing) return { available: false, reason: missing, reasonCode: 'executable_missing' };
+      return (await inner?.(ctx)) ?? { available: true };
     },
   });
 }
