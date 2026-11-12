@@ -78,7 +78,7 @@ describe('createObservabilityTools', () => {
 
   it('offers only the tools of the features some source has', async () => {
     const logsOnly = await createObservabilityTools({ requestContext: context(), provider: provider([dummySource({ logs: true, crashes: false })]) });
-    expect(Object.keys(logsOnly)).toEqual(['observability_query_logs']);
+    expect(Object.keys(logsOnly)).toEqual(['observability_query_logs', 'observability_log_groups']);
     const crashesOnly = await createObservabilityTools({ requestContext: context(), provider: provider([dummySource({ logs: false, crashes: true })]) });
     expect(Object.keys(crashesOnly).sort()).toEqual(['observability_crash_issue', 'observability_crash_issues']);
   });
@@ -94,6 +94,85 @@ describe('createObservabilityTools', () => {
     expect(calls[0]).toMatchObject({ severityAtLeast: 'ERROR', limit: 50, to: now, from: new Date(now.getTime() - 24 * 3_600_000) });
     expect(result).toMatchObject({ project: 'syncta-prod', count: 2, bySeverity: { ERROR: 2 }, nextPageToken: null });
     expect(result.note).toMatch(/untrusted/);
+  });
+
+  it('passes an HTTP status floor to the provider', async () => {
+    const calls: any[] = [];
+    const tools = await createObservabilityTools({
+      requestContext: context(),
+      provider: provider([dummySource({ logs: true, crashes: false }, calls)]),
+      now: () => now,
+    });
+    await (tools.observability_query_logs as Runnable).execute({ httpStatusAtLeast: 500 }, {});
+    expect(calls[0]).toMatchObject({ httpStatusAtLeast: 500 });
+  });
+
+  describe('observability_log_groups', () => {
+    /** A source with `total` WARNING entries, `perPage` a page, two kinds of message. */
+    function pagedSource(total: number, calls: any[]): ObservabilitySource {
+      const all = Array.from({ length: total }, (_, index) => ({
+        timestamp: new Date(now.getTime() - index * 60_000).toISOString(),
+        severity: 'WARNING' as const,
+        resourceType: null,
+        service: index % 3 === 0 ? 'webhook' : 'aiagenttask',
+        message: index % 3 === 0 ? `RetryLater chat ${index}` : `timeout after ${index} s`,
+      }));
+      return {
+        ...dummySource({ logs: true, crashes: false }),
+        queryLogs: async input => {
+          calls.push(input);
+          const start = input.pageToken ? Number(input.pageToken) : 0;
+          const end = Math.min(all.length, start + input.limit);
+          return { entries: all.slice(start, end), nextPageToken: end < all.length ? String(end) : null };
+        },
+      };
+    }
+
+    const run = async (source: ObservabilitySource, input: unknown) => {
+      const tools = await createObservabilityTools({ requestContext: context(), provider: provider([source]), now: () => now });
+      return (tools.observability_log_groups as Runnable).execute(input, {});
+    };
+
+    it('pages through every entry and returns counts and groups instead of lines', async () => {
+      const calls: any[] = [];
+      const result = await run(pagedSource(250, calls), { severityAtLeast: 'WARNING', httpStatusAtLeast: 500 });
+      expect(calls.map(call => call.limit)).toEqual([100, 100, 100]);
+      expect(calls[0]).toMatchObject({ severityAtLeast: 'WARNING', httpStatusAtLeast: 500, from: new Date(now.getTime() - 24 * 3_600_000), to: now });
+      expect(result).toMatchObject({ project: 'syncta-prod', read: 250, complete: true, bySeverity: { WARNING: 250 } });
+      expect(result.byService).toEqual({ webhook: 84, aiagenttask: 166 });
+      expect(result.groups.map((group: any) => [group.pattern, group.count])).toEqual([
+        ['timeout after <n> s', 166],
+        ['RetryLater chat <n>', 84],
+      ]);
+      expect(result.entries).toBeUndefined();
+      expect(result.note).toMatch(/untrusted/);
+    });
+
+    it('stops at maxEntries and says the count is incomplete', async () => {
+      const calls: any[] = [];
+      const result = await run(pagedSource(250, calls), { maxEntries: 120, top: 1 });
+      expect(calls.map(call => call.limit)).toEqual([100, 20]);
+      expect(result).toMatchObject({ read: 120, complete: false, groupsTotal: 2 });
+      expect(result.groups).toHaveLength(1);
+    });
+
+    it('stops after a bounded number of pages when the provider keeps returning empty ones', async () => {
+      let page = 0;
+      const sparse: ObservabilitySource = {
+        ...dummySource({ logs: true, crashes: false }),
+        queryLogs: async () => ({ entries: [], nextPageToken: String((page += 1)) }),
+      };
+      expect(await run(sparse, {})).toMatchObject({ read: 0, complete: false });
+      expect(page).toBe(100);
+    });
+
+    it('refuses a provider that loops on one page token', async () => {
+      const looping: ObservabilitySource = {
+        ...dummySource({ logs: true, crashes: false }),
+        queryLogs: async () => ({ entries: [], nextPageToken: 'same' }),
+      };
+      expect((await run(looping, {})).error).toMatch(/same page token/);
+    });
   });
 
   it('returns a provider refusal with the role to grant instead of failing the turn', async () => {

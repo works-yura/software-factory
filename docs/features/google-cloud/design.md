@@ -19,22 +19,23 @@
 | --- | --- | --- |
 | Порт | `packages/capabilities/src/observability.ts` | `ObservabilityProvider.sourcesFor({orgId, factoryProjectId})` → джерело на кожну прив'язку; у джерела `target { ref, name }`, `features`, `apps`; типи результатів, `OBSERVABILITY_LIMITS`, помилки |
 | Контракт | `packages/capabilities/src/observability-contract.ts` | `describeObservabilitySourceContract`: ціль, ліміти, сортування, вікно, маскування, непідтримувані функції |
-| Інструменти | `packages/integrations/src/observability-tools.ts` | `createObservabilityTools`: три інструменти над усіма джерелами Factory; `pickObservabilitySource` за `project`; позначка «недовірені дані»; відмови провайдера з роллю |
+| Інструменти | `packages/integrations/src/observability-tools.ts`, `log-groups.ts` | `createObservabilityTools`: чотири інструменти над усіма джерелами Factory; `pickObservabilitySource` за `project`; позначка «недовірені дані»; відмови провайдера з роллю |
 | Адаптер | `packages/integration-firebase/src/*` | `settings.ts` (акаунти, прив'язки, перехід зі старої форми), `service-account.ts` (`google-auth-library`), `logging.ts`, `crashlytics.ts`, `redact.ts`, `routes.ts`, `FirebaseIntegration` |
 | Підключення | `apps/server/src/mastra/index.ts` | `new FirebaseIntegration()` у списку інтеграцій; змінних середовища немає |
-| Дозволи | `packages/harness-mastra/src/tools/permissions.ts` | три інструменти в `FACTORY_TOOLS_WITHOUT_APPROVAL`; у Claude Code сервер `factory` довірений |
+| Дозволи | `packages/harness-mastra/src/tools/permissions.ts` | чотири інструменти в `FACTORY_TOOLS_WITHOUT_APPROVAL`; у Claude Code сервер `factory` довірений |
 
 ## Інструменти агента
 
 | Інструмент | Вхід | Типово |
 | --- | --- | --- |
-| `observability_query_logs` | `project`, `from`, `to` (ISO), `severityAtLeast`, `service`, `text`, `limit`, `pageToken` | останні 24 год, 50 записів, нові спершу |
+| `observability_query_logs` | `project`, `from`, `to` (ISO), `severityAtLeast`, `service`, `text`, `httpStatusAtLeast`, `limit`, `pageToken` | останні 24 год, 50 записів, нові спершу |
+| `observability_log_groups` | ті самі фільтри, `maxEntries` (до 5000), `top` (до 100) | гортає всі сторінки сам; повертає `read`, `complete`, `bySeverity`, `byService` і групи (сервіс + повідомлення без id і чисел: кількість, перший і останній час, зразок), а не рядки |
 | `observability_crash_issues` | `project`, `appId`, `from`, `to`, `version`, `limit` | останні 7 днів, 10 проблем, за кількістю подій |
 | `observability_crash_issue` | `project`, `issueId`, `appId` (коли застосунків кілька), `from`, `to`, `eventsLimit` | 3 події: винний кадр і стек, хлібні крихти, custom keys |
 
 `project` — ID проєкту Google Cloud або `ref` прив'язки; необов'язковий, коли проєкт з цією функцією один, обов'язковий, коли їх кілька (відмова перелічує варіанти). Опис інструмента перелічує проєкти й застосунки; кожен результат має поле `project`.
 
-Ліміти: до 100 записів логів, 50 проблем, 10 подій, 15 кадрів, 20 рядків логу події, 2000 символів повідомлення, вікно до 31 дня (Crashlytics — до 90 днів назад).
+Ліміти: до 100 записів логів (у групуванні — до 5000 за виклик, 100 груп), 50 проблем, 10 подій, 15 кадрів, 20 рядків логу події, 2000 символів повідомлення, вікно до 31 дня (Crashlytics — до 90 днів назад).
 
 ## Дані й безпека
 

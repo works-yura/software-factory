@@ -31,6 +31,7 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_list_attachments',
   // Read-only production logs and crashes, offered only when the Factory has a connected source.
   'observability_query_logs',
+  'observability_log_groups',
   'observability_crash_issues',
   'observability_crash_issue',
   // Device preview, offered only on a server that drives this machine's simulators; the person turns

@@ -125,4 +125,11 @@ describe('buildLogFilter', () => {
   it('refuses a service name the filter language would read as syntax', () => {
     expect(() => buildLogFilter({ ...window, service: 'api" OR "x', limit: 1 })).toThrow(/service/);
   });
+
+  it('narrows to request entries at or above an HTTP status, and refuses anything that is not one', () => {
+    expect(buildLogFilter({ ...window, httpStatusAtLeast: 500, limit: 1 })).toContain('httpRequest.status>=500');
+    for (const status of [99, 600, 500.5, Number.NaN]) {
+      expect(() => buildLogFilter({ ...window, httpStatusAtLeast: status, limit: 1 })).toThrow(/httpStatusAtLeast/);
+    }
+  });
 });

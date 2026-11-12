@@ -1859,6 +1859,7 @@ describe('MastraFactory.prepare', () => {
             ...ALLOWED_TOOLS,
             'factory_list_attachments',
             'observability_query_logs',
+            'observability_log_groups',
             'observability_crash_issues',
             'observability_crash_issue',
             'device_list',

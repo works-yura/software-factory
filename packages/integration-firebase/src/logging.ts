@@ -51,6 +51,13 @@ export function buildLogFilter(input: QueryLogsInput): string {
     // A bare string literal is a global restriction: it matches the text in any field.
     parts.push(literal(text));
   }
+  if (input.httpStatusAtLeast !== undefined) {
+    const status = input.httpStatusAtLeast;
+    if (!Number.isInteger(status) || status < 100 || status > 599) {
+      throw new ObservabilityQueryError('httpStatusAtLeast must be an HTTP status, 100–599.');
+    }
+    parts.push(`httpRequest.status>=${status}`);
+  }
   return parts.join(' AND ');
 }
 

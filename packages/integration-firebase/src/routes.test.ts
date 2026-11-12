@@ -278,7 +278,12 @@ describe('FirebaseIntegration agent tools', () => {
 
     await json('POST', '/web/firebase/bindings', binding(synctaAccount));
     const tools = await integration.agentTools({ requestContext: sessionContext('factory-1') });
-    expect(Object.keys(tools).sort()).toEqual(['observability_crash_issue', 'observability_crash_issues', 'observability_query_logs']);
+    expect(Object.keys(tools).sort()).toEqual([
+      'observability_crash_issue',
+      'observability_crash_issues',
+      'observability_log_groups',
+      'observability_query_logs',
+    ]);
     expect(await integration.agentTools({ requestContext: sessionContext('factory-2') })).toEqual({});
 
     const result = await (tools.observability_query_logs as Runnable).execute({ limit: 3 }, {});

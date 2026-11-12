@@ -39,6 +39,10 @@ export const OBSERVABILITY_LIMITS = {
   maxEventLogs: 20,
   /** Widest time window one query may span, in days. */
   maxWindowDays: 31,
+  /** Log entries one grouped read pages through before it stops and says it is incomplete. */
+  maxGroupedLogEntries: 5000,
+  /** Groups one grouped read returns, largest first. */
+  maxLogGroups: 100,
 } as const;
 
 /** Which Factory a read is for: its sources answer only for the provider projects bound to it. */
@@ -69,6 +73,8 @@ export interface QueryLogsInput {
   service?: string;
   /** Free text the entry must contain. */
   text?: string;
+  /** Only request entries whose HTTP status is at least this (500 for server errors). */
+  httpStatusAtLeast?: number;
   limit: number;
   pageToken?: string;
 }
