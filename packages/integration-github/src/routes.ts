@@ -21,6 +21,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '@factory/http';
+import { deleteLiveSession } from '@factory/integrations';
 import { canReadSessionResource, canViewSourceControlSession } from '@factory/session';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@factory/core';
 import { requireExec } from '@factory/sandbox';
@@ -1482,7 +1483,8 @@ function buildProjectGitRoutes({
               error,
             });
           });
-          await controller?.deleteSession({ sessionId: session.sessionId });
+          // The harness that runs it tears it down: a Claude Code or Codex session is not the controller's.
+          if (controller) await deleteLiveSession(controller, session.sessionId);
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {
             sessionId: session.sessionId,

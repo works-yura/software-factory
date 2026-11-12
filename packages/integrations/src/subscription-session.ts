@@ -101,6 +101,21 @@ export async function abortSessionRun(controller: LiveSessionController, session
 }
 
 /**
+ * Tears a session down on whichever harness runs it, before its row is deleted: the session
+ * another harness holds under this id (Claude Code, Codex: its process stops and its record goes),
+ * else the controller's own. Every route that deletes a session goes through here, so none leaves
+ * a turn-harness session running or findable.
+ */
+export async function deleteLiveSession(
+  controller: { deleteSession(input: { sessionId: string }): Promise<unknown> },
+  sessionId: string,
+): Promise<void> {
+  const external = await externalSessionFor(controller, sessionId);
+  if (external?.deleteSession) await external.deleteSession();
+  else await controller.deleteSession({ sessionId });
+}
+
+/**
  * Bring the session that owns a subscribed thread online so a provider event
  * can be delivered to it. Provider-neutral: GitHub and GitLab subscriptions
  * carry the same session binding and differ only in their target data.

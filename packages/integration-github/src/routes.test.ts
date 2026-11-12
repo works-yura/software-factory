@@ -5,6 +5,7 @@ import type { ListIntakeIssuesInput } from '@factory/capabilities';
 import type { CreatePullRequestInput, ListPullRequestsInput } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
 import { mountApiRoutes } from '@factory/http/testing';
+import { routeExternalSessions } from '@factory/integrations';
 
 import { SessionRetirementCoordinator } from '@factory/sandbox';
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';
@@ -2481,6 +2482,23 @@ describe('Factory session routes', () => {
 
     expect(response.status).toBe(404);
     expect(controller.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('tears a Claude Code or Codex session down through the harness that runs it, not the controller', async () => {
+    seedMaterializedProject();
+    const controller = { deleteSession: vi.fn(async () => true) } as any;
+    const harnessDelete = vi.fn(async () => {});
+    const app = buildApp({ id: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    routeExternalSessions(controller, async id => (id === sessionId ? { sendNotificationSignal: vi.fn(), deleteSession: harnessDelete } : undefined));
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(harnessDelete).toHaveBeenCalledTimes(1);
+    expect(controller.deleteSession).not.toHaveBeenCalled();
+    expect(tables.sessions).toHaveLength(0);
   });
 
   it('names a session from its conversation and mirrors the title onto the row', async () => {
