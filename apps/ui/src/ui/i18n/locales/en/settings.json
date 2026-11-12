@@ -938,7 +938,23 @@
     "noClock": "No clock",
     "paused": "Off",
     "lastRun": "Last: {{outcome}}, {{at}}",
-    "whenSchedule": "{{schedule}}"
+    "whenSchedule": "{{schedule}}",
+    "manual": "by hand",
+    "run": {
+      "runNow": "Run now",
+      "runNowFor": "Run “{{name}}” now",
+      "saveAndRun": "Save and run",
+      "done": "“{{name}}”: card created",
+      "doneFiling": "“{{name}}” ran; its card is still landing on the board — see the route's history",
+      "skippedOpen": "“{{name}}”: skipped — the card from the last run is still open",
+      "skipped": "“{{name}}”: skipped — {{reason}}",
+      "failed": "“{{name}}”: failed — {{reason}}",
+      "openCard": "Open card",
+      "disabled": "The route is switched off — switch it on to run it.",
+      "notScheduled": "Only a route “On a schedule” can be run now.",
+      "adminOnly": "Only an organization admin can run routes.",
+      "requestFailed": "Couldn't run the route"
+    }
   },
   "workBoard": {
     "description": "How cards move through this board: when each phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only.",

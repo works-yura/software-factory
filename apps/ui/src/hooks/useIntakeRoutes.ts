@@ -159,3 +159,21 @@ export function useReorderIntakeRoutesMutation(factoryProjectId: string) {
     onError: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
   });
 }
+
+/**
+ * Fires a route «За розкладом» once, now, as its schedule would («Запустити зараз»): the answer is
+ * the fire — the card it filed, or why it was skipped or failed. Its history and the list follow.
+ */
+export function useFireIntakeRouteMutation(factoryProjectId: string) {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (routeId: string) =>
+      client.post<{ fire: IntakeRouteFireInfo }>(`${base(factoryProjectId)}/${encodeURIComponent(routeId)}/fire`, {}),
+    onSettled: (_data, _error, routeId) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRouteFires(factoryProjectId, routeId) }),
+      ]),
+  });
+}

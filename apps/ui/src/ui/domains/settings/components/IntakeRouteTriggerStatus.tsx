@@ -70,6 +70,7 @@ export function TriggerStatus({
             <li key={fire.id}>
               <Txt as="span" variant="caption" tone="muted">
                 {format.format(new Date(fire.firedAt))} · {outcome(fire.outcome)}
+                {fire.triggeredBy ? ` · ${t('intakeTriggers.manual')}` : ''}
                 {fire.reason ? ` · ${fire.reason}` : ''}
                 {fire.workItemId ? ` · ${t('intakeTriggers.openCard')}` : ''}
               </Txt>

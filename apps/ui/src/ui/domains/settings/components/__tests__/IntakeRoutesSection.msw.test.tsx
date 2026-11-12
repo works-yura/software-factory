@@ -2,6 +2,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -135,12 +136,21 @@ function useRouteHandlers(
   return written;
 }
 
+/** Where the page went: a card opened from a run's toast lands on its board with `?item=`. */
+function Location() {
+  const location = useLocation();
+  return <output aria-label="location">{`${location.pathname}${location.search}`}</output>;
+}
+
 function renderSection() {
   return renderWithProviders(
-    <>
-      <IntakeRoutesSection factoryProjectId={PROJECT} factoryName="Acme" />
+    <MemoryRouter initialEntries={['/settings']}>
+      <Routes>
+        <Route path="*" element={<IntakeRoutesSection factoryProjectId={PROJECT} factoryName="Acme" />} />
+      </Routes>
+      <Location />
       <Toaster />
-    </>,
+    </MemoryRouter>,
   );
 }
 
@@ -562,5 +572,165 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
     const history = await within(schedule!).findByRole('list', { name: 'Fire history of “Security audit”' });
     expect(await within(history).findByText(/The last card is still open/)).toBeTruthy();
     expect(within(history).getAllByRole('listitem')).toHaveLength(2);
+  });
+});
+
+describe('IntakeRoutesSection — running a route «За розкладом» now', () => {
+  const ROUTE_ID = '00000000-0000-4000-8000-000000000041';
+  const scheduleRoute = (overrides: Partial<IntakeRouteInfo> = {}) =>
+    route({
+      id: ROUTE_ID,
+      name: 'Security audit',
+      on: [],
+      target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
+      triggered: {
+        trigger: { kind: 'schedule', config: { spec: { preset: 'daily', time: '09:00' }, timezone: 'UTC' }, summary: 'Daily at 09:00 (UTC)' },
+        action: { kind: 'create-card', config: { titleTemplate: 'Audit {date}', description: '', repository: null }, summary: 'Card' },
+        policy: { kind: 'skip-if-open', summary: 'Skip while the last card is open' },
+        nextFires: [],
+        lastFire: null,
+      },
+      ...overrides,
+    });
+  const fireOf = (overrides: Record<string, unknown>) => ({
+    id: 'fire-1',
+    firedAt: '2026-11-18T13:05:00.000Z',
+    triggerKind: 'schedule',
+    outcome: 'done',
+    workItemId: 'card-7',
+    reason: null,
+    triggeredBy: 'admin',
+    ...overrides,
+  });
+  /** The fire endpoint; returns the route ids it was asked to fire, in order. */
+  const useFireHandler = (respond: () => Response) => {
+    const fired: string[] = [];
+    server.use(
+      http.post(`${ROUTES_URL}/:routeId/fire`, ({ params }) => {
+        fired.push(String(params.routeId));
+        return respond();
+      }),
+    );
+    return fired;
+  };
+  const kindsHandlers = () =>
+    server.use(
+      http.get(`${ROUTES_URL}/kinds`, () =>
+        HttpResponse.json({
+          triggers: [{ kind: 'schedule', label: 'On a schedule (repeats)' }],
+          actions: [{ kind: 'create-card', label: 'Create a card' }],
+          policies: [{ kind: 'skip-if-open', label: 'Skip while the last card is open' }],
+          placeholders: ['{date}', '{time}', '{route}'],
+        }),
+      ),
+      http.post(`${ROUTES_URL}/preview`, () => HttpResponse.json({ summary: 'Daily at 09:00 (UTC)', nextFires: [], problems: [] })),
+    );
+
+  it('runs a scheduled route from its row and opens the card it filed from the toast; the history marks it as by hand', async () => {
+    const user = userEvent.setup();
+    useRouteHandlers([scheduleRoute()]);
+    const fired = useFireHandler(() => HttpResponse.json({ fire: fireOf({}) }));
+    server.use(http.get(`${ROUTES_URL}/:routeId/fires`, () => HttpResponse.json({ fires: [fireOf({})] })));
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Run “Security audit” now' }));
+    expect(await screen.findByText('“Security audit”: card created')).toBeTruthy();
+    expect(fired).toEqual([ROUTE_ID]);
+    await user.click(screen.getByRole('button', { name: 'Open card' }));
+    expect(screen.getByRole('status', { name: 'location' }).textContent).toBe(`/factories/${PROJECT}/work?item=card-7`);
+
+    await user.click(within(routeRows()[0]!).getByRole('button', { name: 'History' }));
+    const history = await screen.findByRole('list', { name: 'Fire history of “Security audit”' });
+    expect(await within(history).findByText(/done · by hand/)).toBeTruthy();
+  });
+
+  it('says a run was skipped because the last card is still open, with a link to it', async () => {
+    const user = userEvent.setup();
+    useRouteHandlers([scheduleRoute()]);
+    useFireHandler(() =>
+      HttpResponse.json({ fire: fireOf({ outcome: 'skipped', workItemId: 'card-3', reason: 'The card from the last fire («Audit») is still open.' }) }),
+    );
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Run “Security audit” now' }));
+    expect(await screen.findByText('“Security audit”: skipped — the card from the last run is still open')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Open card' }));
+    expect(screen.getByRole('status', { name: 'location' }).textContent).toBe(`/factories/${PROJECT}/work?item=card-3`);
+  });
+
+  it('shows why a run failed or was refused', async () => {
+    const user = userEvent.setup();
+    useRouteHandlers([scheduleRoute()]);
+    let answer: () => Response = () =>
+      HttpResponse.json({ fire: fireOf({ outcome: 'failed', workItemId: null, reason: 'Board "gone" is not installed.' }) });
+    useFireHandler(() => answer());
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Run “Security audit” now' }));
+    expect(await screen.findByText('“Security audit”: failed — Board "gone" is not installed.')).toBeTruthy();
+    answer = () =>
+      HttpResponse.json({ error: 'intake_route_disabled', message: 'The route is switched off; switch it on to run it.' }, { status: 409 });
+    await user.click(screen.getByRole('button', { name: 'Run “Security audit” now' }));
+    expect(await screen.findByText('The route is switched off — switch it on to run it.')).toBeTruthy();
+  });
+
+  it('offers no run to someone who is not an organization admin, and none on a route that waits for arriving cards', async () => {
+    useRouteHandlers([scheduleRoute(), outsideAuthors], { canEdit: false });
+    renderSection();
+    await waitFor(() => expect(routeRows()).toHaveLength(2));
+    expect(screen.queryByRole('button', { name: /now$/ })).toBeNull();
+  });
+
+  it('«Save and run» saves a new route «За розкладом», then runs it once', async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([]);
+    kindsHandlers();
+    const fired = useFireHandler(() => HttpResponse.json({ fire: fireOf({}) }));
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    const form = screen.getByRole('form', { name: 'New route' });
+    await user.type(within(form).getByRole('textbox', { name: 'Route name' }), 'Security audit');
+    // Only a route on a schedule can be run now.
+    expect(within(form).queryByRole('button', { name: 'Save and run' })).toBeNull();
+    await user.click(await within(form).findByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'On a schedule (repeats)' }));
+    await user.type(within(form).getByRole('textbox', { name: 'Card title' }), 'Audit {{date}');
+    await user.click(within(form).getByRole('combobox', { name: 'Route board' }));
+    await user.click(await screen.findByRole('option', { name: 'Development' }));
+    await user.click(within(form).getByRole('button', { name: 'Save and run' }));
+
+    expect(await screen.findByText('“Security audit”: card created')).toBeTruthy();
+    expect(written.created).toEqual([expect.objectContaining({ name: 'Security audit', triggered: expect.anything() })]);
+    // The route the save answered with is the one run.
+    expect(fired).toEqual(['00000000-0000-4000-8000-000000000009']);
+  });
+
+  it('«Save and run» on an existing route saves the edit first, and a refused save runs nothing', async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([scheduleRoute()]);
+    kindsHandlers();
+    const fired = useFireHandler(() => HttpResponse.json({ fire: fireOf({}) }));
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const form = screen.getByRole('form', { name: /Edit/ });
+    const name = within(form).getByRole('textbox', { name: 'Route name' });
+    await user.clear(name);
+    await user.type(name, 'Weekly audit');
+    await user.click(within(form).getByRole('button', { name: 'Save and run' }));
+    expect(await screen.findByText('“Weekly audit”: card created')).toBeTruthy();
+    expect(written.patched).toEqual([expect.objectContaining({ id: ROUTE_ID, name: 'Weekly audit' })]);
+    expect(fired).toEqual([ROUTE_ID]);
+
+    server.use(
+      http.patch(`${ROUTES_URL}/:routeId`, () =>
+        HttpResponse.json({ error: 'stale_intake_route', message: 'The route changed.' }, { status: 409 }),
+      ),
+    );
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    await user.click(within(screen.getByRole('form', { name: /Edit/ })).getByRole('button', { name: 'Save and run' }));
+    await waitFor(() => expect(screen.getAllByText(/stale_intake_route|Couldn't save the route/).length).toBeGreaterThan(0));
+    expect(fired).toEqual([ROUTE_ID]);
   });
 });

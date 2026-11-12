@@ -73,6 +73,7 @@ export function RouteEditor({
   triggerContext,
   busy,
   onSave,
+  onSaveAndRun,
   onCancel,
 }: {
   initial?: IntakeRouteInfo;
@@ -83,6 +84,8 @@ export function RouteEditor({
   triggerContext: IntakeKindFormContext;
   busy: boolean;
   onSave: (draft: IntakeRouteDraft) => void;
+  /** «Зберегти й запустити» on a route «За розкладом»: save it, then fire it once now. */
+  onSaveAndRun?: (draft: IntakeRouteDraft) => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation('settings');
@@ -147,19 +150,18 @@ export function RouteEditor({
       return model.source.events.filter(value => next.includes(value));
     });
 
-  const save = () => {
+  const draft = (): IntakeRouteDraft => {
     if (scheduled) {
-      onSave({
+      return {
         name: name.trim(),
         enabled: initial?.enabled ?? true,
         when: null,
         target: { boardKey: boardKey!, phaseKey },
         triggered: triggeredDraft!,
-      });
-      return;
+      };
     }
     const closes = events.includes('work_item.closed');
-    onSave({
+    return {
       name: name.trim(),
       enabled: initial?.enabled ?? true,
       // Unchanged events are sent as stored, so saving an untouched route leaves it as it was.
@@ -167,8 +169,9 @@ export function RouteEditor({
       when: custom ? initial!.when : writeRouteWhen(closes ? model : { ...model, closeReason: null }),
       // The server replaces a route's target whole, so a joining route stays a joining one.
       target: { boardKey: boardKey!, phaseKey, joinClosedIssue: initial?.target.joinClosedIssue ?? false },
-    });
+    };
   };
+  const save = () => onSave(draft());
   const ready =
     name.trim() &&
     boardKey &&
@@ -380,6 +383,11 @@ export function RouteEditor({
         <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
           {t('intakeRoutes.cancel')}
         </Button>
+        {scheduled && onSaveAndRun && (
+          <Button type="button" size="sm" variant="ghost" disabled={busy || !ready} onClick={() => onSaveAndRun(draft())}>
+            {t('intakeTriggers.run.saveAndRun')}
+          </Button>
+        )}
         <Button type="submit" size="sm" variant="primary" disabled={busy || !ready}>
           {t('intakeRoutes.save')}
         </Button>
