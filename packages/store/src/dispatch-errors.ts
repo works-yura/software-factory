@@ -35,6 +35,9 @@ const FAILURE_METADATA = {
   run_credentials_unavailable: { canRetry: true, label: 'Model credentials unavailable for the run' },
   // The run's request carries no user, so every retry fails the same way; a person has to start it.
   run_user_unauthenticated: { canRetry: false, label: 'Run started without an authenticated user' },
+  // The run's harness cannot start on this server (its CLI is not installed or not executable): every
+  // retry fails the same way until someone installs it, so the run fails once and a person retries it.
+  harness_not_configured: { canRetry: true, needsPerson: true, label: 'Agent CLI is not installed on the server' },
   // Every model account the run may use is out of usage: the run waits for the reset on its own,
   // and fails with this only once it has waited too long.
   run_usage_limited: { canRetry: true, label: 'Model usage limit reached' },

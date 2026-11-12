@@ -7,6 +7,7 @@ import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/to
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { HarnessExecutableUnavailableError } from '@factory/harness/executable';
 import { createBoardRegistry, defineBoard, toBoardSource } from '@factory/core';
 import { requeueUsageLimitedDecisions } from './usage-limit-sweep.ts';
 import { createTestBoard } from '@factory/core/testing';
@@ -7560,6 +7561,79 @@ describe('a skill run that ends in error (#27740)', () => {
     });
     const provider = new DecisionAttentionProvider({ workItems: storage, boards: createPipelines() }, failedDecisionAttentionSpec);
     expect(await provider.counts({ orgId: 'org-1', userId: 'user-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
+  });
+
+  describe('whose harness cannot start on this server', () => {
+    const spawnEnoent = () => Object.assign(new Error('spawn claude ENOENT'), { code: 'ENOENT', syscall: 'spawn claude', path: 'claude' });
+
+    async function dispatchWith(controller: unknown, idempotencyKey: string) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey,
+      });
+      await bindWorkRun(storage, item.id);
+      const dispatcher = new FactoryDecisionDispatcher({
+        harness: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        boards: autoStartingBoards(),
+        staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+      });
+      const start = Date.parse('2030-01-01T00:00:00Z');
+      await dispatcher.runOnce(new Date(start));
+      // Later ticks must not pick it up again: every retry would fail the same way until someone installs the CLI.
+      await dispatcher.runOnce(new Date(start + 2 * 60 * 60_000));
+      await dispatcher.runOnce(new Date(start + 4 * 60 * 60_000));
+      return { storage, start };
+    }
+
+    it('fails a run whose CLI is missing once, as not configured, and lets a person retry it once installed', async () => {
+      // As the Claude Code harness reports it: its own error, the spawn failure kept as the cause.
+      const runError = Object.assign(new Error('Unable to start Claude Code: spawn claude ENOENT'), { kind: 'process', cause: spawnEnoent() });
+      const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
+      const { storage, start } = await dispatchWith(controller, 'skill-cli-missing');
+
+      const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(decisions).toHaveLength(1);
+      expect(decisions[0]).toMatchObject({
+        status: 'failed',
+        attempts: 1,
+        failureCode: 'harness_not_configured',
+        lastError: expect.stringContaining('Unable to start Claude Code: spawn claude ENOENT'),
+      });
+      const provider = new DecisionAttentionProvider({ workItems: storage, boards: createPipelines() }, failedDecisionAttentionSpec);
+      expect(await provider.counts({ orgId: 'org-1', userId: 'user-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
+      expect(await storage.retryDeferredDecision('org-1', PROJECT_ID, decisions[0]!.id, new Date(start + 24 * 60 * 60_000))).toMatchObject({
+        status: 'retry',
+      });
+    });
+
+    it('files a send the harness refused for a missing CLI the same way', async () => {
+      const refused = Promise.reject(
+        new HarnessExecutableUnavailableError({ harness: 'Codex', executable: 'codex', message: 'Codex is not installed on this server.' }),
+      );
+      refused.catch(() => {});
+      const { controller } = createSession(undefined, { signalAccepted: refused as never });
+      const { storage } = await dispatchWith(controller, 'skill-cli-refused');
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        attempts: 1,
+        failureCode: 'harness_not_configured',
+        lastError: expect.stringContaining('Codex is not installed on this server.'),
+      });
+    });
+
+    it('keeps retrying a run that failed for any other reason', async () => {
+      const { controller } = createSession(undefined, { agentEndReason: 'error', runError: new Error('spawn claude ENOENT') });
+      const { storage } = await dispatchWith(controller, 'skill-words-only');
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ failureCode: 'run_failed' });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]!.status).not.toBe('failed');
+    });
   });
 
   it('stops at once when only a person can choose the card’s repository, and lets them retry after', async () => {

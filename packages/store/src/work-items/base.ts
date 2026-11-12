@@ -238,6 +238,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'run_configuration_invalid',
   'run_credentials_unavailable',
   'run_user_unauthenticated',
+  'harness_not_configured',
   'run_usage_limited',
   'run_failed',
   'unknown',

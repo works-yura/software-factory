@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentNotificationResult, AgentRunContext, AgentSession } from '@factory/harness';
+import { isHarnessExecutableUnavailable } from '@factory/harness/executable';
 
 import {
   autoApprovedExitTool,
@@ -174,6 +175,8 @@ function causeOf(error: unknown): unknown {
 }
 
 function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
+  // The harness's CLI is not on this server: the same run fails the same way until someone installs it.
+  if (isHarnessExecutableUnavailable(error)) return 'harness_not_configured';
   const lower = message.toLowerCase();
   if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
     return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
@@ -190,7 +193,17 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
     return new RunUsageLimited(cause ? `${label} ended in error: ${cause}` : `${label} hit a model usage limit.`, limit);
   }
   if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
-  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
+  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`, { cause: error });
+}
+
+/**
+ * The code a dispatch failure is filed under. A harness that cannot start on this server fails the
+ * same way however it surfaced (a run's error event, or a send the harness refused before any run),
+ * so it is told apart by the error itself rather than by where it was caught.
+ */
+function dispatchFailureCode(error: unknown): FactoryDispatchFailureCode {
+  const code = factoryDispatchFailureCode(error);
+  return code === 'unknown' && isHarnessExecutableUnavailable(error) ? 'harness_not_configured' : code;
 }
 
 /** A run in the review seat: a pull request review, unless it is the card's board's self-review. */
@@ -1101,7 +1114,7 @@ export class FactoryDecisionDispatcher {
           return;
         }
       }
-      const failureCode = factoryDispatchFailureCode(error);
+      const failureCode = dispatchFailureCode(error);
       // A usage limit that reaches here has been waited on for too long.
       const terminal = error instanceof RunUsageLimited || isTerminalFailure(record.attempts, failureCode);
       const failed = await this.#storage.failDeferredDecision({
@@ -2792,7 +2805,7 @@ export class FactoryDecisionDispatcher {
         !(error instanceof FactoryDecisionSuperseded) &&
         !(await superseded?.())
       ) {
-        const failureCode = factoryDispatchFailureCode(error);
+        const failureCode = dispatchFailureCode(error);
         if (isTerminalFailure(attempts, failureCode)) {
           void reportRunEnd({
             orgId: binding.orgId,
@@ -2958,7 +2971,7 @@ export class FactoryDecisionDispatcher {
           return;
         }
       }
-      const failureCode = factoryDispatchFailureCode(error);
+      const failureCode = dispatchFailureCode(error);
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),

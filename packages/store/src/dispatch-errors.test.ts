@@ -15,6 +15,10 @@ describe('Factory dispatch failure policy', () => {
     expect(factoryDispatchFailureMetadata('run_awaiting_input').canRetry).toBe(false);
   });
 
+  it('stops at once for a harness that cannot start here, and lets a person retry once it is installed', () => {
+    expect(factoryDispatchFailureMetadata('harness_not_configured')).toMatchObject({ canRetry: true, needsPerson: true });
+  });
+
   it('offers Retry for repeatable transport and repository operations', () => {
     expect(factoryDispatchFailureMetadata('notification_delivery_failed').canRetry).toBe(true);
     expect(factoryDispatchFailureMetadata('repository_clone_failed').canRetry).toBe(true);
