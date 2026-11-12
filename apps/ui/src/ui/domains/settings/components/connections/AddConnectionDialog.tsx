@@ -62,9 +62,10 @@ function CatalogRow({ connector, onSelect }: { connector: ConnectorView; onSelec
 }
 
 /**
- * Step one, as Mastra's «Add connection to project»: the kit's command list with search and the
- * type filter on one line, then the connectors the server describes — «Інтеграції», and «Інше» for
- * MCP. Keyboard: arrows move, Enter picks.
+ * Step one, as Mastra's «Add connection to project»: the kit's command list with search, the type
+ * filter on its own line (four labels crowd the search), then the connectors the server describes — «Інтеграції», and «Інше» for
+ * MCP; section headings only under «Усі», where they tell sections apart. Keyboard: arrows move,
+ * Enter picks.
  */
 function PickStep({ connectors, onConnect }: { connectors: readonly ConnectorView[]; onConnect: (step: Step) => void }) {
   const { t } = useTranslation('settings');
@@ -77,7 +78,7 @@ function PickStep({ connectors, onConnect }: { connectors: readonly ConnectorVie
   const heading = (text: string) => <span className="text-column text-muted-foreground tracking-normal normal-case">{text}</span>;
   const group = (items: CatalogItem[], label: string) =>
     items.length > 0 && (
-      <CommandGroup heading={heading(label)} aria-label={label}>
+      <CommandGroup heading={filter === 'all' ? heading(label) : undefined} aria-label={label}>
         {items.map(item => (
           <CatalogRow key={item.id} connector={item.connector} onSelect={() => onConnect(`connector:${item.connector.id}`)} />
         ))}
@@ -96,18 +97,17 @@ function PickStep({ connectors, onConnect }: { connectors: readonly ConnectorVie
           placeholder={t('connections.addDialog.search')}
           value={query}
           onValueChange={setQuery}
-          wrapperClassName="max-sm:flex-wrap max-sm:pb-2 max-sm:[&>[data-slot=command-input-right-slot]]:ml-0"
-          className="max-sm:basis-[calc(100%-1.5rem)]"
-          rightSlot={
-            <SegmentedControl aria-label={t('connections.addDialog.filters.label')} size="sm" value={filter} onValueChange={setFilter}>
-              {FILTERS.map(option => (
-                <SegmentedControlItem key={option} value={option}>
-                  {t(`connections.addDialog.filters.${option}`)}
-                </SegmentedControlItem>
-              ))}
-            </SegmentedControl>
-          }
+          wrapperClassName="border-b-0"
         />
+        <div className="border-b border-border px-3 py-2">
+          <SegmentedControl aria-label={t('connections.addDialog.filters.label')} size="sm" value={filter} onValueChange={setFilter}>
+            {FILTERS.map(option => (
+              <SegmentedControlItem key={option} value={option}>
+                {t(`connections.addDialog.filters.${option}`)}
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
+        </div>
         <CommandList scrollArea scrollAreaClassName="h-[min(26rem,calc(100dvh-16rem))] max-sm:h-auto max-sm:flex-1" className="px-2 py-2">
           <CommandEmpty>{t('connections.addDialog.nothing')}</CommandEmpty>
           {group(agents, t('connections.addDialog.agents'))}
