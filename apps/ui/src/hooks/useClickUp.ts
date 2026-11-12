@@ -8,6 +8,8 @@ import {
   fetchClickUpLists,
   fetchClickUpListStatuses,
   fetchClickUpStatus,
+  fetchClickUpUsage,
+  renameClickUp,
 } from '../ui/domains/factory/services/clickup';
 
 export function useClickUpStatusQuery() {
@@ -53,5 +55,12 @@ export function useClickUpConnectionMutations() {
   return {
     connect: useMutation({ mutationFn: (token: string) => connectClickUp(baseUrl, token), onSuccess: settle }),
     disconnect: useMutation({ mutationFn: () => disconnectClickUp(baseUrl), onSuccess: settle }),
+    rename: useMutation({ mutationFn: (name: string | null) => renameClickUp(baseUrl, name), onSuccess: settle }),
   };
+}
+
+/** What removing the ClickUp token stops, asked for when the confirmation opens. */
+export function useClickUpUsageQuery(enabled: boolean) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({ queryKey: ['clickup', 'usage', baseUrl], queryFn: () => fetchClickUpUsage(baseUrl), enabled });
 }

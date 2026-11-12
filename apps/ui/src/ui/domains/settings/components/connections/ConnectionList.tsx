@@ -8,13 +8,23 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+import { useApiConfig } from '../../../../../api/config';
+import { queryKeys } from '../../../../../api/keys';
+import { useClickUpConnectionMutations, useClickUpUsageQuery } from '../../../../../hooks/useClickUp';
 import { useFactoriesQuery } from '../../../../../hooks/useFactories';
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
 import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
 import { connectionHealth } from '../../connections/connections';
-import type { ConnectionRow, ConnectionSources } from '../../connections/connections';
+import { GITHUB_TOKEN_ITEM } from '../../connections/connections';
+import type { ConnectionRow, ConnectionSources, OrgActionBlock } from '../../connections/connections';
+
+/** A connect step «Перепідключити» opens: ClickUp's, GitLab's, Google Cloud's, or GitHub's token. */
+export type ReconnectStep = 'clickup' | 'gitlab' | 'google-cloud' | typeof GITHUB_TOKEN_ITEM;
 import type { FirebaseBinding, FirebaseBindingInput } from '../../services/firebase';
 import { serverToInput } from '../../services/mcpServers';
+import { disconnectGithubConnection, manageGithubConnection, renameGithubInstallation } from '../../../workspaces/services/github';
 import { RemoveAccountDialog } from '../GoogleCloudService';
 import { mcpErrorText } from '../mcp-servers/McpServerInspect';
 import { CapabilityDots, useConnectionDots } from './CapabilityDots';
@@ -35,6 +45,13 @@ export function useRenameConnection() {
   const { t } = useTranslation('settings');
   const mcp = useMcpServerMutations();
   const firebase = useFirebaseMutations();
+  const clickup = useClickUpConnectionMutations();
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const github = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => renameGithubInstallation(baseUrl, id, name),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
+  });
   const rename = (row: ConnectionRow, name: string, onDone?: () => void) => {
     const options = {
       onSuccess: () => {
@@ -45,8 +62,10 @@ export function useRenameConnection() {
     };
     if (row.rename === 'binding' && row.binding) firebase.saveBinding.mutate({ ...bindingInput(row.binding), name, id: row.binding.id }, options);
     else if (row.rename === 'server' && row.server) mcp.save.mutate({ ...serverToInput(row.server), label: name, id: row.server.id }, options);
+    else if (row.rename === 'clickup') clickup.rename.mutate(name, options);
+    else if (row.rename === 'github' && row.installationId) github.mutate({ id: row.installationId, name }, options);
   };
-  return { rename, pending: mcp.save.isPending || firebase.saveBinding.isPending };
+  return { rename, pending: mcp.save.isPending || firebase.saveBinding.isPending || clickup.rename.isPending || github.isPending };
 }
 
 /** A row's state, said only when something needs attention: a dot and a word. */
@@ -75,7 +94,146 @@ export function HealthBadge({ row }: { row: ConnectionRow }) {
   );
 }
 
-export type PendingAction = { kind: 'rename' | 'unlink' | 'delete' | 'delete-account'; row: ConnectionRow };
+export type PendingAction = { kind: 'rename' | 'unlink' | 'delete' | 'delete-account' | 'remove-org'; row: ConnectionRow };
+
+/** A menu item an organization connection cannot take here: shown, disabled, with the reason under it. */
+function BlockedItem({ label, reason, variant }: { label: string; reason: OrgActionBlock; variant?: 'destructive' }) {
+  const { t } = useTranslation('settings');
+  return (
+    <DropdownMenu.Item disabled {...(variant ? { variant } : {})} data-blocked={reason}>
+      <span className="flex flex-col gap-0.5">
+        <span>{label}</span>
+        <span className="text-meta text-muted-foreground whitespace-normal">{t(`connections.blocks.${reason}`)}</span>
+      </span>
+    </DropdownMenu.Item>
+  );
+}
+
+/**
+ * ClickUp, GitHub and GitLab belong to the organization: their menu renames, reconnects and removes
+ * the organization's connection. An action the credential's home decides elsewhere (the server's
+ * environment, GitHub, Mastra Platform) stays in the menu, disabled, saying where.
+ */
+function OrgRowActions({
+  row,
+  onOpen,
+  onPending,
+  onReconnect,
+}: {
+  row: ConnectionRow;
+  onOpen: () => void;
+  onPending: (pending: PendingAction) => void;
+  onReconnect: (step: ReconnectStep) => void;
+}) {
+  const { t } = useTranslation('settings');
+  const { baseUrl } = useApiConfig();
+  const actions = row.orgActions!;
+  // GitHub: the App is re-authorized on GitHub, a stored token is replaced in its token step.
+  const reconnect = () =>
+    row.kind === 'github'
+      ? row.githubAuth === 'token'
+        ? onReconnect(GITHUB_TOKEN_ITEM)
+        : manageGithubConnection(baseUrl)
+      : onReconnect(row.kind as ReconnectStep);
+  return (
+    <DropdownMenu.Content align="end" className="w-72">
+      <DropdownMenu.Item onSelect={onOpen}>{t('connections.actions.open')}</DropdownMenu.Item>
+      {actions.rename === true ? (
+        <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>{t('connections.actions.rename')}</DropdownMenu.Item>
+      ) : (
+        <BlockedItem label={t('connections.actions.rename')} reason={actions.rename} />
+      )}
+      {actions.reconnect === true ? (
+        <DropdownMenu.Item onSelect={reconnect}>{t('connections.actions.reconnect')}</DropdownMenu.Item>
+      ) : (
+        <BlockedItem label={t('connections.actions.reconnect')} reason={actions.reconnect} />
+      )}
+      <DropdownMenu.Separator />
+      {actions.remove === true ? (
+        <DropdownMenu.Item variant="destructive" onSelect={() => onPending({ kind: 'remove-org', row })}>
+          {t('connections.actions.deleteConnection')}
+        </DropdownMenu.Item>
+      ) : (
+        <BlockedItem label={t('connections.actions.deleteConnection')} reason={actions.remove} variant="destructive" />
+      )}
+    </DropdownMenu.Content>
+  );
+}
+
+/** «Видалити підключення» for ClickUp: the token goes for the whole organization; what stops is counted from the Factories' routes. */
+function RemoveOrgConnection({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
+  if (row.kind === 'github') return <RemoveGithubConnection row={row} onClose={onClose} />;
+  return <RemoveClickUp row={row} onClose={onClose} />;
+}
+
+/**
+ * «Видалити підключення» for one GitHub connection: the organization's App installation or token
+ * goes. While Factory projects still use its repositories the server refuses; the confirmation says
+ * so and waits.
+ */
+function RemoveGithubConnection({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
+  const { t } = useTranslation('settings');
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const remove = useMutation({
+    mutationFn: () => disconnectGithubConnection(baseUrl, row.installationId!),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() }),
+  });
+  const inUse = row.projectConnections ?? 0;
+  return (
+    <ConfirmDialog
+      title={t('connections.removeOrg.title', { name: row.title })}
+      body={inUse > 0 ? t('connections.removeOrg.githubInUse', { count: inUse }) : t('connections.removeOrg.githubBody')}
+      confirm={t('connections.removeOrg.confirm')}
+      cancel={t('connections.delete.cancel')}
+      pending={remove.isPending || inUse > 0}
+      onClose={onClose}
+      onConfirm={() =>
+        remove.mutate(undefined, {
+          onSuccess: () => {
+            toast.success(t('connections.removeOrg.done'));
+            onClose();
+          },
+          onError: error => toast.error(errorMessage(error)),
+        })
+      }
+    />
+  );
+}
+
+/** «Видалити підключення» for ClickUp: the token goes for the whole organization; what stops is counted from the Factories' routes. */
+function RemoveClickUp({ row, onClose }: { row: ConnectionRow; onClose: () => void }) {
+  const { t } = useTranslation('settings');
+  const usage = useClickUpUsageQuery(true);
+  const { disconnect } = useClickUpConnectionMutations();
+  const factories = usage.data?.factories ?? [];
+  const body = usage.isPending
+    ? t('connections.removeOrg.counting')
+    : usage.isError
+      ? t('connections.removeOrg.uncounted')
+      : factories.length
+        ? `${t('connections.removeOrg.stops')} ${factories.map(factory => t('connections.removeOrg.factoryLists', { factory: factory.name, count: factory.lists })).join('; ')}.`
+        : t('connections.removeOrg.nothing');
+  return (
+    <ConfirmDialog
+      title={t('connections.removeOrg.title', { name: row.title })}
+      body={`${t('connections.removeOrg.body')} ${body}`}
+      confirm={t('connections.removeOrg.confirm')}
+      cancel={t('connections.delete.cancel')}
+      pending={disconnect.isPending || usage.isPending}
+      onClose={onClose}
+      onConfirm={() =>
+        disconnect.mutate(undefined, {
+          onSuccess: () => {
+            toast.success(t('connections.removeOrg.done'));
+            onClose();
+          },
+          onError: error => toast.error(errorMessage(error)),
+        })
+      }
+    />
+  );
+}
 
 /**
  * The «⋯» menu: rename, reconnect, unlink from this Factory, and — after a separator — delete,
@@ -86,11 +244,13 @@ export function RowActions({
   canEditMcp,
   onOpen,
   onPending,
+  onReconnect,
 }: {
   row: ConnectionRow;
   canEditMcp: boolean;
   onOpen: () => void;
   onPending: (pending: PendingAction) => void;
+  onReconnect: (step: ReconnectStep) => void;
 }) {
   const { t } = useTranslation('settings');
   const { reconnect } = useMcpServerMutations();
@@ -110,6 +270,9 @@ export function RowActions({
       >
         <Ellipsis aria-hidden />
       </DropdownMenu.Trigger>
+      {row.orgActions ? (
+        <OrgRowActions row={row} onOpen={onOpen} onPending={onPending} onReconnect={onReconnect} />
+      ) : (
       <DropdownMenu.Content align="end" className="w-60">
         <DropdownMenu.Item onSelect={onOpen}>{t('connections.actions.open')}</DropdownMenu.Item>
         {row.rename && (row.rename === 'binding' || canEditMcp) && (
@@ -146,6 +309,7 @@ export function RowActions({
           </DropdownMenu.Item>
         )}
       </DropdownMenu.Content>
+      )}
     </DropdownMenu>
   );
 }
@@ -176,6 +340,7 @@ export function PendingDialog({
     onError: (error: unknown) => toast.error(errorMessage(error)),
   });
 
+  if (pending.kind === 'remove-org') return <RemoveOrgConnection row={row} onClose={onClose} />;
   if (pending.kind === 'rename') {
     return <RenameDialog name={row.title} pending={renaming} onClose={onClose} onSave={name => rename(row, name, onClose)} />;
   }
@@ -253,6 +418,7 @@ export function ConnectionList({
   canEditMcp,
   hrefOf,
   onOpen,
+  onReconnect,
 }: {
   rows: ConnectionRow[];
   factoryId: string;
@@ -260,6 +426,8 @@ export function ConnectionList({
   canEditMcp: boolean;
   hrefOf: (id: string) => string;
   onOpen: (id: string) => void;
+  /** «Перепідключити» ClickUp or GitLab: their connect step in «Додати підключення». */
+  onReconnect: (step: ReconnectStep) => void;
 }) {
   const { t } = useTranslation('settings');
   const dots = useConnectionDots();
@@ -291,7 +459,7 @@ export function ConnectionList({
                   <AttentionMark row={row} />
                 </span>
               </span>
-              <RowActions row={row} canEditMcp={canEditMcp} onOpen={() => onOpen(row.id)} onPending={setPending} />
+              <RowActions row={row} canEditMcp={canEditMcp} onOpen={() => onOpen(row.id)} onPending={setPending} onReconnect={onReconnect} />
             </li>
           ))}
         </ul>
@@ -336,7 +504,7 @@ export function ConnectionList({
                 </Table.Cell>
                 <Table.Cell>{row.createdAt ? <TimeAgo value={row.createdAt} /> : <span className="text-muted-foreground">—</span>}</Table.Cell>
                 <Table.Cell align="end">
-                  <RowActions row={row} canEditMcp={canEditMcp} onOpen={() => onOpen(row.id)} onPending={setPending} />
+                  <RowActions row={row} canEditMcp={canEditMcp} onOpen={() => onOpen(row.id)} onPending={setPending} onReconnect={onReconnect} />
                 </Table.Cell>
               </Table.Row>
             ))}

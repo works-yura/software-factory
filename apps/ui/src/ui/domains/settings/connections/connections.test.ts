@@ -28,6 +28,32 @@ describe('filterActivity', () => {
   });
 });
 
+describe('organization connections', () => {
+  it('give ClickUp, GitHub and GitLab rename, reconnect and delete where their credential lives, or say why not', () => {
+    const rows = factoryConnections('syncts', {
+      clickup: { configured: true, connected: true, workspaces: ['Eclipt'], intervalSeconds: 60, canManage: true, name: 'Eclipt', connectedAt: '2026-11-01T00:00:00.000Z', connectedBy: 'u1' },
+      github: {
+        enabled: true,
+        connected: true,
+        canManage: true,
+        installations: [
+          { id: 'row-1', installationId: 1, accountLogin: 'eclipt-ai', accountType: 'Organization', kind: 'app', name: null, createdAt: '2026-11-02T00:00:00.000Z', connectedBy: 'u2' },
+          { id: 'row-2', installationId: 2, accountLogin: 'yura', accountType: 'User', kind: 'token', tokenSource: 'stored', name: 'Personal', createdAt: '2026-11-03T00:00:00.000Z', connectedBy: 'u2' },
+        ],
+      } as never,
+      gitlab: { enabled: true, configured: true, mode: 'direct', reauthRequired: false },
+    });
+    expect(rows.map(row => [row.id, row.title, row.scope, row.orgActions])).toEqual([
+      ['clickup', 'Eclipt', 'organization', { rename: true, reconnect: true, remove: true }],
+      ['github:1', 'eclipt-ai', 'organization', { rename: true, reconnect: true, remove: true }],
+      ['github:2', 'Personal', 'organization', { rename: true, reconnect: true, remove: true }],
+      ['gitlab', 'GitLab', 'organization', { rename: 'env', reconnect: 'env', remove: 'env' }],
+    ]);
+    expect(rows[0]).toMatchObject({ createdAt: '2026-11-01T00:00:00.000Z', createdBy: 'u1' });
+    expect(rows[1]).toMatchObject({ installationId: 'row-1', createdBy: 'u2' });
+  });
+});
+
 describe('connectionHealth', () => {
   it('turns a row state into the header verdict', () => {
     const states: ConnectionState[] = ['ok', 'connected', 'env', 'configured', 'error', 'needs_auth', 'reads-nothing', 'unchecked', 'disabled'];
@@ -115,7 +141,7 @@ describe('factoryConnections', () => {
       ['google-cloud:b-2', 'google-cloud', 'factory'],
       ['mcp:srv-toolbox', 'google-cloud', 'factory'],
       ['clickup', 'clickup', 'organization'],
-      ['github', 'github', 'organization'],
+      ['github:4242', 'github', 'organization'],
       ['mcp:srv-sentry', 'mcp', 'factory'],
     ]);
   });
@@ -142,8 +168,8 @@ describe('factoryConnections', () => {
     expect(rows[4]).toMatchObject({ kind: 'github', state: 'env', account: { name: 'yura' } });
   });
 
-  it('lists GitHub with every connection of either kind, and flags one that needs attention', () => {
-    const [github] = factoryConnections('syncts', {
+  it('lists GitHub as one row per connection of either kind, and flags the one that needs attention', () => {
+    const rows = factoryConnections('syncts', {
       github: {
         enabled: true,
         connected: true,
@@ -153,7 +179,10 @@ describe('factoryConnections', () => {
         ],
       },
     });
-    expect(github).toMatchObject({ id: 'github', account: { name: 'eclipt, client' }, state: 'error' });
+    expect(rows.map(row => [row.id, row.account?.name, row.state, row.githubAuth])).toEqual([
+      ['github:1', 'eclipt', 'connected', 'app'],
+      ['github:2', 'client', 'error', 'token'],
+    ]);
   });
 });
 

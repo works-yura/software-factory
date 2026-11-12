@@ -56,7 +56,7 @@ function NameRow({ row }: { row: ConnectionRow }) {
   const next = name.trim();
   return (
     <SettingsRow label={t('connections.detail.name')}>
-      {row.rename ? (
+      {row.rename && (!row.orgActions || row.orgActions.rename === true) ? (
         <form
           className="flex w-full items-center justify-end gap-2"
           onSubmit={event => {
@@ -206,7 +206,12 @@ export function ConnectionDetail({
           rename: 'server',
         }
       : undefined);
-  const sourceKind = id === 'clickup' || id === 'github' || id === 'gitlab' ? id : undefined;
+  const sourceKind =
+    listed && (listed.kind === 'clickup' || listed.kind === 'github' || listed.kind === 'gitlab')
+      ? listed.kind
+      : id === 'clickup' || id === 'github' || id === 'gitlab'
+        ? id
+        : undefined;
 
   if (!row && sourceKind) {
     // An organization-wide source not connected yet (from its connect step or an old link): its own controls.

@@ -107,8 +107,26 @@ export interface ConnectionRow {
   /** When and by whom the connection was made, where the integration records it. */
   createdAt?: string;
   createdBy?: string;
-  /** What «Перейменувати» renames: the binding's own name, or the server's label; absent — not renamable. */
-  rename?: 'binding' | 'server';
+  /** What «Перейменувати» renames: the binding's own name, the server's label, or an organization connection's name. */
+  rename?: 'binding' | 'server' | 'clickup' | 'github';
+  /** The GitHub installation row a GitHub connection is (its rename and removal address). */
+  installationId?: string;
+  /** How a GitHub connection authenticates: the App, or a token. */
+  githubAuth?: 'app' | 'token';
+  /** GitHub: Factory project connections still using its repositories (removal waits for them). */
+  projectConnections?: number;
+  /** An organization connection's own actions, each either available or why not (shown, never hidden). */
+  orgActions?: OrgActions;
+}
+
+/** Why an organization connection's action cannot be taken here; the menu says it under the item. */
+export type OrgActionBlock = 'env' | 'admin' | 'platform';
+
+/** «Перейменувати», «Перепідключити», «Видалити підключення» for ClickUp, GitHub, GitLab: `true`, or the reason not. */
+export interface OrgActions {
+  rename: true | OrgActionBlock;
+  reconnect: true | OrgActionBlock;
+  remove: true | OrgActionBlock;
 }
 
 export interface ConnectionSources {
@@ -208,49 +226,84 @@ function mcpRows(factoryId: string, mcp: McpServersState, firebase: FirebaseStat
     });
 }
 
+/**
+ * The organization's ClickUp, GitHub and GitLab connections — the organization's, not a Factory's:
+ * every Factory sees them. ClickUp is the organization's token; GitHub one row per installation
+ * (the App on an account, or the server's token); GitLab the Mastra Platform connections, or the
+ * server's own token. What can be renamed, reconnected and removed follows where the credential
+ * lives: a token in the server's environment is changed there, a GitHub App installation on GitHub,
+ * a Platform connection on Mastra Platform.
+ */
 function sourceRows(sources: ConnectionSources): ConnectionRow[] {
   const rows: ConnectionRow[] = [];
   const { clickup, github, gitlab } = sources;
   if (clickup?.configured) {
+    const admin = clickup.canManage !== false || 'admin';
     rows.push({
       id: 'clickup',
       kind: 'clickup',
-      title: 'ClickUp',
+      title: clickup.name ?? 'ClickUp',
       mcp: false,
-      ...(clickup.workspaces.length ? { account: { name: clickup.workspaces.join(', ') } } : {}),
+      ...(clickup.account || clickup.workspaces.length
+        ? { account: { name: clickup.account?.username ?? clickup.workspaces.join(', '), ...(clickup.workspaces.length ? { detail: clickup.workspaces.join(', ') } : {}) } }
+        : {}),
       capabilities: [{ key: 'tasks' }],
       state: clickup.connected ? 'connected' : 'error',
       scope: 'organization',
+      rename: 'clickup',
+      ...(clickup.connectedAt ? { createdAt: clickup.connectedAt } : {}),
+      ...(clickup.connectedBy ? { createdBy: clickup.connectedBy } : {}),
+      orgActions: { rename: admin, reconnect: admin, remove: admin },
     });
   }
   const installations = github?.installations ?? [];
   if (github?.connected || installations.length > 0) {
-    const logins = installations.map(installation => installation.accountLogin).filter((login): login is string => Boolean(login));
-    // Each connection keeps its own kind (App or token); the row's state is the worst of them.
-    const fromEnvOnly = installations.length > 0 && installations.every(installation => installation.kind === 'token' && installation.tokenSource === 'env');
-    rows.push({
-      id: 'github',
-      kind: 'github',
-      title: 'GitHub',
-      mcp: false,
-      ...(logins.length ? { account: { name: logins.join(', ') } } : {}),
-      capabilities: [{ key: 'repositories' }, { key: 'tasks' }],
-      state: installations.some(installation => installation.needsAttention) ? 'error' : fromEnvOnly ? 'env' : 'connected',
-      scope: 'organization',
-    });
+    const admin = github?.canManage !== false || 'admin';
+    // One row per connection (an account): the App on it, or a token — stored by the organization,
+    // or the server's legacy GITHUB_ACCESS_TOKEN.
+    for (const installation of installations) {
+      const fromEnv = installation.kind === 'token' && installation.tokenSource === 'env';
+      rows.push({
+        id: `github:${installation.installationId}`,
+        kind: 'github',
+        title: installation.name ?? installation.accountLogin ?? 'GitHub',
+        mcp: false,
+        ...(installation.accountLogin ? { account: { name: installation.accountLogin, ...(installation.accountType ? { detail: installation.accountType } : {}) } } : {}),
+        capabilities: [{ key: 'repositories' }, { key: 'tasks' }],
+        state: installation.needsAttention ? 'error' : fromEnv ? 'env' : 'connected',
+        scope: 'organization',
+        githubAuth: installation.kind === 'token' ? 'token' : 'app',
+        ...(installation.projectConnections !== undefined ? { projectConnections: installation.projectConnections } : {}),
+        ...(installation.id ? { rename: 'github' as const, installationId: installation.id } : {}),
+        ...(installation.createdAt ? { createdAt: installation.createdAt } : {}),
+        ...(installation.connectedBy ? { createdBy: installation.connectedBy } : {}),
+        orgActions: {
+          rename: installation.id ? admin : 'env',
+          // The App is re-authorized on GitHub; a stored token is replaced in its connect step; the server's token in its environment.
+          reconnect: fromEnv ? 'env' : admin,
+          remove: fromEnv ? 'env' : installation.id ? admin : 'env',
+        },
+      });
+    }
   }
   if (gitlab?.configured) {
-    const labels = (gitlab.connections ?? []).map(connection => connection.accountLabel).filter((label): label is string => Boolean(label));
-    rows.push({
-      id: 'gitlab',
-      kind: 'gitlab',
-      title: 'GitLab',
-      mcp: false,
-      ...(labels.length ? { account: { name: labels.join(', ') } } : {}),
-      capabilities: [{ key: 'repositories' }, { key: 'tasks' }],
-      state: gitlab.mode === 'direct' ? 'env' : gitlab.reauthRequired ? 'needs_auth' : 'connected',
-      scope: 'organization',
-    });
+    const direct = gitlab.mode === 'direct';
+    const connections = gitlab.connections ?? [];
+    for (const connection of direct || !connections.length ? [undefined] : connections) {
+      rows.push({
+        id: connection ? `gitlab:${connection.id}` : 'gitlab',
+        kind: 'gitlab',
+        title: connection?.accountLabel ?? 'GitLab',
+        mcp: false,
+        ...(connection?.accountLabel ? { account: { name: connection.accountLabel } } : {}),
+        capabilities: [{ key: 'repositories' }, { key: 'tasks' }],
+        state: direct ? 'env' : connection?.status === 'needs_reauth' || gitlab.reauthRequired ? 'needs_auth' : 'connected',
+        scope: 'organization',
+        orgActions: direct
+          ? { rename: 'env', reconnect: 'env', remove: 'env' }
+          : { rename: 'platform', reconnect: true, remove: 'platform' },
+      });
+    }
   }
   return rows;
 }

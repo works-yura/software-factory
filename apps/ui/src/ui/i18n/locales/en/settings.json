@@ -1875,7 +1875,28 @@
     },
     "time": {
       "ago": "{{time}} ago"
-    }
+    },
+    "blocks": {
+      "env": "Set in the server environment — change the environment variables",
+      "admin": "Organization admins only",
+      "platform": "Managed on Mastra Platform"
+    },
+    "removeOrg": {
+      "title": "Delete the “{{name}}” connection?",
+      "body": "The token goes for the whole organization.",
+      "counting": "Counting what stops…",
+      "uncounted": "Could not count what stops.",
+      "stops": "This stops:",
+      "factoryLists_one": "“{{factory}}” — {{count}} ClickUp List in intake routes",
+      "factoryLists_other": "“{{factory}}” — {{count}} ClickUp Lists in intake routes",
+      "nothing": "No Factory of the organization reads ClickUp Lists now.",
+      "confirm": "Delete",
+      "done": "Connection deleted",
+      "githubBody": "The connection goes for the whole organization: Factories stop seeing its repositories. A token is deleted; the App stays installed on GitHub.",
+      "githubInUse_one": "{{count}} Factory project still uses its repositories — remove them in Repositories first.",
+      "githubInUse_other": "{{count}} Factory projects still use its repositories — remove them in Repositories first."
+    },
+    "organizationNote": "Connections belong to the organization: all its Factories see them. Google Cloud and MCP servers are also opened to each Factory separately."
   },
   "githubConnections": {
     "tokenTitle": "Connect GitHub with a token",

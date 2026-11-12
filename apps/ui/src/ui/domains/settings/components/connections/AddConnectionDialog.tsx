@@ -274,14 +274,18 @@ export function AddConnectionDialog({
   sources,
   onPick,
   onClose,
+  initialStep,
 }: {
   open: boolean;
   factoryId: string;
   sources: ConnectionSources;
   onPick: (target: ConnectionTarget) => void;
   onClose: () => void;
+  /** Open straight into one connect step («Перепідключити»): ClickUp, GitLab, Google Cloud, or GitHub's token. */
+  initialStep?: Step;
 }) {
-  const [step, setStep] = useState<Step>();
+  const [chosen, setStep] = useState<Step>();
+  const step = chosen ?? initialStep;
   const back = () => setStep(undefined);
   return (
     <Dialog

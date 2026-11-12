@@ -18,6 +18,11 @@ export interface ClickUpStatus {
   intervalSeconds: number;
   /** The caller may connect, replace or disconnect the token (an organization admin). */
   canManage?: boolean;
+  /** The organization's own name for the connection; absent shows «ClickUp». */
+  name?: string;
+  /** When the token was first connected and who connected it (absent on older connections). */
+  connectedAt?: string;
+  connectedBy?: string;
   error?: string;
   reason?: 'not_configured' | 'auth_required' | 'organization_required' | 'unavailable';
 }
@@ -102,4 +107,18 @@ export async function connectClickUp(baseUrl: string, token: string): Promise<Cl
 
 export async function disconnectClickUp(baseUrl: string): Promise<ClickUpStatus> {
   return request<ClickUpStatus>(baseUrl, '/web/clickup/connection', { method: 'DELETE' });
+}
+
+/** «Перейменувати»: the organization's own name for its ClickUp connection (`null` goes back to «ClickUp»). */
+export async function renameClickUp(baseUrl: string, name: string | null): Promise<ClickUpStatus> {
+  return request<ClickUpStatus>(baseUrl, '/web/clickup/connection/name', { method: 'PATCH', body: JSON.stringify({ name }) });
+}
+
+/** The organization's Factories whose intake routes read ClickUp Lists: what stops when the token goes. */
+export interface ClickUpUsage {
+  factories: Array<{ id: string; name: string; lists: number }>;
+}
+
+export async function fetchClickUpUsage(baseUrl: string): Promise<ClickUpUsage> {
+  return request<ClickUpUsage>(baseUrl, '/web/clickup/usage');
 }

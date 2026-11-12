@@ -37,6 +37,27 @@ export interface GithubInstallation {
   /** Token connections only: `env` is a legacy connection served by the server's GITHUB_ACCESS_TOKEN. */
   tokenSource?: 'stored' | 'env';
   needsAttention?: boolean;
+  /** The organization's own name for this connection; `null` shows the account. */
+  name?: string | null;
+  createdAt?: string;
+  /** Who connected it. */
+  connectedBy?: string;
+  /** Factory project connections still using its repositories: removal waits for them. */
+  projectConnections?: number;
+}
+
+/** «Перейменувати» one GitHub connection of the organization (`null` goes back to the account). */
+export async function renameGithubInstallation(baseUrl: string, id: string, name: string | null): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/installations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Accept: 'application/json', 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new Error(body.message ?? `GitHub rename failed (${res.status}).`);
+  }
 }
 
 /**

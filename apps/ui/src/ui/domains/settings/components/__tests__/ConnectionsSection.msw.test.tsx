@@ -52,6 +52,7 @@ const rowNamed = async (name: string) => (await rows()).find(row => within(row).
 
 async function openMenu(name: string) {
   await userEvent.click(screen.getByRole('button', { name: `Actions for ${name}` }));
+  await screen.findByRole('menuitem', { name: 'Open' });
 }
 
 describe('Підключення', () => {
@@ -61,7 +62,7 @@ describe('Підключення', () => {
 
     expect(screen.getByRole('heading', { name: 'Connections', level: 1 })).toBeInTheDocument();
     const list = await rows();
-    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'ClickUp', 'GitHub', 'Sentry']);
+    expect(list.map(row => within(row).getByRole('link').textContent)).toEqual(['syncta-57c6a', 'ClickUp', 'yura', 'Sentry']);
     const google = await rowNamed('syncta-57c6a');
     expect(google).toHaveTextContent('Google Cloud');
     expect(google).toHaveTextContent('Syncta');
@@ -77,7 +78,8 @@ describe('Підключення', () => {
     expect(sentry).toHaveTextContent('MCP');
     expect(within(sentry).getByText('Error').closest('[data-state]')).toHaveAttribute('title', expect.stringContaining('The account was refused access'));
     expect(await rowNamed('ClickUp')).toHaveTextContent('eclipt.ai');
-    expect(await rowNamed('GitHub')).toHaveTextContent('yura');
+    // GitHub is a row per connection, named by its account until the organization names it.
+    expect(await rowNamed('yura')).toHaveTextContent('GitHub');
     expect(screen.queryByRole('link', { name: /^Notes/ })).not.toBeInTheDocument();
   });
 
@@ -168,14 +170,139 @@ describe('Підключення', () => {
     await waitFor(() => expect(writes.at(-1)).toMatchObject({ method: 'DELETE', url: expect.stringContaining('/srv-sentry') }));
   });
 
-  it('offers no unlink or delete for ClickUp: it is connected for the whole organization', async () => {
+  it('renames ClickUp for the organization and deletes it after naming what stops — never «Unlink» from one Factory', async () => {
+    const writes = useHandlers();
+    const sent: Array<{ method: string; body: unknown }> = [];
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/clickup/connection/name`, async ({ request }) => {
+        const body = await request.json();
+        sent.push({ method: 'PATCH', body });
+        return HttpResponse.json({ configured: true, connected: true, workspaces: ['eclipt.ai'], intervalSeconds: 60, canManage: true, name: 'Eclipt' });
+      }),
+      http.get(`${TEST_BASE_URL}/web/clickup/usage`, () =>
+        HttpResponse.json({ factories: [{ id: FACTORY_ID, name: 'syncts', lists: 2 }, { id: 'f-2', name: 'book_fate', lists: 1 }] }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/clickup/connection`, () => {
+        sent.push({ method: 'DELETE', body: null });
+        return HttpResponse.json({ configured: false, connected: false, workspaces: [], intervalSeconds: 60, canManage: true });
+      }),
+    );
+    renderConnections();
+    await rows();
+    await openMenu('ClickUp');
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Open', 'Rename', 'Reconnect', 'Delete connection']);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    const rename = await screen.findByRole('dialog');
+    await userEvent.clear(within(rename).getByRole('textbox', { name: 'Name' }));
+    await userEvent.type(within(rename).getByRole('textbox', { name: 'Name' }), 'Eclipt');
+    await userEvent.click(within(rename).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent).toEqual([{ method: 'PATCH', body: { name: 'Eclipt' } }]));
+    // The row now carries the organization's name for it.
+    expect(await screen.findByRole('link', { name: 'Eclipt' })).toBeInTheDocument();
+
+    await openMenu('Eclipt');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete connection' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete the “Eclipt” connection?' });
+    await waitFor(() =>
+      expect(confirm).toHaveTextContent('“syncts” — 2 ClickUp Lists in intake routes; “book_fate” — 1 ClickUp List in intake routes'),
+    );
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(sent.at(-1)).toEqual({ method: 'DELETE', body: null }));
+    expect(writes).toEqual([]);
+  });
+
+  it('opens ClickUp’s connect step for «Reconnect», where the token is replaced', async () => {
     useHandlers();
     renderConnections();
     await rows();
     await openMenu('ClickUp');
-    expect(await screen.findByRole('menuitem', { name: 'Open' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Unlink from Factory' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: /Delete/ })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Reconnect' }));
+    expect(await screen.findByRole('dialog', { name: 'Connect ClickUp' })).toBeInTheDocument();
+    expect(screen.getByTestId('search')).toHaveTextContent('add=1&step=clickup');
+  });
+
+  it('keeps actions a token from the server environment cannot take, disabled, saying where to change it', async () => {
+    useHandlers();
+    renderConnections();
+    await rows();
+    await openMenu('yura');
+    // Its name is the organization's to give; its token is the server's.
+    expect(screen.getByRole('menuitem', { name: 'Rename' })).not.toHaveAttribute('aria-disabled', 'true');
+    for (const name of [/^Reconnect/, /^Delete connection/]) {
+      const item = screen.getByRole('menuitem', { name });
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+      expect(item).toHaveTextContent('Set in the server environment — change the environment variables');
+    }
+  });
+
+  it('renames a GitHub App connection, and removes it once no Factory project uses its repositories', async () => {
+    useHandlers();
+    const calls: Array<{ method: string; id: unknown; body?: unknown }> = [];
+    let inUse = 1;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          appConfigured: true,
+          connected: true,
+          canManage: true,
+          installations: [
+            { id: 'inst-row-1', installationId: 42, accountLogin: 'eclipt-ai', accountType: 'Organization', kind: 'app', name: null, createdAt: '2026-11-01T10:00:00.000Z', connectedBy: 'user-1', projectConnections: inUse },
+          ],
+          reason: 'ready',
+        }),
+      ),
+      http.patch(`${TEST_BASE_URL}/web/github/installations/:id`, async ({ request, params }) => {
+        calls.push({ method: 'PATCH', id: params.id, body: await request.json() });
+        return HttpResponse.json({ id: params.id, name: 'Eclipt GitHub' });
+      }),
+      http.delete(`${TEST_BASE_URL}/web/github/connections/:id`, ({ params }) => {
+        calls.push({ method: 'DELETE', id: params.id });
+        return HttpResponse.json({ removed: true });
+      }),
+    );
+    renderConnections();
+    const row = await rowNamed('eclipt-ai');
+    expect(within(row).getByRole('link')).toHaveAttribute('href', expect.stringContaining('connection=github%3A42'));
+    await openMenu('eclipt-ai');
+    expect(screen.getByRole('menuitem', { name: 'Reconnect' })).not.toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Name' }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Eclipt GitHub');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', id: 'inst-row-1', body: { name: 'Eclipt GitHub' } }]));
+
+    // While a Factory project still uses its repositories, the confirmation says so and does not delete.
+    await openMenu('eclipt-ai');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete connection' }));
+    const blocked = await screen.findByRole('dialog', { name: 'Delete the “eclipt-ai” connection?' });
+    expect(blocked).toHaveTextContent('1 Factory project still uses its repositories — remove them in Repositories first.');
+    expect(within(blocked).getByRole('button', { name: 'Delete' })).toBeDisabled();
+    await userEvent.click(within(blocked).getByRole('button', { name: 'Cancel' }));
+
+    inUse = 0;
+    renderConnections();
+    await waitFor(async () => expect(await screen.findAllByRole('button', { name: 'Actions for eclipt-ai' })).not.toHaveLength(0));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Actions for eclipt-ai' }).at(-1)!);
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete connection' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete the “eclipt-ai” connection?' });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', id: 'inst-row-1' }));
+  });
+
+  it('tells a member the organization’s connections are changed by an admin', async () => {
+    useHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/clickup/status`, () =>
+        HttpResponse.json({ configured: true, connected: true, workspaces: ['eclipt.ai'], intervalSeconds: 60, canManage: false }),
+      ),
+    );
+    renderConnections();
+    await rows();
+    await openMenu('ClickUp');
+    expect(screen.getByRole('menuitem', { name: /^Delete connection/ })).toHaveTextContent('Organization admins only');
+    expect(screen.getByRole('menuitem', { name: /^Rename/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('adds from one dialog: integrations by capability, MCP only under «Other», the database Google Cloud runs never offered', async () => {
