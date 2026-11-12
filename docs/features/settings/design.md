@@ -14,10 +14,13 @@
 - Збереження: `packages/store/src/projects/base.ts`; контракт: `packages/contracts/src/contracts.ts`.
 - UI: `apps/ui/src/ui/domains/settings/components/models/AgentLanguageSection.tsx`.
 
-## Розділ «Інтеграції»
+## Розділ «Підключення»
 
-Рішення: [ADR-0027](../../adr/0027-integrations-services-and-mcp.md). `/settings/integrations` у групі «Factory», вкладки в URL (`?tab=services|mcp`, `&service=google-cloud|clickup|github|gitlab`).
+Рішення: [ADR-0031](../../adr/0031-connections-one-list.md) (раніше «Інтеграції» з вкладками, [ADR-0027](../../adr/0027-integrations-services-and-mcp.md)). Шлях лишився `/settings/integrations`, група «Factory».
 
-- **Сервіси** (`IntegrationsSection.tsx`): картки зі станом, що відкривають налаштування: Google Cloud ([google-cloud](../google-cloud/design.md)), ClickUp, GitHub, GitLab (`SourceControlServices.tsx`).
-- **MCP**: [mcp-servers](../mcp-servers/design.md).
-- Старі `/settings/observability` і `/settings/mcp-servers` переводять сюди (`RETIRED_SETTINGS_SECTIONS`, `settingsSections.ts`); «Репозиторії» — лише вибір репозиторіїв, «Надходження задач» — лише маршрути.
+- **Список Factory** (`components/connections/ConnectionsSection.tsx`, `ConnectionList.tsx`): інтеграція (позначка MCP), акаунт, можливості, стан, меню «⋮» — «Відкрити», «Перепідключити», «Перейменувати», «Відв'язати від Factory», «Видалити з організації» (що дозволяє вид). Рядки будує `connections/connections.ts` зі стану інтеграцій: прив'язки Google Cloud цієї Factory (з «Базою» в тому ж рядку), MCP-сервери з доступом цієї Factory, ClickUp / GitHub / GitLab на всю організацію.
+- **Рядок відкриває свою сторінку** (`?connection=google-cloud:<прив'язка>|mcp:<сервер>|mcp-new:<запис каталогу>|google-cloud|clickup|github|gitlab`, `ConnectionDetail.tsx`) з наявними налаштуваннями: [google-cloud](../google-cloud/design.md), [mcp-servers](../mcp-servers/design.md), ClickUp, GitHub, GitLab (`SourceControlServices.tsx`). `&account=<id>` відкриває нову прив'язку через цей акаунт.
+- **«Додати підключення»** (`AddConnectionDrawer.tsx`): пошук, «Усі / Інструменти / Джерела», «Уже є в організації» (під'єднати акаунт Google Cloud чи MCP-сервер) і «Інтеграції».
+- **«Активність»** (`ConnectionActivity.tsx`): виклики MCP цієї Factory за 24 години (`GET /web/mcp-servers/activity`).
+- **Телефон:** рядки складаються в картки, шухляда — нижня шторка, кнопки ≥ 44 px, без горизонтальної прокрутки.
+- Старі `?tab=…&service=…`, `/settings/observability` і `/settings/mcp-servers` переводять сюди (`RETIRED_SETTINGS_SECTIONS`, `connectionsPath`, `settingsSections.ts`); «Репозиторії» — лише вибір репозиторіїв, «Надходження задач» — лише маршрути.
