@@ -1,9 +1,11 @@
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { createTool } from '@mastra/core/tools';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '@factory/auth';
 import type { RouteAuth } from '@factory/http';
 
 import type { ConnectCodes } from './connect-codes.ts';
@@ -13,10 +15,12 @@ export const CONVERSATION_REPLY_TOOL = 'factory_conversation_reply';
 
 /**
  * The agent's way back into a conversation: one tool for every platform, keyed by the thread
- * reference the inbound message carried.
+ * reference the inbound message carried. The reply goes out as the session's organization
+ * (`requestContext`): the adapter answers with that organization's provider account only.
  */
-export function createConversationReplyTool(channels: readonly ConversationChannel[]) {
+export function createConversationReplyTool(channels: readonly ConversationChannel[], requestContext?: RequestContext) {
   const byPlatform = new Map(channels.map(channel => [channel.platform, channel]));
+  const orgId = requestContext ? getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext)) : undefined;
   return {
     [CONVERSATION_REPLY_TOOL]: createTool({
       id: CONVERSATION_REPLY_TOOL,
@@ -30,7 +34,7 @@ export function createConversationReplyTool(channels: readonly ConversationChann
       execute: async ({ platform, thread, text }) => {
         const channel = byPlatform.get(platform);
         if (!channel) throw new Error(`No conversation channel for platform "${platform}" is connected.`);
-        await channel.reply({ platform, id: thread }, text);
+        await channel.reply({ platform, id: thread }, text, orgId ? { orgId } : undefined);
         return { posted: true };
       },
     }),

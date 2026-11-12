@@ -19,35 +19,33 @@ import type {
   IntegrationTools,
   Transcriber,
 } from '@factory/integrations';
+import type { IntegrationStorageHandle } from '@factory/store';
 
-import { ClickUpClient } from './api.ts';
-import type { ClickUpTaskSource } from './api.ts';
 import { ClickUpIntake } from './intake.ts';
 import { createClickUpPoller } from './poller.ts';
 import { buildClickUpRoutes } from './routes.ts';
 import { CLICKUP_PLATFORM, createClickUpChannel, createClickUpConversationPoller } from './conversation.ts';
-import type { ClickUpConversationClient } from './conversation.ts';
+import { adoptDeploymentClickUpToken, ClickUpClients } from './connection.ts';
+import type { ClickUpClientFactory, ClickUpConnectionStorage } from './connection.ts';
 import { migrateListStatusRules } from './status-routes.ts';
 
 export const DEFAULT_CLICKUP_POLL_SECONDS = 60;
 
 export interface ClickUpIntegrationOptions {
-  /** Personal API token (`pk_...`); a service account's token outlives staff changes. */
-  apiToken: string;
   intervalSeconds?: number;
-  /** Test seam: replaces the HTTP client the poller reads tasks with. */
-  taskSource?: ClickUpTaskSource;
-  /** Test seam: replaces the HTTP client task comments are read from and replied with. */
-  conversationClient?: ClickUpConversationClient;
+  /** Test seam: builds the client an organization's token talks to ClickUp through. */
+  createClient?: ClickUpClientFactory;
   /** Speech-to-text for voice clips in comments; without it a clip reaches the agent with a note. */
   transcriber?: Transcriber;
 }
 
 /**
- * ClickUp by polling: no webhook, so it works on a local server with no public URL. The Lists
- * read are the ones the project's intake routes name, and those routes place every task; the
- * token comes from the host's environment. Read-only toward ClickUp apart from what agents do
- * through the Intake capability (comments, status).
+ * ClickUp by polling: no webhook, so it works on a local server with no public URL. Each
+ * organization connects its own ClickUp token in Settings › Підключення (stored encrypted in its
+ * `integration_connections` row, ADR-0032); every read and write uses the token of the organization
+ * it is for, and an organization without one reads nothing. The Lists read are the ones the
+ * project's intake routes name, and those routes place every task. Read-only toward ClickUp apart
+ * from what agents do through the Intake capability (comments, status).
  */
 export class ClickUpIntegration implements FactoryIntegration {
   readonly id = 'clickup';
@@ -55,39 +53,72 @@ export class ClickUpIntegration implements FactoryIntegration {
   /** ClickUp imports and moves cards only through intake routes (stored with the boards). */
   readonly requiredDomains = ['intake', 'boards', 'work-items'] as const;
 
-  readonly #client: ClickUpClient;
-  readonly #taskSource: ClickUpTaskSource;
+  readonly #clients: ClickUpClients;
   readonly #intervalSeconds: number;
-  readonly #conversationClient: ClickUpConversationClient;
   readonly #channel: ConversationChannel;
   readonly #codes = new ConnectCodes();
   readonly #transcriber: Transcriber | undefined;
+  readonly #createClient: ClickUpClientFactory | undefined;
+  #storage: IntegrationStorageHandle | undefined;
 
-  constructor(options: ClickUpIntegrationOptions) {
-    this.#client = new ClickUpClient({ token: options.apiToken });
-    this.#conversationClient = options.conversationClient ?? this.#client;
-    this.#channel = createClickUpChannel(this.#conversationClient);
+  constructor(options: ClickUpIntegrationOptions = {}) {
+    this.#createClient = options.createClient;
+    this.#clients = new ClickUpClients({
+      storage: () => this.#connections(),
+      ...(options.createClient ? { create: options.createClient } : {}),
+    });
+    this.#channel = createClickUpChannel(this.#clients);
     this.#transcriber = options.transcriber;
-    this.intake = new ClickUpIntake(this.#client, options.apiToken.trim());
-    this.#taskSource = options.taskSource ?? this.#client;
+    this.intake = new ClickUpIntake(this.#clients);
     this.#intervalSeconds = Math.max(15, options.intervalSeconds ?? DEFAULT_CLICKUP_POLL_SECONDS);
+  }
+
+  initialize({ storage }: { storage: IntegrationStorageHandle }): void {
+    this.#storage = storage;
+  }
+
+  #connections(): ClickUpConnectionStorage {
+    if (!this.#storage) throw new Error('ClickUpIntegration used before initialize().');
+    return this.#storage;
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     return [
       ...buildClickUpRoutes({
         auth: ctx.auth,
-        client: this.#client,
+        clients: this.#clients,
+        storage: () => this.#connections(),
         intake: this.intake,
         intervalSeconds: this.#intervalSeconds,
+        ...(ctx.hooks ? { hooks: ctx.hooks } : {}),
       }),
       buildConnectCodeRoute({ platform: CLICKUP_PLATFORM, auth: ctx.auth, codes: this.#codes }),
     ];
   }
 
-  /** `factory_conversation_reply`: the agent answers in the ClickUp comment thread it was asked in. */
-  sessionTools(_args: { requestContext: RequestContext }): IntegrationTools {
-    return createConversationReplyTool([this.#channel]);
+  /**
+   * `factory_conversation_reply`: the agent answers in the ClickUp comment thread it was asked in,
+   * with its session organization's token.
+   */
+  sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
+    return createConversationReplyTool([this.#channel], requestContext);
+  }
+
+  /**
+   * The one-time move of the retired deployment token (`CLICKUP_API_TOKEN`) into an organization's
+   * connection; run by the factory's boot migration `integrations.envTokensToOrg.clickup.v1`.
+   */
+  async adoptDeploymentToken(input: {
+    storage: IntegrationStorageHandle;
+    orgId: string;
+    env: Readonly<Record<string, string>>;
+  }): Promise<string | undefined> {
+    return adoptDeploymentClickUpToken({
+      storage: input.storage,
+      orgId: input.orgId,
+      token: input.env.CLICKUP_API_TOKEN,
+      ...(this.#createClient ? { create: this.#createClient } : {}),
+    });
   }
 
   /** Moves the retired per-List status rules into intake routes, once per boot (idempotent). */
@@ -113,7 +144,7 @@ export class ClickUpIntegration implements FactoryIntegration {
       throw new Error('ClickUp intake needs the project intake routes (the boards domain); ClickUp should have been disabled.');
     }
     const reconcile = createClickUpPoller({
-      client: this.#taskSource,
+      clients: this.#clients,
       intake: ctx.storage.intake,
       projects: ctx.storage.projects,
       workItems: ctx.runtime.workItems,
@@ -134,7 +165,7 @@ export class ClickUpIntegration implements FactoryIntegration {
       ...(this.#transcriber ? { transcriber: this.#transcriber } : {}),
     });
     const conversations = createClickUpConversationPoller({
-      client: this.#conversationClient,
+      clients: this.#clients,
       router,
       intake: ctx.storage.intake,
       intakeRoutes,
@@ -155,7 +186,7 @@ export class ClickUpIntegration implements FactoryIntegration {
   diagnostics(): Record<string, unknown> {
     return {
       mode: 'polling',
-      tokenConfigured: true,
+      tokens: 'per organization (Settings › Підключення)',
       intervalSeconds: this.#intervalSeconds,
       conversations: { transcription: this.#transcriber ? 'configured' : 'not configured' },
     };

@@ -2,7 +2,7 @@ import type { ChannelIdentityStorage, WorkItemRow, WorkItemsStorage } from '@fac
 
 import { ConnectCodes } from './connect-codes.ts';
 import { isAudioAttachment, TranscriptionError } from './types.ts';
-import type { ConversationAttachment, ConversationChannel, InboundMessage, Transcriber } from './types.ts';
+import type { ConversationAttachment, ConversationChannel, ConversationThreadRef, InboundMessage, Transcriber } from './types.ts';
 
 /** The card a message's thread belongs to, as the adapter finds it from the message's subject. */
 export interface ConversationCard {
@@ -164,7 +164,7 @@ export class ConversationRouter {
         parts.push(`[Attachment: ${attachment.name} — ${attachment.url}]`);
         continue;
       }
-      const transcript = await this.#transcribe(attachment, scope);
+      const transcript = await this.#transcribe(attachment, message.thread, scope);
       parts.push(
         'text' in transcript
           ? `[Voice clip ${attachment.name}, transcribed:] ${transcript.text}`
@@ -176,12 +176,13 @@ export class ConversationRouter {
 
   async #transcribe(
     attachment: ConversationAttachment,
+    thread: ConversationThreadRef,
     scope: { orgId: string; factoryProjectId: string; userId: string },
   ): Promise<{ text: string } | { reason: string }> {
     const { transcriber } = this.#options;
     if (!transcriber) return { reason: 'voice transcription is not set up on this Factory' };
     try {
-      const audio = await this.#options.channel.download(attachment);
+      const audio = await this.#options.channel.download(attachment, thread);
       const limit = this.#options.maxAudioBytes ?? DEFAULT_MAX_AUDIO_BYTES;
       if (audio.byteLength > limit) return { reason: `it is longer than the ${Math.round(limit / 1024 / 1024)} MB limit` };
       const text = (await transcriber({ audio, mimeType: attachment.mimeType, fileName: attachment.name, ...scope })).trim();

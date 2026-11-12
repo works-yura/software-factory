@@ -1,3 +1,4 @@
+import { EXISTING_ORGANIZATION_ID } from '@factory/auth';
 import type { FactoryIntegration } from '@factory/integrations';
 import {
   AUDITS_LEGACY_PHASE_RENAMES,
@@ -41,6 +42,8 @@ export interface FactoryMigrationDeps {
   projectBoards: ProjectBoardCache | undefined;
   integrations: readonly FactoryIntegration[];
   mcpServers: Pick<McpServersStorage, 'rewriteLaunches'>;
+  /** Integration env vars the entry still found set (`CLICKUP_API_TOKEN`, …), for the one-time move into an organization. */
+  retiredIntegrationEnv: Readonly<Record<string, string>>;
 }
 
 const LABEL_ROUTE_NAMES = [
@@ -261,6 +264,25 @@ export function factoryBootMigrations(deps: FactoryMigrationDeps): BootMigration
             });
             return undefined;
           },
+        }),
+      ),
+    // Integration tokens belong to organizations, not the deployment (ADR-0032): a token still in the
+    // env moves into the organization that owned all data before organizations existed, unless it
+    // already stored one (never overwritten). After this ran, nothing reads the env var.
+    ...deps.integrations
+      .filter(integration => integration.adoptDeploymentToken)
+      .map(
+        (integration): BootMigration => ({
+          id: `integrations.envTokensToOrg.${integration.id}.v1`,
+          ready: ready('integrations'),
+          onFailure: 'disable-integration',
+          integrationId: integration.id,
+          run: () =>
+            integration.adoptDeploymentToken!({
+              storage: deps.integrationStorage.forIntegration(integration.id),
+              orgId: EXISTING_ORGANIZATION_ID,
+              env: deps.retiredIntegrationEnv,
+            }),
         }),
       ),
   ];

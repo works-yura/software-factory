@@ -5,7 +5,7 @@ import type { WorkItemRow } from '@factory/store';
 
 import { ClickUpClient } from './api.ts';
 import type { ClickUpTask, ClickUpThreadComment } from './api.ts';
-import { clickUpThreadId, createClickUpChannel, createClickUpConversationPoller } from './conversation.ts';
+import { clickUpThreadId, createClickUpChannel, createClickUpConversationPoller, parseClickUpThreadId } from './conversation.ts';
 import type { ClickUpConversationClient } from './conversation.ts';
 
 const START = new Date('2026-11-11T10:00:00.000Z');
@@ -42,7 +42,11 @@ function comment(overrides: Partial<ClickUpThreadComment>): ClickUpThreadComment
   };
 }
 
-function setup(comments: ClickUpThreadComment[], replies: ClickUpThreadComment[] = []) {
+function setup(
+  comments: ClickUpThreadComment[],
+  replies: ClickUpThreadComment[] = [],
+  projects: Array<{ id: string; orgId: string }> = [{ id: 'p-1', orgId: 'org-1' }],
+) {
   const handled: InboundMessage[] = [];
   const client: ClickUpConversationClient = {
     listTasks: async () => [task],
@@ -53,8 +57,10 @@ function setup(comments: ClickUpThreadComment[], replies: ClickUpThreadComment[]
     download: async () => new Uint8Array(),
   };
   const outcomes: ConversationOutcome[] = [];
+  // Only org-1 connected ClickUp.
+  const forOrg = vi.fn(async (orgId: string) => (orgId === 'org-1' ? client : null));
   const poller = createClickUpConversationPoller({
-    client,
+    clients: { forOrg },
     router: {
       handle: async message => {
         handled.push(message);
@@ -76,11 +82,11 @@ function setup(comments: ClickUpThreadComment[], replies: ClickUpThreadComment[]
         },
       ],
     },
-    projects: { listAll: async () => [{ id: 'p-1', orgId: 'org-1' }] as never },
+    projects: { listAll: async () => projects as never },
     workItems: { getByProjectSource: async () => ({ id: 'card-1', revision: 2, sessions: {} }) as unknown as WorkItemRow },
     now: () => START,
   });
-  return { poller, handled, client };
+  return { poller, handled, client, forOrg };
 }
 
 describe('ClickUp conversation poller', () => {
@@ -91,7 +97,7 @@ describe('ClickUp conversation poller', () => {
     expect(handled[0]).toMatchObject({
       platform: 'clickup',
       id: 'c-1',
-      thread: { platform: 'clickup', id: 'task-1:c-1' },
+      thread: { platform: 'clickup', id: 'task-1:c-1:org-1' },
       sender: { teamId: 'team-9', userId: 'u-7', name: 'olena', mention: '@olena' },
       fromBot: false,
       addressedToBot: true,
@@ -113,20 +119,78 @@ describe('ClickUp conversation poller', () => {
     expect(handled.map(message => message.id)).toEqual(['c-1']);
     await poller.sweep();
     const replyMessage = handled.find(message => message.id === 'r-1');
-    expect(replyMessage).toMatchObject({ addressedToBot: true, thread: { id: 'task-1:c-1' } });
+    expect(replyMessage).toMatchObject({ addressedToBot: true, thread: { id: 'task-1:c-1:org-1' } });
+  });
+});
+
+describe('ClickUp conversation poller across organizations', () => {
+  it("never reads another organization's threads: an organization without a token reads nothing and says so", async () => {
+    const { poller, handled, forOrg } = setup([comment({})], [], [
+      { id: 'p-1', orgId: 'org-1' },
+      { id: 'p-2', orgId: 'org-2' },
+    ]);
+    const summary = await poller.sweep();
+    expect(forOrg.mock.calls.map(call => call[0])).toEqual(['org-1', 'org-2']);
+    expect(handled.map(message => message.thread.id)).toEqual(['task-1:c-1:org-1']);
+    expect(summary.errors).toEqual([expect.objectContaining({ projectId: 'p-2', error: expect.stringContaining('not connected for organization org-2') })]);
+  });
+});
+
+describe('ClickUp thread references', () => {
+  it('carry the organization, encoded, and still read the ones written before it', () => {
+    expect(clickUpThreadId('org:a/b', 'task-1', 'c-1')).toBe('task-1:c-1:org%3Aa%2Fb');
+    expect(parseClickUpThreadId('task-1:c-1:org%3Aa%2Fb')).toEqual({ taskId: 'task-1', commentId: 'c-1', orgId: 'org:a/b' });
+    expect(parseClickUpThreadId('task-1:c-1')).toEqual({ taskId: 'task-1', commentId: 'c-1' });
   });
 });
 
 describe('ClickUp channel', () => {
-  it('replies under the thread comment', async () => {
-    const client = { replyToComment: vi.fn(async () => {}), download: async () => new Uint8Array() };
-    await createClickUpChannel(client).reply({ platform: 'clickup', id: clickUpThreadId('task-1', 'c-1') }, 'on it');
-    expect(client.replyToComment).toHaveBeenCalledWith('c-1', 'on it');
+  function channelWith(tokens: Record<string, string>) {
+    const used: string[] = [];
+    const replyToComment = vi.fn(async () => {});
+    const clients = {
+      require: async (orgId: string) => {
+        const token = tokens[orgId];
+        if (!token) throw new Error(`ClickUp is not connected for organization ${orgId}`);
+        used.push(token);
+        return { replyToComment, download: async () => new Uint8Array([1]) } as never;
+      },
+    };
+    return { channel: createClickUpChannel(clients), used, replyToComment };
+  }
+
+  it("replies under the thread comment with the thread organization's token", async () => {
+    const { channel, used, replyToComment } = channelWith({ 'org-1': 'pk_one', 'org-2': 'pk_two' });
+    await channel.reply({ platform: 'clickup', id: clickUpThreadId('org-2', 'task-1', 'c-1') }, 'on it');
+    expect(replyToComment).toHaveBeenCalledWith('c-1', 'on it');
+    expect(used).toEqual(['pk_two']);
+  });
+
+  it("refuses an agent's reply in a thread of another organization", async () => {
+    const { channel, replyToComment } = channelWith({ 'org-1': 'pk_one', 'org-2': 'pk_two' });
+    await expect(
+      channel.reply({ platform: 'clickup', id: clickUpThreadId('org-2', 'task-1', 'c-1') }, 'x', { orgId: 'org-1' }),
+    ).rejects.toThrow('belongs to another organization');
+    expect(replyToComment).not.toHaveBeenCalled();
+  });
+
+  it("answers a thread written before organizations had tokens as the replying session's organization", async () => {
+    const { channel, used } = channelWith({ 'org-1': 'pk_one' });
+    await channel.reply({ platform: 'clickup', id: 'task-1:c-1' }, 'on it', { orgId: 'org-1' });
+    expect(used).toEqual(['pk_one']);
+    await expect(channel.reply({ platform: 'clickup', id: 'task-1:c-1' }, 'x')).rejects.toThrow('names no organization');
+  });
+
+  it('downloads an attachment with the token of the organization that read it', async () => {
+    const { channel, used } = channelWith({ 'org-1': 'pk_one' });
+    const thread = { platform: 'clickup', id: clickUpThreadId('org-1', 'task-1', 'c-1') };
+    await channel.download({ id: 'a', name: 'v.m4a', mimeType: 'audio/mp4', url: 'https://t.clickup-attachments.com/v.m4a' }, thread);
+    expect(used).toEqual(['pk_one']);
   });
 
   it('refuses a thread reference that is not ClickUp’s', async () => {
-    const client = { replyToComment: vi.fn(async () => {}), download: async () => new Uint8Array() };
-    await expect(createClickUpChannel(client).reply({ platform: 'clickup', id: 'nonsense' }, 'x')).rejects.toThrow(
+    const { channel } = channelWith({ 'org-1': 'pk_one' });
+    await expect(channel.reply({ platform: 'clickup', id: 'nonsense' }, 'x', { orgId: 'org-1' })).rejects.toThrow(
       'Not a ClickUp thread reference',
     );
   });

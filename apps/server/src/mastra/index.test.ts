@@ -69,6 +69,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
       'FACTORY_BROWSER',
+      'CLICKUP_API_TOKEN',
     ]) {
       vi.stubEnv(name, '');
     }
@@ -102,19 +103,38 @@ describe('platform entry (src/mastra/index.ts)', () => {
   });
 
   it(
-    'boots with ClickUp installed and starts its pollers with the intake routes they need',
+    'always installs ClickUp, with no token in env, and starts its pollers with the intake routes they need',
     { timeout: 60_000 },
     async () => {
-      // Every integration the app can install goes through the same context; a missing dependency
-      // (as once the intake routes for ClickUp's workers) used to fail the whole boot.
-      vi.stubEnv('CLICKUP_API_TOKEN', 'pk_test_boot');
+      // Each organization connects its own ClickUp token (ADR-0032): nothing in env decides whether
+      // ClickUp is installed. A missing dependency (as once the intake routes for ClickUp's workers)
+      // used to fail the whole boot.
       const mod = await import('./index.js');
       const installed = factoryConfigs[0]?.integrations?.map(integration => integration.id) ?? [];
       expect(installed).toContain('clickup');
+      expect(factoryConfigs[0]?.retiredIntegrationEnv).toEqual({});
       expect(mod.mastra.getWorker('clickup-issue-reconcile')).toBeDefined();
       expect(mod.mastra.getWorker('clickup-conversations-issue-reconcile')).toBeDefined();
     },
   );
+
+  it('hands a CLICKUP_API_TOKEN still in env only to the one-time move into the organization', { timeout: 60_000 }, async () => {
+    vi.stubEnv('CLICKUP_API_TOKEN', ' pk_test_boot ');
+    // The move checks the token's account; ClickUp is never called from a test.
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).startsWith('https://api.clickup.com/') ? new Response('{}', { status: 401 }) : realFetch(input, init),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await import('./index.js');
+      expect(factoryConfigs[0]?.retiredIntegrationEnv).toEqual({ CLICKUP_API_TOKEN: 'pk_test_boot' });
+      expect(factoryConfigs[0]?.integrations?.map(integration => integration.id)).toContain('clickup');
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
 
   it('uses the preferred installed boards without deployment-owned lifecycle handlers', async () => {
     const { factoryConfigVersion } = await import('./index.js');

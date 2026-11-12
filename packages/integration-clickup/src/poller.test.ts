@@ -101,7 +101,7 @@ function setup(options: SetupOptions) {
   const catchAll = others.filter(route => route.when === null);
   const routes = [...others.filter(route => route.when !== null), ...statusRoutes, ...catchAll];
   const poll = createClickUpPoller({
-    client: { listTasks } as never,
+    clients: { forOrg: async (orgId: string) => (orgId === 'org' ? ({ listTasks } as never) : null) },
     intake: { getConfig: async () => ({ clickup: { enabled: options.enabled ?? true } }) } as never,
     projects: { listAll: async () => [{ id: 'proj', orgId: 'org' }] as never },
     workItems: { getByProjectSource, commitRuleEvaluation, update } as never,
@@ -134,6 +134,43 @@ function placedDecision(setupResult: { commitRuleEvaluation: { mock: { calls: un
 }
 
 describe('createClickUpPoller', () => {
+  it("reads each organization's Lists with its own token; an organization without one reads nothing and says so", async () => {
+    const readBy: string[] = [];
+    const tokens: Record<string, string> = { 'org-a': 'pk_a' };
+    const routes = [
+      {
+        id: 'r',
+        enabled: true,
+        on: ['work_item.created' as const],
+        when: { operator: 'AND' as const, conditions: [{ field: 'source.list', operator: 'equals' as const, value: 'L1' }] },
+        target: { boardKey: 'work', phaseKey: null },
+      },
+    ];
+    const poll = createClickUpPoller({
+      clients: {
+        forOrg: async orgId =>
+          tokens[orgId]
+            ? {
+                listTasks: async () => {
+                  readBy.push(`${orgId}:${tokens[orgId]}`);
+                  return [];
+                },
+              }
+            : null,
+      },
+      intake: { getConfig: async () => ({ clickup: { enabled: true } }) } as never,
+      projects: { listAll: async () => [{ id: 'pa', orgId: 'org-a' }, { id: 'pb', orgId: 'org-b' }] as never },
+      workItems: {} as never,
+      intakeRoutes: { listIntakeRoutes: async () => routes as never },
+      projectBoards: { load: async () => registry },
+      configVersion: 'v',
+      now: () => START,
+    });
+    const summary = await poll();
+    expect(readBy).toEqual(['org-a:pk_a']);
+    expect(summary.errors).toEqual([{ projectId: 'pb', error: expect.stringContaining('ClickUp is not connected for organization org-b') }]);
+  });
+
   it("files a new task on the List's board, in the phase its status maps to", async () => {
     const filed = setup({ tasks: [task()], listBoard: 'bug' });
     const { poll, commitRuleEvaluation } = filed;

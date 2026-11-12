@@ -25,6 +25,8 @@ export const AUDIT_ACTIONS = {
   // Retired with intake rules (ADR-0021); nothing writes it, but past audit rows still read by it.
   intake_rule: ['created', 'updated', 'deleted'],
   observability: ['connected', 'disconnected', 'mapping_updated'],
+  // An organization's integration token (ClickUp, …; ADR-0032): connected, replaced or removed. Never the token.
+  integration: ['token_connected', 'token_removed'],
   sandbox_env: ['set', 'updated', 'deleted', 'stages_updated', 'file_created', 'file_updated', 'file_deleted'],
   // External MCP servers: their config, and each agent call to one of their tools (no payloads).
   mcp_server: ['created', 'updated', 'deleted', 'tool_called', 'tool_tried', 'reconnected'],

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ClickUpClient, ClickUpTask } from './api.ts';
+import type { ClickUpTask } from './api.ts';
+import { ClickUpClients } from './connection.ts';
+import type { ClickUpApi } from './connection.ts';
 import { ClickUpIntake, stateTypeOf } from './intake.ts';
 
 const task: ClickUpTask = {
@@ -18,8 +20,21 @@ const task: ClickUpTask = {
   updatedAt: '2026-10-28T11:00:00.000Z',
 };
 
-function intakeWith(client: Record<string, unknown>) {
-  return new ClickUpIntake(client as unknown as ClickUpClient, 'pk_test');
+/** Org `o` stored `pk_test`; every token gets `client`, recorded so a test can say which token was used. */
+function intakeWith(client: Record<string, unknown>, tokens: string[] = []) {
+  const stored: Record<string, string> = { o: 'pk_test' };
+  const clients = new ClickUpClients({
+    storage: () => ({
+      connections: {
+        get: async (orgId: string) => (stored[orgId] ? ({ data: { apiToken: stored[orgId] } } as never) : null),
+      } as never,
+    }),
+    create: token => {
+      tokens.push(token);
+      return client as unknown as ClickUpApi;
+    },
+  });
+  return new ClickUpIntake(clients);
 }
 
 describe('ClickUpIntake', () => {
@@ -31,7 +46,7 @@ describe('ClickUpIntake', () => {
         { id: 'L2', name: 'Inbox', path: '', workspaceId: 'w' },
       ],
     });
-    const sources = await intake.listSources();
+    const sources = await intake.listSources({ orgId: 'o', userId: 'u' });
     expect(sources.map(source => [source.id, source.name])).toEqual([
       ['L1', 'Eng / Mobile / Backlog'],
       ['L2', 'Inbox'],
@@ -72,6 +87,27 @@ describe('ClickUpIntake', () => {
     expect(
       await intake.updateIssue({ connection: { type: 'oauth', accessToken: 'x' }, issueId: 't1', state: { kind: 'byType', stateType: 'canceled' } }),
     ).toBeNull();
+  });
+
+  it("reads an organization's Lists with its own token and refuses an organization without one", async () => {
+    const tokens: string[] = [];
+    const intake = intakeWith({ listWorkspaces: async () => [], listLists: async () => [] }, tokens);
+    await intake.listSources({ orgId: 'o', userId: 'u' });
+    expect(tokens).toEqual(['pk_test']);
+    await expect(intake.listSources({ orgId: 'other', userId: 'u' })).rejects.toThrow(/ClickUp is not connected for organization other/);
+    await expect(intake.listItems({ orgId: 'other', userId: 'u', sourceIds: ['L1'] })).rejects.toThrow(/not connected/);
+    await expect(
+      intake.resolveIntakeDispatch!({ orgId: 'other', externalSource: { type: 'task', externalId: 't1' } }),
+    ).rejects.toThrow(/not connected/);
+  });
+
+  it("hands a dispatch the organization's token and acts on the task with the token it is given", async () => {
+    const tokens: string[] = [];
+    const intake = intakeWith({ getTask: async () => task, createComment: async () => ({ id: 'c1' }) }, tokens);
+    const resolved = await intake.resolveIntakeDispatch!({ orgId: 'o', externalSource: { type: 'task', externalId: 't1' } });
+    expect(resolved).toEqual({ connection: { type: 'oauth', accessToken: 'pk_test' }, sourceId: 'L1', issueId: 't1' });
+    await intake.createComment({ connection: { type: 'oauth', accessToken: 'pk_other' }, issueId: 't1', body: 'hi' });
+    expect(tokens).toEqual(['pk_test', 'pk_other']);
   });
 
   it('maps ClickUp status types to shared state types', () => {

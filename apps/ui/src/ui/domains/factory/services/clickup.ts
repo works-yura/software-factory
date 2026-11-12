@@ -2,14 +2,22 @@ import { translator } from '../../../i18n/t';
 
 const tk = translator('board');
 
-/** Browser-side helpers for the ClickUp intake source (polling, API token on the server). */
+/**
+ * Browser-side helpers for the ClickUp intake source (polling). Each organization connects its own
+ * API token (ADR-0032); the token goes to the server once and never comes back.
+ */
 
 export interface ClickUpStatus {
-  /** False when the server has no ClickUp token (the status route is not mounted). */
+  /** The organization stored a token. False also when the status could not be read (`reason`). */
   configured: boolean;
+  /** ClickUp accepted the stored token just now. */
   connected: boolean;
   workspaces: string[];
+  /** The ClickUp account the token belongs to. */
+  account?: { username: string };
   intervalSeconds: number;
+  /** The caller may connect, replace or disconnect the token (an organization admin). */
+  canManage?: boolean;
   error?: string;
   reason?: 'not_configured' | 'auth_required' | 'organization_required' | 'unavailable';
 }
@@ -31,9 +39,9 @@ const UNAVAILABLE: ClickUpStatus = {
 };
 
 /**
- * No ClickUp token means the status route is not mounted. The server then answers with its HTML
- * app shell (200), not a 404, so a response that is not JSON counts as "not configured" too.
- * Everything else that fails is "unavailable".
+ * A server without the ClickUp integration has no status route: it answers with its HTML app shell
+ * (200), not a 404, so a response that is not JSON counts as "not configured" too. Everything else
+ * that fails is "unavailable".
  */
 export async function fetchClickUpStatus(baseUrl: string): Promise<ClickUpStatus> {
   try {
@@ -85,4 +93,13 @@ export async function fetchClickUpListStatuses(baseUrl: string, listId: string):
   return (
     await request<{ statuses: ClickUpListStatus[] }>(baseUrl, `/web/clickup/lists/${encodeURIComponent(listId)}/statuses`)
   ).statuses;
+}
+
+/** Connect or replace the organization's token; ClickUp checks it first, and a refusal says why. */
+export async function connectClickUp(baseUrl: string, token: string): Promise<ClickUpStatus> {
+  return request<ClickUpStatus>(baseUrl, '/web/clickup/connection', { method: 'PUT', body: JSON.stringify({ token }) });
+}
+
+export async function disconnectClickUp(baseUrl: string): Promise<ClickUpStatus> {
+  return request<ClickUpStatus>(baseUrl, '/web/clickup/connection', { method: 'DELETE' });
 }

@@ -5,6 +5,7 @@ import type { FactoryProject, FactoryProjectsStorage, IntakeStorage, WorkItemRow
 import { arrivalSourceFacts } from '@factory/store';
 
 import type { ClickUpTask, ClickUpTaskSource } from './api.ts';
+import { ClickUpNotConnectedError } from './connection.ts';
 import { isClosedTask } from './intake.ts';
 import { CLICKUP_INTEGRATION_ID, routedClickUpLists } from './lists.ts';
 
@@ -17,7 +18,8 @@ const USER_ID = 'clickup-poller';
 const normalizeIdentity = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, '-');
 
 export interface ClickUpPollerOptions {
-  client: ClickUpTaskSource;
+  /** The organization's ClickUp client, from its own stored token; `null` when it has not connected ClickUp. */
+  clients: { forOrg(orgId: string): Promise<ClickUpTaskSource | null> };
   intake: Pick<IntakeStorage, 'getConfig'>;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   workItems: Pick<WorkItemsStorage, 'getByProjectSource' | 'commitRuleEvaluation' | 'update'>;
@@ -257,14 +259,26 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       errors: [],
     };
     const touched = new Set<string>();
+    const clients = new Map<string, ClickUpTaskSource | null>();
     for (const { project, listId } of await routedClickUpLists(options)) {
       touched.add(project.id);
+      // Each organization reads its Lists with its own token; one without a token reads nothing.
+      if (!clients.has(project.orgId)) {
+        const client = await options.clients.forOrg(project.orgId);
+        clients.set(project.orgId, client);
+        if (!client) {
+          summary.failed += 1;
+          summary.errors.push({ projectId: project.id, error: new ClickUpNotConnectedError(project.orgId).message });
+        }
+      }
+      const client = clients.get(project.orgId);
+      if (!client) continue;
       const cursorKey = `${project.id}:${listId}`;
       const since = cursors.get(cursorKey) ?? new Date(startedAt.getTime() - lookbackMs);
       let newest = since;
       let failed = false;
       try {
-        const tasks = await options.client.listTasks({ listId, updatedAfter: since, includeClosed: true });
+        const tasks = await client.listTasks({ listId, updatedAfter: since, includeClosed: true });
         for (const task of tasks) {
           summary.checked += 1;
           try {

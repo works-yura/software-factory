@@ -20,6 +20,7 @@ describe('audit action registry', () => {
       'intake_route',
       'intake_rule',
       'observability',
+      'integration',
       'sandbox_env',
       'mcp_server',
     ]);

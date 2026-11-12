@@ -1,10 +1,18 @@
-import type { ConversationChannel, ConversationRouter, InboundMessage } from '@factory/integrations';
+import type {
+  ConversationChannel,
+  ConversationReplyScope,
+  ConversationRouter,
+  ConversationThreadRef,
+  InboundMessage,
+} from '@factory/integrations';
 import type { IssueReconcileSummary } from '@factory/integrations';
 import type { FactoryProject, FactoryProjectsStorage, IntakeStorage, WorkItemRow, WorkItemsStorage } from '@factory/store';
 
 import type { ClickUpTask, ClickUpThreadComment, ClickUpUser } from './api.ts';
 import type { IntakeRoutesReader } from '@factory/core';
 
+import { ClickUpNotConnectedError } from './connection.ts';
+import type { ClickUpClients } from './connection.ts';
 import { CLICKUP_INTEGRATION_ID, routedClickUpLists } from './lists.ts';
 
 export const CLICKUP_PLATFORM = 'clickup';
@@ -20,31 +28,59 @@ export interface ClickUpConversationClient {
   download(url: string): Promise<Uint8Array>;
 }
 
-/** A thread is a top-level task comment; replies go under it. Ref: `<taskId>:<commentId>`. */
-export function clickUpThreadId(taskId: string, commentId: string): string {
-  return `${taskId}:${commentId}`;
+/**
+ * A thread is a top-level task comment; replies go under it. Ref: `<taskId>:<commentId>:<orgId>`
+ * (the organization URI-encoded): the organization whose token read the comment answers in it
+ * (ADR-0032). Threads written before tokens moved into organizations are `<taskId>:<commentId>`;
+ * an agent's reply to one goes out as its session's organization.
+ */
+export function clickUpThreadId(orgId: string, taskId: string, commentId: string): string {
+  return `${taskId}:${commentId}:${encodeURIComponent(orgId)}`;
 }
 
-function parseThreadId(id: string): { taskId: string; commentId: string } {
-  const [taskId, commentId, ...rest] = id.split(':');
-  if (!taskId || !commentId || rest.length > 0) throw new Error(`Not a ClickUp thread reference: "${id}".`);
-  return { taskId, commentId };
+export function parseClickUpThreadId(id: string): { taskId: string; commentId: string; orgId?: string } {
+  const [taskId, commentId, org, ...rest] = id.split(':');
+  if (!taskId || !commentId || org === '' || rest.length > 0) throw new Error(`Not a ClickUp thread reference: "${id}".`);
+  if (org === undefined) return { taskId, commentId };
+  let orgId: string;
+  try {
+    orgId = decodeURIComponent(org);
+  } catch {
+    throw new Error(`Not a ClickUp thread reference: "${id}".`);
+  }
+  return { taskId, commentId, orgId };
 }
 
-/** ClickUp's outbound half of a conversation channel. */
-export function createClickUpChannel(client: Pick<ClickUpConversationClient, 'replyToComment' | 'download'>): ConversationChannel {
+/** Whose client posts in a thread: the thread's organization, which must be the replying session's. */
+function threadOrg(thread: ConversationThreadRef, scope: ConversationReplyScope | undefined): { orgId: string; commentId: string } {
+  if (thread.platform !== CLICKUP_PLATFORM) throw new Error(`Thread ${thread.id} is not a ClickUp thread.`);
+  const parsed = parseClickUpThreadId(thread.id);
+  if (parsed.orgId && scope && parsed.orgId !== scope.orgId) {
+    throw new Error(`ClickUp thread ${thread.id} belongs to another organization; reply only in threads of your own organization.`);
+  }
+  const orgId = parsed.orgId ?? scope?.orgId;
+  if (!orgId) throw new Error(`ClickUp thread ${thread.id} names no organization, and the reply comes from none.`);
+  return { orgId, commentId: parsed.commentId };
+}
+
+/** ClickUp's outbound half of a conversation channel: every reply uses the thread organization's own token. */
+export function createClickUpChannel(clients: Pick<ClickUpClients, 'require'>): ConversationChannel {
   return {
     platform: CLICKUP_PLATFORM,
-    reply: async (thread, text) => {
-      if (thread.platform !== CLICKUP_PLATFORM) throw new Error(`Thread ${thread.id} is not a ClickUp thread.`);
-      await client.replyToComment(parseThreadId(thread.id).commentId, text);
+    reply: async (thread, text, scope) => {
+      const { orgId, commentId } = threadOrg(thread, scope);
+      await (await clients.require(orgId)).replyToComment(commentId, text);
     },
-    download: attachment => client.download(attachment.url),
+    download: async (attachment, thread) => {
+      const { orgId } = threadOrg(thread, undefined);
+      return (await clients.require(orgId)).download(attachment.url);
+    },
   };
 }
 
 export interface ClickUpConversationPollerOptions {
-  client: ClickUpConversationClient;
+  /** The organization's client, from its own stored token; `null` when it has not connected ClickUp. */
+  clients: { forOrg(orgId: string): Promise<ClickUpConversationClient | null> };
   router: Pick<ConversationRouter, 'handle'>;
   intake: Pick<IntakeStorage, 'getConfig'>;
   /** The Factories' intake routes: the Lists they name are the ones whose comment threads are read. */
@@ -73,9 +109,11 @@ export function createClickUpConversationPoller(options: ClickUpConversationPoll
   /** Top-level comment ids of threads Factory was addressed in. */
   const joined = new Set<string>();
   const cards = new Map<string, { project: FactoryProject; card: WorkItemRow }>();
-  let bot: ClickUpUser | undefined;
+  /** Factory's ClickUp account per client: each organization's token is its own account. */
+  const bots = new WeakMap<ClickUpConversationClient, ClickUpUser>();
 
   const inbound = (
+    orgId: string,
     task: ClickUpTask,
     threadCommentId: string,
     comment: ClickUpThreadComment,
@@ -84,7 +122,7 @@ export function createClickUpConversationPoller(options: ClickUpConversationPoll
   ): InboundMessage => ({
     platform: CLICKUP_PLATFORM,
     id: comment.id,
-    thread: { platform: CLICKUP_PLATFORM, id: clickUpThreadId(task.id, threadCommentId) },
+    thread: { platform: CLICKUP_PLATFORM, id: clickUpThreadId(orgId, task.id, threadCommentId) },
     sender: {
       teamId: task.teamId ?? '',
       userId: comment.authorId,
@@ -110,12 +148,31 @@ export function createClickUpConversationPoller(options: ClickUpConversationPoll
       errors: [],
       cards,
     };
-    bot ??= await options.client.authorizedUser();
-    const me = bot;
     const touched = new Set<string>();
+    const readers = new Map<string, { client: ClickUpConversationClient; me: ClickUpUser } | null>();
 
     for (const { project, listId } of await routedClickUpLists(options)) {
       const orgId = project.orgId;
+      // Each organization reads its threads with its own token; one without a token reads nothing.
+      if (!readers.has(orgId)) {
+        try {
+          const client = await options.clients.forOrg(orgId);
+          if (!client) throw new ClickUpNotConnectedError(orgId);
+          let me = bots.get(client);
+          if (!me) {
+            me = await client.authorizedUser();
+            bots.set(client, me);
+          }
+          readers.set(orgId, { client, me });
+        } catch (error) {
+          readers.set(orgId, null);
+          summary.failed += 1;
+          summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+      const reader = readers.get(orgId);
+      if (!reader) continue;
+      const { client, me } = reader;
       {
         touched.add(project.id);
         const cursorKey = `${project.id}:${listId}`;
@@ -123,7 +180,7 @@ export function createClickUpConversationPoller(options: ClickUpConversationPoll
         let newest = since;
         let failed = false;
         try {
-          for (const task of await options.client.listTasks({ listId, updatedAfter: since, includeClosed: false })) {
+          for (const task of await client.listTasks({ listId, updatedAfter: since, includeClosed: false })) {
             const card = await options.workItems.getByProjectSource({
               orgId,
               factoryProjectId: project.id,
@@ -131,21 +188,22 @@ export function createClickUpConversationPoller(options: ClickUpConversationPoll
             });
             if (!card) continue;
             try {
-              for (const comment of await options.client.listThreadComments(task.id)) {
-                const thread = clickUpThreadId(task.id, comment.id);
+              for (const comment of await client.listThreadComments(task.id)) {
+                const thread = clickUpThreadId(orgId, task.id, comment.id);
+                const joinedKey = `${orgId}:${comment.id}`;
                 cards.set(thread, { project, card });
                 const messages: InboundMessage[] = [];
-                if (Date.parse(comment.createdAt) > startedAt.getTime()) messages.push(inbound(task, comment.id, comment, me, false));
-                if (joined.has(comment.id) && comment.replyCount > 0) {
-                  for (const reply of await options.client.listReplies(comment.id)) {
-                    if (Date.parse(reply.createdAt) > startedAt.getTime()) messages.push(inbound(task, comment.id, reply, me, true));
+                if (Date.parse(comment.createdAt) > startedAt.getTime()) messages.push(inbound(orgId, task, comment.id, comment, me, false));
+                if (joined.has(joinedKey) && comment.replyCount > 0) {
+                  for (const reply of await client.listReplies(comment.id)) {
+                    if (Date.parse(reply.createdAt) > startedAt.getTime()) messages.push(inbound(orgId, task, comment.id, reply, me, true));
                   }
                 }
                 for (const message of messages) {
                   summary.checked += 1;
                   const outcome = await options.router.handle(message);
                   if (outcome === 'delivered' || outcome === 'connect-card' || outcome === 'linked') {
-                    joined.add(comment.id);
+                    joined.add(joinedKey);
                     summary.updated += 1;
                   }
                 }

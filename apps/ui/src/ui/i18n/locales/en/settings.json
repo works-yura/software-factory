@@ -39,13 +39,32 @@
     "clickup": {
       "title": "ClickUp tasks",
       "checking": "Checking the ClickUp connection…",
-      "notConfigured": "ClickUp is not configured on this server. Set CLICKUP_API_TOKEN and restart it to enable ClickUp.",
+      "notConfigured": "ClickUp is not installed on this server.",
       "authRequired": "Sign in again to manage ClickUp syncing.",
       "organizationRequired": "Select an organization to manage ClickUp syncing.",
       "statusUnavailable": "ClickUp status could not be loaded.",
-      "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
+      "rejected": "ClickUp rejected the organization's token. An admin can replace it.",
       "ready": "Tasks are checked every {{seconds}} s in the Lists that intake routes name (Settings › Work Intake, source ClickUp, the «List» condition): a route decides whether a task is imported, where its card goes and what a status change does.",
-      "sync": "Import ClickUp tasks"
+      "sync": "Import ClickUp tasks",
+      "notConnected": "ClickUp is not connected for this organization yet. Paste a ClickUp personal API token (pk_…, ClickUp › Settings › Apps): ClickUp checks it, and Factory stores it encrypted for your organization only.",
+      "notConnectedMember": "ClickUp is not connected for this organization yet. An organization admin can connect it.",
+      "account": "ClickUp account: {{username}}",
+      "token": {
+        "label": "ClickUp API token",
+        "placeholder": "pk_…",
+        "connect": "Connect",
+        "checking": "Checking…",
+        "replace": "Replace token",
+        "disconnect": "Disconnect",
+        "cancel": "Cancel",
+        "connected": "ClickUp connected",
+        "disconnected": "ClickUp disconnected",
+        "failed": "ClickUp could not be connected",
+        "adminOnly": "Only an organization admin connects, replaces or disconnects the token.",
+        "confirmTitle": "Disconnect ClickUp?",
+        "confirmBody": "The token is deleted. The organization stops importing ClickUp tasks and answering in comments until an admin connects a token again. Intake routes and cards stay.",
+        "confirm": "Disconnect"
+      }
     },
     "sources": {
       "title": "Sources",

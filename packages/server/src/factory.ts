@@ -345,6 +345,13 @@ export interface MastraFactoryConfig {
    */
   publicUrl?: string;
   /**
+   * Integration tokens a deployment used to keep in its env (`CLICKUP_API_TOKEN`, …), read once by
+   * the entry and handed here only so the boot migration `integrations.envTokensToOrg.<id>.v1` can
+   * move each into the organization that owned all data before organizations existed (ADR-0032).
+   * Nothing else reads them; once that migration ran on a deployment they can be deleted.
+   */
+  retiredIntegrationEnv?: Readonly<Record<string, string>>;
+  /**
    * The Factory MCP server at `/web/factory/projects/:projectId/mcp`, which lets
    * MCP clients such as ChatGPT use the Factory tools as the signed-in user.
    * On by default with Mastra Platform auth; other providers need
@@ -1160,6 +1167,7 @@ export class MastraFactory {
         projectBoards: this.#projectBoards,
         integrations,
         mcpServers: mcpServersStorage,
+        retiredIntegrationEnv: this.#config.retiredIntegrationEnv ?? {},
       }),
       {
         ...(storage.isDomainReady('boot-migrations') ? { markers: bootMigrationsStorage } : {}),

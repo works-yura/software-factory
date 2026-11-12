@@ -229,16 +229,23 @@ const gitlab = gitlabAccessToken
     })
   : undefined;
 
-// ClickUp by polling: only the token lives in env; Lists, routing and tag → board are set in
-// Settings › Intake. No webhook, so it works on a local server.
-const clickupApiToken = process.env.CLICKUP_API_TOKEN?.trim();
+// ClickUp by polling: each organization connects its own token in Settings › Підключення, stored
+// encrypted (ADR-0032); nothing reads a ClickUp token from env. Lists, routing and tag → board are set
+// in Settings › Intake. No webhook, so it works on a local server.
 const clickupPollSeconds = Number(process.env.CLICKUP_POLL_INTERVAL_SECONDS);
-const clickup = clickupApiToken
-  ? new ClickUpIntegration({
-      apiToken: clickupApiToken,
-      ...(Number.isFinite(clickupPollSeconds) && clickupPollSeconds > 0 ? { intervalSeconds: clickupPollSeconds } : {}),
-    })
-  : undefined;
+const clickup = new ClickUpIntegration({
+  ...(Number.isFinite(clickupPollSeconds) && clickupPollSeconds > 0 ? { intervalSeconds: clickupPollSeconds } : {}),
+});
+
+// Integration tokens that used to live in env (ADR-0032). Read only here, only to hand them to the
+// one-time boot migration that moves each into the `factory-local-org` organization; after the first
+// boot on this version they can be deleted from the env.
+const RETIRED_INTEGRATION_ENV_KEYS = ['CLICKUP_API_TOKEN'] as const;
+const retiredIntegrationEnv: Record<string, string> = {};
+for (const key of RETIRED_INTEGRATION_ENV_KEYS) {
+  const value = process.env[key]?.trim();
+  if (value) retiredIntegrationEnv[key] = value;
+}
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, FACTORY_CREDENTIAL_ENCRYPTION_KEY, DATABASE_URL, …) never leak into
@@ -318,7 +325,7 @@ const firebase = new FirebaseIntegration();
 const integrations = [
   ...(github ? [github] : []),
   ...(gitlab ? [gitlab] : []),
-  ...(clickup ? [clickup] : []),
+  clickup,
   firebase,
 ];
 
@@ -431,6 +438,7 @@ export const factory = new MastraFactory({
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.
   publicUrl: process.env.MASTRACODE_PUBLIC_URL,
+  retiredIntegrationEnv,
   // Allowed cross-origin SPA origins (comma-separated). The SPA is served from
   // a separate static host, so credentialed requests must be explicitly allowed.
   allowedOrigins: (process.env.MASTRACODE_ALLOWED_ORIGINS ?? '')

@@ -1,4 +1,5 @@
 export * from './api.ts';
+export * from './connection.ts';
 export * from './integration.ts';
 export * from './intake.ts';
 export * from './poller.ts';

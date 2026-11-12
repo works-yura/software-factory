@@ -267,6 +267,17 @@ export interface FactoryIntegration {
    */
   migrate?(ctx: IntegrationMigrationContext): Promise<void>;
   /**
+   * Moves the token a deployment used to keep in its env (ADR-0032) into `orgId`'s connection, once:
+   * `env` holds the retired variables the entry read (`CLICKUP_API_TOKEN`, …). Never overwrites a
+   * token the organization already stored. Run by the factory's boot migration
+   * `integrations.envTokensToOrg.<id>.v1`; returns a line for the log when something moved or was kept.
+   */
+  adoptDeploymentToken?(input: {
+    storage: IntegrationStorageHandle;
+    orgId: string;
+    env: Readonly<Record<string, string>>;
+  }): Promise<string | undefined>;
+  /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds
    * the result into the server's route table.

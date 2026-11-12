@@ -48,13 +48,26 @@ export interface InboundMessage {
   createdAt: string;
 }
 
+/**
+ * Who is replying: the organization of the agent session that called the reply tool. Provider
+ * credentials belong to an organization (ADR-0032), so an adapter answers with that organization's
+ * account and refuses a thread another organization's account read.
+ */
+export interface ConversationReplyScope {
+  orgId: string;
+}
+
 /** Outbound side every adapter implements. */
 export interface ConversationChannel {
   readonly platform: string;
-  /** Post `text` as a reply in `thread`, visible to everyone in it. */
-  reply(thread: ConversationThreadRef, text: string): Promise<void>;
-  /** Fetch an attachment's bytes (only called for audio the core will transcribe). */
-  download(attachment: ConversationAttachment): Promise<Uint8Array>;
+  /**
+   * Post `text` as a reply in `thread`, visible to everyone in it. `scope` is set when an agent
+   * replies (its session's organization); the router's own notes pass none — the thread the
+   * adapter wrote says whose account read it.
+   */
+  reply(thread: ConversationThreadRef, text: string, scope?: ConversationReplyScope): Promise<void>;
+  /** Fetch an attachment's bytes (only called for audio the core will transcribe) from the thread it came in. */
+  download(attachment: ConversationAttachment, thread: ConversationThreadRef): Promise<Uint8Array>;
 }
 
 export interface TranscriptionInput {

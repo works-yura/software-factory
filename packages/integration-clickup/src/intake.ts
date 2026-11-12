@@ -7,15 +7,18 @@ import type {
   IntakeIssueDetail,
   IntakeItemPage,
   IntakeSource,
+  IntegrationConnection,
   ListIntakeIssuesInput,
   ListIntakeItemsInput,
+  ListIntakeSourcesInput,
   ResolveIntakeDispatchInput,
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
 } from '@factory/capabilities';
 
 import { ClickUpApiError } from './api.ts';
-import type { ClickUpClient, ClickUpList, ClickUpTask } from './api.ts';
+import type { ClickUpList, ClickUpTask } from './api.ts';
+import type { ClickUpApi, ClickUpClients } from './connection.ts';
 
 const SOURCE_CACHE_MS = 60_000;
 
@@ -53,39 +56,43 @@ function decodeCursor(value: string | undefined): { source: number; page: number
   }
 }
 
-/** ClickUp as an intake provider: Lists are sources, tasks are issues. */
+/** ClickUp as an intake provider: Lists are sources, tasks are issues. Every call uses the organization's own token. */
 export class ClickUpIntake implements Intake {
-  readonly #client: ClickUpClient;
-  readonly #token: string;
-  #sources: { at: number; value: ClickUpList[] } | undefined;
+  readonly #clients: ClickUpClients;
+  readonly #sources = new Map<string, { at: number; client: ClickUpApi; value: ClickUpList[] }>();
 
-  constructor(client: ClickUpClient, token: string) {
-    this.#client = client;
-    this.#token = token;
+  constructor(clients: ClickUpClients) {
+    this.#clients = clients;
   }
 
-  /** Lists of every Workspace the token can see; cached briefly because it fans out over Spaces. */
-  async lists(): Promise<ClickUpList[]> {
-    if (this.#sources && Date.now() - this.#sources.at < SOURCE_CACHE_MS) return this.#sources.value;
+  /**
+   * Lists of every Workspace the organization's token can see; cached briefly per organization
+   * because it fans out over Spaces (a replaced token reads afresh).
+   */
+  async lists(orgId: string): Promise<ClickUpList[]> {
+    const client = await this.#clients.require(orgId);
+    const cached = this.#sources.get(orgId);
+    if (cached && cached.client === client && Date.now() - cached.at < SOURCE_CACHE_MS) return cached.value;
     const lists: ClickUpList[] = [];
-    for (const workspace of await this.#client.listWorkspaces()) lists.push(...(await this.#client.listLists(workspace)));
-    this.#sources = { at: Date.now(), value: lists };
+    for (const workspace of await client.listWorkspaces()) lists.push(...(await client.listLists(workspace)));
+    this.#sources.set(orgId, { at: Date.now(), client, value: lists });
     return lists;
   }
 
-  resolveIntakeDispatch = async ({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> => {
+  resolveIntakeDispatch = async ({ orgId, externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> => {
     if (externalSource.type !== 'task') return null;
-    const task = await this.#client.getTask(externalSource.externalId);
+    const token = await this.#clients.tokenOf(orgId);
+    const task = await this.#clients.forToken(token).getTask(externalSource.externalId);
     if (!task) return null;
     return {
-      connection: { type: 'oauth', accessToken: this.#token },
+      connection: { type: 'oauth', accessToken: token },
       ...(task.listId ? { sourceId: task.listId } : {}),
       issueId: task.id,
     };
   };
 
-  listSources = async (): Promise<IntakeSource[]> =>
-    (await this.lists()).map(list => ({
+  listSources = async ({ orgId }: ListIntakeSourcesInput): Promise<IntakeSource[]> =>
+    (await this.lists(orgId)).map(list => ({
       id: list.id,
       name: list.path ? `${list.path} / ${list.name}` : list.name,
       type: 'list',
@@ -93,7 +100,7 @@ export class ClickUpIntake implements Intake {
     }));
 
   listItems = async (input: ListIntakeItemsInput): Promise<IntakeItemPage> => {
-    const page = await this.#page(input.sourceIds, input.cursor);
+    const page = await this.#page(await this.#clients.require(input.orgId), input.sourceIds, input.cursor);
     return {
       items: page.tasks.map(({ task, listId }) => ({
         source: { type: 'task', externalId: task.id, url: task.url },
@@ -111,7 +118,7 @@ export class ClickUpIntake implements Intake {
   };
 
   listIssues = async (input: ListIntakeIssuesInput) => {
-    const page = await this.#page(input.sourceIds, input.cursor);
+    const page = await this.#page(this.#client(input.connection), input.sourceIds, input.cursor);
     const wanted = (input.labels ?? []).map(label => label.toLowerCase());
     return {
       issues: page.tasks
@@ -122,32 +129,40 @@ export class ClickUpIntake implements Intake {
   };
 
   getIssue = async (input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> => {
-    const task = await this.#client.getTask(input.issueId);
+    const client = this.#client(input.connection);
+    const task = await client.getTask(input.issueId);
     if (!task) return null;
-    const comments = await this.#client.listComments(task.id);
+    const comments = await client.listComments(task.id);
     return { ...toIssue(task), description: task.description || null, comments };
   };
 
   createComment = async (input: CreateIntakeCommentInput): Promise<CreatedIntakeComment | null> => {
-    const created = await this.#client.createComment(input.issueId, input.body);
+    const created = await this.#client(input.connection).createComment(input.issueId, input.body);
     return { id: created.id, url: '' };
   };
 
   updateIssue = async (input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> => {
-    const task = await this.#client.getTask(input.issueId);
+    const client = this.#client(input.connection);
+    const task = await client.getTask(input.issueId);
     if (!task) return null;
-    const status = await this.#targetStatus(task, input.state);
+    const status = await this.#targetStatus(client, task, input.state);
     if (!status) return null;
-    if (status !== task.status.name) await this.#client.setTaskStatus(task.id, status);
-    const refreshed = (await this.#client.getTask(task.id)) ?? task;
+    if (status !== task.status.name) await client.setTaskStatus(task.id, status);
+    const refreshed = (await client.getTask(task.id)) ?? task;
     return toIssue(refreshed);
   };
 
-  async #targetStatus(task: ClickUpTask, state: UpdateIntakeIssueInput['state']): Promise<string | null> {
+  /** The client for the organization token an intake connection carries (from `resolveIntakeDispatch`). */
+  #client(connection: IntegrationConnection): ClickUpApi {
+    if (connection.type !== 'oauth') throw new Error(`ClickUp takes an organization token, not a ${connection.type} connection.`);
+    return this.#clients.forToken(connection.accessToken);
+  }
+
+  async #targetStatus(client: ClickUpApi, task: ClickUpTask, state: UpdateIntakeIssueInput['state']): Promise<string | null> {
     if (state.kind === 'byName') return state.name;
     if (state.stateType === 'canceled' || !task.listId) return null;
     const wantedTypes = { unstarted: ['open'], started: ['custom'], completed: ['closed', 'done'] }[state.stateType];
-    const { statuses } = await this.#client.getList(task.listId);
+    const { statuses } = await client.getList(task.listId);
     for (const type of wantedTypes) {
       const match = statuses.find(status => status.type === type);
       if (match) return match.name;
@@ -156,13 +171,13 @@ export class ClickUpIntake implements Intake {
   }
 
   /** Tasks of the next List page, walking the selected Lists in order. */
-  async #page(sourceIds: string[], cursorValue: string | undefined) {
+  async #page(client: ClickUpApi, sourceIds: string[], cursorValue: string | undefined) {
     const cursor = decodeCursor(cursorValue);
     if (!cursor || cursor.source >= sourceIds.length) return { tasks: [], nextCursor: null };
     const listId = sourceIds[cursor.source]!;
     let result;
     try {
-      result = await this.#client.listTasksPage({ listId, page: cursor.page });
+      result = await client.listTasksPage({ listId, page: cursor.page });
     } catch (error) {
       // A List removed or hidden since it was selected must not break the whole intake feed.
       if (error instanceof ClickUpApiError && (error.status === 404 || error.status === 403)) {
