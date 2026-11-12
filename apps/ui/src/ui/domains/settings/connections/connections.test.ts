@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { mcpCatalogEntry } from '@factory/core';
+
+import toolboxOverlay from '../../../../../../../packages/server/src/mcp-servers/catalog/mcp-toolbox.factory.json';
+import toolboxManifest from '../../../../../../../packages/server/src/mcp-servers/catalog/mcp-toolbox.server.json';
 import type { FirebaseState } from '../services/firebase';
 import type { McpServer, McpServersState } from '../services/mcpServers';
 import { connectionCatalog, factoryConnections, filterCatalog, linkableAccounts } from './connections';
@@ -55,9 +59,12 @@ const toolbox = server({
 });
 const elsewhere = server({ id: 'srv-other', name: 'sentry', label: 'Sentry', assignments: [{ factoryProjectId: 'other' }] });
 
+const toolboxEntry = mcpCatalogEntry(toolboxManifest, toolboxOverlay);
+const sentry = server({ id: 'srv-sentry', name: 'sentry', label: 'Sentry', assignments: [{ factoryProjectId: 'syncts' }] });
+
 const mcp: McpServersState = {
-  servers: [managed, toolbox, elsewhere],
-  catalog: [],
+  servers: [managed, toolbox, sentry, elsewhere],
+  catalog: [toolboxEntry, { ...toolboxEntry, id: 'weather', integration: undefined }],
   credentials: { 'google-cloud-account': [{ id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' }] },
   canEdit: true,
 };
@@ -71,28 +78,33 @@ describe('factoryConnections', () => {
     gitlab: { enabled: true, configured: false, reauthRequired: false },
   });
 
-  it("lists the Factory's Google Cloud links, then its MCP servers, then organization-wide sources", () => {
-    expect(rows.map(row => [row.id, row.scope])).toEqual([
-      ['google-cloud:b-1', 'factory'],
-      ['google-cloud:b-2', 'factory'],
-      ['mcp:srv-toolbox', 'factory'],
-      ['clickup', 'organization'],
-      ['github', 'organization'],
+  it("lists the Factory's Google Cloud, then organization-wide sources, then MCP servers", () => {
+    expect(rows.map(row => [row.id, row.kind, row.scope])).toEqual([
+      ['google-cloud:b-1', 'google-cloud', 'factory'],
+      ['google-cloud:b-2', 'google-cloud', 'factory'],
+      ['mcp:srv-toolbox', 'google-cloud', 'factory'],
+      ['clickup', 'clickup', 'organization'],
+      ['github', 'github', 'organization'],
+      ['mcp:srv-sentry', 'mcp', 'factory'],
     ]);
   });
 
   it("folds a binding's «База» server into the binding's row and takes its health", () => {
     const binding = rows[0]!;
     expect(binding).toMatchObject({ title: 'syncta-57c6a', account: { name: 'Syncta' }, state: 'ok', server: { id: 'srv-db' } });
-    expect(binding.capabilities).toEqual([{ key: 'logs' }, { key: 'crashes', count: 1 }, { key: 'database' }]);
+    expect(binding.capabilities).toEqual([{ key: 'logs' }, { key: 'crashes' }, { key: 'database' }]);
   });
 
   it('says a binding that reads nothing does so', () => {
     expect(rows[1]).toMatchObject({ state: 'reads-nothing', capabilities: [] });
   });
 
-  it('names the account an MCP server reads through and marks it MCP', () => {
-    expect(rows[2]).toMatchObject({ mcp: true, account: { name: 'Syncta' }, state: 'unchecked' });
+  it('shows a database made from an entry Google Cloud runs as Google Cloud\'s «База», not as MCP', () => {
+    expect(rows[2]).toMatchObject({ kind: 'google-cloud', title: 'Firestore', mcp: false, account: { name: 'Syncta' }, capabilities: [{ key: 'database' }], state: 'unchecked' });
+  });
+
+  it('marks an own server MCP', () => {
+    expect(rows[5]).toMatchObject({ kind: 'mcp', title: 'Sentry', mcp: true });
   });
 
   it('marks a connection the environment makes', () => {
@@ -102,7 +114,23 @@ describe('factoryConnections', () => {
 
 describe('linkableAccounts', () => {
   it("offers every Google Cloud account and the MCP servers the Factory has no access to, never a managed one", () => {
-    expect(linkableAccounts('syncts', { firebase, mcp }).map(account => account.id)).toEqual(['google-cloud:acc-1', 'mcp:srv-other']);
+    expect(linkableAccounts('syncts', { firebase, mcp }).map(account => [account.id, account.kind])).toEqual([
+      ['google-cloud:acc-1', 'google-cloud'],
+      ['mcp:srv-other', 'mcp'],
+    ]);
+  });
+});
+
+describe('connectionCatalog', () => {
+  it('offers first-party integrations, then third-party and own MCP servers under «Інше»; never an entry an integration runs', () => {
+    expect(connectionCatalog({ firebase, mcp }).map(item => [item.id, item.section, item.mcp])).toEqual([
+      ['google-cloud', 'integrations', false],
+      ['clickup', 'integrations', false],
+      ['github', 'integrations', false],
+      ['gitlab', 'integrations', false],
+      ['mcp-entry:weather', 'other', true],
+      ['mcp-custom', 'other', true],
+    ]);
   });
 });
 

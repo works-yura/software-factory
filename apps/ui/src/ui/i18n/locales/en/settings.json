@@ -1237,9 +1237,9 @@
     },
     "managed": {
       "title": "Managed by {{integration}}",
-      "hint": "Its binding in the service sets the config and access; here you can change only what each tool may do and the masking.",
+      "hint": "Its Google Cloud binding sets the config and access; here you can change only what each tool may do and the masking.",
       "open": "Open Google Cloud",
-      "accessHint": "Its binding in the service sets which Factory gets it.",
+      "accessHint": "Its Google Cloud binding sets which Factory gets it.",
       "summary": "managed by {{integration}}",
       "by": {
         "firebase": "Google Cloud"
@@ -1338,7 +1338,7 @@
       "removeBinding": "Remove binding",
       "removeAria": "Remove binding {{title}}",
       "database": "Database (Firestore)",
-      "databaseHint": "Agents read this project’s Firestore through MCP Toolbox. Read-only when the account has only Cloud Datastore Viewer. What its tools may do is set on this connection’s page.",
+      "databaseHint": "Agents read this project’s Firestore, read-only when the account has only Cloud Datastore Viewer. What the database tools may do is set on this connection’s page.",
       "databaseId": "Firestore database",
       "databaseIdHint": "Empty for the (default) database.",
       "databaseOn": "database"
@@ -1564,7 +1564,7 @@
     "description": "Services and tools this Factory's agents use. Accounts belong to the organization: one can be linked to several Factories.",
     "add": "Add connection",
     "loading": "Loading connections…",
-    "empty": "This Factory uses nothing yet. Add a connection: Google Cloud, an MCP server, ClickUp or GitHub.",
+    "empty": "This Factory uses nothing yet. Add Google Cloud, ClickUp, GitHub or your own server.",
     "listLabel": "This Factory's connections",
     "columns": {
       "integration": "Integration",
@@ -1582,22 +1582,16 @@
       "github": "GitHub",
       "gitlab": "GitLab"
     },
-    "summaries": {
-      "google-cloud": "Logs, crashes and the Firestore database of Google Cloud projects through a service account.",
-      "mcp-custom": "Your own MCP server: a local command or an address.",
-      "clickup": "Tasks from ClickUp Lists land on boards by the intake routes.",
-      "github": "GitHub repositories, issues and pull requests.",
-      "gitlab": "GitLab repositories and issues."
-    },
     "capabilities": {
       "logs": "Logs",
       "crashes_one": "Crashes · {{count}} app",
       "crashes_other": "Crashes · {{count}} apps",
-      "database": "Database (MCP)",
+      "database": "Database",
       "tools_one": "{{count}} tool",
       "tools_other": "{{count}} tools",
       "tasks": "Tasks",
-      "repositories": "Repositories"
+      "repositories": "Repositories",
+      "crashes": "Crashes"
     },
     "states": {
       "ok": "Working",
@@ -1648,34 +1642,16 @@
     "back": "All connections",
     "detail": {
       "account": "Google Cloud account",
-      "database": "Database (MCP Toolbox)",
-      "databaseHint": "What the database tools may do and whether personal data is masked. The binding above sets the project and access.",
+      "database": "Database (Firestore)",
+      "databaseHint": "What agents may do with the database and whether personal data is masked. The binding above sets the project.",
       "notFound": "This connection is gone: it was unlinked or deleted.",
-      "newMcp": "New MCP server"
-    },
-    "drawer": {
-      "title": "Add connection",
-      "description": "A new integration for this Factory, or an account the organization already has.",
-      "search": "Search integrations and accounts",
-      "filters": {
-        "label": "Type",
-        "all": "All",
-        "tools": "Tools",
-        "sources": "Sources"
-      },
-      "accounts": "Already in the organization",
-      "catalog": "Integrations",
-      "link": "Link",
-      "connect": "Connect",
-      "open": "Open",
-      "connected": "Connected",
-      "nothing": "Nothing found.",
-      "linked": "“{{name}}” linked to the Factory",
-      "accountHint": "A new project through this account"
+      "newMcp": "New MCP server",
+      "diagnostics": "Diagnostics",
+      "transport": "Under the hood: {{transport}} · server {{server}}"
     },
     "activity": {
       "title": "Activity",
-      "description": "Tool calls by this Factory's agents in the last 24 hours. Only MCP server calls are recorded so far (including the Google Cloud database); reading logs and crashes is not logged.",
+      "description": "Tool calls by this Factory's agents in the last 24 hours. Calls to the Google Cloud database and MCP servers are recorded so far; reading logs and crashes is not logged.",
       "none": "No calls by agents in the last 24 hours.",
       "summary_one": "{{count}} call · errors: {{errors}}",
       "summary_other": "{{count}} calls · errors: {{errors}}",
@@ -1686,6 +1662,64 @@
       "error": "error",
       "tried": "tried from settings",
       "session": "Open session"
+    },
+    "connect": {
+      "title": "Connect {{name}}",
+      "subtitle": {
+        "google-cloud": "Logs, crashes and the Firestore database — read-only, through a service account.",
+        "clickup": "Tasks from ClickUp Lists land on boards by the intake routes.",
+        "github": "GitHub repositories, issues and pull requests.",
+        "gitlab": "GitLab repositories and issues."
+      },
+      "back": "Back",
+      "retry": "Try again",
+      "continue": "Continue",
+      "openSettings": "Open settings",
+      "errorTitle": "Couldn't connect",
+      "chooseAccount": "Which account reads it?",
+      "newKey": "New service account key",
+      "newKeyHint": "Paste the service account key JSON or pick the file.",
+      "keyName": "Account name",
+      "keyNamePlaceholder": "For example, Syncta",
+      "key": "Key (JSON)",
+      "pickFile": "Pick a file",
+      "roles": "Read-only roles needed: Logs Viewer, Firebase Crashlytics Viewer, Cloud Datastore Viewer.",
+      "submit": "Connect",
+      "connecting": "Connecting…",
+      "successTitle": "Account “{{name}}” added",
+      "successBody": "Now pick the Google Cloud project this Factory reads.",
+      "bindProject": "Pick a project",
+      "connectedTitle": "Connected",
+      "notConnectedTitle": "Not connected yet",
+      "statusFailed": "Couldn't read the status: {{error}}"
+    },
+    "addDialog": {
+      "title": "Add connection",
+      "description": "An integration for this Factory, or an account the organization already has.",
+      "search": "Search",
+      "searchLabel": "Search integrations and accounts",
+      "filters": {
+        "label": "Type",
+        "all": "All",
+        "tools": "Tools",
+        "sources": "Sources"
+      },
+      "accounts": "Organization accounts",
+      "integrations": "Integrations",
+      "other": "Other",
+      "customMcp": "Own MCP server",
+      "nothing": "Nothing found.",
+      "add": "Connect {{name}}",
+      "link": "Link {{name}}",
+      "linking": "Linking…",
+      "linked": "“{{name}}” linked to the Factory",
+      "connected": "connected",
+      "capability": {
+        "tools": "Tools for agents",
+        "tasks": "Tasks",
+        "code": "Repositories"
+      },
+      "googleAccount": "Google Cloud account"
     }
   }
 }

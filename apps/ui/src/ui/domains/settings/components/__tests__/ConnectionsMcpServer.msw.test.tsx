@@ -136,12 +136,7 @@ async function pick(combobox: string, option: string) {
 describe('Підключення: MCP servers', () => {
   it('adds Firestore from the catalog: picks the Google Cloud account, takes the project from the Factory, no raw variable names', async () => {
     const writes = useHandlers();
-    await render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    const drawer = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.type(within(drawer).getByRole('searchbox', { name: 'Search integrations and accounts' }), 'firestore');
-    expect(within(drawer).queryByRole('button', { name: /Own server/ })).not.toBeInTheDocument();
-    await userEvent.click(within(drawer).getByRole('button', { name: 'Connect: Database (MCP Toolbox)' }));
+    await render(NEW_TOOLBOX);
 
     await pick('What to connect', 'Firestore');
     // The form is the manifest's inputs in the person's language, never env names.
@@ -268,7 +263,11 @@ describe('Підключення: MCP servers', () => {
     const writes = useHandlers([{ ...managedServer, health: undefined }], true, firebaseState);
     await render('?connection=google-cloud:bnd-1');
 
-    expect(await screen.findByRole('heading', { name: 'Database (MCP Toolbox)' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Database (Firestore)' })).toBeInTheDocument();
+    // How it runs only under «Diagnostics», folded.
+    expect(screen.queryByText(/MCP Toolbox|@toolbox-sdk/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
+    expect(screen.getByText(/Under the hood: MCP · @toolbox-sdk\/server/)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Add Factory' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
@@ -344,9 +343,10 @@ describe('Підключення: MCP servers', () => {
 
   it('shows each server’s state in its row: tools and when checked, or the error in plain words', async () => {
     const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+    const own = { ...stored, launch: { transport: 'http' as const, url: 'https://mcp.example.test/mcp', headers: {} } };
     useHandlers([
       {
-        ...stored,
+        ...own,
         health: {
           state: 'ok',
           tools: [{ name: 'a', description: '' }, { name: 'b', description: '' }],
@@ -354,13 +354,13 @@ describe('Підключення: MCP servers', () => {
         },
       },
       {
-        ...stored,
+        ...own,
         id: 'srv-2',
         name: 'broken',
         label: 'Broken DB',
         health: { state: 'error', tools: [], error: '7 PERMISSION_DENIED', errorKind: 'auth_denied' },
       },
-      { ...stored, id: 'srv-3', name: 'fresh', label: 'Fresh DB' },
+      { ...own, id: 'srv-3', name: 'fresh', label: 'Fresh DB' },
     ]);
     await render();
     const rowOf = async (name: string) => (await screen.findByRole('button', { name: new RegExp(`^${name}`) })).closest('li')!;

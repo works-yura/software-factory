@@ -55,22 +55,24 @@ async function openMenu(name: string) {
 }
 
 describe('Підключення', () => {
-  it("lists the Factory's connections as one list: Google Cloud with its «База», MCP by badge, organization-wide sources; never another Factory's", async () => {
+  it("lists the Factory's connections as one list: Google Cloud with its «База», organization-wide sources, MCP servers last by badge; never another Factory's", async () => {
     useHandlers();
     renderConnections();
 
     const list = await rows();
     expect(list.map(row => within(row).getAllByRole('button')[0]!.textContent)).toEqual([
       'syncta-57c6aGoogle Cloud',
-      'SentryMCPMCP server',
       'ClickUp',
       'GitHub',
+      'SentryMCPMCP server',
     ]);
     const google = await rowNamed('syncta-57c6a');
     expect(google).toHaveTextContent('Syncta');
     expect(google).toHaveTextContent('factory@syncta-57c6a.iam.gserviceaccount.com');
     expect(google).toHaveTextContent('Logs');
-    expect(google).toHaveTextContent('Database (MCP)');
+    expect(google).toHaveTextContent('Database');
+    // A first-party integration says what it gives, never how it runs.
+    expect(google).not.toHaveTextContent('MCP');
     expect(google).toHaveTextContent('Working');
     // The «База» server is the binding's, not a row of its own.
     expect(screen.queryByRole('button', { name: /^Firestore syncta-57c6a/ })).not.toBeInTheDocument();
@@ -155,22 +157,37 @@ describe('Підключення', () => {
     expect(screen.queryByRole('menuitem', { name: /Delete/ })).not.toBeInTheDocument();
   });
 
-  it('adds from one drawer: filters by type, links an organization server with access for every session kind', async () => {
+  it('adds from one dialog: integrations by capability, MCP only under «Other», the database Google Cloud runs never offered', async () => {
+    useHandlers();
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+
+    const integrations = within(dialog).getByRole('region', { name: 'Integrations' });
+    expect(within(integrations).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
+      'Connect Google Cloud',
+      'Connect ClickUp',
+      'Connect GitHub',
+      'Connect GitLab',
+    ]);
+    expect(within(integrations).queryByText('MCP')).not.toBeInTheDocument();
+    expect(within(within(dialog).getByRole('region', { name: 'Other' })).getByRole('button', { name: 'Connect Own MCP server' })).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Toolbox/)).not.toBeInTheDocument();
+
+    // Sources leave out tools and the organization's accounts.
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Sources' }));
+    expect(within(dialog).queryByRole('region', { name: 'Organization accounts' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Connect Google Cloud' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Connect GitLab' })).toBeInTheDocument();
+  });
+
+  it('links an organization server with access for every session kind', async () => {
     const writes = useHandlers();
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    const drawer = await screen.findByRole('dialog', { name: 'Add connection' });
-
-    // Sources leave out tools and the organization's accounts.
-    await userEvent.click(within(drawer).getByRole('button', { name: 'Sources' }));
-    expect(within(drawer).queryByRole('region', { name: 'Already in the organization' })).not.toBeInTheDocument();
-    expect(within(drawer).getByRole('button', { name: 'Open: ClickUp' })).toBeInTheDocument();
-    expect(within(drawer).getByRole('button', { name: 'Connect: GitLab' })).toBeInTheDocument();
-    expect(within(drawer).queryByRole('button', { name: /Google Cloud/ })).not.toBeInTheDocument();
-
-    await userEvent.click(within(drawer).getByRole('button', { name: 'All' }));
-    await userEvent.type(within(drawer).getByRole('searchbox', { name: 'Search integrations and accounts' }), 'notes');
-    await userEvent.click(within(drawer).getByRole('button', { name: 'Link: Notes' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+    await userEvent.type(within(dialog).getByRole('searchbox', { name: 'Search integrations and accounts' }), 'notes');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Link Notes' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]!.body).toMatchObject({
@@ -183,12 +200,60 @@ describe('Підключення', () => {
     useHandlers();
     renderConnections();
     await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
-    const drawer = await screen.findByRole('dialog', { name: 'Add connection' });
-    await userEvent.click(within(drawer).getByRole('button', { name: 'Link: Syncta' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Link Syncta' }));
 
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=google-cloud&account=acc-1'));
     expect(await screen.findByRole('combobox', { name: 'Google Cloud account' })).toHaveTextContent('Syncta');
     expect(screen.getByRole('combobox', { name: 'Factory' })).toHaveTextContent('syncts');
+  });
+
+  it('connects Google Cloud in the dialog: a refused key shows why and tries again, then goes on to pick the project', async () => {
+    useHandlers();
+    const posted: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/firebase/accounts`, async ({ request }) => {
+        posted.push(await request.json());
+        if (posted.length === 1) return HttpResponse.json({ error: 'invalid_key', message: 'The key has no client_email.' }, { status: 422 });
+        return HttpResponse.json({
+          account: { id: 'acc-2', name: 'BookFate', clientEmail: 'f@bookfate.iam.gserviceaccount.com', projectId: 'bookfate', keyId: 'k', bindingIds: [] },
+          ...firebaseState,
+        });
+      }),
+    );
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Connect Google Cloud' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect Google Cloud' });
+
+    // The organization already has an account: pick it, or add a new key.
+    await userEvent.click(within(dialog).getByRole('button', { name: /New service account key/ }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Key (JSON)' }), '{{"type":"service_account"}');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
+
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't connect");
+    expect(alert).toHaveTextContent('The key has no client_email.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
+
+    expect(await within(dialog).findByText('Account “BookFate” added')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Pick a project' }));
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=google-cloud&account=acc-2'));
+    expect(posted).toHaveLength(2);
+  });
+
+  it('shows ClickUp connected in its step and goes to its settings; «Back» returns to the list', async () => {
+    useHandlers();
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Connect ClickUp' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect ClickUp' });
+    expect(await within(dialog).findByRole('status')).toHaveTextContent('Connected');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Connect ClickUp' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Connect ClickUp' })).getByRole('button', { name: 'Open settings' }));
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?connection=clickup'));
   });
 
   it('shows the last 24 hours of agent calls with counts, newest first', async () => {
@@ -219,7 +284,7 @@ describe('Підключення on a phone', () => {
     window.matchMedia = original;
   });
 
-  it('opens «Add connection» as a bottom sheet and keeps row actions in a 44px menu button', async () => {
+  it('opens «Add connection» full screen and keeps row actions in a 44px menu button', async () => {
     window.matchMedia = (query: string) =>
       ({
         matches: query.includes('max-width'),
@@ -236,7 +301,8 @@ describe('Підключення on a phone', () => {
     await rows();
     expect(screen.getByRole('button', { name: 'Actions for Sentry' })).toHaveClass('size-11');
     await userEvent.click(screen.getByRole('button', { name: 'Add connection' }));
-    const drawer = await screen.findByRole('dialog', { name: 'Add connection' });
-    expect(drawer.className).toMatch(/rounded-t-xl/);
+    const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+    expect(dialog.className).toContain('max-sm:h-[calc(100dvh+3rem)]');
+    expect(dialog.className).toContain('max-sm:rounded-none');
   });
 });

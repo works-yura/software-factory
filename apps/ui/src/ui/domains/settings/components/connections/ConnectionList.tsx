@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 import { useFactoriesQuery } from '../../../../../hooks/useFactories';
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
 import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
-import { CONNECTION_KINDS } from '../../connections/connections';
 import type { ConnectionCapability, ConnectionRow, ConnectionSources, ConnectionState } from '../../connections/connections';
 import { serverToInput } from '../../services/mcpServers';
 import { RemoveAccountDialog } from '../GoogleCloudService';
@@ -85,7 +84,9 @@ function RowActions({
   const { t } = useTranslation('settings');
   const { reconnect } = useMcpServerMutations();
   const server = row.server;
-  const ownMcp = row.kind === 'mcp' && server && !row.managed && canEditMcp;
+  // A server people made (not one an integration manages): theirs to rename, unlink and delete.
+  const ownServer = Boolean(server && !row.managed && canEditMcp);
+  const ownMcp = row.kind === 'mcp' && ownServer;
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -119,13 +120,13 @@ function RowActions({
         {row.kind === 'google-cloud' && row.accountId && (
           <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>{t('connections.actions.renameAccount')}</DropdownMenu.Item>
         )}
-        {(ownMcp || row.kind === 'google-cloud') && (
+        {(ownServer || row.binding) && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item onSelect={() => onPending({ kind: 'unlink', row })}>{t('connections.actions.unlink')}</DropdownMenu.Item>
           </>
         )}
-        {ownMcp && <DropdownMenu.Item onSelect={() => onPending({ kind: 'delete', row })}>{t('connections.actions.delete')}</DropdownMenu.Item>}
+        {ownServer && <DropdownMenu.Item onSelect={() => onPending({ kind: 'delete', row })}>{t('connections.actions.delete')}</DropdownMenu.Item>}
         {row.kind === 'google-cloud' && row.accountId && (
           <DropdownMenu.Item onSelect={() => onPending({ kind: 'delete-account', row })}>{t('connections.actions.deleteAccount')}</DropdownMenu.Item>
         )}
@@ -260,7 +261,7 @@ export function ConnectionList({
         {rows.map(row => {
           const { title, subtitle } = connectionTitle(row, t(`connections.kinds.${row.kind}`));
           return (
-            <li key={row.id} data-testid="connection-row" className={`relative flex flex-col gap-2 px-3 py-3 md:px-4 ${COLUMNS}`}>
+            <li key={row.id} data-testid="connection-row" className={`relative flex flex-col gap-2 px-3 py-3 md:min-h-16 md:px-4 md:py-2 ${COLUMNS}`}>
               <button
                 type="button"
                 onClick={() => onOpen(row.id)}
@@ -272,8 +273,8 @@ export function ConnectionList({
                     <Txt as="span" variant="body" tone="ink" className="truncate">
                       {title}
                     </Txt>
-                    {(row.mcp || CONNECTION_KINDS[row.kind].mcp) && (
-                      <Badge size="xs" variant="neutral">
+                    {row.mcp && (
+                      <Badge size="xs" variant="neutral" emphasis="subtle">
                         {t('connections.mcpBadge')}
                       </Badge>
                     )}
@@ -285,7 +286,7 @@ export function ConnectionList({
                   )}
                 </span>
               </button>
-              <span className="flex min-w-0 flex-col pl-11 md:pl-0">
+              <span className="flex min-w-0 flex-col pl-12 md:pl-0">
                 {row.account ? (
                   <>
                     <Txt as="span" variant="caption" tone="ink" className="truncate">
@@ -308,14 +309,14 @@ export function ConnectionList({
                   </Txt>
                 )}
               </span>
-              <span className="flex min-w-0 flex-wrap gap-1 pl-11 md:pl-0">
+              <span className="flex min-w-0 flex-wrap gap-1 pl-12 md:pl-0">
                 {row.capabilities.map(capability => (
                   <Badge key={capability.key} size="sm" variant="neutral" emphasis="subtle">
                     {capabilityLabel(capability)}
                   </Badge>
                 ))}
               </span>
-              <span className="pl-11 md:pl-0">
+              <span className="pl-12 md:pl-0">
                 <StateCell row={row} />
               </span>
               <span className="absolute top-2 right-1 md:static md:flex md:justify-end">

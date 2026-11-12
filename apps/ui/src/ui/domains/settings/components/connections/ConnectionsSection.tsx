@@ -8,8 +8,8 @@ import { useParams, useSearchParams } from 'react-router';
 import { factoryConnections } from '../../connections/connections';
 import { SettingsSubsection } from '../SettingsSubsection';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import { AddConnectionDrawer } from './AddConnectionDrawer';
-import type { ConnectionTarget } from './AddConnectionDrawer';
+import { AddConnectionDialog } from './AddConnectionDialog';
+import type { ConnectionTarget } from './ConnectSteps';
 import { ConnectionActivity } from './ConnectionActivity';
 import { ConnectionDetail } from './ConnectionDetail';
 import { ConnectionList } from './ConnectionList';
@@ -23,7 +23,7 @@ const LEGACY_SERVICES = new Set(['google-cloud', 'clickup', 'github', 'gitlab'])
 /**
  * Settings › Підключення: everything this Factory's agents connect to, in one list modelled on
  * Mastra Platform's Connect page — integration, account, capabilities, status, a «⋮» menu — with
- * «Додати підключення» (integrations and the organization's accounts in one searchable drawer) and
+ * «Додати підключення» (integrations and the organization's accounts in one searchable dialog, with each first-party integration's connect step) and
  * «Активність» below. MCP is a badge on a row, not a section. A row opens its own view
  * (`?connection=`), which keeps each integration's full settings.
  */
@@ -122,7 +122,7 @@ export function ConnectionsSection() {
         )}
       </SettingsSubsection>
       <ConnectionActivity factoryId={factoryId} />
-      <AddConnectionDrawer
+      <AddConnectionDialog
         open={adding}
         factoryId={factoryId}
         sources={sources}

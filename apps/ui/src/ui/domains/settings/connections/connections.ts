@@ -11,6 +11,11 @@
  * ClickUp, GitHub and GitLab are connected for the whole organization; a Factory has no link of its
  * own to drop (its intake routes and repositories say what it uses), so their rows say so.
  *
+ * First-party integrations show what they give agents, never how they run: an MCP catalog entry an
+ * integration runs under the hood (`entry.integration`, e.g. MCP Toolbox for Google Cloud's «База»)
+ * is not offered in the catalog, and a server made from it is that integration's row («База»), not an
+ * MCP row. MCP shows only for third-party and own servers.
+ *
  * Each integration is a kind in {@link CONNECTION_KINDS}; the rows, the add catalog and the accounts
  * a Factory can link are built here from the integrations' own state, so the page holds no
  * integration-specific branching beyond its detail views.
@@ -30,27 +35,34 @@ export type ConnectionKind = 'google-cloud' | 'mcp' | 'clickup' | 'github' | 'gi
 /** The add catalog's filter: tools agents call, and sources that bring work and code. */
 export type ConnectionCategory = 'tools' | 'sources';
 
+/** What an integration gives agents, as «Додати підключення» marks it with icons. */
+export type CatalogCapability = 'tools' | 'tasks' | 'code';
+
 export interface ConnectionKindDescriptor {
   kind: ConnectionKind;
   category: ConnectionCategory;
-  /** Runs as an MCP server (the row and catalog show the badge). */
+  /** Runs as a third-party MCP server (the row and catalog show the badge). */
   mcp: boolean;
   /** Connected for the whole organization: no Factory link to drop. */
   organizationWide: boolean;
+  capabilities: CatalogCapability[];
 }
 
 export const CONNECTION_KINDS: Record<ConnectionKind, ConnectionKindDescriptor> = {
-  'google-cloud': { kind: 'google-cloud', category: 'tools', mcp: false, organizationWide: false },
-  mcp: { kind: 'mcp', category: 'tools', mcp: true, organizationWide: false },
-  clickup: { kind: 'clickup', category: 'sources', mcp: false, organizationWide: true },
-  github: { kind: 'github', category: 'sources', mcp: false, organizationWide: true },
-  gitlab: { kind: 'gitlab', category: 'sources', mcp: false, organizationWide: true },
+  'google-cloud': { kind: 'google-cloud', category: 'tools', mcp: false, organizationWide: false, capabilities: ['tools'] },
+  mcp: { kind: 'mcp', category: 'tools', mcp: true, organizationWide: false, capabilities: ['tools'] },
+  clickup: { kind: 'clickup', category: 'sources', mcp: false, organizationWide: true, capabilities: ['tasks'] },
+  github: { kind: 'github', category: 'sources', mcp: false, organizationWide: true, capabilities: ['code', 'tasks'] },
+  gitlab: { kind: 'gitlab', category: 'sources', mcp: false, organizationWide: true, capabilities: ['code', 'tasks'] },
 };
+
+/** First-party integrations, the order «Додати підключення» lists them in. */
+export const FIRST_PARTY: ReadonlyArray<Exclude<ConnectionKind, 'mcp'>> = ['google-cloud', 'clickup', 'github', 'gitlab'];
 
 /** What a connection lets agents do, as the row lists it. */
 export type ConnectionCapability =
   | { key: 'logs' }
-  | { key: 'crashes'; count: number }
+  | { key: 'crashes' }
   | { key: 'database' }
   | { key: 'tools'; count: number }
   | { key: 'tasks' }
@@ -115,7 +127,7 @@ function managedServerFor(servers: readonly McpServer[], bindingId: string): Mcp
 function bindingCapabilities(binding: FirebaseBinding): ConnectionCapability[] {
   return [
     ...(binding.logs ? [{ key: 'logs' } as const] : []),
-    ...(binding.crashes && binding.apps.length > 0 ? [{ key: 'crashes', count: binding.apps.length } as const] : []),
+    ...(binding.crashes && binding.apps.length > 0 ? [{ key: 'crashes' } as const] : []),
     ...(binding.database?.enabled ? [{ key: 'database' } as const] : []),
   ];
 }
@@ -140,9 +152,17 @@ function googleCloudRows(factoryId: string, firebase: FirebaseState, servers: re
         scope: 'factory',
         binding,
         ...(account ? { accountId: account.id } : {}),
-        ...(server ? { server } : {}),
+        ...(server ? { server, managed: true } : {}),
       } satisfies ConnectionRow;
     });
+}
+
+/** The first-party integration a stored server belongs to: its owner, or the integration its catalog entry runs for. */
+export function serverIntegration(server: McpServer, catalog: readonly McpCatalogEntry[]): Exclude<ConnectionKind, 'mcp'> | undefined {
+  if (server.owner?.integration === GOOGLE_CLOUD_OWNER) return 'google-cloud';
+  if (server.launch.transport !== 'catalog') return undefined;
+  const entryId = server.launch.entry;
+  return catalog.find(entry => entry.id === entryId)?.integration;
 }
 
 function mcpRows(factoryId: string, mcp: McpServersState, firebase: FirebaseState | undefined): ConnectionRow[] {
@@ -155,13 +175,17 @@ function mcpRows(factoryId: string, mcp: McpServersState, firebase: FirebaseStat
       const credential = server.launch.transport === 'catalog' ? Object.values(server.launch.credentials)[0] : undefined;
       const option = credential ? accountName(credential.id) : undefined;
       const tools = server.health?.tools.length;
+      const integration = serverIntegration(server, mcp.catalog);
+      // A database an integration runs (Google Cloud's Firestore through MCP Toolbox): that
+      // integration's «База», named by the project it reads, never by its transport.
+      const project = server.launch.transport === 'catalog' ? server.launch.inputs.FIRESTORE_PROJECT : undefined;
       return {
         id: connectionId.server(server.id),
-        kind: 'mcp',
-        title: server.label,
-        mcp: true,
+        kind: integration ?? 'mcp',
+        title: integration ? (project ?? 'Firestore') : server.label,
+        mcp: !integration,
         ...(option ? { account: { name: option.name, ...(option.detail ? { detail: option.detail } : {}) } } : {}),
-        capabilities: tools ? [{ key: 'tools', count: tools }] : [],
+        capabilities: integration ? [{ key: 'database' }] : tools ? [{ key: 'tools', count: tools }] : [],
         state: mcpServerState(server),
         scope: 'factory',
         server,
@@ -214,45 +238,76 @@ function sourceRows(sources: ConnectionSources): ConnectionRow[] {
   return rows;
 }
 
-/** Everything the Factory connects to, Factory links first (Google Cloud, MCP), then organization-wide sources. */
+/** Everything the Factory connects to: Google Cloud, ClickUp, GitHub, GitLab, then MCP servers. */
 export function factoryConnections(factoryId: string, sources: ConnectionSources): ConnectionRow[] {
   const servers = sources.mcp?.servers ?? [];
+  const order: ConnectionKind[] = ['google-cloud', 'clickup', 'github', 'gitlab', 'mcp'];
+  // First-party integrations first, MCP servers last; within a kind, the order each source gives.
   return [
     ...(sources.firebase ? googleCloudRows(factoryId, sources.firebase, servers) : []),
     ...(sources.mcp ? mcpRows(factoryId, sources.mcp, sources.firebase) : []),
     ...sourceRows(sources),
-  ];
+  ]
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => order.indexOf(left.row.kind) - order.indexOf(right.row.kind) || left.index - right.index)
+    .map(({ row }) => row);
 }
 
-/** One entry of «Додати підключення»: an integration, an MCP catalog server, or an own MCP server. */
+/** One entry of «Додати підключення»: a first-party integration, a third-party MCP server, or an own one. */
 export interface CatalogItem {
   /** `google-cloud`, `clickup`, `github`, `gitlab`, `mcp-entry:<id>`, `mcp-custom`. */
   id: string;
   kind: ConnectionKind;
   category: ConnectionCategory;
+  /** Listed under «Інше»: MCP servers, third-party or own. */
+  section: 'integrations' | 'other';
   mcp: boolean;
-  /** Set for integrations: their name and summary come from the page's translations by kind. */
+  capabilities: CatalogCapability[];
+  /** A third-party MCP catalog entry; first-party names come from the kind. */
   entry?: McpCatalogEntry;
-  /** Already connected for the organization (ClickUp, GitHub, GitLab) — opening shows it. */
+  /** Already connected for the organization — opening shows it. */
   connected: boolean;
 }
 
 export function connectionCatalog(sources: ConnectionSources): CatalogItem[] {
-  const entries = sources.mcp?.catalog ?? [];
+  const connected: Record<(typeof FIRST_PARTY)[number], boolean> = {
+    'google-cloud': Boolean(sources.firebase?.accounts.length),
+    clickup: Boolean(sources.clickup?.connected),
+    github: Boolean(sources.github?.connected || sources.github?.mode === 'token'),
+    gitlab: Boolean(sources.gitlab?.configured),
+  };
+  // Entries an integration runs under the hood are that integration's business, not a choice.
+  const thirdParty = (sources.mcp?.catalog ?? []).filter(entry => !entry.integration);
   return [
-    { id: 'google-cloud', kind: 'google-cloud', category: 'tools', mcp: false, connected: Boolean(sources.firebase?.accounts.length) },
-    ...entries.map(entry => ({ id: `mcp-entry:${entry.id}`, kind: 'mcp' as const, category: 'tools' as const, mcp: true, entry, connected: false })),
-    { id: 'mcp-custom', kind: 'mcp', category: 'tools', mcp: true, connected: false },
-    { id: 'clickup', kind: 'clickup', category: 'sources', mcp: false, connected: Boolean(sources.clickup?.connected) },
-    { id: 'github', kind: 'github', category: 'sources', mcp: false, connected: Boolean(sources.github?.connected || sources.github?.mode === 'token') },
-    { id: 'gitlab', kind: 'gitlab', category: 'sources', mcp: false, connected: Boolean(sources.gitlab?.configured) },
+    ...FIRST_PARTY.map(kind => ({
+      id: kind,
+      kind,
+      category: CONNECTION_KINDS[kind].category,
+      section: 'integrations' as const,
+      mcp: false,
+      capabilities: CONNECTION_KINDS[kind].capabilities,
+      connected: connected[kind],
+    })),
+    ...thirdParty.map(entry => ({
+      id: `mcp-entry:${entry.id}`,
+      kind: 'mcp' as const,
+      category: 'tools' as const,
+      section: 'other' as const,
+      mcp: true,
+      capabilities: ['tools' as const],
+      entry,
+      connected: false,
+    })),
+    { id: 'mcp-custom', kind: 'mcp', category: 'tools', section: 'other', mcp: true, capabilities: ['tools'], connected: false },
   ];
 }
 
 /** An organization account or server this Factory is not linked to yet, offered in «Додати підключення». */
 export interface LinkableAccount {
   id: string;
-  kind: 'google-cloud' | 'mcp';
+  kind: ConnectionKind;
+  /** An MCP server (linking gives this Factory access); otherwise a Google Cloud account. */
+  server?: true;
   name: string;
   detail?: string;
   /** The account (Google Cloud) or server (MCP) to link. */
@@ -272,9 +327,13 @@ export function linkableAccounts(factoryId: string, sources: ConnectionSources):
     detail: account.clientEmail,
     targetId: account.id,
   }));
+  const catalog = sources.mcp?.catalog ?? [];
   const servers = (sources.mcp?.servers ?? [])
     .filter(server => !server.owner && !server.assignments.some(assignment => assignment.factoryProjectId === factoryId))
-    .map(server => ({ id: `mcp:${server.id}`, kind: 'mcp' as const, name: server.label, detail: server.name, targetId: server.id }));
+    .map(server => {
+      const integration = serverIntegration(server, catalog);
+      return { id: `mcp:${server.id}`, kind: integration ?? ('mcp' as const), name: server.label, detail: server.name, targetId: server.id, server: true as const };
+    });
   return [...accounts, ...servers];
 }
 

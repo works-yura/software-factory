@@ -76,6 +76,11 @@ interface Props {
   start: McpServerStart;
   state: McpServersState;
   onSaved: () => void;
+  /**
+   * Shown as part of a first-party integration's page (Google Cloud's «База»): no «managed by»
+   * banner and no catalog wording about how it runs — the page says what it is.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -83,7 +88,7 @@ interface Props {
  * an address for an own server), then access, tool policy and masking. The identifier is made from
  * the name and kept under «Додатково».
  */
-export function McpServerEditor({ server, start, state, onSaved }: Props) {
+export function McpServerEditor({ server, start, state, onSaved, embedded = false }: Props) {
   const { t } = useTranslation('settings');
   const { factoryId } = useParams<{ factoryId: string }>();
   const canEdit = state.canEdit;
@@ -252,7 +257,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
 
   return (
     <SettingsContainer>
-      {managedBy && (
+      {managedBy && !embedded && (
         <SettingsRow label={t('mcpServers.managed.title', { integration: t(`mcpServers.managed.by.${managedBy}`, { defaultValue: managedBy }) })} description={t('mcpServers.managed.hint')}>
           {factoryId && (
             <Link to={connectionsPath(factoryId, 'google-cloud')} className="underline">
@@ -266,7 +271,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
       </SettingsRow>
 
       {entry && entry.variants.length > 1 && (
-        <SettingsRow label={t('mcpServers.variant')} description={variant?.summary ? localized(variant.summary) : localized(entry.summary)}>
+        <SettingsRow label={t('mcpServers.variant')} description={variant?.summary ? localized(variant.summary) : embedded ? undefined : localized(entry.summary)}>
           <Select value={variantId ?? ''} disabled={configLocked} onValueChange={setVariantId}>
             <SelectTrigger aria-label={t('mcpServers.variant')} className="w-56">
               {variant ? localized(variant.label) : t('mcpServers.field.pickChoice')}
