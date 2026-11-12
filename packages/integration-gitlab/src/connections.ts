@@ -53,7 +53,6 @@ interface Copy {
   method: string;
   state: { connected: string; reauth: string; reauthMessage: string; refused: string };
   platformOnly: string;
-  adminOnly: string;
   manage: string;
   notFound: string;
   sessionFailed: (error: string) => string;
@@ -79,7 +78,6 @@ const COPY: ConnectionCopy<Copy> = {
     method: 'Mastra Platform',
     state: { connected: 'Connected', reauth: 'Needs sign-in', reauthMessage: 'GitLab asks to sign in again: use «Reconnect».', refused: 'GitLab refuses the token' },
     platformOnly: 'Managed on Mastra Platform',
-    adminOnly: 'Only organization admins change connections.',
     manage: 'Open Mastra Platform',
     notFound: 'This GitLab connection no longer exists.',
     sessionFailed: error => `Mastra Platform could not start the GitLab sign-in: ${error}`,
@@ -103,7 +101,6 @@ const COPY: ConnectionCopy<Copy> = {
     method: 'Mastra Platform',
     state: { connected: 'Підключено', reauth: 'Потрібен вхід', reauthMessage: 'GitLab просить увійти знову: «Перепідключити».', refused: 'GitLab не приймає токен' },
     platformOnly: 'Керується в Mastra Platform',
-    adminOnly: 'Змінює адміністратор організації.',
     manage: 'Відкрити Mastra Platform',
     notFound: 'Цього підключення GitLab уже немає.',
     sessionFailed: error => `Mastra Platform не змогла почати вхід у GitLab: ${error}`,
@@ -132,7 +129,7 @@ export class GitLabConnections implements IntegrationConnections {
       label: copy.platform.label,
       description: copy.platform.description,
       authKind: 'oauth',
-      available: request.admin ? true : { reason: copy.adminOnly },
+      available: true,
     };
   }
 
@@ -204,7 +201,7 @@ export class GitLabConnections implements IntegrationConnections {
         scope: 'organization',
         actions: {
           rename: platform,
-          reconnect: request.admin ? { method: this.#platformMethod(copy, request) } : { reason: copy.adminOnly },
+          reconnect: { method: this.#platformMethod(copy, request) },
           remove: platform,
           manageExternally: { url: MASTRA_PLATFORM_URL, label: copy.manage },
         },

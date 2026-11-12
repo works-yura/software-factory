@@ -19,6 +19,7 @@ import type { Context } from 'hono';
 
 import {
   CONNECTION_LANGUAGES,
+  DEFAULT_CONNECTION_PERMISSIONS,
   connectRequestSchema,
   reconnectRequestSchema,
   renameConnectionSchema,
@@ -26,7 +27,11 @@ import {
 } from '@factory/contracts';
 import type {
   AuthFlowStatus,
+  ConnectionActionsView,
+  ConnectionBlocked,
   ConnectionDetailSection,
+  ConnectionPermission,
+  ConnectionPermissions,
   ConnectionErrorBody,
   ConnectionLanguage,
   ConnectionSettingsValues,
@@ -62,8 +67,19 @@ export interface ConnectionRequest {
   audit(action: ConnectionAuditAction | AuditAction, metadata: Record<string, unknown>, options?: { factoryProjectId?: string }): void;
 }
 
-/** A connector as it describes itself; the registry adds its id. */
-export type ConnectorDescription = Omit<ConnectorView, 'id'>;
+/** A connector as it describes itself; the registry adds its id and its resolved permissions. */
+export type ConnectorDescription = Omit<ConnectorView, 'id' | 'permissions'>;
+
+/**
+ * A named permission a connector defines: whether this request may act on the connection `localId`
+ * (absent for a new connection), or why not. The registry calls it; the connector checks nothing else.
+ */
+export type ConnectionPolicy = (request: ConnectionRequest, localId: string | undefined) => Promise<true | ConnectionBlocked>;
+
+export { DEFAULT_CONNECTION_PERMISSIONS };
+
+/** A change the registry gates. */
+export type ConnectionChange = Exclude<keyof ConnectionPermissions, 'settings'> | 'settings';
 
 /** A connection as its connector lists it: its own id, without the connector's name and logo. */
 export type ConnectorConnection = Omit<ConnectionView, 'id' | 'connector'> & { id: string };
@@ -90,10 +106,14 @@ export const connectionRefused = (
  */
 export interface IntegrationConnections {
   /**
-   * The connector decides who may connect and change its connections (each member manages their own
-   * accounts: a harness's sign-ins). Unset, the registry lets only organization admins change them.
+   * Who may make each change (`member`, `admin`, or one of `policies`); what is left out is an
+   * organization admin's ({@link DEFAULT_CONNECTION_PERMISSIONS}). The registry enforces it on every
+   * route and turns a refused action, method or setting into `{ reason }` in what it serves: a
+   * connector does not check roles itself.
    */
-  readonly memberManaged?: boolean;
+  readonly permissions?: Partial<ConnectionPermissions>;
+  /** The named policies `permissions` refers to. */
+  readonly policies?: Readonly<Record<string, ConnectionPolicy>>;
   /** Name, logo key, category, capabilities and connect methods, for «Додати підключення». */
   describe(request: ConnectionRequest): ConnectorDescription | Promise<ConnectorDescription>;
   /** The organization's connections (and the asking Factory's links). */
@@ -124,8 +144,8 @@ export interface IntegrationConnections {
   /** Drops the asking Factory's link and keeps the organization's account. */
   unlink?(request: ConnectionRequest, id: string): Promise<ConnectionOutcome<{ message: string }>>;
   /**
-   * Saves a `settings` section of the detail page. Not gated by the registry: the connector decides
-   * who may change what (a field a member may not change is `disabled` with a reason).
+   * Saves a `settings` section of the detail page, gated by `permissions.settings` (per section id
+   * when it is a map); a field the connector itself cannot change here is `disabled` with a reason.
    */
   updateSettings?(
     request: ConnectionRequest,
@@ -158,6 +178,7 @@ const COPY: ConnectionCopy<{
   unauthorized: string;
   organizationRequired: string;
   adminOnly: string;
+  policyMissing: string;
   notFound: string;
   unknownConnector: string;
   invalidBody: string;
@@ -168,7 +189,8 @@ const COPY: ConnectionCopy<{
   en: {
     unauthorized: 'Sign in to see connections.',
     organizationRequired: 'Connections belong to an organization. Personal accounts cannot connect.',
-    adminOnly: 'Only organization admins can change connections.',
+    adminOnly: 'Only organization admins change connections.',
+    policyMissing: 'This server cannot tell whether you may do that.',
     notFound: 'This connection no longer exists.',
     unknownConnector: 'This integration is not available on this server.',
     invalidBody: 'The request is not what this action takes.',
@@ -179,7 +201,8 @@ const COPY: ConnectionCopy<{
   uk: {
     unauthorized: 'Увійдіть, щоб бачити підключення.',
     organizationRequired: 'Підключення належать організації. Особистий акаунт не може підключати.',
-    adminOnly: 'Змінювати підключення можуть лише адміністратори організації.',
+    adminOnly: 'Змінює адміністратор організації.',
+    policyMissing: 'Сервер не може визначити, чи вам це можна.',
     notFound: 'Цього підключення вже немає.',
     unknownConnector: 'Ця інтеграція недоступна на цьому сервері.',
     invalidBody: 'Запит не такий, як ця дія приймає.',
@@ -212,8 +235,8 @@ function splitConnectionId(id: string): { connectorId: string; localId: string }
 
 /**
  * `/web/connections`: one registry over every connector's facet. Org-scoped (a personal account is
- * refused), readable by members, changed by organization admins only (unless the connector is
- * `memberManaged` and decides itself); every refusal and every
+ * refused), readable by members; every change takes the permission its connector declares
+ * (`IntegrationConnections.permissions`, an admin's by default), checked here; every refusal and every
  * string is in the request's language.
  */
 export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRoute[] {
@@ -261,10 +284,81 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
     return { request, language };
   };
 
-  const describe = async (connector: ConnectorRegistration, request: ConnectionRequest): Promise<ConnectorView> => ({
-    id: connector.id,
-    ...(await connector.connections.describe(request)),
+  /** The permission a change of `connector` takes (for `settings`, of `section` when they differ per section). */
+  const permissionOf = (connector: ConnectorRegistration, change: ConnectionChange, section?: string): ConnectionPermission => {
+    const declared = { ...DEFAULT_CONNECTION_PERMISSIONS, ...connector.connections.permissions };
+    if (change !== 'settings') return declared[change];
+    const settings = declared.settings;
+    if (typeof settings === 'string' || 'policy' in settings) return settings as ConnectionPermission;
+    return (section ? (settings as Record<string, ConnectionPermission>)[section] : undefined) ?? DEFAULT_CONNECTION_PERMISSIONS.connect;
+  };
+
+  /** Whether this request may make `change` (on `localId`), or why not: the one place roles are checked. */
+  const permitted = async (
+    connector: ConnectorRegistration,
+    request: ConnectionRequest,
+    change: ConnectionChange,
+    localId: string | undefined,
+    section?: string,
+  ): Promise<true | ConnectionBlocked> => {
+    const copy = localize(COPY, request.language);
+    const permission = permissionOf(connector, change, section);
+    if (permission === 'member') return true;
+    if (permission === 'admin') return request.admin ? true : { reason: copy.adminOnly };
+    const policy = connector.connections.policies?.[permission.policy];
+    if (!policy) return { reason: copy.policyMissing };
+    return policy(request, localId);
+  };
+
+  /** A connection's actions with every one the request may not take turned into its reason. */
+  const gateActions = async (
+    connector: ConnectorRegistration,
+    request: ConnectionRequest,
+    connection: ConnectorConnection,
+  ): Promise<ConnectorConnection> => {
+    const actions: ConnectionActionsView = { ...connection.actions };
+    for (const change of ['rename', 'reconnect', 'remove', 'unlink'] as const) {
+      const action = actions[change];
+      if (action === undefined || (typeof action === 'object' && 'reason' in action)) continue;
+      const allowed = await permitted(connector, request, change, connection.id);
+      if (allowed !== true) (actions as Record<string, unknown>)[change] = allowed;
+    }
+    return { ...connection, actions };
+  };
+
+  /** Settings sections with every field of a section the request may not save disabled with the reason. */
+  const gateSections = async (
+    connector: ConnectorRegistration,
+    request: ConnectionRequest,
+    localId: string,
+    sections: ConnectionDetailSection[],
+  ): Promise<ConnectionDetailSection[]> =>
+    Promise.all(
+      sections.map(async section => {
+        if (section.type !== 'settings') return section;
+        const allowed = await permitted(connector, request, 'settings', localId, section.id);
+        if (allowed === true) return section;
+        return { ...section, fields: section.fields.map(field => (field.disabled ? field : { ...field, disabled: allowed })) };
+      }),
+    );
+
+  /** The permissions as served: declared, defaults filled in. */
+  const permissionsOf = (connector: ConnectorRegistration): ConnectionPermissions => ({
+    ...DEFAULT_CONNECTION_PERMISSIONS,
+    ...connector.connections.permissions,
   });
+
+  const describe = async (connector: ConnectorRegistration, request: ConnectionRequest): Promise<ConnectorView> => {
+    const description = await connector.connections.describe(request);
+    const connect = await permitted(connector, request, 'connect', undefined);
+    return {
+      id: connector.id,
+      ...description,
+      // A method the request may not use is offered disabled, with why.
+      methods: description.methods.map(method => (connect !== true && method.available === true ? { ...method, available: connect } : method)),
+      permissions: permissionsOf(connector),
+    };
+  };
   const refOf = (view: ConnectorView): ConnectorRef => ({ id: view.id, name: view.name, icon: view.icon });
   const globalView = (ref: ConnectorRef, connection: ConnectorConnection): ConnectionView => ({
     ...connection,
@@ -272,10 +366,11 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
     connector: ref,
   });
 
-  /** Resolves `:id` to its connector, for a call that reads (`write: false`) or changes it. */
+  /** Resolves `:id` to its connector, for a call that reads (`change` absent) or makes a change, which its permission gates. */
   const target = async (
     c: RouteContext,
-    write: boolean,
+    change?: ConnectionChange,
+    section?: string,
   ): Promise<
     | { request: ConnectionRequest; connector: ConnectorRegistration; localId: string; copy: (typeof COPY)['en'] }
     | { response: Response }
@@ -286,7 +381,10 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
     const copy = localize(COPY, resolved.language);
     const connector = split ? byId.get(split.connectorId) : undefined;
     if (!split || !connector) return { response: refuse(c, 404, { error: 'not_found', message: copy.notFound }) };
-    if (write && !resolved.request.admin && !connector.connections.memberManaged) return { response: refuse(c, 403, { error: 'forbidden', message: copy.adminOnly }) };
+    if (change) {
+      const allowed = await permitted(connector, resolved.request, change, split.localId, section);
+      if (allowed !== true) return { response: refuse(c, 403, { error: 'forbidden', message: allowed.reason }) };
+    }
     return { request: resolved.request, connector, localId: split.localId, copy };
   };
 
@@ -300,7 +398,10 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
   ) =>
     result.type === 'authorize'
       ? result
-      : { ...result, connection: globalView(refOf(await describe(connector, request)), result.connection) };
+      : {
+          ...result,
+          connection: globalView(refOf(await describe(connector, request)), await gateActions(connector, request, result.connection)),
+        };
 
   return [
     registerApiRoute('/web/connections', {
@@ -316,7 +417,8 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
             const view = await describe(connector, request);
             try {
               const listed = await connector.connections.list(request);
-              return { connections: listed.map(connection => globalView(refOf(view), connection)), failure: undefined };
+              const gated = await Promise.all(listed.map(connection => gateActions(connector, request, connection)));
+              return { connections: gated.map(connection => globalView(refOf(view), connection)), failure: undefined };
             } catch (error) {
               console.warn(`[factory] ${connector.id} connections could not be listed:`, error);
               const message = copy.listFailed(error instanceof Error ? error.message : String(error));
@@ -351,9 +453,8 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
         if (!parsed.success) return refuse(c, 400, { error: 'invalid_body', message: copy.invalidBody });
         const connector = byId.get(parsed.data.connector);
         if (!connector) return refuse(c, 404, { error: 'unknown_connector', message: copy.unknownConnector });
-        if (!resolved.request.admin && !connector.connections.memberManaged) {
-          return refuse(c, 403, { error: 'forbidden', message: copy.adminOnly });
-        }
+        const allowed = await permitted(connector, resolved.request, 'connect', undefined);
+        if (allowed !== true) return refuse(c, 403, { error: 'forbidden', message: allowed.reason });
         const outcome = await connector.connections.connect(resolved.request, parsed.data.method, parsed.data.input);
         if (!outcome.ok) return refuse(c, outcome.status, outcome.body);
         return c.json(await connectResult(connector, resolved.request, outcome.value));
@@ -379,7 +480,7 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const found = await target(c, true);
+        const found = await target(c, 'reconnect');
         if ('response' in found) return found.response;
         const { request, connector, localId, copy } = found;
         const parsed = reconnectRequestSchema.safeParse((await c.req.json().catch(() => ({}))) ?? {});
@@ -394,7 +495,7 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       method: 'PATCH',
       requiresAuth: false,
       handler: async c => {
-        const found = await target(c, true);
+        const found = await target(c, 'rename');
         if ('response' in found) return found.response;
         const { request, connector, localId, copy } = found;
         const parsed = renameConnectionSchema.safeParse(await c.req.json().catch(() => undefined));
@@ -407,7 +508,7 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const found = await target(c, false);
+        const found = await target(c);
         if ('response' in found) return found.response;
         const { request, connector, localId, copy } = found;
         if (!connector.connections.removalImpact) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
@@ -419,7 +520,7 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const found = await target(c, true);
+        const found = await target(c, 'remove');
         if ('response' in found) return found.response;
         const { request, connector, localId, copy } = found;
         if (!connector.connections.remove) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
@@ -431,7 +532,7 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const found = await target(c, true);
+        const found = await target(c, 'unlink');
         if ('response' in found) return found.response;
         const { request, connector, localId, copy } = found;
         if (!connector.connections.unlink) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
@@ -442,10 +543,11 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       method: 'PATCH',
       requiresAuth: false,
       handler: async c => {
-        const found = await target(c, false);
+        const body = updateConnectionSettingsSchema.safeParse(await c.req.json().catch(() => undefined));
+        const found = await target(c, 'settings', body.success ? body.data.section : undefined);
         if ('response' in found) return found.response;
         const { request, connector, localId, copy } = found;
-        const parsed = updateConnectionSettingsSchema.safeParse(await c.req.json().catch(() => undefined));
+        const parsed = body;
         if (!parsed.success) return refuse(c, 400, { error: 'invalid_body', message: copy.invalidBody });
         if (!connector.connections.updateSettings) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
         const outcome = await connector.connections.updateSettings(request, localId, parsed.data.section, parsed.data.values);
@@ -456,11 +558,11 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const found = await target(c, false);
+        const found = await target(c);
         if ('response' in found) return found.response;
         const { request, connector, localId, copy } = found;
         const sections = connector.connections.detail ? await connector.connections.detail(request, localId) : [];
-        return sections ? c.json({ sections }) : refuse(c, 404, { error: 'not_found', message: copy.notFound });
+        return sections ? c.json({ sections: await gateSections(connector, request, localId, sections) }) : refuse(c, 404, { error: 'not_found', message: copy.notFound });
       },
     }),
   ];

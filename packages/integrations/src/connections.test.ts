@@ -121,9 +121,85 @@ describe('/web/connections', () => {
     expect((await t.request('/web/connections')).status).toBe(200);
     const refused = await t.request('/web/connections', t.json('POST', { connector: 'fake', method: 'key', input: {} }, { 'accept-language': 'uk' }));
     expect(refused.status).toBe(403);
-    expect(await refused.json()).toEqual({ error: 'forbidden', message: 'Змінювати підключення можуть лише адміністратори організації.' });
+    expect(await refused.json()).toEqual({ error: 'forbidden', message: 'Змінює адміністратор організації.' });
     expect((await t.request('/web/connections/fake%3Aone', { method: 'DELETE' })).status).toBe(403);
     expect(t.calls).toEqual([]);
+  });
+
+  it('protects a connector that checks no roles itself: refused routes, actions, methods and settings come back with the reason', async () => {
+    const calls: Array<{ call: string; request: ConnectionRequest; args: unknown[] }> = [];
+    const naive: IntegrationConnections = {
+      ...fakeConnector(calls),
+      unlink: async () => connectionOk({ message: 'Unlinked' }),
+      updateSettings: async () => connectionOk({ message: 'Saved' }),
+      detail: async () => [
+        { type: 'settings', id: 'import', fields: [{ name: 'on', displayName: 'On', type: 'boolean', required: false, value: true }] },
+        { type: 'settings', id: 'name', fields: [{ name: 'name', displayName: 'Name', type: 'string', required: false, value: 'x' }] },
+      ],
+      // Only `import` is a member's; everything else keeps the admin default.
+      permissions: { settings: { import: 'member' } },
+    };
+    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }), connectors: [{ id: 'naive', connections: naive }] });
+    const send = (path: string, init?: RequestInit) => {
+      const hono = new Hono();
+      hono.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { id: 'member-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(hono as never, routes);
+      return hono.request(path, init);
+    };
+    const json = (method: string, body: unknown) => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    const listed = (await (await send('/web/connections')).json()) as any;
+    expect(listed.connections[0].actions).toEqual({
+      rename: { reason: 'Only organization admins change connections.' },
+      remove: { reason: 'Only organization admins change connections.' },
+    });
+    const methods = (await (await send('/web/connections/methods')).json()) as any;
+    expect(methods.connectors[0].methods[0].available).toEqual({ reason: 'Only organization admins change connections.' });
+    expect(methods.connectors[0].permissions).toMatchObject({ connect: 'admin', remove: 'admin', settings: { import: 'member' } });
+    const detail = (await (await send('/web/connections/naive%3Aone/detail')).json()) as any;
+    expect(detail.sections[0].fields[0].disabled).toBeUndefined();
+    expect(detail.sections[1].fields[0].disabled).toEqual({ reason: 'Only organization admins change connections.' });
+
+    for (const [path, init] of [
+      ['/web/connections', json('POST', { connector: 'naive', method: 'key', input: {} })],
+      ['/web/connections/naive%3Aone', json('PATCH', { name: 'x' })],
+      ['/web/connections/naive%3Aone', { method: 'DELETE' }],
+      ['/web/connections/naive%3Aone/unlink', { method: 'POST' }],
+      ['/web/connections/naive%3Aone/settings', json('PATCH', { section: 'name', values: { name: 'y' } })],
+    ] as const) {
+      expect((await send(path, init)).status, `${init.method} ${path}`).toBe(403);
+    }
+    expect((await send('/web/connections/naive%3Aone/settings', json('PATCH', { section: 'import', values: { on: false } }))).status).toBe(200);
+    expect(calls).toEqual([]);
+  });
+
+  it('asks a named policy of the connector, per connection', async () => {
+    const calls: Array<{ call: string; request: ConnectionRequest; args: unknown[] }> = [];
+    const owned: IntegrationConnections = {
+      ...fakeConnector(calls),
+      permissions: { connect: 'member', remove: { policy: 'owner' } },
+      policies: { owner: async (request, id) => (id === 'one' && request.userId === 'owner' ? true : { reason: 'Only its owner removes it.' }) },
+    };
+    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }), connectors: [{ id: 'owned', connections: owned }] });
+    const as = (userId: string) => (path: string, init?: RequestInit) => {
+      const hono = new Hono();
+      hono.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { id: userId, organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(hono as never, routes);
+      return hono.request(path, init);
+    };
+    const other = (await (await as('someone')('/web/connections')).json()) as any;
+    expect(other.connections[0].actions.remove).toEqual({ reason: 'Only its owner removes it.' });
+    expect((await as('someone')('/web/connections/owned%3Aone?confirm=1', { method: 'DELETE' })).status).toBe(403);
+    expect((await as('owner')('/web/connections/owned%3Aone?confirm=1', { method: 'DELETE' })).status).toBe(200);
+    // A member connects: the method is offered.
+    const methods = (await (await as('someone')('/web/connections/methods')).json()) as any;
+    expect(methods.connectors[0].methods[0].available).toBe(true);
   });
 
   it('removes only with confirmation when the connector asks for it, and refuses what a connector cannot do', async () => {

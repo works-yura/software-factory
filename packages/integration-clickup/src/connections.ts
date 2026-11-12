@@ -39,7 +39,6 @@ interface Copy {
   tasks: string;
   method: { label: string; description: string; field: string; help: string; submit: string; replace: string; missing: string };
   already: string;
-  adminOnly: string;
   rejected: (status: number) => string;
   unreachable: (error: string) => string;
   connectedTitle: (account: string) => string;
@@ -81,7 +80,6 @@ const COPY: ConnectionCopy<Copy> = {
       missing: 'Paste a ClickUp API token (pk_…).',
     },
     already: 'ClickUp is already connected. Replace its token with «Reconnect».',
-    adminOnly: 'Only organization admins change connections.',
     rejected: status =>
       `ClickUp rejected this token (${status}). Paste a personal API token (pk_…) from ClickUp › Settings › Apps; a regenerated token replaces the old one.`,
     unreachable: error => `ClickUp could not check the token: ${error}`,
@@ -135,7 +133,6 @@ const COPY: ConnectionCopy<Copy> = {
       missing: 'Вставте API-токен ClickUp (pk_…).',
     },
     already: 'ClickUp уже підключено. Замініть токен через «Перепідключити».',
-    adminOnly: 'Змінює адміністратор організації.',
     rejected: status =>
       `ClickUp не прийняв цей токен (${status}). Вставте персональний API-токен (pk_…) з ClickUp › Settings › Apps; перегенерований токен замінює старий.`,
     unreachable: error => `ClickUp не зміг перевірити токен: ${error}`,
@@ -196,6 +193,8 @@ type TokenCheck = { ok: true; account: ClickUpConnectionMetadata } | { ok: false
 
 /** The organization's ClickUp token, one connection per organization. */
 export class ClickUpConnections implements IntegrationConnections {
+  /** The import switch is any member's, as Settings › Надходження is; every other change an admin's (the default). */
+  readonly permissions = { settings: 'member' } as const;
   readonly #deps: ClickUpConnectionsDeps;
 
   constructor(deps: ClickUpConnectionsDeps) {
@@ -212,7 +211,7 @@ export class ClickUpConnections implements IntegrationConnections {
         { name: 'token', displayName: copy.method.field, type: 'secret', placeholder: 'pk_…', description: copy.method.help, required: true },
       ],
       submitLabel: options.replace ? copy.method.replace : copy.method.submit,
-      available: !request.admin ? { reason: copy.adminOnly } : options.connected ? { reason: copy.already } : true,
+      available: options.connected ? { reason: copy.already } : true,
     };
   }
 
@@ -269,7 +268,6 @@ export class ClickUpConnections implements IntegrationConnections {
     const stored = clickUpMetadataOf(meta);
     const name = typeof meta.name === 'string' ? meta.name : null;
     const workspaces = read.workspaces.length ? read.workspaces : (stored?.workspaces ?? []);
-    const blocked = { reason: copy.adminOnly };
     const usage = await this.#usage(request.orgId).catch(() => null);
     return {
       id: CLICKUP_CONNECTION_ID,
@@ -285,9 +283,9 @@ export class ClickUpConnections implements IntegrationConnections {
       ...(typeof meta.connectedBy === 'string' ? { createdBy: meta.connectedBy } : {}),
       ...(usage && usage.length ? { dependents: copy.usedBy(usage.length) } : {}),
       actions: {
-        rename: request.admin ? true : blocked,
-        reconnect: request.admin ? { method: this.#tokenMethod(copy, request, { replace: true }) } : blocked,
-        remove: request.admin ? true : blocked,
+        rename: true,
+        reconnect: { method: this.#tokenMethod(copy, request, { replace: true }) },
+        remove: true,
       },
     };
   }

@@ -51,7 +51,6 @@ interface Copy {
   provides: { logs: string; crashes: string; database: string };
   key: { label: string; description: string; name: string; namePlaceholder: string; file: string; fileHelp: string; project: string; projectHelp: string; submit: string; replace: string };
   account: { label: string; description: string; field: string; none: string };
-  adminOnly: string;
   factoryRequired: string;
   invalidKey: (message: string) => string;
   accountMissing: string;
@@ -111,7 +110,6 @@ const COPY: ConnectionCopy<Copy> = {
       field: 'Account',
       none: 'The organization has no Google Cloud account yet: add a key.',
     },
-    adminOnly: 'Only organization admins change connections.',
     factoryRequired: 'Open Connections of a Factory to bind a Google Cloud project to it.',
     invalidKey: message => `This is not a service account key: ${message}`,
     accountMissing: 'Choose one of the Google Cloud accounts.',
@@ -192,7 +190,6 @@ const COPY: ConnectionCopy<Copy> = {
       field: 'Акаунт',
       none: 'В організації ще немає акаунта Google Cloud: додайте ключ.',
     },
-    adminOnly: 'Змінює адміністратор організації.',
     factoryRequired: 'Відкрийте «Підключення» Factory, щоб прив’язати до неї проєкт Google Cloud.',
     invalidKey: message => `Це не ключ сервісного акаунта: ${message}`,
     accountMissing: 'Виберіть один з акаунтів Google Cloud.',
@@ -311,7 +308,7 @@ export class GoogleCloudConnections implements IntegrationConnections {
         ...(replace ? [] : [{ name: 'projectId', displayName: copy.key.project, type: 'string' as const, description: copy.key.projectHelp, required: false }]),
       ],
       submitLabel: replace ? copy.key.replace : copy.key.submit,
-      available: !request.admin ? { reason: copy.adminOnly } : !request.factoryProjectId ? { reason: copy.factoryRequired } : true,
+      available: !request.factoryProjectId ? { reason: copy.factoryRequired } : true,
     };
   }
 
@@ -334,9 +331,7 @@ export class GoogleCloudConnections implements IntegrationConnections {
         { name: 'projectId', displayName: copy.key.project, type: 'string', description: copy.key.projectHelp, required: false },
       ],
       submitLabel: copy.key.submit,
-      available: !request.admin
-        ? { reason: copy.adminOnly }
-        : !request.factoryProjectId
+      available: !request.factoryProjectId
           ? { reason: copy.factoryRequired }
           : accounts.length === 0
             ? { reason: copy.account.none }
@@ -361,7 +356,6 @@ export class GoogleCloudConnections implements IntegrationConnections {
   #view(request: ConnectionRequest, state: FirebaseState, binding: FirebaseBinding): ConnectorConnection {
     const copy = localize(COPY, request.language);
     const account = state.accounts.find(candidate => candidate.id === binding.accountId);
-    const blocked = { reason: copy.adminOnly };
     const reads = bindingReads(binding) || readsDatabase(binding);
     const shared = state.bindings.filter(other => other.accountId === binding.accountId).length;
     return {
@@ -385,10 +379,10 @@ export class GoogleCloudConnections implements IntegrationConnections {
       ...(binding.createdBy ? { createdBy: binding.createdBy } : {}),
       ...(shared > 1 ? { dependents: copy.usedBy(shared) } : {}),
       actions: {
-        rename: request.admin ? true : blocked,
-        reconnect: request.admin ? { method: this.#keyMethod(copy, request, true) } : blocked,
-        unlink: request.admin ? true : blocked,
-        remove: request.admin ? true : blocked,
+        rename: true,
+        reconnect: { method: this.#keyMethod(copy, request, true) },
+        unlink: true,
+        remove: true,
         manageExternally: { url: `https://console.cloud.google.com/iam-admin/iam?project=${encodeURIComponent(binding.projectId)}`, label: copy.manage },
       },
     };
@@ -578,7 +572,6 @@ export class GoogleCloudConnections implements IntegrationConnections {
     const { binding, state } = found;
     const account = state.accounts.find(candidate => candidate.id === binding.accountId);
     const key = await readAccountKey(this.#deps.storage, request.orgId, binding.accountId);
-    const blocked = request.admin ? undefined : { reason: copy.adminOnly };
     const projects = key ? await listGoogleCloudProjects(key, this.#discovery).catch(() => undefined) : undefined;
     const databases = key && readsDatabase(binding) ? await listFirestoreDatabases(key, binding.projectId, this.#discovery).catch(() => undefined) : undefined;
     const option = (value: string, label?: string) => ({ value, label: label ?? value });
@@ -602,12 +595,12 @@ export class GoogleCloudConnections implements IntegrationConnections {
         description: projects?.denied ? `${copy.detail.settingsHelp} ${copy.detail.denied(projects.denied.message)}` : copy.detail.settingsHelp,
         saveLabel: copy.detail.save,
         fields: [
-          { name: 'projectId', displayName: copy.detail.fields.project, type: 'select', options: projectOptions, required: true, value: binding.projectId, ...(blocked ? { disabled: blocked } : {}) },
-          { name: 'logs', displayName: copy.detail.fields.logs, type: 'boolean', required: false, value: binding.logs, ...(blocked ? { disabled: blocked } : {}) },
-          { name: 'crashes', displayName: copy.detail.fields.crashes, type: 'boolean', required: false, value: binding.crashes, ...(blocked ? { disabled: blocked } : {}) },
-          { name: 'apps', displayName: copy.detail.fields.apps, type: 'textarea', description: copy.detail.fields.appsHelp, required: false, value: appsText(binding.apps), ...(blocked ? { disabled: blocked } : {}) },
-          { name: 'database', displayName: copy.detail.fields.database, description: copy.detail.fields.databaseHelp, type: 'boolean', required: false, value: readsDatabase(binding), ...(blocked ? { disabled: blocked } : {}) },
-          { name: 'databaseId', displayName: copy.detail.fields.databaseId, type: 'select', options: databaseOptions, required: false, value: databaseId, ...(blocked ? { disabled: blocked } : {}) },
+          { name: 'projectId', displayName: copy.detail.fields.project, type: 'select', options: projectOptions, required: true, value: binding.projectId },
+          { name: 'logs', displayName: copy.detail.fields.logs, type: 'boolean', required: false, value: binding.logs },
+          { name: 'crashes', displayName: copy.detail.fields.crashes, type: 'boolean', required: false, value: binding.crashes },
+          { name: 'apps', displayName: copy.detail.fields.apps, type: 'textarea', description: copy.detail.fields.appsHelp, required: false, value: appsText(binding.apps) },
+          { name: 'database', displayName: copy.detail.fields.database, description: copy.detail.fields.databaseHelp, type: 'boolean', required: false, value: readsDatabase(binding) },
+          { name: 'databaseId', displayName: copy.detail.fields.databaseId, type: 'select', options: databaseOptions, required: false, value: databaseId },
         ],
       },
       ...(readsDatabase(binding)
@@ -620,7 +613,7 @@ export class GoogleCloudConnections implements IntegrationConnections {
               id: 'account',
               title: copy.detail.accountSection,
               saveLabel: copy.detail.saveAccount,
-              fields: [{ name: 'name', displayName: copy.detail.accountName, type: 'string' as const, required: true, value: account.name, ...(blocked ? { disabled: blocked } : {}) }],
+              fields: [{ name: 'name', displayName: copy.detail.accountName, type: 'string' as const, required: true, value: account.name }],
             },
           ]
         : []),
@@ -630,7 +623,6 @@ export class GoogleCloudConnections implements IntegrationConnections {
 
   async updateSettings(request: ConnectionRequest, id: string, section: string, values: ConnectionSettingsValues): Promise<ConnectionOutcome<{ message: string }>> {
     const copy = localize(COPY, request.language);
-    if (!request.admin) return connectionRefused(403, { error: 'forbidden', message: copy.adminOnly });
     const found = await this.#binding(request, id);
     if (!found) return connectionRefused(404, { error: 'not_found', message: copy.notFound });
     const { binding } = found;

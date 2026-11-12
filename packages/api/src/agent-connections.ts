@@ -10,9 +10,9 @@
  *   with only an `authId` and a `waiting` note, and `getAuthStatus` says when it ended.
  * - List: one connection per account of the organization; state says whether it runs, is out of
  *   usage until a time, needs a new sign-in, is off, or is a pasted token from before (runs nothing).
- * - Who may change what: a member their own sign-ins, an organization admin anyone's
- *   (`memberManaged`: the registry leaves the check here). A new sign-in to an account is only its
- *   owner's to make.
+ * - Who may change what, declared as permissions the registry enforces: any member connects (signs
+ *   in) their own; renaming, rotation and removing are the owner's or an organization admin's
+ *   (`ownerOrAdmin`); a new sign-in to an account is only its owner's (`owner`).
  * - Detail: facts, the allowance windows (`HarnessUsage`), recent usage (owner or admin), and the
  *   rotation switch — generic sections, no harness-specific UI.
  *
@@ -346,8 +346,6 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
     const condition = conditionOf(account);
     const oauth = condition === 'legacy' ? undefined : await store.getAccountOAuth(request.orgId, account.id).catch(() => undefined);
     const email = oauth?.email ?? null;
-    const manage = canManage(account, request);
-    const mine = account.ownerUserId === request.userId;
     const owner = await ownerLabel(account, request, copy);
     const state = {
       ok: { tone: 'ok' as const, label: copy.states.ok },
@@ -363,11 +361,9 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
     const reconnect =
       condition === 'legacy'
         ? { reason: copy.legacyReconnect }
-        : !mine
-          ? { reason: copy.ownerOnlyReconnect }
-          : options.signIn
-            ? { method: method(copy) }
-            : { reason: copy.signInUnavailable(signInName) };
+        : options.signIn
+          ? { method: method(copy) }
+          : { reason: copy.signInUnavailable(signInName) };
     return {
       id: account.id,
       status: condition === 'needs_sign_in' ? 'needs_reauth' : 'active',
@@ -382,9 +378,9 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
       createdAt: account.createdAt.toISOString(),
       createdBy: account.createdBy,
       actions: {
-        rename: manage ? true : { reason: copy.manageOwnOnly },
+        rename: true,
         reconnect,
-        remove: manage ? true : { reason: copy.manageOwnOnly },
+        remove: true,
       },
     };
   };
@@ -396,8 +392,6 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
   };
 
   const notFound = (language: ConnectionLanguage) => connectionRefused(404, { error: 'not_found', message: localize(COPY, language).notFound });
-  const forbidden = (language: ConnectionLanguage) =>
-    connectionRefused(403, { error: 'forbidden', message: localize(COPY, language).manageOwnOnly });
 
   const startSignIn = (request: ConnectionRequest): ConnectionOutcome<ConnectorConnectResult> => {
     const copy = localize(COPY, request.language);
@@ -479,8 +473,32 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
     return { type: 'table', title: copy.recent.title(RECENT_USAGE_DAYS), columns: [...copy.recent.columns], rows, empty: copy.recent.empty };
   };
 
+  /** The account `localId` and whether the request is its owner; a missing account is left to the call (404). */
+  const ownership = async (request: ConnectionRequest, localId: string | undefined) => {
+    const found = localId ? await find(request, localId) : undefined;
+    return { found, owner: found?.account.ownerUserId === request.userId };
+  };
+
   return {
-    memberManaged: true,
+    // Any member signs in with their own account; the rest is the owner's (or an admin's), enforced by the registry.
+    permissions: {
+      connect: 'member',
+      reconnect: { policy: 'owner' },
+      rename: { policy: 'ownerOrAdmin' },
+      remove: { policy: 'ownerOrAdmin' },
+      settings: { policy: 'ownerOrAdmin' },
+    },
+    policies: {
+      // A sign-in files under the person signing in; it replaces this account only when it is theirs.
+      owner: async (request, localId) => {
+        const { found, owner } = await ownership(request, localId);
+        return !found || owner ? true : { reason: localize(COPY, request.language).ownerOnlyReconnect };
+      },
+      ownerOrAdmin: async (request, localId) => {
+        const { found, owner } = await ownership(request, localId);
+        return !found || owner || request.admin ? true : { reason: localize(COPY, request.language).manageOwnOnly };
+      },
+    },
 
     describe(request) {
       const copy = localize(COPY, request.language);
@@ -527,15 +545,12 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
       if (!found) return notFound(request.language);
       const copy = localize(COPY, request.language);
       if (found.account.kind !== kind) return connectionRefused(409, { error: 'legacy', message: copy.legacyReconnect });
-      // A sign-in files under the person signing in; it replaces this account only when it is theirs.
-      if (found.account.ownerUserId !== request.userId) return connectionRefused(403, { error: 'forbidden', message: copy.ownerOnlyReconnect });
       return startSignIn(request);
     },
 
     async rename(request, id, name) {
       const found = await find(request, id);
       if (!found) return notFound(request.language);
-      if (!canManage(found.account, request)) return forbidden(request.language);
       // An empty name goes back to who signed in.
       const label =
         name.trim() || (await found.store.getAccountOAuth(request.orgId, id).catch(() => undefined))?.email || `${signInName} · ${harness.label}`;
@@ -551,7 +566,6 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
     async remove(request, id, { confirm }) {
       const found = await find(request, id);
       if (!found) return notFound(request.language);
-      if (!canManage(found.account, request)) return forbidden(request.language);
       const impact = await impactOf(found.store, found.account, request);
       if (impact.requiresConfirm && !confirm) {
         return connectionRefused(409, { error: 'confirmation_required', message: impact.body, impact });
@@ -568,7 +582,6 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
       if (section !== 'rotation' || typeof values.enabled !== 'boolean') {
         return connectionRefused(400, { error: 'invalid_settings', message: copy.notFound });
       }
-      if (!canManage(found.account, request)) return forbidden(request.language);
       const condition = conditionOf(found.account);
       if (condition === 'legacy') return connectionRefused(409, { error: 'legacy', message: copy.rotation.legacyReason });
       if (condition === 'needs_sign_in' && values.enabled) {
@@ -609,9 +622,7 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
           ? copy.rotation.legacyReason
           : condition === 'needs_sign_in'
             ? copy.rotation.needsSignInReason
-            : !canManage(account, request)
-              ? copy.manageOwnOnly
-              : undefined;
+            : undefined;
       const rotation: ConnectionDetailSection = {
         type: 'settings',
         id: 'rotation',

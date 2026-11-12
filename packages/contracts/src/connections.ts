@@ -91,6 +91,34 @@ export interface ConnectorRef {
   icon: string;
 }
 
+/**
+ * Who may do something with a connector's connections: any `member` of the organization, an
+ * organization `admin`, or a named `policy` the connector defines (the owner of an account, …). The
+ * registry enforces it on every route and shows a refused action disabled with the reason; a connector
+ * only declares it.
+ */
+export type ConnectionPermission = 'member' | 'admin' | { policy: string };
+
+/** The permission each change takes; reading is every member's. `settings` may differ per section id. */
+export interface ConnectionPermissions {
+  connect: ConnectionPermission;
+  reconnect: ConnectionPermission;
+  rename: ConnectionPermission;
+  remove: ConnectionPermission;
+  unlink: ConnectionPermission;
+  settings: ConnectionPermission | Record<string, ConnectionPermission>;
+}
+
+/** Every change is an organization admin's unless the connector declares otherwise. */
+export const DEFAULT_CONNECTION_PERMISSIONS: ConnectionPermissions = {
+  connect: 'admin',
+  reconnect: 'admin',
+  rename: 'admin',
+  remove: 'admin',
+  unlink: 'admin',
+  settings: 'admin',
+};
+
 /** A connector as «Додати підключення» lists it: Mastra's `ToolProviderInfo` with its methods. */
 export interface ConnectorView extends ConnectorRef {
   /** One line under the connect step's title (`ToolProviderInfo.description`). */
@@ -111,6 +139,8 @@ export interface ConnectorView extends ConnectorRef {
   /** Provider-level health (configuration, reachability), as `ToolProvider.getHealth`. */
   health?: ToolProviderHealth;
   methods: ConnectMethod[];
+  /** Who may change its connections, as declared (defaults filled in) and enforced by the registry. */
+  permissions: ConnectionPermissions;
 }
 
 export interface ConnectionStateView {

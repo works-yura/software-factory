@@ -42,7 +42,6 @@ interface Copy {
   link: { label: string; description: string; field: string; none: string; submit: string; linkedTitle: (name: string) => string };
   custom: { label: string; description: string };
   check: { label: string; connected: (count: number) => string; failed: (error: string) => string };
-  adminOnly: string;
   factoryRequired: string;
   inEditor: string;
   notFound: string;
@@ -78,7 +77,6 @@ const COPY: ConnectionCopy<Copy> = {
     },
     custom: { label: 'Own MCP server', description: 'A remote URL or a local command.' },
     check: { label: 'Check the connection', connected: count => `Reconnected: ${count} ${count === 1 ? 'tool' : 'tools'}`, failed: error => `Could not reconnect: ${error}` },
-    adminOnly: 'Only organization admins change connections.',
     factoryRequired: 'Open Connections of a Factory to link a server to it.',
     inEditor: 'This server is set up in its editor.',
     notFound: 'This MCP server no longer exists.',
@@ -131,7 +129,6 @@ const COPY: ConnectionCopy<Copy> = {
     },
     custom: { label: 'Власний MCP-сервер', description: 'Віддалена адреса або локальна команда.' },
     check: { label: 'Перевірити з’єднання', connected: count => `Перепідключено, інструментів: ${count}`, failed: error => `Не вдалося перепідключити: ${error}` },
-    adminOnly: 'Змінює адміністратор організації.',
     factoryRequired: 'Відкрийте «Підключення» Factory, щоб прив’язати до неї сервер.',
     inEditor: 'Цей сервер налаштовується в його редакторі.',
     notFound: 'Цього MCP-сервера вже немає.',
@@ -209,13 +206,12 @@ export class McpConnections implements IntegrationConnections {
     const language = request.language;
     const servers = request.factoryProjectId ? await this.#servers(request.orgId) : [];
     const linkable = servers.filter(server => !server.assignments.some(assignment => assignment.factoryProjectId === request.factoryProjectId));
-    const blocked = !request.admin ? { reason: copy.adminOnly } : undefined;
     const editorMethod = (id: string, label: string, description: string, params: Record<string, string>): ConnectMethod => ({
       id,
       label,
       description,
       authKind: 'apiKey',
-      available: blocked ?? true,
+      available: true,
       editor: { component: 'mcp-server', params: { ...params, ...(request.factoryProjectId ? { factoryProjectId: request.factoryProjectId } : {}) } },
     });
     return {
@@ -242,7 +238,7 @@ export class McpConnections implements IntegrationConnections {
             },
           ],
           submitLabel: copy.link.submit,
-          available: blocked ?? (!request.factoryProjectId ? { reason: copy.factoryRequired } : linkable.length === 0 ? { reason: copy.link.none } : (true as const)),
+          available: !request.factoryProjectId ? { reason: copy.factoryRequired } : linkable.length === 0 ? { reason: copy.link.none } : (true as const),
         },
         // Servers an integration runs under the hood are that integration's, not a choice here.
         ...this.#deps.catalog
@@ -265,7 +261,6 @@ export class McpConnections implements IntegrationConnections {
         : undefined;
     const credential = server.launch.transport === 'catalog' ? Object.values(server.launch.credentials)[0] : undefined;
     const account = credential ? accountNames.get(`${credential.kind}:${credential.id}`) : undefined;
-    const blocked = { reason: copy.adminOnly };
     const others = server.assignments.filter(assignment => assignment.factoryProjectId !== request.factoryProjectId).length;
     return {
       id: server.id,
@@ -281,10 +276,10 @@ export class McpConnections implements IntegrationConnections {
       createdBy: server.createdBy,
       ...(others > 0 ? { dependents: copy.usedBy(others + 1) } : {}),
       actions: {
-        rename: request.admin ? true : blocked,
-        reconnect: request.admin ? { method: this.#checkMethod(copy) } : blocked,
-        ...(request.factoryProjectId ? { unlink: request.admin ? true : blocked } : {}),
-        remove: request.admin ? true : blocked,
+        rename: true,
+        reconnect: { method: this.#checkMethod(copy) },
+        ...(request.factoryProjectId ? { unlink: true } : {}),
+        remove: true,
       },
     };
   }

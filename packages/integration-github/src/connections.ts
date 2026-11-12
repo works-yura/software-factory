@@ -136,7 +136,6 @@ interface Copy {
   accountType: (type: string | null) => string | undefined;
   state: { connected: string; env: string; attention: string };
   attention: { not_found: string; token_missing: string; no_app: string };
-  adminOnly: string;
   manage: string;
   usedBy: (count: number) => string;
   notFound: string;
@@ -210,7 +209,6 @@ const COPY: ConnectionCopy<Copy> = {
       token_missing: 'The token of this connection is gone. Paste a new one in «Reconnect».',
       no_app: 'This server has no GitHub App any more. Connect the account with a token.',
     },
-    adminOnly: 'Only organization admins change connections.',
     manage: 'Open on GitHub',
     usedBy: count => `Used by ${count} ${count === 1 ? 'Factory' : 'Factories'}`,
     notFound: 'This GitHub connection no longer exists.',
@@ -280,7 +278,6 @@ const COPY: ConnectionCopy<Copy> = {
       token_missing: 'Токена цього підключення немає. Вставте новий у «Перепідключити».',
       no_app: 'На цьому сервері більше немає GitHub App. Підключіть акаунт токеном.',
     },
-    adminOnly: 'Змінює адміністратор організації.',
     manage: 'Відкрити на GitHub',
     usedBy: count => `Використовують Factory: ${count}`,
     notFound: 'Цього підключення GitHub уже немає.',
@@ -369,7 +366,7 @@ export class GithubConnections implements IntegrationConnections {
         },
       ],
       submitLabel: replace ? copy.token.replace : copy.token.submit,
-      available: request.admin ? true : { reason: copy.adminOnly },
+      available: true,
     };
   }
 
@@ -399,7 +396,6 @@ export class GithubConnections implements IntegrationConnections {
   #view(request: ConnectionRequest, view: GithubConnectionView): ConnectorConnection {
     const copy = localize(COPY, request.language);
     const fromEnv = view.kind === 'token' && view.tokenSource === 'env';
-    const blocked = { reason: copy.adminOnly };
     const accountDetail = copy.accountType(view.accountType);
     const manageUrl =
       view.kind === 'app' && view.accountLogin
@@ -429,12 +425,10 @@ export class GithubConnections implements IntegrationConnections {
       createdBy: view.connectedBy,
       ...(view.projectConnections > 0 ? { dependents: copy.usedBy(view.projectConnections) } : {}),
       actions: {
-        rename: request.admin ? true : blocked,
+        rename: true,
         // The App is re-authorized through its install flow; a token is replaced in its form.
-        reconnect: request.admin
-          ? { method: view.kind === 'app' ? this.#appMethod(copy) : this.#tokenMethod(copy, request, true) }
-          : blocked,
-        remove: request.admin ? true : blocked,
+        reconnect: { method: view.kind === 'app' ? this.#appMethod(copy) : this.#tokenMethod(copy, request, true) },
+        remove: true,
         ...(manageUrl ? { manageExternally: { url: manageUrl, label: copy.manage } } : {}),
       },
     };

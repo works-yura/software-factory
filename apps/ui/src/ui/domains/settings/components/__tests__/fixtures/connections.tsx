@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
+import { DEFAULT_CONNECTION_PERMISSIONS } from '@factory/contracts';
 import type { ConnectionView, ConnectorView } from '@factory/contracts';
 
 import type { McpServer } from '../../../services/mcpServers';
@@ -45,6 +46,7 @@ export const acmeConnector: ConnectorView = {
   category: 'sources',
   provides: [{ key: 'tasks', label: 'Tickets' }],
   capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true },
+  permissions: DEFAULT_CONNECTION_PERMISSIONS,
   methods: [
     {
       id: 'key',
@@ -71,6 +73,7 @@ export const roboAgentConnector: ConnectorView = {
   category: 'agents',
   provides: [{ key: 'agent', label: 'Runs Robo Agent sessions' }],
   capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true },
+  permissions: DEFAULT_CONNECTION_PERMISSIONS,
   methods: [{ id: 'sign-in', label: 'Sign in with Robo', authKind: 'oauth', available: true }],
 };
 
@@ -106,6 +109,7 @@ export const mcpConnector: ConnectorView = {
   mcp: true,
   provides: [{ key: 'tools', label: 'Tools' }],
   capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true },
+  permissions: DEFAULT_CONNECTION_PERMISSIONS,
   methods: [
     {
       id: 'link',

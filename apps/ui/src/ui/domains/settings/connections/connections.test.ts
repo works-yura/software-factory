@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_CONNECTION_PERMISSIONS } from '@factory/contracts';
 import type { ConnectorView } from '@factory/contracts';
 
 import { catalogText, connectionCatalog, filterActivity, filterCatalog } from './connections';
@@ -13,6 +14,7 @@ const connector = (id: string, overrides: Partial<ConnectorView> = {}): Connecto
   category: 'sources',
   provides: [{ key: 'tasks', label: 'Tickets' }],
   capabilities: { multipleConnectionsPerToolkit: true, batchConnectionStatus: false, reauthorizeReusesConnectionId: true },
+  permissions: DEFAULT_CONNECTION_PERMISSIONS,
   methods: [{ id: 'key', label: 'API key', authKind: 'apiKey', fields: [], available: true }],
   ...overrides,
 });

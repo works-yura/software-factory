@@ -233,7 +233,8 @@ function guardConnections(registration: IntegrationRegistration, facet: Integrat
       return call(...args);
     };
   return {
-    ...(facet.memberManaged ? { memberManaged: true } : {}),
+    ...(facet.permissions ? { permissions: facet.permissions } : {}),
+    ...(facet.policies ? { policies: facet.policies } : {}),
     describe: request => facet.describe(request),
     list: ready(request => facet.list(request)),
     connect: ready((request, method, input) => facet.connect(request, method, input)),
