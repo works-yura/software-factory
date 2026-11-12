@@ -19,7 +19,8 @@
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" --no-use && nvm use --silent default >/dev/null
-export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin"
+# The agent CLIs the server spawns: Claude Code installs into ~/.local/bin, Codex comes with nvm's node.
+export PATH="$HOME/.local/bin:$PATH:/usr/local/bin:/opt/homebrew/bin"
 set -u
 
 CONFIG="${HOME}/.mastracode/factory-v4/server.env"

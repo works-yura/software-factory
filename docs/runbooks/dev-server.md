@@ -7,7 +7,7 @@ cd apps/server
 corepack pnpm dev:local
 ```
 
-- Вхід через Google (`FACTORY_AUTH=google`; `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACTORY_AUTH_SECRET` у `apps/server/.env`, див. README).
+- Вхід через Google (`FACTORY_AUTH=google`; `GOOGLE_CLIENT_ID`, `claude` з `~/.local/bin` (без нього сесії Claude Code падають з `spawn claude ENOENT`), `GOOGLE_CLIENT_SECRET`, `FACTORY_AUTH_SECRET` у `apps/server/.env`, див. README).
 - Порт `5874` (API — `http://127.0.0.1:5874/api`). Перевірка: `curl -s -o /dev/null -w '%{http_code}' http://localhost:5874/auth/me` → `200` (решта шляхів без входу — `401` або перенаправлення на `/signin`).
 - Під час старту `sync:skills` копіює `packages/harness-mastra/factory-skills` у `apps/server/src/mastra/public/factory-skills`.
 - Сервер стежить за файлами й сам перезапускається після зміни коду пакетів (`Restarting server...` у лозі).
