@@ -15,6 +15,15 @@ UI не знає провайдерів: усе, що людина бачить 
 
 7. Налаштування підключення — секція `settings` у `detail` (поля з поточними значеннями) і `updateSettings`; перемикачі зберігаються одразу, решта — кнопкою секції. Дозволи вирішує конектор (поле, яке людині не можна змінювати, — `disabled` з причиною).
 8. Конектор, що не є інтеграцією (як MCP-сервери), реєструється через `assembleFactoryApiRoutes({ connectors })`.
+9. Хто може змінювати: за замовчуванням — лише адміністратор організації (реєстр відмовляє сам). Конектор, де кожен учасник керує своїм (акаунти агентів), ставить `memberManaged: true` і перевіряє права сам.
+10. Потік, що завершується поза браузером (вхід CLI на машині сервера): `authorize` без `url` — з `authId` і `waiting` (`title`, `message`, `timeoutMs`); `getAuthStatus` повертає `{ status, message }`.
+
+## Як додати харнес з акаунтами (ADR-0036)
+
+1. Дескриптор у `packages/contracts/src/harnesses.ts`: `icon` (ключ логотипа) і `setup.accounts: { provider, connector }`.
+2. Сервер: вид входу й назва — `SIGN_IN_ACCOUNT_PROVIDERS` (`packages/api/src/credential-accounts.ts`), потік входу CLI (`createAccountSignInService`), фасет `HarnessUsage` для лімітів. `assembleFactoryApiRoutes` сам зареєструє `createAgentAccountsConnections` для харнесу, який сервер запускає.
+3. Фасет моделей — через `withConnectionAvailability(models, { connector, missing })`: без входу людини харнес недоступний з причиною, і UI його ніде не пропонує.
+4. UI не змінюється: харнес приходить з `/web/config/features` і `/web/config/models`; логотип — ключ у `ConnectionIcon`.
 
 Єдиний виняток із дескрипторів — редактор MCP-сервера (`custom: mcp-server` у секціях і `editor` у способі); новий конектор ним не користується.
 
