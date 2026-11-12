@@ -14,7 +14,7 @@
 | Група | Пакети |
 | --- | --- |
 | Ядро й дошки | `core` (дошки, правила), `pipelines` (дошки `work`, `product`), `work-items`, `runtime` (переходи, диспетчер) |
-| Сервер | `server` (фабрика, Claude-сесії, правила), `api`, `contracts`, `http`, `auth`, `credentials`, `supervisor`, `session`, `feed`, `activity`, `observability`, `capabilities`, `mcp` |
+| Сервер | `server` (фабрика, Claude-сесії, правила), `api`, `contracts`, `http`, `auth`, `auth-better-auth`, `credentials`, `supervisor`, `session`, `feed`, `activity`, `observability`, `capabilities`, `mcp` |
 | Дані | `store` (домени БД, вкладення) |
 | Агенти | `harness-core`, `harness-mastra` (+ `factory-skills/`), `harness-claude-code-core`, `harness-claude-code-ui`, `sandbox`, `internal-workspace` |
 | Інтеграції | `integrations`, `integration-github`, `integration-gitlab`, `integration-clickup` |

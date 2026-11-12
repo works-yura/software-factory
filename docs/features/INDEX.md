@@ -17,5 +17,5 @@
 | [google-cloud](google-cloud/design.md) | Підключення › Google Cloud: логи й креші для агентів (порт, адаптер Firebase), «База» Firestore через MCP Toolbox, акаунти й прив'язки Factory → проєкт, маскування |
 | [sandbox](sandbox/design.md) | Пісочниця (лише локальна), коміти й пуш, очікування рішення людини; як це в оригінальній Mastra |
 | [conversations](conversations/design.md) | Розмови з агентом поза Factory: коментарі ClickUp, прив'язка акаунта, голосові кліпи, відповідь у тред |
-| [auth](auth/design.md) | Вхід: Google на better-auth, організації й ролі, запрошення посиланням, перенесення людей з Firebase-входу; local dev і вимкнений вхід |
+| [auth](auth/design.md) | Вхід: Google на better-auth, організації й ролі, запрошення посиланням; local dev і вимкнений вхід |
 | [mcp-servers](mcp-servers/design.md) | Підключення › MCP: менеджер MCP-серверів, доступ картки, політика інструментів, секрети, маскування; сервери, якими керують сервіси |

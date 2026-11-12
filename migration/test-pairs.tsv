@@ -37,7 +37,7 @@ storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts	1	upstream #29644: a key mismatch explains itself (+1)
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts	+1	one sandbox folder per card: sessions of a factory on a branch (+1)
 auth-seam.test.ts	server/src/auth-seam.test.ts	-7	WorkOS env fallback, isWorkOSAuth/getWorkOSProvider and Studio custom-domain cases dropped with @mastra/auth-workos and @mastra/auth-studio (-8); /auth/me provider report (+1)
-auth.test.ts	auth/src/auth.test.ts	0	WorkOS env fallback cases replaced by explicit-provider selection (3 cases → 2); better-auth user picture read from `image` (+1)
+auth.test.ts	auth/src/auth.test.ts	+2	WorkOS env fallback cases replaced by explicit-provider selection (3 cases → 2); better-auth user picture read from `image` (+1); failed admin checks are denied and logged, a failed organization bootstrap answers 503 (ADR-0030) (+2)
 environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule.test.ts
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
@@ -288,7 +288,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+17	upstream #28838: src/
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	0	personal model scope removed (Your models, scope choice, personal keys) (-1); retired Connections links open Repositories, after #29588 (+1)
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx
-../../../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	-7	Mastra Platform sign-in and custom-domain cases dropped with @mastra/auth-studio (-3); better-auth is Google-only (ADR-0029): email/password form and Firebase popup cases (-8) replaced by Google button cases (+4)
+../../../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	-7	Mastra Platform sign-in and custom-domain cases dropped with @mastra/auth-studio (-3); better-auth is Google-only (ADR-0030): email/password form and Firebase popup cases (-8) replaced by Google button cases (+4)
 ../../../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx	../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts	../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/useInitializingPlaceholder.test.ts	../apps/ui/src/ui/domains/chat/components/useInitializingPlaceholder.test.ts
@@ -386,7 +386,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+17	upstream #28838: src/
 ../../../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts	../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItems.test.ts	../apps/ui/src/ui/domains/factory/services/workItems.test.ts	1	added: a stored card from a dropped integration reads as manual
 ../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	+6	upstream 22084b780f (#28100): Memory found by its former page name (+1); 9173231506 (#28312): sidebar search button hands focus back (+1); 63d7d5cbd4 (#28257): retired Activity URLs open the board (+1); upstream #29712: board UI from each board's loop phases (+3)
-../../../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	+1	better-auth sign-in named Google (ADR-0029)
+../../../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	+1	better-auth sign-in named Google (ADR-0030)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx

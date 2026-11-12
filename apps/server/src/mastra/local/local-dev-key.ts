@@ -13,7 +13,7 @@ export function localDevCredentialKey(): string {
 
 /**
  * The same key for a development server on the person's own machine that signs people in another
- * way (Google through Firebase), so credentials stored under local dev auth stay readable.
+ * way (`FACTORY_AUTH=google`), so credentials stored under local dev auth stay readable.
  */
 export function ownMachineCredentialKey(): string {
   if (process.env.NODE_ENV !== 'development') {
