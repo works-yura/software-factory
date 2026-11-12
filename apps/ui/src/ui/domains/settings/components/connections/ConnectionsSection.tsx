@@ -25,7 +25,6 @@ const LEGACY_TABS = new Set(['services', 'mcp']);
 
 /** A connect step «Перепідключити» opens straight into (`&step=`): a first-party kind's, or a server connection's. */
 const isStep = (value: string | null): value is Step =>
-  value === 'gitlab' ||
   value === 'google-cloud' ||
   Boolean(value?.startsWith('connector:') || value?.startsWith('reconnect:'));
 

@@ -13,9 +13,12 @@ import type {
   ConnectionsListResponse,
   ConnectorsResponse,
   ConnectResult,
+  ConnectSession,
   RemovalImpact,
 } from '@factory/contracts';
 import i18next from 'i18next';
+
+import { runHeadlessAuth } from '../../factory/services/platformConnect';
 
 /** A refusal from the connections API: its message, per-field messages, and a removal's impact. */
 export class ConnectionApiError extends Error {
@@ -35,12 +38,56 @@ export function connectionRedirectUrl(baseUrl: string, url: string): string {
   return url.startsWith('/') ? `${baseUrl}${url}` : url;
 }
 
-/** Leaves the page for an `authorize` URL (an App install, OAuth). An object so tests can watch it. */
+/**
+ * How the page leaves for an `authorize` URL (an App install, OAuth) or runs a provider session in
+ * place (a Nango connect session, headlessly). An object so tests can stand in for both.
+ */
 export const connectionNavigation = {
   assign(url: string): void {
     window.location.assign(url);
   },
+  async runSession(session: ConnectSession, authId: string | undefined): Promise<void> {
+    await runHeadlessAuth({
+      session: {
+        connectionId: authId ?? '',
+        integrationId: session.integrationId,
+        connectUrl: '',
+        sessionToken: session.token,
+        expiresAt: session.expiresAt ?? '',
+      },
+    });
+  },
 };
+
+const AUTH_POLL_INTERVAL_MS = 2_000;
+const AUTH_POLL_DEADLINE_MS = 60_000;
+
+/**
+ * Finishes an `authorize` result: opens its URL (the page leaves: `redirected`), or runs its session
+ * here and then asks the connector about `authId` until the account is active (`completed`), or the
+ * minute passes (`pending`: the provider still confirms). A failed flow throws.
+ */
+export async function finishAuthorize(
+  baseUrl: string,
+  connector: string,
+  result: Extract<ConnectResult, { type: 'authorize' }>,
+  options: { intervalMs?: number; deadlineMs?: number } = {},
+): Promise<'redirected' | 'completed' | 'pending'> {
+  if (!result.session) {
+    if (result.url) connectionNavigation.assign(connectionRedirectUrl(baseUrl, result.url));
+    return 'redirected';
+  }
+  await connectionNavigation.runSession(result.session, result.authId);
+  if (!result.authId) return 'completed';
+  const deadline = Date.now() + (options.deadlineMs ?? AUTH_POLL_DEADLINE_MS);
+  for (;;) {
+    const { status } = await connectionsApi.authStatus(baseUrl, connector, result.authId);
+    if (status === 'completed') return 'completed';
+    if (status === 'failed') throw new ConnectionApiError(409, { error: 'auth_failed' });
+    if (Date.now() >= deadline) return 'pending';
+    await new Promise(resolve => setTimeout(resolve, options.intervalMs ?? AUTH_POLL_INTERVAL_MS));
+  }
+}
 
 const path = (id: string, suffix = '') => `/web/connections/${encodeURIComponent(id)}${suffix}`;
 

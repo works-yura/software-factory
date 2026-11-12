@@ -21,11 +21,21 @@ import {
   useConnectPlatformProviderMutation,
   useReconnectPlatformProviderMutation,
 } from '../../../../hooks/usePlatformConnections';
-import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import { useConnectors } from '../../../../hooks/useConnections';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { translator } from '../../../i18n/t';
 
 const tk = translator('settings');
+
+/**
+ * A Platform provider's name and how it authorizes, as the server's connector describes it
+ * (ADR-0035): the UI keeps no provider registry of its own.
+ */
+function useProviderMeta(provider: PlatformConnectProviderId): { displayName: string; authKind: 'oauth' | 'apiKey' } {
+  const connector = useConnectors().data?.connectors.find(candidate => candidate.id === provider);
+  const method = connector?.methods.find(candidate => candidate.available === true) ?? connector?.methods[0];
+  return { displayName: connector?.name ?? provider, authKind: method?.authKind ?? 'oauth' };
+}
 
 function connectionName(connection: PlatformProviderConnection): string {
   return connection.displayName?.trim() || connection.accountLabel?.trim() || tk('connectedAccounts.fallbackName');
@@ -41,7 +51,7 @@ interface ApiKeyDialogProps {
 
 function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDialogProps) {
   const { t } = useTranslation('settings');
-  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const meta = useProviderMeta(provider);
   const [apiKey, setApiKey] = useState('');
   return (
     <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
@@ -105,7 +115,7 @@ export function ProviderConnectControl({
   onCompleted,
 }: ProviderConnectControlProps) {
   const { t } = useTranslation('settings');
-  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const meta = useProviderMeta(provider);
   const connectMutation = useConnectPlatformProviderMutation(provider);
   const reconnectMutation = useReconnectPlatformProviderMutation(provider);
   const [collectingApiKey, setCollectingApiKey] = useState(false);

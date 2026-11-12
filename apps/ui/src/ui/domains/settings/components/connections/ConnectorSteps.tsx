@@ -6,12 +6,13 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight, RotateCw } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../../api/config';
 import { useAuthorize, useReconnect } from '../../../../../hooks/useConnections';
-import { ConnectionApiError, connectionNavigation, connectionRedirectUrl } from '../../connections/api';
+import { ConnectionApiError, finishAuthorize } from '../../connections/api';
 import type { ConnectionTarget } from './ConnectSteps';
 import { StepFrame } from './ConnectSteps';
 
@@ -141,6 +142,9 @@ export function ConnectorConnect({
   const method = methods.find(candidate => candidate.id === chosenId);
   const [values, setValues] = useState<Record<string, string>>({});
   const [done, setDone] = useState<Extract<ConnectResult, { type: 'connected' }>>();
+  /** A session run here (a provider popup): in progress, finished, still confirming, or failed. */
+  const [authorizing, setAuthorizing] = useState<'running' | 'completed' | 'pending' | { error: string }>();
+  const queryClient = useQueryClient();
   const frame = {
     kind: connector.icon,
     title: title ?? t('connections.connect.title', { name: connector.name }),
@@ -151,8 +155,19 @@ export function ConnectorConnect({
     if (!method) return;
     const handle = {
       onSuccess: (result: ConnectResult) => {
-        if (result.type === 'authorize') connectionNavigation.assign(connectionRedirectUrl(baseUrl, result.url));
-        else setDone(result);
+        if (result.type === 'connected') {
+          setDone(result);
+          return;
+        }
+        if (result.session) setAuthorizing('running');
+        finishAuthorize(baseUrl, connector.id, result).then(
+          outcome => {
+            if (outcome === 'redirected') return;
+            setAuthorizing(outcome);
+            void queryClient.invalidateQueries();
+          },
+          (error: unknown) => setAuthorizing({ error: errorMessage(error) }),
+        );
       },
     };
     if (reconnect) reconnectMutation.mutate({ id: reconnect, input }, handle);
@@ -164,6 +179,22 @@ export function ConnectorConnect({
     if (method && !single) setChosenId(undefined);
     else onBack();
   };
+
+  if (authorizing === 'completed' || authorizing === 'pending') {
+    return (
+      <StepFrame
+        {...frame}
+        onBack={onBack}
+        action={
+          <Button size="sm" variant="primary" onClick={() => onPick({ connection: connector.id })}>
+            {t('connections.connector.open')}
+          </Button>
+        }
+      >
+        <Notice variant={authorizing === 'completed' ? 'success' : 'info'} title={t(`connections.connector.authorized.${authorizing}`, { name: connector.name })} role="status" />
+      </StepFrame>
+    );
+  }
 
   if (done) {
     return (
@@ -217,10 +248,10 @@ export function ConnectorConnect({
             variant="primary"
             type={fields.length > 0 ? 'submit' : 'button'}
             form={fields.length > 0 ? formId : undefined}
-            disabled={mutation.isPending || missing}
+            disabled={mutation.isPending || authorizing === 'running' || missing}
             onClick={fields.length === 0 ? () => run({}) : undefined}
           >
-            {mutation.isPending ? (
+            {mutation.isPending || authorizing === 'running' ? (
               <>
                 <Spinner size="sm" aria-hidden />
                 {t('connections.connect.connecting')}
@@ -241,6 +272,11 @@ export function ConnectorConnect({
       {failure && Object.keys(fieldErrors).length === 0 && (
         <Notice variant="destructive" title={t('connections.connect.errorTitle')} role="alert">
           <Notice.Message>{errorMessage(failure)}</Notice.Message>
+        </Notice>
+      )}
+      {typeof authorizing === 'object' && (
+        <Notice variant="destructive" title={t('connections.connect.errorTitle')} role="alert">
+          <Notice.Message>{authorizing.error}</Notice.Message>
         </Notice>
       )}
       {method.description && (

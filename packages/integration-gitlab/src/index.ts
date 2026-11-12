@@ -16,3 +16,4 @@ export * from './subscriptions.ts';
 export * from './version-control.ts';
 export * from './webhook.ts';
 export * from './webhook-dispatch.ts';
+export * from './connections.ts';

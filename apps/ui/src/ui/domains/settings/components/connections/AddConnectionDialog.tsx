@@ -17,8 +17,8 @@ import { CapabilityDots, serverDots, useCatalogDots } from './CapabilityDots';
 import type { CapabilityDot } from './CapabilityDots';
 import { ConnectionIcon } from './ConnectionIcon';
 import { ConnectorConnect } from './ConnectorSteps';
-import { GoogleCloudConnect, SourceConnect } from './ConnectSteps';
-import type { ConnectionTarget, FirstParty, SourceKind } from './ConnectSteps';
+import { GoogleCloudConnect } from './ConnectSteps';
+import type { ConnectionTarget, FirstParty } from './ConnectSteps';
 
 export type { ConnectionTarget };
 
@@ -261,7 +261,7 @@ function PickStep({
 /**
  * «Додати підключення»: one dialog for picking and connecting. Step one lists what can be added; a
  * first-party integration opens its connect step in the same dialog (Google Cloud: an account and
- * its key; GitLab: its state and controls); a connector the server describes opens its
+ * its key); a connector the server describes opens its
  * methods (a form, or a redirect to the provider); an MCP server or an organization account goes
  * straight to its page. «Перепідключити» on a server connection opens here at its reconnect method.
  */
@@ -278,7 +278,7 @@ export function AddConnectionDialog({
   sources: ConnectionSources;
   onPick: (target: ConnectionTarget) => void;
   onClose: () => void;
-  /** Open straight into one connect step («Перепідключити»): GitLab, Google Cloud, or a server connection's. */
+  /** Open straight into one connect step («Перепідключити»): Google Cloud, or a server connection's. */
   initialStep?: Step;
 }) {
   const [chosen, setStep] = useState<Step>();
@@ -298,8 +298,6 @@ export function AddConnectionDialog({
           <GoogleCloudConnect accounts={sources.firebase?.accounts ?? []} onBack={back} onPick={onPick} />
         ) : step?.startsWith('connector:') || step?.startsWith('reconnect:') ? (
           <ServerStep step={step as `connector:${string}` | `reconnect:${string}`} sources={sources} onBack={back} onPick={onPick} />
-        ) : step ? (
-          <SourceConnect kind={step as SourceKind} onBack={back} onPick={onPick} />
         ) : (
           <PickStep factoryId={factoryId} sources={sources} onConnect={setStep} onPick={onPick} />
         )}

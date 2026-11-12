@@ -18,19 +18,6 @@ const tk = translator('board');
 
 export type PlatformConnectProviderId = 'gitlab';
 
-/** How the provider authorizes: OAuth consent popup or an API-key form. */
-export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
-
-export interface PlatformConnectProviderMeta {
-  id: PlatformConnectProviderId;
-  displayName: string;
-  authKind: PlatformConnectAuthKind;
-}
-
-export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
-  gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
-};
-
 export interface PlatformProviderConnection {
   id: string;
   integrationId: string;

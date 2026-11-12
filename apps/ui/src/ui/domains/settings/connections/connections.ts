@@ -2,13 +2,11 @@
  * Settings › Підключення: one list of what a Factory's agents connect to, whatever runs underneath.
  *
  * Two levels, as the stores already keep them:
- * - **Organization** — accounts and servers: Google Cloud service-account keys, MCP servers, the
- *   GitLab connections, and every connector the server describes.
+ * - **Organization** — accounts and servers: Google Cloud service-account keys, MCP servers, and
+ *   every connector the server describes.
  * - **Factory** — a link to one of them: a Google Cloud binding (this Factory reads that project
  *   through that account), an MCP server's access entry for this Factory. «Відв'язати» drops the
  *   link and keeps the organization's account for other Factories.
- *
- * GitLab is connected for the whole organization; a Factory has no link of its own to drop (its intake routes and repositories say what it uses), so their rows say so.
  *
  * Connectors the server describes (ADR-0035) arrive as {@link ConnectionView}s from
  * `/web/connections` — name, logo key, state, actions and every string — and become rows of kind
@@ -28,11 +26,10 @@ import type { ConnectionsListResponse, ConnectionView, ConnectorView } from '@fa
 import type { McpCatalogEntry } from '@factory/core';
 import { mcpServerState } from '@factory/core';
 
-import type { GitLabStatus } from '../../factory/services/gitlab';
 import type { FirebaseAccount, FirebaseBinding, FirebaseState } from '../services/firebase';
 import type { McpServer, McpServersState } from '../services/mcpServers';
 
-export type ConnectionKind = 'google-cloud' | 'mcp' | 'gitlab';
+export type ConnectionKind = 'google-cloud' | 'mcp';
 
 /** A row's kind: one the page still builds itself, or `connector` — described by the server. */
 export type RowKind = ConnectionKind | 'connector';
@@ -56,11 +53,10 @@ export interface ConnectionKindDescriptor {
 export const CONNECTION_KINDS: Record<ConnectionKind, ConnectionKindDescriptor> = {
   'google-cloud': { kind: 'google-cloud', category: 'tools', mcp: false, organizationWide: false, capabilities: ['tools'] },
   mcp: { kind: 'mcp', category: 'tools', mcp: true, organizationWide: false, capabilities: ['tools'] },
-  gitlab: { kind: 'gitlab', category: 'sources', mcp: false, organizationWide: true, capabilities: ['code', 'tasks'] },
 };
 
 /** First-party integrations, the order «Додати підключення» lists them in. */
-export const FIRST_PARTY: ReadonlyArray<Exclude<ConnectionKind, 'mcp'>> = ['google-cloud', 'gitlab'];
+export const FIRST_PARTY: ReadonlyArray<Exclude<ConnectionKind, 'mcp'>> = ['google-cloud'];
 
 /** What a connection lets agents do, as the row lists it. */
 export type ConnectionCapability =
@@ -109,26 +105,14 @@ export interface ConnectionRow {
   createdBy?: string;
   /** What «Перейменувати» renames: the binding's own name, the server's label, or an organization connection's name. */
   rename?: 'binding' | 'server';
-  /** An organization connection's own actions, each either available or why not (shown, never hidden). */
-  orgActions?: OrgActions;
   /** A connection the server describes (kind `connector`): its name, logo, state, actions and copy. */
   view?: ConnectionView;
 }
 
-/** Why an organization connection's action cannot be taken here; the menu says it under the item. */
-export type OrgActionBlock = 'env' | 'admin' | 'platform';
-
-/** «Перейменувати», «Перепідключити», «Видалити підключення» for GitLab: `true`, or the reason not. */
-export interface OrgActions {
-  rename: true | OrgActionBlock;
-  reconnect: true | OrgActionBlock;
-  remove: true | OrgActionBlock;
-}
 
 export interface ConnectionSources {
   firebase?: FirebaseState;
   mcp?: McpServersState;
-  gitlab?: GitLabStatus;
   /** Every connection the server's connectors describe (`/web/connections`). */
   connections?: ConnectionsListResponse;
   /** The server's connectors and their connect methods (`/web/connections/methods`). */
@@ -226,36 +210,6 @@ function mcpRows(factoryId: string, mcp: McpServersState, firebase: FirebaseStat
     });
 }
 
-/**
- * The organization's GitLab connections — the organization's, not a Factory's: every Factory sees
- * them: the Mastra Platform connections, or the server's own token. What can be renamed, reconnected and removed follows where the
- * credential lives: a token in the server's environment is changed there, a Platform connection on
- * Mastra Platform.
- */
-function sourceRows(sources: ConnectionSources): ConnectionRow[] {
-  const rows: ConnectionRow[] = [];
-  const { gitlab } = sources;
-  if (gitlab?.configured) {
-    const direct = gitlab.mode === 'direct';
-    const connections = gitlab.connections ?? [];
-    for (const connection of direct || !connections.length ? [undefined] : connections) {
-      rows.push({
-        id: connection ? `gitlab:${connection.id}` : 'gitlab',
-        kind: 'gitlab',
-        title: connection?.accountLabel ?? 'GitLab',
-        mcp: false,
-        ...(connection?.accountLabel ? { account: { name: connection.accountLabel } } : {}),
-        capabilities: [{ key: 'repositories' }, { key: 'tasks' }],
-        state: direct ? 'env' : connection?.status === 'needs_reauth' || gitlab.reauthRequired ? 'needs_auth' : 'connected',
-        scope: 'organization',
-        orgActions: direct
-          ? { rename: 'env', reconnect: 'env', remove: 'env' }
-          : { rename: 'platform', reconnect: true, remove: 'platform' },
-      });
-    }
-  }
-  return rows;
-}
 
 /** The row's state word for the health verdict: the server's tone, in the page's states. */
 const TONE_STATE: Record<ConnectionView['state']['tone'], ConnectionState> = {
@@ -282,15 +236,14 @@ export function connectorRow(view: ConnectionView): ConnectionRow {
   };
 }
 
-/** Everything the Factory connects to: Google Cloud, GitLab, the server's connectors, then MCP servers. */
+/** Everything the Factory connects to: Google Cloud, the server's connectors, then MCP servers. */
 export function factoryConnections(factoryId: string, sources: ConnectionSources): ConnectionRow[] {
   const servers = sources.mcp?.servers ?? [];
-  const order: RowKind[] = ['google-cloud', 'gitlab', 'connector', 'mcp'];
+  const order: RowKind[] = ['google-cloud', 'connector', 'mcp'];
   // First-party integrations first, MCP servers last; within a kind, the order each source gives.
   return [
     ...(sources.firebase ? googleCloudRows(factoryId, sources.firebase, servers) : []),
     ...(sources.mcp ? mcpRows(factoryId, sources.mcp, sources.firebase) : []),
-    ...sourceRows(sources),
     ...(sources.connections?.connections ?? []).map(connectorRow),
   ]
     .map((row, index) => ({ row, index }))
@@ -300,7 +253,7 @@ export function factoryConnections(factoryId: string, sources: ConnectionSources
 
 /** One entry of «Додати підключення»: a first-party integration, a connector the server describes, an MCP server. */
 export interface CatalogItem {
-  /** `google-cloud`, `gitlab`, `connector:<id>`, `mcp-entry:<id>`, `mcp-custom`. */
+  /** `google-cloud`, `connector:<id>`, `mcp-entry:<id>`, `mcp-custom`. */
   id: string;
   kind: RowKind;
   category: ConnectionCategory;
@@ -319,7 +272,6 @@ export interface CatalogItem {
 export function connectionCatalog(sources: ConnectionSources): CatalogItem[] {
   const connected: Record<(typeof FIRST_PARTY)[number], boolean> = {
     'google-cloud': Boolean(sources.firebase?.accounts.length),
-    gitlab: Boolean(sources.gitlab?.configured),
   };
   // Entries an integration runs under the hood are that integration's business, not a choice.
   const thirdParty = (sources.mcp?.catalog ?? []).filter(entry => !entry.integration);

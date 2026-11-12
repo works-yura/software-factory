@@ -21,7 +21,6 @@ import { McpServerEditor } from '../mcp-servers/McpServerEditor';
 import type { McpServerSection, McpServerStart } from '../mcp-servers/McpServerEditor';
 import { McpServerHealthLine, mcpErrorText } from '../mcp-servers/McpServerInspect';
 import { SettingsSubsection } from '../SettingsSubsection';
-import { GitLabService } from '../SourceControlServices';
 import { ConnectionActivity } from './ConnectionActivity';
 import { ConnectorDetailSections } from './ConnectorDetail';
 import { HealthBadge, useRenameConnection } from './ConnectionList';
@@ -56,7 +55,7 @@ function NameRow({ row }: { row: ConnectionRow }) {
   const next = name.trim();
   return (
     <SettingsRow label={t('connections.detail.name')}>
-      {(row.view ? row.view.actions.rename === true : row.rename && (!row.orgActions || row.orgActions.rename === true)) ? (
+      {(row.view ? row.view.actions.rename === true : Boolean(row.rename)) ? (
         <form
           className="flex w-full items-center justify-end gap-2"
           onSubmit={event => {
@@ -222,13 +221,6 @@ export function ConnectionDetail({
           rename: 'server',
         }
       : undefined);
-  const sourceKind =
-    listed && listed.kind === 'gitlab' ? listed.kind : id === 'gitlab' ? id : undefined;
-
-  if (!row && sourceKind) {
-    // An organization-wide source not connected yet (from its connect step or an old link): its own controls.
-    return <Plain><GitLabService /></Plain>;
-  }
   if (!row) {
     return (
       <Txt as="p" variant="caption" tone="muted">
@@ -261,8 +253,6 @@ export function ConnectionDetail({
     </>
   ) : server ? (
     editor('config')
-  ) : sourceKind === 'gitlab' ? (
-    <GitLabService />
   ) : null;
 
   const tabs: Array<{ value: DetailTab; content: ReactNode }> = [

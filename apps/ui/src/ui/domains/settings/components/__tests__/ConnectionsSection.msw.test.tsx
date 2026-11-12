@@ -353,7 +353,6 @@ describe('Підключення', () => {
     const integrations = within(dialog).getByRole('group', { name: 'Integrations' });
     expect(within(integrations).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual([
       'Connect Google Cloud',
-      'Connect GitLab',
       'Connect Acme Cloud',
     ]);
     expect(within(integrations).getByRole('option', { name: 'Connect Acme Cloud' })).toContainElement(within(integrations).getByRole('img', { name: 'Tickets' }));
@@ -365,7 +364,7 @@ describe('Підключення', () => {
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Sources' }));
     expect(within(dialog).queryByRole('group', { name: 'Organization accounts' })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Connect Google Cloud' })).not.toBeInTheDocument();
-    expect(within(dialog).getByRole('option', { name: 'Connect GitLab' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('option', { name: 'Connect Acme Cloud' })).toBeInTheDocument();
   });
 
   it('links an organization server with access for every session kind', async () => {
@@ -470,6 +469,33 @@ describe('Підключення', () => {
       { connector: 'acme', method: 'key', input: { key: 'acme_bad' } },
       { connector: 'acme', method: 'key', input: { key: 'acme_bad' } },
     ]);
+  });
+
+  it('runs a provider session an authorize method returns here, then waits for the account to be active', async () => {
+    useHandlers();
+    const asked: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/connections/methods`, () =>
+        HttpResponse.json({ connectors: [{ ...acmeConnector, methods: [{ id: 'sso', label: 'Sign in with Acme', authKind: 'oauth', available: true }] }] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/connections`, () =>
+        HttpResponse.json({ type: 'authorize', authId: 'acct-9', session: { provider: 'nango', token: 'tok', integrationId: 'acme' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/connections/authorizations/:authId`, ({ params, request }) => {
+        asked.push(`${params.authId}:${new URL(request.url).searchParams.get('connector')}`);
+        return HttpResponse.json({ status: 'completed' });
+      }),
+    );
+    const run = vi.spyOn(connectionNavigation, 'runSession').mockResolvedValue();
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('option', { name: 'Connect Acme Cloud' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connect Acme Cloud' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
+    expect(await within(dialog).findByText('Acme Cloud is connected')).toBeInTheDocument();
+    expect(run).toHaveBeenCalledWith({ provider: 'nango', token: 'tok', integrationId: 'acme' }, 'acct-9');
+    expect(asked).toEqual(['acct-9:acme']);
+    run.mockRestore();
   });
 
   it('opens the URL an authorize method returns', async () => {

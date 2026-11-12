@@ -14,9 +14,9 @@ import { useReconnect, useUnlinkConnection, useUpdateConnection } from '../../..
 import { useFactoriesQuery } from '../../../../../hooks/useFactories';
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
 import { useMcpServerMutations } from '../../../../../hooks/useMcpServers';
-import { connectionNavigation, connectionRedirectUrl } from '../../connections/api';
+import { finishAuthorize } from '../../connections/api';
 import { connectionHealth } from '../../connections/connections';
-import type { ConnectionKind, ConnectionRow, ConnectionSources, OrgActions } from '../../connections/connections';
+import type { ConnectionKind, ConnectionRow, ConnectionSources } from '../../connections/connections';
 import type { FirebaseBinding, FirebaseBindingInput } from '../../services/firebase';
 import { serverToInput } from '../../services/mcpServers';
 import { RemoveAccountDialog } from '../GoogleCloudService';
@@ -159,7 +159,14 @@ function ConnectorRowActions({
       { id: view.id, input: {} },
       {
         onSuccess: result => {
-          if (result.type === 'authorize') connectionNavigation.assign(connectionRedirectUrl(baseUrl, result.url));
+          if (result.type !== 'authorize') return;
+          finishAuthorize(baseUrl, view.connector.id, result).then(
+            outcome => {
+              if (outcome === 'redirected') return;
+              toast.success(t(`connections.connector.authorized.${outcome}`, { name: view.connector.name }));
+            },
+            (error: unknown) => toast.error(errorMessage(error)),
+          );
         },
         onError: error => toast.error(errorMessage(error)),
       },
@@ -209,57 +216,6 @@ function ConnectorRowActions({
 }
 
 /**
- * GitLab belongs to the organization: their menu renames, reconnects and removes the
- * organization's connection. An action the credential's home decides elsewhere (the server's
- * environment, Mastra Platform) stays in the menu, disabled, saying where.
- */
-function OrgRowActions({
-  row,
-  onOpen,
-  onPending,
-  onReconnect,
-}: {
-  row: ConnectionRow;
-  onOpen: () => void;
-  onPending: (pending: PendingAction) => void;
-  onReconnect: (step: ReconnectStep) => void;
-}) {
-  const { t } = useTranslation('settings');
-  const actions = row.orgActions!;
-  const reconnect = () => onReconnect(row.kind as ReconnectStep);
-  const blocked = (reason: Exclude<OrgActions[keyof OrgActions], true>) => t(`connections.blocks.${reason}`);
-  return (
-    <DropdownMenu.Content align="end" className="w-72">
-      <DropdownMenu.Item onSelect={onOpen}>
-        <ArrowUpRight aria-hidden />
-        {t('connections.actions.open')}
-      </DropdownMenu.Item>
-      {actions.rename === true ? (
-        <DropdownMenu.Item onSelect={() => onPending({ kind: 'rename', row })}>
-          <Pencil aria-hidden />
-          {t('connections.actions.rename')}
-        </DropdownMenu.Item>
-      ) : (
-        <BlockedItem icon={Pencil} label={t('connections.actions.rename')} reason={blocked(actions.rename)} />
-      )}
-      {actions.reconnect === true ? (
-        <DropdownMenu.Item onSelect={reconnect}>
-          <RefreshCw aria-hidden />
-          {t('connections.actions.reconnect')}
-        </DropdownMenu.Item>
-      ) : (
-        <BlockedItem icon={RefreshCw} label={t('connections.actions.reconnect')} reason={blocked(actions.reconnect)} />
-      )}
-      <DropdownMenu.Separator />
-      {actions.remove !== true && (
-        <BlockedItem icon={Trash2} label={t('connections.actions.deleteConnection')} reason={blocked(actions.remove)} variant="destructive" />
-      )}
-    </DropdownMenu.Content>
-  );
-}
-
-
-/**
  * The «⋯» menu: rename, reconnect, unlink from this Factory, and — after a separator — delete,
  * as far as the row's kind allows. Organization connections and server connectors have menus of their own.
  */
@@ -296,8 +252,6 @@ export function RowActions({
       </DropdownMenu.Trigger>
       {row.view ? (
         <ConnectorRowActions row={row} onOpen={onOpen} onPending={onPending} onReconnect={onReconnect} />
-      ) : row.orgActions ? (
-        <OrgRowActions row={row} onOpen={onOpen} onPending={onPending} onReconnect={onReconnect} />
       ) : (
       <DropdownMenu.Content align="end" className="w-60">
         <DropdownMenu.Item onSelect={onOpen}>

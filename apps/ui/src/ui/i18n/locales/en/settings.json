@@ -207,11 +207,6 @@
     "title": "Repositories",
     "description": "Repositories {{name}} can edit. What feeds the board is set under Work Intake.",
     "manageGithub": "Manage GitHub connection",
-    "reconnectGitlab": "Reconnect GitLab",
-    "manageGitlab": "Manage GitLab connection",
-    "connectAnotherGitlab": "Connect another GitLab account",
-    "connectGitlab": "Connect GitLab",
-    "gitlabFromEnv": "GitLab managed by deployment environment variables",
     "environmentHint": "Sandbox resources, repository order and setup commands live in <link>Environment</link>.",
     "connectionsHint": "GitHub and GitLab are connected under Connections.",
     "openIntegrations": "Open Connections"
@@ -1556,12 +1551,6 @@
       "fromEnv": "Connected from the server environment",
       "connectedTo": "Connected: {{name}}",
       "googleCloud": "Accounts: {{accounts}} · bindings: {{bindings}}"
-    },
-    "repositoriesHint": "Which repositories this Factory works in is under Repositories.",
-    "openRepositories": "Open Repositories",
-    "gitlab": {
-      "connected": "GitLab is connected for the organization.",
-      "notConnected": "GitLab is not connected yet."
     }
   },
   "organization": {
@@ -1636,8 +1625,7 @@
     "organizationWide": "Whole organization",
     "kinds": {
       "google-cloud": "Google Cloud",
-      "mcp": "MCP server",
-      "gitlab": "GitLab"
+      "mcp": "MCP server"
     },
     "capabilities": {
       "logs": "Logs",
@@ -1777,13 +1765,11 @@
     "connect": {
       "title": "Connect {{name}}",
       "subtitle": {
-        "google-cloud": "Logs, crashes and the Firestore database — read-only, through a service account.",
-        "gitlab": "GitLab repositories and issues."
+        "google-cloud": "Logs, crashes and the Firestore database — read-only, through a service account."
       },
       "back": "Back",
       "retry": "Try again",
       "continue": "Continue",
-      "openSettings": "Open settings",
       "errorTitle": "Couldn't connect",
       "chooseAccount": "Which account reads it?",
       "newKey": "New service account key",
@@ -1797,10 +1783,7 @@
       "connecting": "Connecting…",
       "successTitle": "Account “{{name}}” added",
       "successBody": "Now pick the Google Cloud project this Factory reads.",
-      "bindProject": "Pick a project",
-      "connectedTitle": "Connected",
-      "notConnectedTitle": "Not connected yet",
-      "statusFailed": "Couldn't read the status: {{error}}"
+      "bindProject": "Pick a project"
     },
     "addDialog": {
       "title": "Add connection",
@@ -1841,11 +1824,6 @@
     "time": {
       "ago": "{{time}} ago"
     },
-    "blocks": {
-      "env": "Set in the server environment — change the environment variables",
-      "admin": "Organization admins only",
-      "platform": "Managed on Mastra Platform"
-    },
     "organizationNote": "Connections belong to the organization: all its Factories see them. Google Cloud and MCP servers are also opened to each Factory separately.",
     "connector": {
       "reading": "Reading what depends on it…",
@@ -1858,7 +1836,11 @@
       "dependents": "Depends on it",
       "manage": "Manage elsewhere",
       "detailFailed": "Couldn't read the details",
-      "saveFailed": "Couldn't save"
+      "saveFailed": "Couldn't save",
+      "authorized": {
+        "completed": "{{name}} is connected",
+        "pending": "{{name}} is still confirming the sign-in; the connection appears in the list in a moment."
+      }
     }
   }
 }

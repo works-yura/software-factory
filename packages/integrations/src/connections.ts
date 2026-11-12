@@ -32,6 +32,7 @@ import type {
   ConnectionSettingsValues,
   ConnectionView,
   ConnectorRef,
+  ConnectSession,
   ConnectorView,
   RemovalImpact,
 } from '@factory/contracts';
@@ -63,7 +64,7 @@ export type ConnectorDescription = Omit<ConnectorView, 'id'>;
 export type ConnectorConnection = Omit<ConnectionView, 'id' | 'connector'> & { id: string };
 
 export type ConnectorConnectResult =
-  | { type: 'authorize'; url: string; authId?: string }
+  | { type: 'authorize'; url?: string; authId?: string; session?: ConnectSession }
   | { type: 'connected'; connection: ConnectorConnection; title: string; message?: string };
 
 /** A facet call's result: the value, or the status and body to refuse with. */

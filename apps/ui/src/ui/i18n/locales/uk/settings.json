@@ -209,11 +209,6 @@
     "title": "Репозиторії",
     "description": "Репозиторії, які може змінювати {{name}}. Що потрапляє на дошку, налаштовується в розділі «Надходження задач».",
     "manageGithub": "Керувати підключенням GitHub",
-    "reconnectGitlab": "Перепідключити GitLab",
-    "manageGitlab": "Керувати підключенням GitLab",
-    "connectAnotherGitlab": "Підключити ще один акаунт GitLab",
-    "connectGitlab": "Підключити GitLab",
-    "gitlabFromEnv": "GitLab налаштовано через змінні середовища розгортання",
     "environmentHint": "Ресурси пісочниці, порядок репозиторіїв і команди налаштування задаються в розділі <link>Середовище</link>.",
     "connectionsHint": "GitHub і GitLab підключаються в розділі «Підключення».",
     "openIntegrations": "Відкрити «Підключення»"
@@ -1584,12 +1579,6 @@
       "fromEnv": "Підключено з середовища сервера",
       "connectedTo": "Підключено: {{name}}",
       "googleCloud": "Акаунтів: {{accounts}} · прив’язок: {{bindings}}"
-    },
-    "repositoriesHint": "З якими репозиторіями працює ця Factory — у розділі «Репозиторії».",
-    "openRepositories": "Відкрити «Репозиторії»",
-    "gitlab": {
-      "connected": "GitLab підключено для організації.",
-      "notConnected": "GitLab ще не підключено."
     }
   },
   "organization": {
@@ -1664,8 +1653,7 @@
     "organizationWide": "Уся організація",
     "kinds": {
       "google-cloud": "Google Cloud",
-      "mcp": "Сервер MCP",
-      "gitlab": "GitLab"
+      "mcp": "Сервер MCP"
     },
     "capabilities": {
       "logs": "Логи",
@@ -1813,13 +1801,11 @@
     "connect": {
       "title": "Підключити {{name}}",
       "subtitle": {
-        "google-cloud": "Логи, креші й база Firestore — лише читання, через сервісний акаунт.",
-        "gitlab": "Репозиторії й задачі GitLab."
+        "google-cloud": "Логи, креші й база Firestore — лише читання, через сервісний акаунт."
       },
       "back": "Назад",
       "retry": "Спробувати знову",
       "continue": "Продовжити",
-      "openSettings": "Відкрити налаштування",
       "errorTitle": "Не вдалося підключити",
       "chooseAccount": "Через який акаунт читати?",
       "newKey": "Новий сервісний ключ",
@@ -1833,10 +1819,7 @@
       "connecting": "Підключаю…",
       "successTitle": "Акаунт «{{name}}» додано",
       "successBody": "Тепер виберіть проєкт Google Cloud, який читатиме ця Factory.",
-      "bindProject": "Вибрати проєкт",
-      "connectedTitle": "Підключено",
-      "notConnectedTitle": "Ще не підключено",
-      "statusFailed": "Не вдалося дізнатися стан: {{error}}"
+      "bindProject": "Вибрати проєкт"
     },
     "addDialog": {
       "title": "Додати підключення",
@@ -1877,11 +1860,6 @@
     "time": {
       "ago": "{{time}} тому"
     },
-    "blocks": {
-      "env": "Задано в середовищі сервера — змініть змінні середовища",
-      "admin": "Лише адміністратор організації",
-      "platform": "Керується в Mastra Platform"
-    },
     "organizationNote": "Підключення належать організації: їх бачать усі її Factory. Google Cloud і сервери MCP додатково відкриваються кожній Factory окремо.",
     "connector": {
       "reading": "Читаю, що від нього залежить…",
@@ -1894,7 +1872,11 @@
       "dependents": "Від нього залежить",
       "manage": "Керувати деінде",
       "detailFailed": "Не вдалося прочитати подробиці",
-      "saveFailed": "Не вдалося зберегти"
+      "saveFailed": "Не вдалося зберегти",
+      "authorized": {
+        "completed": "{{name}} підключено",
+        "pending": "{{name}} ще підтверджує вхід; підключення з’явиться в списку за мить."
+      }
     }
   }
 }

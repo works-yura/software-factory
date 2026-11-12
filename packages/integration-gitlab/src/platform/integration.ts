@@ -6,6 +6,7 @@ import { GitLabApiClient, GitLabApiError } from '../api.ts';
 import type { GitLabRuleOverrides } from '../default-rules.ts';
 import { gitlabConnection, GitLabIntegrationBase } from '../integration.ts';
 import type { GitLabStatusConnection } from '../integration.ts';
+import type { GitLabPlatformSession } from '../connections.ts';
 import { attachGitLabRules } from '../rules.ts';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
 import type { PlatformApiClientConfig } from '@factory/integrations';
@@ -17,6 +18,7 @@ interface PlatformIntegrationConnection {
   integrationId: string;
   status: 'active' | 'needs_reauth';
   accountLabel: string | null;
+  displayName?: string | null;
 }
 
 interface PlatformGitLabContext {
@@ -87,6 +89,16 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
 
   override async statusConnections(): Promise<GitLabStatusConnection[]> {
     return this.listConnections();
+  }
+
+  /** Nango sessions for a new GitLab account or for reauthorizing one, minted with the deploy's Platform credentials. */
+  override platformSessions() {
+    return {
+      connect: () =>
+        this.#client.request<GitLabPlatformSession>('POST', `/v2/integrations/${encodeURIComponent(GITLAB_INTEGRATION_ID)}/connect-sessions`, {}),
+      reconnect: (connectionId: string) =>
+        this.#client.request<GitLabPlatformSession>('POST', `/v2/connections/${encodeURIComponent(connectionId)}/reconnect-session`, {}),
+    };
   }
 
   async hasActiveConnections(): Promise<boolean> {

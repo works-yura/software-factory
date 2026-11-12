@@ -22,7 +22,9 @@ import type { RouteAuth } from '@factory/http';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
+import type { FactoryIntegration, IntegrationConnections, IntegrationContext, IntegrationTools } from '@factory/integrations';
+import { GitLabConnections } from './connections.ts';
+import type { GitLabConnectionsSource } from './connections.ts';
 import { IssueReconcileWorker } from '@factory/integrations';
 import { buildGitLabAgentTools } from './agent-tools.ts';
 import {
@@ -323,6 +325,16 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       sourceId: encodeSourceId(match),
       issueId: input.issueId,
     });
+  }
+
+  /** The organization's GitLab connections for Settings › Підключення (ADR-0035). */
+  connections(_ctx: IntegrationContext): IntegrationConnections {
+    return new GitLabConnections(this);
+  }
+
+  /** Platform mode mints Nango connect/reconnect sessions; direct mode has none. */
+  platformSessions(): ReturnType<GitLabConnectionsSource['platformSessions']> {
+    return undefined;
   }
 
   /** Platform mode exposes org connections; direct mode returns undefined. */

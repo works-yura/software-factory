@@ -92,7 +92,7 @@ export const acmeConnection: ConnectionView = {
 
 /**
  * The integrations' state around the MCP servers a test brings: one Google Cloud binding (or
- * none), GitLab not set up, one connection of a FAKE server connector (Acme Cloud —
+ * none), one connection of a FAKE server connector (Acme Cloud —
  * the page must render it from the server's descriptors alone), no activity.
  */
 export function useIntegrationHandlers(
@@ -112,7 +112,6 @@ export function useIntegrationHandlers(
     http.get(`${TEST_BASE_URL}/web/connections`, () => HttpResponse.json(options.connections ?? { connections: [acmeConnection], failures: [], copy: { organizationWide: 'Whole organization' } })),
     http.get(`${TEST_BASE_URL}/web/connections/:id/detail`, () => HttpResponse.json({ sections: [] })),
     http.get(`${TEST_BASE_URL}/web/connections/methods`, () => HttpResponse.json({ connectors: options.connectors ?? [acmeConnector] })),
-    http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' })),
     http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/projects`, () => HttpResponse.json({ items: [{ value: 'syncta-57c6a' }] })),
     http.get(`${TEST_BASE_URL}/web/firebase/accounts/:accountId/databases`, () => HttpResponse.json({ items: [{ value: '(default)' }] })),
     http.get(`${MCP_BASE}/activity`, () => HttpResponse.json({ since: '2026-11-11T12:00:00.000Z', total: 0, errors: 0, calls: [], truncated: false })),

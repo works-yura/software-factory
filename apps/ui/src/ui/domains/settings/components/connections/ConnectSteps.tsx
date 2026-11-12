@@ -11,10 +11,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useFirebaseMutations } from '../../../../../hooks/useFirebase';
-import { useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
 import type { FIRST_PARTY } from '../../connections/connections';
 import type { FirebaseAccount } from '../../services/firebase';
-import { GitLabService } from '../SourceControlServices';
 import { ConnectionIcon } from './ConnectionIcon';
 
 /** Where a pick leads: a connection's page (`?connection=`), with an account to link. */
@@ -23,7 +21,6 @@ export type ConnectionTarget = { connection: string; account?: string };
 export type FirstParty = (typeof FIRST_PARTY)[number];
 
 /** The organization-wide sources whose connect step shows their state and their own controls. */
-export type SourceKind = 'gitlab';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -233,69 +230,6 @@ export function GoogleCloudConnect({
           {t('connections.connect.pickFile')}
         </Txt>
       </label>
-    </StepFrame>
-  );
-}
-
-/** GitLab's state: whether it is connected, in one line, and how to retry reading it. */
-function useSourceState(_kind: SourceKind) {
-  const { t } = useTranslation('settings');
-  const query = useGitLabStatusQuery();
-  const connected = query.data?.configured === true;
-  const detail = query.data?.mode === 'direct' ? t('connections.states.env') : undefined;
-  return { pending: query.isPending, error: query.isError ? query.error : undefined, retry: () => void query.refetch(), connected, detail };
-}
-
-/**
- * Connect GitLab: its state at the top — connected, not yet, or a tinted panel when it could not be
- * read — and its own controls below; «Відкрити налаштування» goes to the connection's page.
- */
-export function SourceConnect({
-  kind,
-  onBack,
-  onPick,
-}: {
-  kind: SourceKind;
-  onBack: () => void;
-  onPick: (target: ConnectionTarget) => void;
-}) {
-  const { t } = useTranslation('settings');
-  const state = useSourceState(kind);
-  return (
-    <StepFrame
-      kind={kind}
-      onBack={onBack}
-      action={
-        state.error ? (
-          <Button size="sm" variant="primary" onClick={state.retry}>
-            <RotateCw aria-hidden className="size-4" />
-            {t('connections.connect.retry')}
-          </Button>
-        ) : (
-          <Button size="sm" variant="primary" disabled={state.pending} onClick={() => onPick({ connection: kind })}>
-            {t('connections.connect.openSettings')}
-          </Button>
-        )
-      }
-    >
-      {state.pending ? (
-        <span className="flex items-center gap-2">
-          <Spinner size="sm" aria-hidden />
-        </span>
-      ) : state.error ? (
-        <Notice variant="destructive" title={t('connections.connect.errorTitle')} role="alert">
-          <Notice.Message>{t('connections.connect.statusFailed', { error: errorMessage(state.error) })}</Notice.Message>
-        </Notice>
-      ) : (
-        <Notice
-          variant={state.connected ? 'success' : 'info'}
-          title={state.connected ? t('connections.connect.connectedTitle') : t('connections.connect.notConnectedTitle')}
-          role="status"
-        >
-          {state.detail && <Notice.Message>{state.detail}</Notice.Message>}
-        </Notice>
-      )}
-      {!state.pending && !state.error && <GitLabService />}
     </StepFrame>
   );
 }

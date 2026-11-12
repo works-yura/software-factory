@@ -69,7 +69,7 @@ export function ConnectionsPageHeader() {
   const row = factoryConnections(factoryId, sources).find(candidate => candidate.id === open);
   const entryId = open.startsWith('mcp-new:') ? open.slice('mcp-new:'.length) : undefined;
   const entry = entryId ? sources.mcp?.catalog.find(candidate => candidate.id === entryId) : undefined;
-  const kind = open.startsWith('mcp') ? 'mcp' : (open as 'google-cloud' | 'gitlab');
+  const kind = open.startsWith('mcp') ? 'mcp' : (open as 'google-cloud');
   const icon = row ? kindOf(row).icon : kind;
   const name =
     row?.title ??

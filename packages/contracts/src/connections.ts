@@ -236,12 +236,24 @@ export interface ConnectorsResponse {
 }
 
 /**
- * A connect or reconnect: `authorize` — the URL to open and, when the connector can be asked about
+ * A provider session the browser completes itself instead of opening a URL — Mastra Factory's
+ * platform-connect: a Nango connect session minted with the deploy's Platform credentials, run
+ * headlessly (`@nangohq/frontend`); then `authId`'s `AuthFlowStatus` says when the account is active.
+ */
+export interface ConnectSession {
+  provider: 'nango';
+  token: string;
+  integrationId: string;
+  expiresAt?: string;
+}
+
+/**
+ * A connect or reconnect: `authorize` — the URL to open (or a `session` to run) and, when the connector can be asked about
  * it, the `authId` whose `AuthFlowStatus` `/web/connections/authorizations/:authId` reports — or the
  * connection it made, with what to tell the person.
  */
 export type ConnectResult =
-  | { type: 'authorize'; url: string; authId?: string }
+  | { type: 'authorize'; url?: string; authId?: string; session?: ConnectSession }
   | { type: 'connected'; connection: ConnectionView; title: string; message?: string };
 
 export interface AuthorizationStatusResponse {
