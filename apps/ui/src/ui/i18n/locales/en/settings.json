@@ -1405,7 +1405,7 @@
   "sandboxEnvs": {
     "title": "Environment variables",
     "description": "Added to every sandbox in this Factory.",
-    "add": "Add variable",
+    "add": "Add or import",
     "loadFailed": "Failed to load environment variables",
     "notWritable": "Environment variables can't be saved until a credential encryption key is configured on the server.",
     "empty": "No variables yet.",
@@ -1432,11 +1432,73 @@
     "saveFailed": "Failed to save the variable",
     "editTitle": "Edit {{name}}",
     "dialogDescription": "Values are encrypted and can't be viewed after saving.",
-    "taken": "{{name}} already exists. Edit it instead.",
     "keepValue": "Leave empty to keep the current value",
     "pickOne": "Pick at least one.",
     "saving": "Saving…",
-    "save": "Save"
+    "save": "Save",
+    "import": {
+      "title": "Add or import variables",
+      "description": "Add variables in a form or paste raw .env content. Values are encrypted and can't be viewed after saving.",
+      "mode": "How to add",
+      "form": "Form",
+      "raw": "Raw",
+      "addRow": "Add another",
+      "removeRow": "Remove row {{n}}",
+      "dropTitle": "Drop a .env file here",
+      "dropDescription": "or choose a file from your computer",
+      "chooseFile": "Choose file",
+      "rawLabel": "Raw .env",
+      "rawHelp": "KEY=value per line; # comments, export and quoted (also multi-line) values are understood.",
+      "file": {
+        "tooLarge": "{{name}} is too large: at most {{max}} KB.",
+        "binary": "{{name}} looks binary. Choose a plain-text .env file.",
+        "unreadable": "Couldn't read {{name}}. Try again."
+      },
+      "applyTo": "Apply to stage",
+      "review": "Review variables",
+      "reviewTitle": "Review variables",
+      "reviewDescription_one": "{{count}} variable will be saved to {{stage}} ({{targets}}). Nothing is sent until you save.",
+      "reviewDescription_other": "{{count}} variables will be saved to {{stage}} ({{targets}}). Nothing is sent until you save.",
+      "reviewTable": "Variables to import",
+      "lineColumn": "Line",
+      "rowColumn": "Row",
+      "line": "Line {{n}}",
+      "row": "Row {{n}}",
+      "status": "Status",
+      "statusOf": "{{name}} (line {{n}}) status",
+      "emptyValue": "empty",
+      "new": "New",
+      "overwrites": "Overwrites existing",
+      "duplicateLine": "Duplicate: line {{n}} wins",
+      "duplicateRow": "Duplicate: row {{n}} wins",
+      "entryProblem": {
+        "invalidName": "Invalid name: letters, digits and _, not starting with a digit",
+        "reserved": "Name reserved by Factory",
+        "valueTooLong": "Value over 32 KB",
+        "valueNul": "Value contains a NUL character",
+        "duplicate": "Duplicate"
+      },
+      "unreadable_one": "{{count}} line can't be imported",
+      "unreadable_other": "{{count}} lines can't be imported",
+      "unreadableList": "Lines that can't be imported",
+      "problem": {
+        "missingEquals": "not a KEY=value line",
+        "missingName": "has a value but no name",
+        "unterminatedQuote": "quoted value never closes",
+        "textAfterQuote": "text after the closing quote"
+      },
+      "nothing": "Nothing to import.",
+      "back": "Back",
+      "save_one": "Save {{count}} variable",
+      "save_other": "Save {{count}} variables",
+      "retry_one": "Retry {{count}} failed",
+      "retry_other": "Retry {{count}} failed",
+      "saved_one": "Saved {{count}} variable",
+      "saved_other": "Saved {{count}} variables",
+      "partial": "Saved {{saved}} of {{total}}; {{failed}} failed. The saved ones stay saved: retry the failed ones or cancel.",
+      "rowSaved": "Saved",
+      "rowFailed": "Failed: {{error}}"
+    }
   },
   "sandboxStages": {
     "stageColumn": "Stage",
@@ -1492,7 +1554,17 @@
     "saveFailed": "Failed to save the env file",
     "deleteTitle": "Delete {{path}}?",
     "deleteDescription": "It is removed from every sandbox on its next command. Its content can't be recovered.",
-    "deleteFailed": "Failed to delete the env file"
+    "deleteFailed": "Failed to delete the env file",
+    "dropTitle": "Drop a file here",
+    "dropDescription": "or choose one from your computer: any text file, e.g. .env or a service-account .json",
+    "chooseFile": "Choose file",
+    "fileLoaded": "Loaded {{name}} ({{size}}). The content is hidden.",
+    "showContent": "Show content",
+    "file": {
+      "tooLarge": "{{name}} is too large: env files hold at most {{max}} KB.",
+      "binary": "{{name}} looks binary. Env files must be text.",
+      "unreadable": "Couldn't read {{name}}. Try again."
+    }
   },
   "routing": {
     "lanes": {

@@ -1,5 +1,5 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -220,7 +220,75 @@ describe('Env files per repository', () => {
     expect(screen.getByText('Only organization admins can add, view or change env files.')).toBeInTheDocument();
     expect(requests).toEqual([]);
   });
+
+  it('fills content and an empty path from a chosen file, keeping the content hidden until shown', async () => {
+    const requests = useEnvFilesServer([]);
+    const user = userEvent.setup();
+    const json = '{"type":"service_account","private_key":"sentinel-secret"}';
+
+    renderSettings();
+    await openRepository(user, 'acme/mobile');
+    await user.click(await screen.findByRole('button', { name: 'Add env file to acme/mobile' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.upload(
+      within(dialog).getByLabelText('Choose file'),
+      new File([json], 'service-account.json', { type: 'application/json' }),
+    );
+
+    expect(await within(dialog).findByText(/Loaded service-account\.json \(\d+ B\)\. The content is hidden\./)).toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: 'Path' })).toHaveValue('service-account.json');
+    expect(screen.queryByText(/sentinel-secret/)).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Show content' }));
+    expect(within(dialog).getByRole('textbox', { name: 'Content' })).toHaveValue(json);
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          method: 'POST',
+          body: { projectRepositoryId: 'mobile', path: 'service-account.json', stage: 'development', content: json },
+        },
+      ]),
+    );
+  });
+
+  it('keeps a typed path when a dropped file fills the content', async () => {
+    useEnvFilesServer([]);
+    const user = userEvent.setup();
+
+    renderSettings();
+    await openRepository(user, 'acme/mobile');
+    await user.click(await screen.findByRole('button', { name: 'Add env file to acme/mobile' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Path' }), 'apps/mobile/.env');
+    fireEvent.drop(within(dialog).getByRole('group', { name: 'Drop a file here' }), {
+      dataTransfer: { types: ['Files'], files: [new File(['A=1'], '.env.mobile', { type: 'text/plain' })] },
+    });
+
+    expect(await within(dialog).findByText(/Loaded \.env\.mobile/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: 'Path' })).toHaveValue('apps/mobile/.env');
+  });
+
+  it('refuses a file over the server limit with a clear error', async () => {
+    const requests = useEnvFilesServer([]);
+    const user = userEvent.setup();
+
+    renderSettings();
+    await openRepository(user, 'acme/mobile');
+    await user.click(await screen.findByRole('button', { name: 'Add env file to acme/mobile' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.upload(
+      within(dialog).getByLabelText('Choose file'),
+      new File(['x'.repeat(64 * 1024 + 1)], 'big.env', { type: 'text/plain' }),
+    );
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('big.env is too large: env files hold at most 64 KB.');
+    expect(within(dialog).getByRole('textbox', { name: 'Path' })).toHaveValue('');
+    expect(within(dialog).getByRole('textbox', { name: 'Content' })).toHaveValue('');
+    expect(requests).toEqual([]);
+  });
 });
+
 
 describe('envFilePathProblem', () => {
   it('accepts paths inside the repository and names why others are refused', () => {

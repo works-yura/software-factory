@@ -19,6 +19,11 @@ import type {
   SandboxStage,
 } from '../ui/domains/workspaces/services/sandbox-envs';
 
+type SandboxEnvInput = { name: string; value: string; appliesTo: SandboxEnvAppliesTo; stage?: SandboxStage };
+
+/** How saving one variable of a batch went; `error` is the server's message. */
+export type SandboxEnvSaveResult = { name: string; ok: true } | { name: string; ok: false; error: string };
+
 /** A Factory's sandbox environment variables (names and settings only). Idle without a factory id. */
 export function useSandboxEnvsQuery(factoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
@@ -36,9 +41,27 @@ export function useSandboxEnvMutations(factoryId: string) {
   const onSuccess = () => queryClient.invalidateQueries({ queryKey: queryKeys.factorySandboxEnvs(factoryId) });
   return {
     set: useMutation({
-      mutationFn: (input: { name: string; value: string; appliesTo: SandboxEnvAppliesTo; stage?: SandboxStage }) =>
-        setSandboxEnv(baseUrl, factoryId, input),
+      mutationFn: (input: SandboxEnvInput) => setSandboxEnv(baseUrl, factoryId, input),
       onSuccess,
+    }),
+    /**
+     * Saves several variables one by one (the API takes one per request) and
+     * reports each result; a failure doesn't stop the rest. Refetches once.
+     */
+    setMany: useMutation({
+      mutationFn: async (inputs: SandboxEnvInput[]): Promise<SandboxEnvSaveResult[]> => {
+        const results: SandboxEnvSaveResult[] = [];
+        for (const input of inputs) {
+          try {
+            await setSandboxEnv(baseUrl, factoryId, input);
+            results.push({ name: input.name, ok: true });
+          } catch (error) {
+            results.push({ name: input.name, ok: false, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        return results;
+      },
+      onSettled: onSuccess,
     }),
     updateAppliesTo: useMutation({
       mutationFn: (input: { name: string; appliesTo?: SandboxEnvAppliesTo; stage?: SandboxStage }) =>

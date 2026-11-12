@@ -1,7 +1,6 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
   DialogAction,
@@ -14,7 +13,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -30,30 +29,21 @@ import { useTranslation } from 'react-i18next';
 
 import { useSandboxEnvMutations, useSandboxEnvsQuery } from '../../../../../hooks/useSandboxEnvs';
 import { relativeTime } from '../../../../../lib/date/relativeTime';
-import type { SandboxEnv, SandboxEnvAppliesTo, SandboxStage } from '../../../workspaces/services/sandbox-envs';
+import type { SandboxEnv, SandboxStage } from '../../../workspaces/services/sandbox-envs';
+import { ImportSandboxEnvsDialog } from './ImportSandboxEnvsDialog';
+import { TargetsField, toAppliesTo, toTargets } from './SandboxEnvTargets';
+import type { Targets } from './SandboxEnvTargets';
 import { StageBadge, StagePicker } from './SandboxStage';
 
 const MASK = '••••••••••••';
 
 type Mutations = ReturnType<typeof useSandboxEnvMutations>;
-type Targets = { build: boolean; runtime: boolean };
-
-function toTargets(appliesTo: SandboxEnvAppliesTo): Targets {
-  return { build: appliesTo !== 'runtime', runtime: appliesTo !== 'build' };
-}
-
-function toAppliesTo({ build, runtime }: Targets): SandboxEnvAppliesTo | undefined {
-  if (build && runtime) return 'both';
-  if (build) return 'build';
-  if (runtime) return 'runtime';
-  return undefined;
-}
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-/** Opens the add dialog; rendered as the Environment variables subsection action. */
+/** Opens the add-or-import dialog; rendered as the Environment variables subsection action. */
 export function AddSandboxEnvButton({ factoryId }: { factoryId: string }) {
   const envsQuery = useSandboxEnvsQuery(factoryId);
   const mutations = useSandboxEnvMutations(factoryId);
@@ -66,7 +56,7 @@ export function AddSandboxEnvButton({ factoryId }: { factoryId: string }) {
       <Button size="sm" icon={<Plus />} disabled={!data?.writable} onClick={() => setOpen(true)}>
         {t('sandboxEnvs.add')}
       </Button>
-      {open && data && <SandboxEnvDialog envs={data.envs} mutations={mutations} onClose={() => setOpen(false)} />}
+      {open && data && <ImportSandboxEnvsDialog envs={data.envs} mutations={mutations} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -190,7 +180,7 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
         </Table>
       )}
       {editing && (
-        <SandboxEnvDialog env={editing} envs={envs} mutations={mutations} onClose={() => setEditing(undefined)} />
+        <SandboxEnvDialog env={editing} mutations={mutations} onClose={() => setEditing(undefined)} />
       )}
       <AlertDialog open={deleting !== undefined} onOpenChange={open => !open && setDeleting(undefined)}>
         <AlertDialog.Content>
@@ -217,38 +207,23 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
   );
 }
 
-/** Add (no `env`) or edit (with `env`) one variable. */
-function SandboxEnvDialog({
-  env,
-  envs,
-  mutations,
-  onClose,
-}: {
-  env?: SandboxEnv;
-  envs: SandboxEnv[];
-  mutations: Mutations;
-  onClose: () => void;
-}) {
+/** Edit one variable: a new value, where it applies, or its stage. Adding goes through the import dialog. */
+function SandboxEnvDialog({ env, mutations, onClose }: { env: SandboxEnv; mutations: Mutations; onClose: () => void }) {
   const id = useId();
   const { t } = useTranslation('settings');
-  const [name, setName] = useState(env?.name ?? '');
   const [value, setValue] = useState('');
-  const [targets, setTargets] = useState<Targets>(toTargets(env?.appliesTo ?? 'runtime'));
-  const [stage, setStage] = useState<SandboxStage>(env?.stage ?? 'development');
+  const [targets, setTargets] = useState<Targets>(toTargets(env.appliesTo));
+  const [stage, setStage] = useState<SandboxStage>(env.stage);
   const [error, setError] = useState<string>();
 
-  const trimmedName = name.trim();
   const appliesTo = toAppliesTo(targets);
-  const taken = !env && envs.some(existing => existing.name === trimmedName);
-  const changed = env
-    ? Boolean(value) || appliesTo !== env.appliesTo || stage !== env.stage
-    : Boolean(trimmedName && value);
+  const changed = Boolean(value) || appliesTo !== env.appliesTo || stage !== env.stage;
   const pending = mutations.set.isPending || mutations.updateAppliesTo.isPending;
-  const canSave = changed && appliesTo !== undefined && !taken && !pending;
+  const canSave = changed && appliesTo !== undefined && !pending;
 
   const callbacks = {
     onSuccess: () => {
-      toast.success(t('sandboxEnvs.saved', { name: trimmedName }));
+      toast.success(t('sandboxEnvs.saved', { name: env.name }));
       onClose();
     },
     onError: (failure: unknown) => setError(errorMessage(failure, t('sandboxEnvs.saveFailed'))),
@@ -257,12 +232,12 @@ function SandboxEnvDialog({
   const save = () => {
     if (!canSave || !appliesTo) return;
     setError(undefined);
-    // A new value is sent with where it applies and its stage; otherwise only what changed is.
-    const stageChange = !env || stage !== env.stage ? { stage } : {};
-    if (value) mutations.set.mutate({ name: trimmedName, value, appliesTo, ...stageChange }, callbacks);
+    // A new value is sent with where it applies; otherwise only what changed is.
+    const stageChange = stage !== env.stage ? { stage } : {};
+    if (value) mutations.set.mutate({ name: env.name, value, appliesTo, ...stageChange }, callbacks);
     else {
       mutations.updateAppliesTo.mutate(
-        { name: trimmedName, ...(appliesTo !== env?.appliesTo ? { appliesTo } : {}), ...stageChange },
+        { name: env.name, ...(appliesTo !== env.appliesTo ? { appliesTo } : {}), ...stageChange },
         callbacks,
       );
     }
@@ -272,65 +247,28 @@ function SandboxEnvDialog({
     <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{env ? t('sandboxEnvs.editTitle', { name: env.name }) : t('sandboxEnvs.add')}</DialogTitle>
+          <DialogTitle>{t('sandboxEnvs.editTitle', { name: env.name })}</DialogTitle>
           <DialogDescription>{t('sandboxEnvs.dialogDescription')}</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <Field invalid={taken}>
+          <Field>
             <FieldLabel htmlFor={`${id}-name`}>{t('sandboxEnvs.name')}</FieldLabel>
-            <Input
-              id={`${id}-name`}
-              autoFocus={!env}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono"
-              placeholder="NAME"
-              value={name}
-              disabled={Boolean(env)}
-              onChange={event => setName(event.target.value)}
-            />
-            {taken && <FieldError>{t('sandboxEnvs.taken', { name: trimmedName })}</FieldError>}
+            <Input id={`${id}-name`} className="font-mono" value={env.name} disabled />
           </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-value`}>{t('sandboxEnvs.value')}</FieldLabel>
             <Input
               id={`${id}-value`}
-              autoFocus={Boolean(env)}
+              autoFocus
               autoComplete="off"
               spellCheck={false}
               className="font-mono"
-              placeholder={env ? t('sandboxEnvs.keepValue') : t('sandboxEnvs.value')}
+              placeholder={t('sandboxEnvs.keepValue')}
               value={value}
               onChange={event => setValue(event.target.value)}
             />
           </Field>
-          <Field invalid={appliesTo === undefined}>
-            <FieldLabel>{t('sandboxEnvs.appliesTo')}</FieldLabel>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  aria-label={t('sandboxEnvs.build')}
-                  checked={targets.build}
-                  onCheckedChange={checked => setTargets(current => ({ ...current, build: checked === true }))}
-                />
-                <Txt as="span" variant="body-sm">
-                  {t('sandboxEnvs.build')}
-                </Txt>
-              </label>
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  aria-label={t('sandboxEnvs.runtime')}
-                  checked={targets.runtime}
-                  onCheckedChange={checked => setTargets(current => ({ ...current, runtime: checked === true }))}
-                />
-                <Txt as="span" variant="body-sm">
-                  {t('sandboxEnvs.runtime')}
-                </Txt>
-              </label>
-            </div>
-            <FieldDescription>{t('sandboxEnvs.appliesToShort')}</FieldDescription>
-            {appliesTo === undefined && <FieldError>{t('sandboxEnvs.pickOne')}</FieldError>}
-          </Field>
+          <TargetsField value={targets} onChange={setTargets} />
           <Field>
             <FieldLabel>{t('sandboxStages.stageColumn')}</FieldLabel>
             <StagePicker value={stage} onChange={setStage} label={t('sandboxStages.stageColumn')} />

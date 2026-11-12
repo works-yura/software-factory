@@ -1,5 +1,5 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -27,7 +27,7 @@ function env(name: string, appliesTo: SandboxEnv['appliesTo'], stage: SandboxEnv
 function useSandboxEnvsServer(
   initial: SandboxEnv[],
   writable = true,
-  options: { canManage?: boolean; stages?: SandboxEnvList['stages'] } = {},
+  options: { canManage?: boolean; stages?: SandboxEnvList['stages']; failing?: Set<string> } = {},
 ) {
   const envs = new Map(initial.map(item => [item.name, item]));
   const requests: RecordedRequest[] = [];
@@ -60,6 +60,9 @@ function useSandboxEnvsServer(
       async ({ params, request }) => {
         const body = await request.json();
         requests.push({ method: 'PUT', name: params.name, body });
+        if (options.failing?.has(params.name)) {
+          return HttpResponse.json({ message: 'Value refused by the server' }, { status: 400 });
+        }
         const saved = env(params.name, body.appliesTo, body.stage ?? envs.get(params.name)?.stage);
         envs.set(params.name, saved);
         return HttpResponse.json({ env: saved });
@@ -144,22 +147,31 @@ describe('Environment variables settings', () => {
     expect(vars.queryByRole('table')).not.toBeInTheDocument();
   });
 
-  it('adds a variable from the dialog with PUT, showing the value while typing', async () => {
+  it('adds a variable from the form after a review that masks its value', async () => {
     const requests = useSandboxEnvsServer([]);
     const user = userEvent.setup();
 
     renderSettings();
 
     const vars = await section();
-    await user.click(await vars.findByRole('button', { name: 'Add variable' }));
+    await user.click(await vars.findByRole('button', { name: 'Add or import' }));
     const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('tab', { name: 'Form' })).toHaveAttribute('aria-selected', 'true');
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'API_KEY');
     const valueInput = within(dialog).getByRole('textbox', { name: 'Value' });
     await user.type(valueInput, 'sk-123');
-    // A textbox, not a password field: what you type is visible until it's saved.
+    // A textbox, not a password field: what you type is visible until it's reviewed.
     expect(valueInput).toHaveValue('sk-123');
     await user.click(within(dialog).getByRole('checkbox', { name: 'Build' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Review variables' }));
+
+    const table = await within(dialog).findByRole('table', { name: 'Variables to import' });
+    expect(within(table).getByText('API_KEY')).toBeInTheDocument();
+    expect(within(table).getByText('••••••••••••')).toBeInTheDocument();
+    expect(within(table).getByLabelText('API_KEY (line 1) status')).toHaveTextContent('New');
+    expect(screen.queryByText('sk-123')).not.toBeInTheDocument();
+    expect(requests).toEqual([]);
+    await user.click(within(dialog).getByRole('button', { name: 'Save 1 variable' }));
 
     await waitFor(() =>
       expect(requests).toEqual([
@@ -168,10 +180,9 @@ describe('Environment variables settings', () => {
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(await vars.findByLabelText('API_KEY value hidden')).toHaveTextContent('••••••••••••');
-    expect(screen.queryByText('sk-123')).not.toBeInTheDocument();
   });
 
-  it('blocks adding a name that already exists and asks for at least one target', async () => {
+  it('flags a name that already exists as an overwrite and asks for at least one target', async () => {
     const requests = useSandboxEnvsServer([env('API_KEY', 'runtime')]);
     const user = userEvent.setup();
 
@@ -179,19 +190,23 @@ describe('Environment variables settings', () => {
 
     const vars = await section();
     await vars.findByText('API_KEY');
-    await user.click(vars.getByRole('button', { name: 'Add variable' }));
+    await user.click(vars.getByRole('button', { name: 'Add or import' }));
     const dialog = await screen.findByRole('dialog');
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'API_KEY');
-    await user.type(within(dialog).getByRole('textbox', { name: 'Value' }), 'v');
-    expect(within(dialog).getByText('API_KEY already exists. Edit it instead.')).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
-
-    await user.clear(within(dialog).getByRole('textbox', { name: 'Name' }));
-    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'OTHER');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Value' }), 'rotated');
     await user.click(within(dialog).getByRole('checkbox', { name: 'Runtime' }));
     expect(within(dialog).getByText('Pick at least one.')).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
-    expect(requests).toEqual([]);
+    expect(within(dialog).getByRole('button', { name: 'Review variables' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Runtime' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Review variables' }));
+
+    expect(await within(dialog).findByLabelText('API_KEY (line 1) status')).toHaveTextContent('Overwrites existing');
+    await user.click(within(dialog).getByRole('button', { name: 'Save 1 variable' }));
+    await waitFor(() =>
+      expect(requests).toEqual([
+        { method: 'PUT', name: 'API_KEY', body: { value: 'rotated', appliesTo: 'runtime', stage: 'development' } },
+      ]),
+    );
   });
 
   it('changes where a variable applies from Edit with PATCH and no value', async () => {
@@ -275,7 +290,7 @@ describe('Environment variables settings', () => {
 
     const vars = await section();
     expect(await vars.findByText(/can't be saved until a credential encryption key is configured/)).toBeInTheDocument();
-    expect(vars.getByRole('button', { name: 'Add variable' })).toBeDisabled();
+    expect(vars.getByRole('button', { name: 'Add or import' })).toBeDisabled();
     await user.click(vars.getByRole('button', { name: 'API_KEY actions' }));
     expect(await screen.findByRole('menuitem', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
     // Delete still works so old values can be removed.
@@ -337,5 +352,125 @@ describe('Environment variables settings', () => {
     expect(toggle).toBeDisabled();
     expect(vars.getByText('Only organization admins can change this.')).toBeInTheDocument();
     expect(requests).toEqual([]);
+  });
+});
+
+const RAW_ENV = [
+  '# Acme staging',
+  'export API_KEY=sk-secret-1',
+  'DATABASE_URL="postgres://user:pa=ss@host:5432/db" # primary',
+  'PRIVATE_KEY="-----BEGIN KEY-----',
+  'MIIsecret',
+  '-----END KEY-----"',
+  'EMPTY=',
+  'not a line',
+  'API_KEY=sk-secret-2',
+  'GH_TOKEN=nope',
+].join('\n');
+
+async function openImport(user: User) {
+  const vars = await section();
+  await user.click(await vars.findByRole('button', { name: 'Add or import' }));
+  const dialog = await screen.findByRole('dialog');
+  await user.click(within(dialog).getByRole('tab', { name: 'Raw' }));
+  return dialog;
+}
+
+describe('Importing environment variables', () => {
+  it('parses pasted .env text, shows what it could not read and saves the rest to the chosen stage', async () => {
+    const requests = useSandboxEnvsServer([env('DATABASE_URL', 'runtime')]);
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const dialog = await openImport(user);
+    await user.click(within(dialog).getByRole('textbox', { name: 'Raw .env' }));
+    await user.paste(RAW_ENV);
+    await user.click(within(within(dialog).getByRole('radiogroup', { name: 'Apply to stage' })).getByRole('radio', { name: 'Staging' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Review variables' }));
+
+    const problems = await within(dialog).findByRole('list', { name: "Lines that can't be imported" });
+    expect(within(problems).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      'Line 8: not a KEY=value line',
+    ]);
+    expect(within(dialog).getByText("1 line can't be imported")).toBeInTheDocument();
+    const table = within(dialog).getByRole('table', { name: 'Variables to import' });
+    expect(within(table).getByLabelText('API_KEY (line 2) status')).toHaveTextContent('Duplicate: line 9 wins');
+    expect(within(table).getByLabelText('API_KEY (line 9) status')).toHaveTextContent('New');
+    expect(within(table).getByLabelText('DATABASE_URL (line 3) status')).toHaveTextContent('Overwrites existing');
+    expect(within(table).getByLabelText('GH_TOKEN (line 10) status')).toHaveTextContent('Name reserved by Factory');
+    expect(within(table).getByText('empty')).toBeInTheDocument();
+    expect(screen.queryByText(/sk-secret|MIIsecret|pa=ss/)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/4 variables will be saved to Staging \(Runtime\)/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Save 4 variables' }));
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        { method: 'PUT', name: 'DATABASE_URL', body: { value: 'postgres://user:pa=ss@host:5432/db', appliesTo: 'runtime', stage: 'staging' } },
+        {
+          method: 'PUT',
+          name: 'PRIVATE_KEY',
+          body: { value: '-----BEGIN KEY-----\nMIIsecret\n-----END KEY-----', appliesTo: 'runtime', stage: 'staging' },
+        },
+        { method: 'PUT', name: 'EMPTY', body: { value: '', appliesTo: 'runtime', stage: 'staging' } },
+        { method: 'PUT', name: 'API_KEY', body: { value: 'sk-secret-2', appliesTo: 'runtime', stage: 'staging' } },
+      ]),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await screen.findByText('Saved 4 variables')).toBeInTheDocument();
+  });
+
+  it('fills the text from a dropped .env file', async () => {
+    useSandboxEnvsServer([]);
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const dialog = await openImport(user);
+    const zone = within(dialog).getByRole('group', { name: 'Drop a .env file here' });
+    const dropped = new File(['A=1\nB=2\n'], '.env', { type: 'text/plain' });
+    fireEvent.drop(zone, { dataTransfer: { types: ['Files'], files: [dropped] } });
+
+    await waitFor(() => expect(within(dialog).getByRole('textbox', { name: 'Raw .env' })).toHaveValue('A=1\nB=2\n'));
+  });
+
+  it('fills the text from a chosen file and refuses one that is too large', async () => {
+    useSandboxEnvsServer([]);
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const dialog = await openImport(user);
+    const input = within(dialog).getByLabelText('Choose file');
+    await user.upload(input, new File(['TOKEN=abc'], '.env.local', { type: 'text/plain' }));
+    await waitFor(() => expect(within(dialog).getByRole('textbox', { name: 'Raw .env' })).toHaveValue('TOKEN=abc'));
+
+    await user.upload(input, new File(['x'.repeat(600 * 1024)], 'huge.env', { type: 'text/plain' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('huge.env is too large: at most 256 KB.');
+    expect(within(dialog).getByRole('textbox', { name: 'Raw .env' })).toHaveValue('TOKEN=abc');
+  });
+
+  it('keeps the dialog open after a partial failure, shows each result and retries only the failed one', async () => {
+    const failing = new Set(['BROKEN']);
+    const requests = useSandboxEnvsServer([], true, { failing });
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const dialog = await openImport(user);
+    await user.click(within(dialog).getByRole('textbox', { name: 'Raw .env' }));
+    await user.paste('GOOD=1\nBROKEN=2');
+    await user.click(within(dialog).getByRole('button', { name: 'Review variables' }));
+    await user.click(await within(dialog).findByRole('button', { name: 'Save 2 variables' }));
+
+    expect(await within(dialog).findByText('Saved 1 of 2; 1 failed. The saved ones stay saved: retry the failed ones or cancel.')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('GOOD (line 1) status')).toHaveTextContent('Saved');
+    expect(within(dialog).getByLabelText('BROKEN (line 2) status')).toHaveTextContent('Failed: Value refused by the server');
+    expect(requests.map(request => request.name)).toEqual(['GOOD', 'BROKEN']);
+
+    failing.clear();
+    await user.click(within(dialog).getByRole('button', { name: 'Retry 1 failed' }));
+    await waitFor(() => expect(requests.map(request => request.name)).toEqual(['GOOD', 'BROKEN', 'BROKEN']));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

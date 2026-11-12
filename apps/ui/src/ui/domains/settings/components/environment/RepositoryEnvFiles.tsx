@@ -13,6 +13,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { FileDropZone } from '@mastra/playground-ui/components/FileDropZone';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -29,9 +30,11 @@ import { useApiConfig } from '../../../../../api/config';
 import { useSandboxEnvFileMutations, useSandboxEnvFilesQuery } from '../../../../../hooks/useSandboxEnvs';
 import { revealSandboxEnvFile } from '../../../workspaces/services/sandbox-envs';
 import type { SandboxEnvFile, SandboxStage } from '../../../workspaces/services/sandbox-envs';
+import { readTextFile } from './readTextFile';
 import { StageBadge, StagePicker } from './SandboxStage';
 
 const MASK = '••••••••••••';
+/** The server's limit (`MAX_SANDBOX_ENV_FILE_CONTENT_LENGTH`, in characters). */
 const MAX_CONTENT_LENGTH = 64 * 1024;
 const SEGMENT = /^[A-Za-z0-9._@+-]+$/;
 
@@ -50,6 +53,10 @@ export function envFilePathProblem(path: string): 'empty' | 'absolute' | 'parent
   if (segments.some(segment => segment.toLowerCase() === '.git')) return 'git';
   if (path.length > 256 || !segments.every(segment => SEGMENT.test(segment))) return 'chars';
   return undefined;
+}
+
+function formatSize(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -242,6 +249,9 @@ function EnvFileDialog({
   // `undefined` while an existing file's content stays hidden (and unchanged).
   const [content, setContent] = useState<string | undefined>(file ? undefined : '');
   const [revealing, setRevealing] = useState(false);
+  // A chosen or dropped file stays hidden, like stored content, until shown.
+  const [loaded, setLoaded] = useState<{ name: string; size: number; shown: boolean }>();
+  const [fileError, setFileError] = useState<string>();
   const [error, setError] = useState<string>();
 
   const trimmedPath = path.trim();
@@ -265,6 +275,19 @@ function EnvFileDialog({
     } finally {
       setRevealing(false);
     }
+  };
+
+  const loadFile = async (chosen: File) => {
+    setFileError(undefined);
+    const read = await readTextFile(chosen, MAX_CONTENT_LENGTH);
+    if (!read.ok) {
+      setFileError(t(`envFiles.file.${read.reason}`, { name: chosen.name, max: MAX_CONTENT_LENGTH / 1024 }));
+      return;
+    }
+    setContent(read.text);
+    setLoaded({ name: chosen.name, size: chosen.size, shown: false });
+    // Suggest the file's name as the path; a name the rules refuse shows why under the path.
+    if (!path.trim()) setPath(chosen.name);
   };
 
   const save = () => {
@@ -345,6 +368,15 @@ function EnvFileDialog({
                   {t('envFiles.replace')}
                 </Button>
               </div>
+            ) : loaded && !loaded.shown ? (
+              <div className="flex items-center gap-3">
+                <Txt as="span" variant="body-sm" tone="muted">
+                  {t('envFiles.fileLoaded', { name: loaded.name, size: formatSize(loaded.size) })}
+                </Txt>
+                <Button size="sm" icon={<Eye />} onClick={() => setLoaded({ ...loaded, shown: true })}>
+                  {t('envFiles.showContent')}
+                </Button>
+              </div>
             ) : (
               <Textarea
                 id={`${id}-content`}
@@ -361,6 +393,17 @@ function EnvFileDialog({
             </FieldDescription>
             {tooLong && <FieldError>{t('envFiles.tooLong')}</FieldError>}
           </Field>
+          <FileDropZone
+            title={t('envFiles.dropTitle')}
+            description={t('envFiles.dropDescription')}
+            buttonLabel={t('envFiles.chooseFile')}
+            onFiles={([chosen]) => chosen && void loadFile(chosen)}
+          />
+          {fileError && (
+            <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
+              {fileError}
+            </Txt>
+          )}
           {error && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {error}
