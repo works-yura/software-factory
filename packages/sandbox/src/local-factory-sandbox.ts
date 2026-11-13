@@ -1,9 +1,11 @@
 import { lstat, mkdir, rename, rm, stat, symlink } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
 
+import { hostExecutor } from './template/host-exec.ts';
 import type { FactorySandboxCheckoutServices, LocalEnvironmentTemplate } from './template/local-template.ts';
+import { localSandboxSettingsSchema } from './template/local-sandbox-settings.ts';
 import { WORK_ITEM_FOLDERS_DIR } from './work-item-folder.ts';
 import { resolveContainedLocalWorkdir } from './workdir.ts';
 
@@ -40,20 +42,20 @@ class SessionLocalSandbox extends LocalSandbox {
   readonly #root: string;
   readonly #shared: boolean;
   readonly #legacyDirectory: string | undefined;
-  readonly #template: LocalEnvironmentTemplate | undefined;
+  readonly #removeOwnFolder: (directory: string, sessionId: string) => Promise<void>;
 
   constructor(
     options: ConstructorParameters<typeof LocalSandbox>[0],
     root: string,
     shared: boolean,
-    legacyDirectory?: string,
-    template?: LocalEnvironmentTemplate,
+    legacyDirectory: string | undefined,
+    removeOwnFolder: (directory: string, sessionId: string) => Promise<void>,
   ) {
     super(options);
     this.#root = resolve(root);
     this.#shared = shared;
     this.#legacyDirectory = legacyDirectory;
-    this.#template = template;
+    this.#removeOwnFolder = removeOwnFolder;
   }
 
   /**
@@ -80,9 +82,7 @@ class SessionLocalSandbox extends LocalSandbox {
     // Only a session's own directory under the root, never the root itself or anything outside it.
     if (!directory.startsWith(this.#root + sep)) return;
     // Its work goes to the mirror first; when that cannot be verified the folder stays (and this throws).
-    const remove = () => rm(directory, { recursive: true, force: true });
-    if (this.#template) await this.#template.removeFolder(directory, { sessionId: this.id, remove });
-    else await remove();
+    await this.#removeOwnFolder(directory, this.id);
   }
 }
 
@@ -99,11 +99,116 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
   readonly #options: LocalFactorySandboxOptions;
   /** Environment builds, present with a template: the same workflow, triggers and UI as remote templates. */
   override readonly builds: FactorySandboxBuilds<Record<string, never>> | undefined;
+  /** The Factory-tunable sleep limits and hidden-ref retention (Settings › Environment › Sandbox). */
+  override readonly settings = localSandboxSettingsSchema as never;
+  /** Folders (keys) being put to sleep: their removal keeps the record, as asleep. */
+  readonly #sleeping = new Set<string>();
 
   constructor(options: LocalFactorySandboxOptions) {
     super();
     this.#options = options;
     this.builds = options.template?.builds;
+    const template = options.template;
+    if (template) {
+      // Saved commits set aside by a save: the person hears it on the folder's record.
+      template.onNotice = notice => {
+        const key = this.folderKeyOf(notice.dir);
+        if (!key) return;
+        void template.sandboxes
+          .addProblem(key, { kind: 'superseded', message: `${notice.branch}: saved commits the new tip does not contain were kept at ${notice.ref}` }, this.#recordDefaults(key))
+          .catch(() => {});
+      };
+    }
+  }
+
+  /** The record's kind and Factory as the key tells them. */
+  #recordDefaults(key: string): { kind: 'card' | 'session'; factoryProjectId?: string } {
+    const segments = key.split('/');
+    return segments[0] === WORK_ITEM_FOLDERS_DIR ? { kind: 'card', factoryProjectId: segments[1]! } : { kind: 'session' };
+  }
+
+  /**
+   * Remove a sandbox folder with its work put to sleep first; the record
+   * follows: gone (or asleep, when the sleeper removes it), and a failed save
+   * becomes a problem the person sees, with the folder kept.
+   */
+  async #removeFolder(directory: string, options: { publish: boolean; sessionId?: string }): Promise<void> {
+    const remove = () => rm(directory, { recursive: true, force: true });
+    const template = this.#options.template;
+    if (!template) return remove();
+    const key = this.folderKeyOf(directory);
+    try {
+      const notices = await template.removeFolder(directory, { ...options, remove });
+      if (key && notices.length) {
+        await template.sandboxes
+          .addProblem(key, { kind: 'public-repository', message: notices.join('\n') }, this.#recordDefaults(key))
+          .catch(() => {});
+      }
+    } catch (error) {
+      if (key) {
+        await template.sandboxes
+          .addProblem(key, { kind: 'save-failed', message: error instanceof Error ? error.message : String(error) }, this.#recordDefaults(key))
+          .catch(() => {});
+      }
+      throw error;
+    }
+    if (key && !this.#sleeping.has(key)) await template.sandboxes.remove(key).catch(() => {});
+  }
+
+  /** The folder key (`<session>` or `work-items/<factory>/<card>`) a path lies in. */
+  folderKeyOf(directory: string): string | undefined {
+    const folder = this.folderRootOf(directory);
+    if (!folder) return undefined;
+    return relative(resolve(this.#options.root), folder).split(sep).join('/');
+  }
+
+  /** The folder's path for its key; `undefined` for a key outside the root. */
+  folderPathOf(key: string): string | undefined {
+    try {
+      return key.startsWith(`${WORK_ITEM_FOLDERS_DIR}/`) ? this.workItemFolderPath(key) : resolveContainedLocalWorkdir(this.#options.root, key);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** The folder's size on disk in bytes (hard links counted once); `undefined` when it cannot be read. */
+  async folderSize(key: string): Promise<number | undefined> {
+    const folder = this.folderPathOf(key);
+    if (!folder) return undefined;
+    const result = await hostExecutor().executeCommand('du', ['-sk', folder], { timeout: 60_000 });
+    const kb = Number(result.stdout.trim().split(/\s+/)[0]);
+    return result.exitCode === 0 && Number.isFinite(kb) ? kb * 1024 : undefined;
+  }
+
+  /**
+   * Put a sandbox folder to sleep (the sleeper decided it may): a session's
+   * own folder is saved and published first, then its sessions are released
+   * (a released own session's sandbox removes its folder); a card's sessions
+   * are released first and the folder then saved, published and removed. The
+   * folder's record stays, asleep. Throws when anything could not be kept.
+   */
+  async sleepFolder(key: string, input: { sessionIds: string[]; release: (sessionId: string) => Promise<void> }): Promise<void> {
+    const template = this.#options.template;
+    const directory = this.folderPathOf(key);
+    if (!template || !directory) throw new Error(`No sandbox folder for ${key}`);
+    const card = key.startsWith(`${WORK_ITEM_FOLDERS_DIR}/`);
+    this.#sleeping.add(key);
+    try {
+      if (!card) {
+        const notices = await template.sleepFolder(directory, { publish: true });
+        if (notices.length) {
+          await template.sandboxes.addProblem(key, { kind: 'public-repository', message: notices.join('\n') }, this.#recordDefaults(key)).catch(() => {});
+        }
+      }
+      for (const sessionId of input.sessionIds) await input.release(sessionId);
+      const still = await stat(directory).then(
+        () => true,
+        () => false,
+      );
+      if (still) await this.#removeFolder(directory, { publish: card });
+    } finally {
+      this.#sleeping.delete(key);
+    }
   }
 
   /** The environment template, when configured. */
@@ -143,9 +248,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       entry => entry.isSymbolicLink(),
       () => true,
     );
-    const remove = () => rm(directory, { recursive: true, force: true });
-    if (!link && this.#options.template) await this.#options.template.removeFolder(directory, { sessionId, remove });
-    else await remove();
+    if (!link) await this.#removeFolder(directory, { publish: false, sessionId });
+    else await rm(directory, { recursive: true, force: true });
   }
 
   /**
@@ -160,9 +264,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       () => true,
       () => false,
     );
-    const remove = () => rm(directory, { recursive: true, force: true });
-    if (present && this.#options.template) await this.#options.template.removeFolder(directory, { publish: true, remove });
-    else await remove();
+    if (present) await this.#removeFolder(directory, { publish: true });
+    else await rm(directory, { recursive: true, force: true });
   }
 
   /** Drop exactly what a deleted session saved (the person discarded it); a later save of the branch by another session stays. */
@@ -184,8 +287,31 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     return segments[0] && !segments[0].startsWith('.') ? join(root, segments[0]) : undefined;
   }
 
+  /**
+   * Work was seen in a session's folder (a run started or ended): its record
+   * is awake, and names the session and its owner.
+   */
+  async touchSandbox(
+    directory: string,
+    context: { sessionId?: string; rowId?: string; orgId?: string; factoryProjectId?: string },
+  ): Promise<void> {
+    const template = this.#options.template;
+    const key = this.folderKeyOf(directory);
+    if (!template || !key) return;
+    const folder = this.folderRootOf(directory)!;
+    const repos = (await template.checkoutsIn(folder)).map(dir => dir.slice(folder.length + 1) || basename(dir));
+    await template.sandboxes.touch(key, {
+      ...this.#recordDefaults(key),
+      ...(context.sessionId ? { sessionId: context.sessionId } : {}),
+      ...(context.rowId ? { rowId: context.rowId } : {}),
+      ...(context.orgId ? { orgId: context.orgId } : {}),
+      ...(context.factoryProjectId ? { factoryProjectId: context.factoryProjectId } : {}),
+      repos,
+    });
+  }
+
   /** Keep the work in a session's folder after a run ended; never throws. */
-  async saveSessionWork(directory: string, context: Record<string, unknown> = {}): Promise<void> {
+  async saveSessionWork(directory: string, context: { sessionId?: string } & Record<string, unknown> = {}): Promise<void> {
     const template = this.#options.template;
     if (!template) return;
     // The whole folder, every repository of the environment, not just the one the path names.
@@ -208,7 +334,7 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       this.#options.root,
       shared,
       shared ? resolveContainedLocalWorkdir(this.#options.root, ctx.sessionId) : undefined,
-      this.#options.template,
+      (directory, sessionId) => this.#removeFolder(directory, { publish: false, sessionId }),
     );
   }
 }

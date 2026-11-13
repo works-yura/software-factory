@@ -22,6 +22,7 @@ import type { RepositoryCache } from './repository-cache.ts';
 import { SessionWork, runGitIn } from './session-work.ts';
 import type { SessionCheckout, SessionWorkSaveResult, SessionWorkSnapshot } from './session-work.ts';
 import { MirrorSessionWorkStore, RemoteHiddenRefSessionWorkStore } from './session-work-stores.ts';
+import { SandboxRegistry } from './sandbox-registry.ts';
 
 /**
  * What a provider offers session materialization beyond a sandbox: a cache to
@@ -100,6 +101,8 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   readonly repositoryCache: LocalMirrorRepositoryCache;
   readonly sessionWork: SessionWork;
   readonly builds: LocalEnvironmentBuilds;
+  /** What the server knows about each sandbox folder: owner, activity, sleep, problems. */
+  readonly sandboxes: SandboxRegistry;
   readonly #packageStores: boolean;
   readonly #logger: LocalMirrorLogger;
   readonly #queues = new Map<string, Promise<unknown>>();
@@ -121,6 +124,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
       host: hostExecutor({ ...(options.env ? { env: options.env } : {}) }),
       ...(options.freshnessMs !== undefined ? { freshnessMs: options.freshnessMs } : {}),
     });
+    this.sandboxes = new SandboxRegistry({ root: this.root });
     this.sessionWork = new SessionWork({
       store: new MirrorSessionWorkStore(this.repositoryCache),
       sleepStore: new RemoteHiddenRefSessionWorkStore(),

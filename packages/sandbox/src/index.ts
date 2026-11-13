@@ -23,3 +23,7 @@ export * from './template/session-work.ts';
 export * from './template/session-work-stores.ts';
 export * from './template/local-builds.ts';
 export * from './template/local-template.ts';
+export * from './template/sandbox-registry.ts';
+export * from './template/sleep-policy.ts';
+export * from './template/sandbox-sleeper.ts';
+export * from './template/local-sandbox-settings.ts';
