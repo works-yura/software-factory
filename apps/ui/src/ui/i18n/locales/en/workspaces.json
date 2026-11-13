@@ -144,7 +144,7 @@
         "accounts_other": "Runs on your organization’s {{count}} Claude Code accounts.",
         "none": "Claude Code needs a Claude sign-in to run.",
         "needSignIn": "Sign in to an organization to use its Claude Code accounts.",
-        "addHint": "You can sign in any time in Settings → Models → Claude Code accounts.",
+        "addHint": "You can sign in any time in Settings → Connections → Claude Code.",
         "signInWith": "Sign in with Claude",
         "signInWithDescription": "Opens the Claude sign-in page; the Factory keeps its own login"
       },
@@ -176,7 +176,7 @@
         "accounts_other": "Runs on your organization’s {{count}} Codex accounts.",
         "none": "Codex needs a ChatGPT sign-in to run.",
         "needSignIn": "Sign in to an organization to use its Codex accounts.",
-        "addHint": "You can sign in any time in Settings → Models → Codex accounts.",
+        "addHint": "You can sign in any time in Settings → Connections → Codex.",
         "signInWith": "Sign in with ChatGPT",
         "signInWithDescription": "Shows a ChatGPT sign-in page and code; the Factory keeps its own login"
       },
