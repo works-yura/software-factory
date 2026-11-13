@@ -1622,10 +1622,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       }
       const sessionWork = checkoutServices?.sessionWork;
       if (!sessionWork) return;
-      // A fresh clone, or a card's checkout another role left that lacks this session's branch
-      // (the folder was rebuilt by an earlier role): the branch's saved work belongs here.
-      if (!materialized.cloned && (await hasLocalBranch(target, repo.dir, session.branch))) return;
       try {
+        // A fresh clone, or a card's checkout another role left that lacks this session's branch
+        // (the folder was rebuilt by an earlier role): the branch's saved work belongs here.
+        if (!materialized.cloned && (await hasLocalBranch(target, repo.dir, session.branch))) return;
         const restored = await timedPhase(`workspace.restore(${repo.slug})`, () =>
           sessionWork.restore(
             {

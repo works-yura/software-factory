@@ -99,7 +99,13 @@ async function acquire(lockDir: string, options: Required<Pick<FileLockOptions, 
     try {
       await mkdir(lockDir);
       const owner: LockOwner = { host: hostname(), pid: process.pid, token, acquiredAt: new Date(now()).toISOString() };
-      await writeFile(path.join(lockDir, 'owner.json'), JSON.stringify(owner));
+      try {
+        await writeFile(path.join(lockDir, 'owner.json'), JSON.stringify(owner));
+      } catch (error) {
+        // A lock nobody can name would block everyone until it went stale.
+        await rm(lockDir, { recursive: true, force: true }).catch(() => {});
+        throw error;
+      }
       return { token, waitedMs: now() - started };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;

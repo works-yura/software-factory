@@ -173,8 +173,10 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
     const log = (line: string) => {
       logs.push(mask(line));
     };
+    // The last heartbeat write is awaited before the final one, so it can never land after it.
+    let beat: Promise<void> = Promise.resolve();
     const heartbeat = setInterval(() => {
-      void this.#write(project, { ...record, logs: [...logs], heartbeatAt: new Date(this.#now()).toISOString() }).catch(() => {});
+      beat = this.#write(project, { ...record, logs: [...logs], heartbeatAt: new Date(this.#now()).toISOString() }).catch(() => {});
     }, this.#options.heartbeatMs ?? DEFAULT_BUILD_HEARTBEAT_MS);
     heartbeat.unref?.();
     const started = this.#now();
@@ -264,6 +266,7 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
       fatal ??= error instanceof Error ? error.message : String(error);
     } finally {
       clearInterval(heartbeat);
+      await beat;
     }
     log(`${fatal ? 'failed' : 'ready'} in ${seconds(this.#now() - started)}${setupFailures.length ? ` · setup failed: ${setupFailures.join(', ')}` : ''}`);
     const finished: BuildRecord = {
