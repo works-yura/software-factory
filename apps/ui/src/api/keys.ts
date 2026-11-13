@@ -99,7 +99,7 @@ export const queryKeys = {
     ['intake', 'trigger-preview', factoryProjectId ?? null, trigger, locale] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  // Under the board's key: whatever refreshes or rewrites the board's cards reaches a session's too.
+  // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
@@ -115,6 +115,8 @@ export const queryKeys = {
   attachments: (owner: string | undefined) => ['factory', 'attachments', owner ?? null] as const,
   factoryMembers: (factoryProjectId: string | undefined) =>
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
+  workItemsWithSessions: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
