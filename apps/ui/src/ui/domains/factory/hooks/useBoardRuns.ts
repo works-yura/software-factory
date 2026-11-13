@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router';
 
 import { translator } from '../../../i18n/t';
 
+import { useApiConfig } from '../../../../api/config';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
-import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { sessionRepositoryFor } from '../boardRepository';
+import { listWorkItems } from '../services/workItems';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const tk = translator('board');
@@ -15,19 +16,8 @@ const tk = translator('board');
 const preparingSessionLabel = () => tk('runs.preparingSession');
 
 /** Opening the chat session a card carries, and minting one when it has none yet. */
-export function useBoardRuns({
-  factoryProjectId,
-  refetchItems,
-}: {
-  factoryProjectId: string;
-  /**
-   * A fresh read of the cards a click can land on. It is given the id of the card clicked, and may
-   * send that card alone: the card is taken as deleted when the read succeeds without it.
-   */
-  refetchItems: (
-    itemId: string,
-  ) => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
-}) {
+export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string }) {
+  const { baseUrl } = useApiConfig();
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const navigate = useNavigate();
 
@@ -59,16 +49,18 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
-  // Refetch failures here used to be silent: an expired auth cookie made every
-  // board click a no-op with no feedback. Toast so the click never dies quietly.
+  // The clicked card alone, read fresh: it may have gained a session since it was listed, or been
+  // deleted. A failed read used to be silent: an expired auth cookie made every board click a
+  // no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
-    const refreshedItems = await refetchItems(itemId);
-    if (!refreshedItems.isSuccess) {
-      const cause = refreshedItems.error;
+    let cards: WorkItem[];
+    try {
+      cards = (await listWorkItems(baseUrl, factoryProjectId, undefined, { workItemId: [itemId] })).workItems;
+    } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : tk('runs.refreshFailed'));
       return;
     }
-    const item = refreshedItems.data.find(candidate => candidate.id === itemId);
+    const item = cards.find(candidate => candidate.id === itemId);
     if (!item) {
       toast.error(tk('runs.cardGone'));
       return;

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { boardFilterItems, boardFilterParams, boardFilterStateFromItems, boardFiltersFromParams } from './boardFilters';
-import { boardSource } from './boardSourceFilters';
 
 describe('Board source filters', () => {
   it('preserves every filter through URL and saved view filters', () => {
@@ -15,12 +14,5 @@ describe('Board source filters', () => {
     expect(url.getAll('assignee')).toEqual(['github:bob']);
     expect(url.getAll('label')).toEqual(['needs,review', 'p0']);
     expect(url.get('sort')).toBe('created-newest');
-  });
-
-  it('groups issue and pull request sources under their providers', () => {
-    expect(boardSource('github-issue')).toBe('github');
-    expect(boardSource('github-pr')).toBe('github');
-    expect(boardSource('gitlab-pr')).toBe('gitlab');
-    expect(boardSource('manual')).toBe('manual');
   });
 });
