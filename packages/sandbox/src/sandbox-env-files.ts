@@ -55,6 +55,25 @@ inside() {
   return 1
 }
 tracked() { git ls-files --error-unmatch -- "$1" >/dev/null 2>&1; }
+exclude_block() {
+  touch "$exclude"
+  awk -v begin='${ENV_FILES_EXCLUDE_BEGIN}' -v end='${ENV_FILES_EXCLUDE_END}' '$0 == begin { skip = 1; next } $0 == end { skip = 0; next } !skip' "$exclude" > "$exclude.next"
+  if [ -s "$1" ]; then
+    { printf '%s\\n' '${ENV_FILES_EXCLUDE_BEGIN}'; sed 's|^|/|' "$1"; printf '%s\\n' '${ENV_FILES_EXCLUDE_END}'; } >> "$exclude.next"
+  fi
+  mv -f "$exclude.next" "$exclude"
+}
+# Every path about to be written is excluded first (with the ones written before), so a
+# write that fails partway never leaves a file git, or a snapshot of the work, would take.
+: > "$manifest.pending"
+if [ -f "$manifest" ]; then cat "$manifest" >> "$manifest.pending"; fi
+i=1
+for arg in "$@"; do
+  if [ $((i % 2)) -eq 1 ]; then printf '%s\\n' "$arg" >> "$manifest.pending"; fi
+  i=$((i + 1))
+done
+exclude_block "$manifest.pending"
+rm -f "$manifest.pending"
 : > "$manifest.next"
 while [ $# -ge 2 ]; do
   p=$1
@@ -87,12 +106,7 @@ if [ -f "$manifest" ]; then
   done < "$manifest"
 fi
 mv -f "$manifest.next" "$manifest"
-touch "$exclude"
-awk -v begin='${ENV_FILES_EXCLUDE_BEGIN}' -v end='${ENV_FILES_EXCLUDE_END}' '$0 == begin { skip = 1; next } $0 == end { skip = 0; next } !skip' "$exclude" > "$exclude.next"
-if [ -s "$manifest" ]; then
-  { printf '%s\\n' '${ENV_FILES_EXCLUDE_BEGIN}'; sed 's|^|/|' "$manifest"; printf '%s\\n' '${ENV_FILES_EXCLUDE_END}'; } >> "$exclude.next"
-fi
-mv -f "$exclude.next" "$exclude"
+exclude_block "$manifest"
 `;
 
 /** The command that writes `files` into the checkout at `repoDir`; exported for tests. */

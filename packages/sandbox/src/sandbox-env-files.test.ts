@@ -116,6 +116,23 @@ describe('env files in a real checkout', () => {
     expect(await exclude()).toBe('# mine\n*.log\n');
   });
 
+  it('excludes every file before writing any, so a write that fails partway leaves nothing git would take', async () => {
+    // `blocker` cannot be written into, so the script stops at the second file.
+    await fs.mkdir(path.join(repo, 'blocker'));
+    await fs.chmod(path.join(repo, 'blocker'), 0o555);
+    onTestFinished(() => fs.chmod(path.join(repo, 'blocker'), 0o755).catch(() => {}));
+    await expect(
+      writeEnvFiles(exec(), repo, [
+        { path: '.env.staging', content: 'A=1\n' },
+        { path: 'blocker/inner.env', content: 'B=2\n' },
+      ]),
+    ).rejects.toThrow();
+    const exclude = await fs.readFile(path.join(repo, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toContain('/.env.staging');
+    expect(exclude).toContain('/blocker/inner.env');
+    expect(git(repo, 'status', '--porcelain', '--untracked-files=all')).not.toContain('.env.staging');
+  });
+
   it('never writes through a folder that leads outside the checkout', async () => {
     const outside = path.join(dir, 'outside');
     await fs.mkdir(outside);
