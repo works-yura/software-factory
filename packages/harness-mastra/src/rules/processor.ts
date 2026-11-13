@@ -474,6 +474,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   private readonly loadedMemorySettings = new WeakSet<object>();
 
   private readonly options: FactoryPhaseStateProcessorOptions;
+  private readonly bindingReconciles = new Map<string, Promise<void>>();
   private readonly boards: ProjectBoardSource;
 
   constructor(options: FactoryPhaseStateProcessorOptions) {
@@ -644,6 +645,20 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   }
 
   async reconcileBinding(binding: FactoryRunBindingRecord): Promise<void> {
+    const previous = this.bindingReconciles.get(binding.id);
+    const run = (async () => {
+      if (previous) await previous.catch(() => undefined);
+      await this.reconcileBindingNow(binding);
+    })();
+    this.bindingReconciles.set(binding.id, run);
+    try {
+      await run;
+    } finally {
+      if (this.bindingReconciles.get(binding.id) === run) this.bindingReconciles.delete(binding.id);
+    }
+  }
+
+  private async reconcileBindingNow(binding: FactoryRunBindingRecord): Promise<void> {
     const reader = this.options.messageReader;
     if (!reader || binding.status !== 'active') return;
     // One keyed read up front: a binding whose item is gone or no longer in a

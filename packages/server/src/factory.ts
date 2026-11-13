@@ -3233,6 +3233,7 @@ export class MastraFactory {
                 // A route's card is filed after its fire was committed: write the card back onto the fire.
                 cardFiled: writeFireCardBack(intakeRouteFiresStorage),
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 ...(githubIntegration
