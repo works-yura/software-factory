@@ -12,6 +12,8 @@ import {
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
+  GIT_TRANSFER_STALL_BYTES_PER_SECOND,
+  GIT_TRANSFER_STALL_SECONDS,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
@@ -1275,6 +1277,40 @@ describe('git transfer retry', () => {
       expect(err).toBeInstanceOf(MaterializeError);
       expect(err.code).toBe('clone-failed');
       expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(3); // initial + 2 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aborts a stalled transfer instead of waiting out the command guard', async () => {
+    const sandbox = new FakeSandbox();
+
+    await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+
+    const clone = sandbox.executions.find(execution => execution.command === 'git' && execution.args.includes('clone'));
+    expect(clone?.options?.env).toMatchObject({
+      GIT_HTTP_LOW_SPEED_LIMIT: String(GIT_TRANSFER_STALL_BYTES_PER_SECOND),
+      GIT_HTTP_LOW_SPEED_TIME: String(GIT_TRANSFER_STALL_SECONDS),
+    });
+  });
+
+  it('retries a clone git aborted as too slow', async () => {
+    vi.useFakeTimers();
+    try {
+      let clones = 0;
+      const STALLED = {
+        exitCode: 128,
+        stdout: '',
+        stderr:
+          'error: RPC failed; curl 28 Operation too slow. Less than 1000 bytes/sec transferred the last 60 seconds\nfatal: early EOF',
+      };
+      const sandbox = new FakeSandbox(script => (script.includes('git clone') ? (++clones === 1 ? STALLED : OK) : OK));
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(clones).toBe(2);
     } finally {
       vi.useRealTimers();
     }

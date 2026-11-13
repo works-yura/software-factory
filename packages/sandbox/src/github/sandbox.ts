@@ -165,6 +165,15 @@ async function executeOnce(
 
 const GIT_TRANSFER_RETRIES = 2;
 const GIT_TRANSFER_RETRY_DELAY_MS = 2000;
+/**
+ * A transfer that stalls (the connection stays open but nothing arrives) is
+ * aborted by git itself once it moves less than this many bytes a second for
+ * {@link GIT_TRANSFER_STALL_SECONDS}, and then retried like a dropped one —
+ * instead of hanging until the 15-minute command guard while the session
+ * waits on its first turn.
+ */
+export const GIT_TRANSFER_STALL_BYTES_PER_SECOND = 1000;
+export const GIT_TRANSFER_STALL_SECONDS = 60;
 
 /**
  * True when a git transfer died mid-flight rather than being refused.
@@ -182,7 +191,7 @@ const GIT_TRANSFER_RETRY_DELAY_MS = 2000;
  */
 function isTransientGitFailure(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /HTTP2 framing layer|RPC failed; curl|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
+  return /HTTP2 framing layer|RPC failed; curl|Operation too slow|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
     output,
   );
 }
@@ -203,9 +212,15 @@ async function gitTransfer(
 ): Promise<SandboxCommandResult> {
   const { beforeRetry, ...commandOptions } = options;
   const deadlineMs = Date.now() + (commandOptions.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+  const env = {
+    GIT_HTTP_LOW_SPEED_LIMIT: String(GIT_TRANSFER_STALL_BYTES_PER_SECOND),
+    GIT_HTTP_LOW_SPEED_TIME: String(GIT_TRANSFER_STALL_SECONDS),
+    ...commandOptions.env,
+  };
   for (let attempt = 0; ; attempt++) {
     const result = await execute(sandbox, 'git', args, {
       ...commandOptions,
+      env,
       timeoutMs: Math.max(deadlineMs - Date.now(), 1),
     });
     if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
