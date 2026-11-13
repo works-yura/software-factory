@@ -32,6 +32,9 @@ status() {
   else
     say "$(printf '%s\n' "$open" | wc -l | tr -d ' ') paths, e.g.:"
     printf '%s\n' "$open" | sed -n '1,10s/^/  /p'
+    # Files the server or deploy.sh create later get the default 644; a closed folder still hides them.
+    [ "$(stat -f '%Lp' "$SERVER_DIR")" = 700 ] \
+      && say "  (they sit in $SERVER_DIR, which is 700: unreachable anyway; apply again to close them too)"
   fi
   say "  ~/.mastracode itself: $(stat -f '%Sp' "$OWNER_HOME/.mastracode") (drwx------ = nobody else gets in at all)"
 

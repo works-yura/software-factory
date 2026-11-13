@@ -55,6 +55,15 @@ status() {
   done < <(dot_entries)
   [ "$open" = 0 ] && say "  all closed"
   say "  (left open on purpose: $KEEP_OPEN, $(stat -f '%Sp' "$DOT/$KEEP_OPEN" 2>/dev/null || echo missing))"
+  # Hidden folders stay as they are, but none may be writable by others: the pnpm store
+  # (.pnpm-store) is hard-linked into the server's releases, so writing to it changes the server.
+  local writable
+  writable="$(find "$DOT" -mindepth 1 -maxdepth 2 -name '.*' -perm +022 \
+    -not -path "$DOT/.Trashes*" -not -path "$DOT/.TemporaryItems*" 2>/dev/null || true)"
+  if [ -n "$writable" ]; then
+    say "  writable by others (hidden):"
+    printf '%s\n' "$writable" | sed 's/^/    /'
+  fi
   [ "$(ownership_state)" = Disabled ] && say "  note: while Owners is Disabled these modes protect nothing"
 
   step "c. User $AGENT_USER"
@@ -71,9 +80,11 @@ ownership_on() {
   need_root ownership-on
   step "Enabling owners on $DOT"
   diskutil enableOwnership "$DOT"
-  step "Files not owned by $OWNER (first 30; there may be more)"
+  # Three levels deep: the whole disk (node_modules, pnpm store, builds) takes far too long.
+  # Full scan, if wanted: find /Volumes/dot -xdev ! -user <you> | head
+  step "Files not owned by $OWNER, three levels deep (first 30)"
   local found
-  found="$(find "$DOT" -xdev ! -user "$OWNER" -not -path "$DOT/.*" 2>/dev/null | head -30 || true)"
+  found="$(find "$DOT" -xdev -maxdepth 3 ! -user "$OWNER" -not -path "$DOT/.*" 2>/dev/null | head -30 || true)"
   if [ -z "$found" ]; then
     say "  none"
   else
