@@ -80,7 +80,7 @@ export interface FactorySandboxProblemAttentionItem extends FactoryAttentionItem
   kind: 'sandbox-problem';
   sourceId: string;
   sandboxKey: string;
-  problem: 'save-failed' | 'superseded' | 'public-repository';
+  problem: 'save-failed' | 'superseded' | 'public-repository' | 'processes-unchecked';
 }
 
 export type FactoryAttentionItem =

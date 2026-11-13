@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, realpath, rename, rm, stat, symlink } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
@@ -21,7 +21,47 @@ export interface LocalFactorySandboxOptions {
    * session clones from the network and a removed folder takes its work along.
    */
   template?: LocalEnvironmentTemplate;
+  /** Tests: the rename that moves a folder to the trash (to simulate another volume). */
+  renameForRemoval?: (from: string, to: string) => Promise<void>;
 }
+
+/**
+ * Which processes left in a sandbox folder Factory started: descendants of
+ * the server (sandbox commands, harness CLIs and theirs), processes carrying
+ * the sandbox marker in their environment where it can be read (Linux), and,
+ * where it cannot (macOS), orphans with no terminal (a `nohup` job whose shell
+ * exited; a person's shell or editor has a terminal or a living parent).
+ * Everything else is left running.
+ */
+export function classifyFolderProcesses(input: {
+  candidates: readonly number[];
+  processes: ReadonlyMap<number, { parent: number; tty: boolean }>;
+  serverPid: number;
+  marked: ReadonlySet<number>;
+  envReadable: boolean;
+}): { ours: number[]; left: number[] } {
+  const descendsFromServer = (target: number) => {
+    for (let current = input.processes.get(target)?.parent, hops = 0; current && current > 1 && hops < 64; hops++) {
+      if (current === input.serverPid) return true;
+      current = input.processes.get(current)?.parent;
+    }
+    return false;
+  };
+  const ours: number[] = [];
+  const left: number[] = [];
+  for (const target of input.candidates) {
+    const info = input.processes.get(target);
+    const orphanWithoutTerminal = info !== undefined && info.parent === 1 && !info.tty;
+    if (descendsFromServer(target) || input.marked.has(target) || (!input.envReadable && orphanWithoutTerminal)) ours.push(target);
+    else left.push(target);
+  }
+  return { ours, left };
+}
+
+/** Marks every process a local sandbox starts with its folder key. */
+export const SANDBOX_MARKER_ENV = 'FACTORY_SANDBOX_FOLDER';
+/** Left in a folder deleted in place, so an interrupted delete is finished, never reused. */
+const DELETING_MARKER = '.factory-deleting';
 
 /**
  * What factory hands a sandbox constructor: core's context plus the card
@@ -184,40 +224,94 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     await mkdir(trash, { recursive: true });
     const away = join(trash, randomUUID());
     try {
-      await rename(directory, away);
+      await (this.#options.renameForRemoval ?? rename)(directory, away);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-      throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return;
+      if (code !== 'EXDEV') throw error;
+      // Another volume (a folder mounted or linked from elsewhere): deleted where it is, marked
+      // first, so a crash midway leaves a folder the next start finishes deleting, never reuses.
+      await writeFile(join(directory, DELETING_MARKER), new Date().toISOString());
+      await rm(directory, { recursive: true, force: true });
+      return;
     }
     await rm(away, { recursive: true, force: true });
   }
 
-  /** Empty the trash a crash left (at start); never touches a folder in use. */
+  /**
+   * Finish deletes a crash interrupted (at start): the trash, and any folder
+   * marked as being deleted in place. Never touches a folder in use.
+   */
   async emptyTrash(): Promise<void> {
     await rm(this.#trash(), { recursive: true, force: true }).catch(() => {});
+    const root = resolve(this.#options.root);
+    const candidates: string[] = [];
+    const children = async (dir: string) =>
+      (await readdir(dir, { withFileTypes: true }).catch(() => [])).filter(entry => entry.isDirectory()).map(entry => join(dir, entry.name));
+    for (const dir of await children(root)) {
+      if (dir === join(root, WORK_ITEM_FOLDERS_DIR)) {
+        for (const factory of await children(dir)) candidates.push(...(await children(factory)));
+      } else {
+        candidates.push(dir);
+      }
+    }
+    for (const folder of candidates) {
+      const marked = await stat(join(folder, DELETING_MARKER)).then(
+        () => true,
+        () => false,
+      );
+      if (marked) await rm(folder, { recursive: true, force: true }).catch(() => {});
+    }
   }
 
   /**
-   * Stop every process whose working directory is in the folder: what a
-   * sandbox's own tracking misses (`nohup`, a harness's background shells)
-   * would keep ports and files. SIGTERM, then SIGKILL after a grace period;
-   * answers what was signalled.
+   * Stop the processes left working in the folder that Factory started:
+   * descendants of this server (a sandbox command, a harness CLI and their
+   * children), or carrying the sandbox's marker in their environment (what a
+   * `nohup` left behind after its shell exited). SIGTERM, then SIGKILL after a
+   * grace period. Anyone else's (a person's shell or editor in the folder) is
+   * logged and left. `unchecked` when the processes could not be listed.
    */
-  async stopProcessesIn(directory: string, graceMs = 3_000): Promise<number[]> {
+  async stopProcessesIn(directory: string, graceMs = 3_000): Promise<{ stopped: number[]; left: number[]; unchecked: boolean }> {
     const host = hostExecutor();
     const listed = await host.executeCommand('lsof', ['-a', '-d', 'cwd', '-F', 'pn'], { timeout: 30_000 });
+    // lsof exits 1 when some processes cannot be read; only no output at all means it could not look.
+    if (!listed.stdout.trim()) {
+      console.warn('[factory:sleep] could not list the processes in a sandbox folder; some may keep running', {
+        directory,
+        exitCode: listed.exitCode,
+        error: listed.stderr.trim().slice(-300),
+      });
+      return { stopped: [], left: [], unchecked: true };
+    }
     // lsof names the real path (/private/var/… for /var/…).
     const folder = await realpath(directory).catch(() => resolve(directory));
-    const pids: number[] = [];
+    const inFolder: number[] = [];
     let pid: number | undefined;
     for (const line of listed.stdout.split('\n')) {
       if (line.startsWith('p')) pid = Number(line.slice(1));
       else if (line.startsWith('n') && pid && pid !== process.pid) {
         const cwd = line.slice(1);
-        if (cwd === folder || cwd.startsWith(folder + sep)) pids.push(pid);
+        if (cwd === folder || cwd.startsWith(folder + sep)) inFolder.push(pid);
       }
     }
-    const unique = [...new Set(pids)];
+    const candidates = [...new Set(inFolder)];
+    if (!candidates.length) return { stopped: [], left: [], unchecked: false };
+    const table = await host.executeCommand('ps', ['-A', '-o', 'pid=,ppid=,tty='], { timeout: 30_000 });
+    const processes = new Map<number, { parent: number; tty: boolean }>();
+    for (const row of table.stdout.split('\n')) {
+      const [child, parent, tty] = row.trim().split(/\s+/);
+      if (child && parent) processes.set(Number(child), { parent: Number(parent), tty: Boolean(tty) && tty !== '??' && tty !== '?' });
+    }
+    const marked = new Set<number>();
+    if (process.platform === 'linux') {
+      for (const target of candidates) {
+        const env = await readFile(`/proc/${target}/environ`, 'utf8').catch(() => '');
+        if (env.includes(`${SANDBOX_MARKER_ENV}=`)) marked.add(target);
+      }
+    }
+    const { ours, left } = classifyFolderProcesses({ candidates, processes, serverPid: process.pid, marked, envReadable: process.platform === 'linux' });
+    if (left.length) console.warn('[factory:sleep] processes in a sandbox folder that Factory did not start are left running', { directory, pids: left });
     const alive = (target: number) => {
       try {
         process.kill(target, 0);
@@ -226,7 +320,7 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
         return false;
       }
     };
-    for (const target of unique) {
+    for (const target of ours) {
       try {
         process.kill(target, 'SIGTERM');
       } catch {
@@ -234,8 +328,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       }
     }
     const deadline = Date.now() + graceMs;
-    while (unique.some(alive) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
-    const stubborn = unique.filter(alive);
+    while (ours.some(alive) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+    const stubborn = ours.filter(alive);
     for (const target of stubborn) {
       try {
         process.kill(target, 'SIGKILL');
@@ -243,8 +337,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
         // Gone already.
       }
     }
-    if (unique.length) console.warn('[factory:sleep] stopped processes left in a sandbox folder', { directory, pids: unique, killed: stubborn });
-    return unique;
+    if (ours.length) console.warn('[factory:sleep] stopped processes left in a sandbox folder', { directory, pids: ours, killed: stubborn });
+    return { stopped: ours, left, unchecked: false };
   }
 
   /** The folder key (`<session>` or `work-items/<factory>/<card>`) a path lies in. */
@@ -294,7 +388,16 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       // stays while it sleeps (its removal below is the one that saves, publishes and checks).
       for (const sessionId of input.sessionIds) await input.release(sessionId);
       if (!(await input.stillIdle())) return 'active';
-      await this.stopProcessesIn(directory);
+      const processes = await this.stopProcessesIn(directory);
+      if (processes.unchecked) {
+        await template.sandboxes
+          .addProblem(
+            key,
+            { kind: 'processes-unchecked', message: 'The processes in the folder could not be listed (lsof); some may still run and hold ports.' },
+            this.#recordDefaults(key),
+          )
+          .catch(() => {});
+      }
       const removed = await this.#removeFolder(directory, { publish: true, mayRemove: input.stillIdle });
       return removed ? 'slept' : 'active';
     } finally {
@@ -419,7 +522,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
         workingDirectory: shared
           ? this.workItemFolderPath(ctx.workItemFolder!)
           : join(this.#options.root, ctx.sessionId),
-        ...(this.#env() ? { env: this.#env() } : {}),
+        // Every process the sandbox starts, and theirs, carries the folder: sleep finds what survives.
+        env: { ...this.#env(), [SANDBOX_MARKER_ENV]: shared ? ctx.workItemFolder! : ctx.sessionId },
       },
       this.#options.root,
       shared,

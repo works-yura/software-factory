@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describeFactorySandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { LocalFactorySandbox } from '../local-factory-sandbox.ts';
+import { classifyFolderProcesses, LocalFactorySandbox } from '../local-factory-sandbox.ts';
 import { withWorkItemFolderLock } from '../session-sandbox.ts';
 import { sleepPolicyOf } from './local-sandbox-settings.ts';
 import { LocalEnvironmentTemplate } from './local-template.ts';
@@ -350,6 +350,74 @@ describe('putting sandboxes to sleep, with real git', () => {
     expect(await sleeper().sleep('work-items/f/card-25', 'manual')).toEqual({ outcome: 'active' });
     await Promise.all(queuedStarts);
     expect(await exists(card.path)).toBe(true);
+  });
+
+  it('stops a job a sandbox shell left running after it exited (nohup), and its own children', async () => {
+    const card = await folder('work-items/f/card-26', 'agent-26', 'factory/item-26');
+    // A shell starts a background job and exits: the job is reparented away from this process.
+    const shell = spawn('sh', ['-c', 'nohup sleep 60 >/dev/null 2>&1 & echo $!'], {
+      cwd: card.dir,
+      env: { ...process.env, FACTORY_SANDBOX_FOLDER: 'work-items/f/card-26' },
+      detached: true,
+    });
+    let out = '';
+    shell.stdout.on('data', chunk => (out += String(chunk)));
+    await new Promise(resolve => shell.on('close', resolve));
+    const orphan = Number(out.trim());
+    const child = spawn('sleep', ['60'], { cwd: card.dir, stdio: 'ignore' });
+    const result = await sandbox.stopProcessesIn(card.dir, 500);
+    expect(result.unchecked).toBe(false);
+    expect(result.stopped).toEqual(expect.arrayContaining([orphan, child.pid]));
+  });
+
+  it('leaves a person\'s shell or editor in the folder running, killing only what Factory started', () => {
+    const processes = new Map([
+      [10, { parent: 1, tty: false }], // the server
+      [11, { parent: 10, tty: false }], // a sandbox command
+      [12, { parent: 11, tty: false }], // its child
+      [20, { parent: 1, tty: false }], // a nohup job whose shell exited
+      [30, { parent: 31, tty: true }], // a person's shell in a terminal
+      [31, { parent: 1, tty: true }],
+      [40, { parent: 41, tty: false }], // an editor's helper
+      [41, { parent: 1, tty: false }],
+      [50, { parent: 1, tty: true }], // an orphan still on a terminal
+    ]);
+    const mac = classifyFolderProcesses({ candidates: [11, 12, 20, 30, 40, 50], processes, serverPid: 10, marked: new Set(), envReadable: false });
+    expect(mac).toEqual({ ours: [11, 12, 20], left: [30, 40, 50] });
+    // Where the environment can be read, the marker decides orphans.
+    const linux = classifyFolderProcesses({ candidates: [11, 20, 40], processes, serverPid: 10, marked: new Set([40]), envReadable: true });
+    expect(linux).toEqual({ ours: [11, 40], left: [20] });
+  });
+
+  it('says when the processes cannot be listed instead of pretending none are left', async () => {
+    const card = await folder('work-items/f/card-27', 'agent-27', 'factory/item-27');
+    const path0 = process.env.PATH;
+    process.env.PATH = '/nonexistent';
+    try {
+      expect(await sandbox.stopProcessesIn(card.dir)).toEqual({ stopped: [], left: [], unchecked: true });
+    } finally {
+      process.env.PATH = path0;
+    }
+  });
+
+  it('a folder on another volume (EXDEV) is deleted in place with a marker, not reported as a failed save', async () => {
+    const card = await folder('work-items/f/card-28', 'agent-28', 'factory/item-28');
+    const crossVolume = new LocalFactorySandbox({
+      root: sandboxRoot,
+      template,
+      renameForRemoval: async () => {
+        throw Object.assign(new Error('cross-device link'), { code: 'EXDEV' });
+      },
+    });
+    await crossVolume.removeWorkItemFolder('work-items/f/card-28');
+    expect(await exists(card.path)).toBe(false);
+    expect(await template.sandboxes.get('work-items/f/card-28')).toBeUndefined();
+    // A delete in place the server did not finish: the next start finishes it.
+    const interrupted = path.join(sandboxRoot, 'work-items', 'f', 'card-29');
+    await mkdir(path.join(interrupted, 'repo'), { recursive: true });
+    await writeFile(path.join(interrupted, '.factory-deleting'), 'x');
+    await crossVolume.emptyTrash();
+    expect(await exists(interrupted)).toBe(false);
   });
 
   it('offers the limits as Factory settings with their defaults', () => {

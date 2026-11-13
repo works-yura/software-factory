@@ -236,7 +236,8 @@
       "problem": {
         "save-failed": "Its work could not be saved, so its folder is kept. Fix the cause; the next sleep retries.",
         "superseded": "Saved commits the branch no longer contains were kept aside:",
-        "public-repository": "Public repository: its work is kept on this machine only, never published."
+        "public-repository": "Public repository: its work is kept on this machine only, never published.",
+        "processes-unchecked": "The processes in its folder could not be checked; some may still run and hold ports."
       }
     }
   },

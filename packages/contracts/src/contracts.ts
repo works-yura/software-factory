@@ -430,7 +430,7 @@ const sandboxEnvsListResponseSchema = z.object({
 const sandboxEnvResponseSchema = z.object({ env: sandboxEnvSchema });
 /** A problem with a sandbox's kept work the person should hear about (ADR-0039). */
 const sandboxProblemSchema = z.object({
-  kind: z.enum(['save-failed', 'superseded', 'public-repository']),
+  kind: z.enum(['save-failed', 'superseded', 'public-repository', 'processes-unchecked']),
   message: z.string(),
   at: z.string(),
   occurrence: z.string(),

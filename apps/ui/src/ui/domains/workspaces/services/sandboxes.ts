@@ -10,7 +10,7 @@ import { readJsonOrThrow } from './http';
 const tk = translator('workspaces');
 
 export type FactorySandboxState = 'active' | 'idle' | 'asleep';
-export type FactorySandboxProblemKind = 'save-failed' | 'superseded' | 'public-repository';
+export type FactorySandboxProblemKind = 'save-failed' | 'superseded' | 'public-repository' | 'processes-unchecked';
 
 export interface FactorySandboxProblem {
   kind: FactorySandboxProblemKind;

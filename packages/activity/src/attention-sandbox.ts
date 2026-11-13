@@ -26,7 +26,7 @@ export interface SandboxProblemEntry {
   /** The sandbox folder key: `work-items/<factory>/<card>` or a session's row id. */
   key: string;
   sandboxKind: 'card' | 'session';
-  problem: 'save-failed' | 'superseded' | 'public-repository';
+  problem: 'save-failed' | 'superseded' | 'public-repository' | 'processes-unchecked';
   message: string;
   at: string;
 }

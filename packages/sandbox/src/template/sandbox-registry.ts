@@ -21,7 +21,7 @@ export interface SandboxSessionRecord {
 
 /** A problem with the sandbox's kept work the person should hear about. */
 export interface SandboxProblem {
-  kind: 'save-failed' | 'superseded' | 'public-repository';
+  kind: 'save-failed' | 'superseded' | 'public-repository' | 'processes-unchecked';
   message: string;
   at: string;
   /** Stable per occurrence, for the attention list's read state. */
