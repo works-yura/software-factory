@@ -404,6 +404,32 @@ describe('WorkspaceViewerPanel', () => {
       await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
 
       expect(await screen.findByText('setup failed')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/The sandbox could not start/);
+    });
+
+    it.each([
+      [500, { error: 'internal_error', message: 'boom' }, /The sandbox could not start/, 'boom'],
+      [504, { error: 'gateway_timeout', message: 'stopped waiting' }, /The sandbox start timed out/, 'stopped waiting'],
+    ])('names a %i start failure in words, never as its code', async (status, body, line, detail) => {
+      installHandlers();
+      server.use(
+        http.get(TREE_URL, () =>
+          HttpResponse.json({ workspacePath: WORKSPACE, path: '', available: false, entries: [] }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/sandbox/start`, () =>
+          HttpResponse.json(body, { status }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(line);
+      expect(alert).toHaveTextContent(detail);
+      expect(alert).not.toHaveTextContent(body.error);
     });
 
     describe('when the start runs in the background', () => {
@@ -462,7 +488,10 @@ describe('WorkspaceViewerPanel', () => {
 
       it('shows why the start failed once it ends, and offers to try again', async () => {
         installHandlers();
-        startInBackground({ ...notRunning, startError: 'clone failed: repository not found' });
+        startInBackground({
+          ...notRunning,
+          startError: { code: 'timeout', message: 'Sandbox command timed out after 900s.' },
+        });
         const user = userEvent.setup();
 
         renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
@@ -470,9 +499,10 @@ describe('WorkspaceViewerPanel', () => {
         await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
 
         expect(await screen.findByText(/Starting the sandbox/)).toBeInTheDocument();
-        expect(await screen.findByRole('alert', {}, { timeout: 8_000 })).toHaveTextContent(
-          'clone failed: repository not found',
-        );
+        const alert = await screen.findByRole('alert', {}, { timeout: 8_000 });
+        // The kind of failure in the viewer's language, the server's message under it.
+        expect(alert).toHaveTextContent(/The sandbox start timed out/);
+        expect(alert).toHaveTextContent('Sandbox command timed out after 900s.');
         expect(screen.getByText(/The sandbox isn.t running/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeEnabled();
       });

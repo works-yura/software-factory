@@ -1125,7 +1125,7 @@ describe('session sandbox recreate', () => {
       );
       await expect(listSessionWorkspaceTree(session)).resolves.toMatchObject({
         available: false,
-        startError: 'setup failed',
+        startError: { code: 'unknown', message: 'setup failed' },
       });
 
       // The next start clears it while it runs.
@@ -1152,7 +1152,7 @@ describe('session sandbox recreate', () => {
       await settledSessionSandboxStart(session.sessionId);
       expect(sessionSandboxStartState(session.sessionId)).toEqual({
         starting: false,
-        error: 'This session has no sandbox to start.',
+        error: { code: 'no_sandbox', message: 'This session has no sandbox to start.' },
       });
     });
   });
@@ -1682,7 +1682,7 @@ describe('personal sessions of a Claude Code Factory', () => {
     await settledSessionSandboxStart(sessionId);
     expect(sessionSandboxStartState(sessionId)).toEqual({
       starting: false,
-      error: 'clone failed: repository not found',
+      error: { code: 'no_access', message: 'clone failed: repository not found' },
     });
   });
 

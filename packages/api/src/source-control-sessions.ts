@@ -32,7 +32,11 @@ import type {
 import type { WorkItemsStorage } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
 import type { LocalCheckoutAttacher } from './fs.ts';
-import { sessionSandboxStartState, startSessionSandboxInBackground } from './session-sandbox-starts.ts';
+import {
+  NothingToStartError,
+  sessionSandboxStartState,
+  startSessionSandboxInBackground,
+} from './session-sandbox-starts.ts';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from '@factory/session';
 
 type RouteContext = Context;
@@ -691,7 +695,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             const label = TURN_HARNESS_LABELS[turnSession.harness ?? 'claude-code'];
             startSessionSandboxInBackground(session.sessionId, async () => {
               if (!(await createLocalCheckout(session))) {
-                throw new Error(`This ${label} session's checkout could not be set up: send it a message to create it.`);
+                throw new NothingToStartError(
+                  `This ${label} session's checkout could not be set up: send it a message to create it.`,
+                );
               }
             });
             return c.json({ starting: true }, 202);
@@ -717,7 +723,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
               await sessionMemoryResourceId(controller, session, options.workItems),
             ));
           const sandbox = live?.getWorkspace()?.sandbox;
-          if (!sandbox?.start) throw new Error('This session has no sandbox to start.');
+          if (!sandbox?.start) throw new NothingToStartError('This session has no sandbox to start.');
           await sandbox.start();
         });
         return c.json({ starting: true }, 202);

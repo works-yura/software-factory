@@ -7,16 +7,59 @@
  * state back: `starting` while it runs, and why it failed until the next start.
  */
 
+/**
+ * What kind of failure ended a start, for the page to name in the viewer's language:
+ * - `timeout`: a command or transfer ran out of time (e.g. a clone from a slow GitHub);
+ * - `network`: the sandbox could not reach the git host;
+ * - `no_access`: the git host refused the repository (credentials, permissions, not found);
+ * - `clone_failed`: git failed to clone or check out for another reason;
+ * - `no_sandbox`: the session has no sandbox, or no checkout, to start;
+ * - `unknown`: anything else; its message is all there is.
+ */
+export type SessionSandboxStartErrorCode = 'timeout' | 'network' | 'no_access' | 'clone_failed' | 'no_sandbox' | 'unknown';
+
+export interface SessionSandboxStartError {
+  code: SessionSandboxStartErrorCode;
+  /** The server's own message, in English, as the detail under the page's translated line. */
+  message: string;
+}
+
 export interface SessionSandboxStartState {
   /** A start is running for the session. */
   starting: boolean;
   /** Why the last start failed, until the next one begins. */
-  error?: string;
+  error?: SessionSandboxStartError;
+}
+
+/** Thrown by a start that finds nothing to start; classified as `no_sandbox`. */
+export class NothingToStartError extends Error {
+  override readonly name = 'NothingToStartError';
+}
+
+const TIMEOUT = /timed out|timeout|too slow|stalled|low speed/i;
+const NETWORK = /could not reach|could not resolve host|failed to connect|network is unreachable|egress/i;
+const NO_ACCESS =
+  /authentication failed|could not read username|repository not found|permission denied|access denied|\b40[134]\b|not authorized|did not include usable credentials/i;
+const GIT_FAILURE_CODES = new Set(['clone-failed', 'pull-failed', 'git-missing']);
+
+/** Sort a start failure into a {@link SessionSandboxStartErrorCode}, keeping its message. */
+export function classifySessionSandboxStartError(error: unknown): SessionSandboxStartError {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof NothingToStartError) return { code: 'no_sandbox', message };
+  // `MaterializeError` (sandbox package) carries a code; matched by shape so no import is needed.
+  const materialize = error instanceof Error ? (error as Error & { code?: unknown }).code : undefined;
+  if (materialize === 'egress-blocked') return { code: 'network', message };
+  if (TIMEOUT.test(message)) return { code: 'timeout', message };
+  if (NETWORK.test(message)) return { code: 'network', message };
+  if (NO_ACCESS.test(message)) return { code: 'no_access', message };
+  if (typeof materialize === 'string' && GIT_FAILURE_CODES.has(materialize)) return { code: 'clone_failed', message };
+  if (/\bgit (clone|checkout|fetch)\b/i.test(message)) return { code: 'clone_failed', message };
+  return { code: 'unknown', message };
 }
 
 interface StartEntry {
   running?: Promise<void>;
-  error?: string;
+  error?: SessionSandboxStartError;
 }
 
 const starts = new Map<string, StartEntry>();
@@ -35,7 +78,7 @@ export function startSessionSandboxInBackground(sessionId: string, start: () => 
       if (starts.get(sessionId) === entry) starts.delete(sessionId);
     } catch (error) {
       console.error('[Factory Sessions] Failed to start session sandbox', { sessionId, error });
-      entry.error = error instanceof Error ? error.message : String(error);
+      entry.error = classifySessionSandboxStartError(error);
     } finally {
       entry.running = undefined;
     }

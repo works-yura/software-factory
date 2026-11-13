@@ -20,6 +20,7 @@ import { canReadSessionResource, canViewSourceControlSession, sessionMemoryResou
 import type { SessionRunBindings, SessionThreadLookup } from '@factory/session';
 
 import { sessionSandboxStartState } from './session-sandbox-starts.ts';
+import type { SessionSandboxStartError } from './session-sandbox-starts.ts';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -105,8 +106,8 @@ export interface WorkspaceTreeListing {
   entries: WorkspaceTreeEntry[];
   /** Set while a sandbox start the Files tab asked for runs: nothing is read until it ends. */
   starting?: boolean;
-  /** Why the last sandbox start failed, while the session has no sandbox to read. */
-  startError?: string;
+  /** Why the last sandbox start failed (its kind and the server's message), while the session has no sandbox to read. */
+  startError?: SessionSandboxStartError;
 }
 
 export type WorkspaceChangeStatus =
