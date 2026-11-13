@@ -125,6 +125,24 @@ export class SessionRetirementCoordinator {
   }
 
   /**
+   * Stop a session's sandbox without retiring the session: its row, branch and
+   * files stay, and its next run starts the sandbox again (a local sandbox
+   * reuses its folder). For a session in its card's shared folder this stops
+   * only what this session runs there. A sandbox this process never opened is
+   * left to its provider: the local provider keeps no identity to reach it by.
+   */
+  async stopSessionSandbox(input: Pick<RetireSessionInput, 'sessionId' | 'orgId' | 'sourceControl'>): Promise<void> {
+    await this.#withSessionLock(input.sessionId, async () => {
+      const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
+      if (!session || session.orgId !== input.orgId) return;
+      const entry = peekSessionSandbox(session.id);
+      if (!entry) return;
+      await this.#stopSandbox(session, entry.sandbox);
+      await this.#invalidate(session);
+    });
+  }
+
+  /**
    * Destroy a session's sandbox so its next message boots a fresh VM from the
    * template, keeping the session row, its conversation, and work-item refs.
    * Skips teardown commands, and works without a memo entry in this process

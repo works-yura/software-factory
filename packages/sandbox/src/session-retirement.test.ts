@@ -332,6 +332,30 @@ describe('SessionRetirementCoordinator', () => {
     expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
   });
 
+  // Upstream #29981, for a card that runs in no context: its sandbox stops, nothing else goes.
+  it('stops a session sandbox without teardown, keeping the session, and invalidates its workspace', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const calls: string[] = [];
+    const fake = seedMemoSandbox(session, calls);
+    const invalidateSession = vi.fn(async () => {
+      calls.push('invalidate');
+    });
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession });
+
+    await coordinator.stopSessionSandbox({ orgId: 'org-1', sessionId: session.sessionId, sourceControl: storage });
+
+    expect(calls.filter(call => call.includes('teardown'))).toEqual([]);
+    expect(calls).toEqual(['stop', 'invalidate']);
+    expect(fake.destroy).not.toHaveBeenCalled();
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
+    expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
+    // Another organization's request stops nothing.
+    await coordinator.stopSessionSandbox({ orgId: 'org-2', sessionId: session.sessionId, sourceControl: storage });
+    expect(calls).toEqual(['stop', 'invalidate']);
+  });
+
   it('tears every environment repository down in position order, each in its own directory, and keeps going on failure', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);

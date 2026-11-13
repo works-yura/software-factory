@@ -225,6 +225,7 @@ const SANDBOX_SWEEP_INTERVAL_MS = 5 * 60_000;
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { backfillUntilDone, factoryPrincipalId, WorkItemSplitModeError } from '@factory/store';
 import { factoryRunsNeedSharedSignIn } from './accounts/pool.ts';
+import { createContextSandboxStops } from './context-sandboxes.ts';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -1689,6 +1690,26 @@ export class MastraFactory {
             ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),
           })
       : retireTerminalSessions;
+    // A card that moves into a phase that runs no context leaves its folder idle: its sandbox stops
+    // (files and branch stay) once the card's runs have ended (upstream #29981, one folder per card).
+    const contextSandboxStops =
+      sessionRetirement && workItemsReady
+        ? createContextSandboxStops({
+            workItems: workItemsStorage,
+            placeOf: async card => {
+              const board = (await toBoardSource(boards).load(card)).get(boardForWorkItem(card));
+              const stage = card.stages.length === 1 ? card.stages[0] : undefined;
+              if (!board || stage === undefined) return { kind: 'phase', context: 'unknown' };
+              if (board.isTerminal(stage)) return { kind: 'terminal' };
+              return { kind: 'phase', context: board.roleForPhase(stage) };
+            },
+            isRunning: sessionId => liveSessionRegistry?.isRunning(sessionId) ?? false,
+            stopSession: async ({ orgId, sessionId }) => {
+              const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
+              if (sourceControl) await sessionRetirement.stopSessionSandbox({ orgId, sessionId, sourceControl });
+            },
+          })
+        : undefined;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
@@ -1696,6 +1717,7 @@ export class MastraFactory {
           storage: workItemsStorage,
           audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          ...(contextSandboxStops ? { onContextLeft: contextSandboxStops } : {}),
           onTransitionCommitted: (() => {
             const notifyStageChange = createStageChangeNotifier({
               workItems: workItemsStorage,
