@@ -6,6 +6,7 @@ import {
   PRODUCT_LEGACY_PHASE_RENAMES,
   productBoard,
 } from '@factory/pipelines';
+import { STALE_BINDING_TTL_MS } from '@factory/runtime';
 import type { ProjectBoardCache } from '@factory/runtime';
 import {
   boardDefinitionOf,
@@ -285,5 +286,30 @@ export function factoryBootMigrations(deps: FactoryMigrationDeps): BootMigration
             }),
         }),
       ),
+    // The stale-binding sweep revoked every binding older than a day, so a card waiting on a person
+    // (a client approving a brief) silently lost its agent. The sweep now keeps a binding its card
+    // still points at; this gives back the ones it took. Waits for the project boards so a finished
+    // card is known as finished. Nothing else depends on it, so a failure only warns.
+    {
+      id: 'runBindings.restoreAgeRevoked.v1',
+      ready: ready('work-items') && Boolean(projectBoards),
+      onFailure: 'warn',
+      run: async () => {
+        const { restored, skipped } = await workItems.restoreAgeRevokedRunBindings({
+          minAgeMs: STALE_BINDING_TTL_MS,
+          now: new Date(),
+        });
+        for (const { binding, reason } of skipped) {
+          console.warn(
+            `[factory] left binding ${binding.id} revoked (card ${binding.workItemId}, ${binding.role} seat, session ${binding.sessionId}): ${reason}`,
+          );
+        }
+        if (restored.length === 0) return undefined;
+        const list = restored
+          .map(binding => `${binding.id} (card ${binding.workItemId}, ${binding.role} seat, session ${binding.sessionId})`)
+          .join(', ');
+        return `restored ${restored.length} run binding(s) the stale-binding sweep revoked by age: ${list}`;
+      },
+    },
   ];
 }
