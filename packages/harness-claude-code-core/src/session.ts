@@ -85,6 +85,15 @@ const DEFAULT_PARK_TIMEOUT_MS = 30 * 60_000;
 /** Leads the id of the question card an MCP elicitation is asked as. */
 const ELICITATION_CALL_PREFIX = 'elicitation-';
 
+/** What the chat says when a run was stopped before Claude read a person's message (an `undelivered` error). */
+export const UNDELIVERED_MESSAGE =
+  'The run was stopped before Claude read this message. It is kept and goes to Claude with the next message you send.';
+
+/** A person's message (or a signal) the chat already shows as sent: not a notification, a gate answer or a plan decision. */
+function isShownMessage(input: ClaudePendingInput): boolean {
+  return input.kind === 'signal' && !input.gate && !input.planDecision && input.echoed === true;
+}
+
 /**
  * The request-context key a person's identity travels under when they write
  * (Mastra's `MASTRA_MESSAGE_AUTHOR_KEY`); their message is stamped with it.
@@ -682,18 +691,29 @@ export class ClaudeCodeSession implements AgentSession {
    * process is stopped behind it. The usage the turn reported so far is
    * counted first. Queued follow-ups then start their own run, as Mastra's
    * queue drains once the thread is idle.
+   *
+   * `source` names who stopped it (`chat`, `delete`, …) for the log. A person's message the run
+   * carried that Claude never read (e.g. the run was still setting its checkout up) waits for the
+   * next turn, and the chat says so with an `undelivered` error instead of going quiet.
    */
-  abort(): void {
-    this.#abort(true);
+  abort(source = 'host'): void {
+    this.#abort(true, { source, reportUndelivered: true });
   }
 
-  #abort(drainFollowUps: boolean): void {
+  #abort(drainFollowUps: boolean, { source, reportUndelivered = false }: { source: string; reportUndelivered?: boolean }): void {
     const run = this.#run;
     if (!run || run.settled) return;
     run.abortRequested = true;
+    // A stop ends a run without a word from Claude: the log says who stopped it and how far it got.
+    console.info('[claude-code harness] Run stopped.', {
+      sessionId: this.id,
+      runId: run.runId,
+      source,
+      stage: run.process ? 'running' : run.begun ? 'setting up, no Claude process yet' : 'waiting to start',
+    });
     run.process?.terminate();
     this.#reportUsage(run, true);
-    this.#settle(run, 'aborted', { drainFollowUps });
+    this.#settle(run, 'aborted', { drainFollowUps, reportUndelivered });
   }
 
   /** Resolves when the run the message started or joined ends. */
@@ -734,7 +754,8 @@ export class ClaudeCodeSession implements AgentSession {
     }
     if (delivery === 'steer') {
       if (this.#steer(message)) return { action: 'deliver' };
-      this.#abort(false);
+      // What the stopped run carried goes with the steer's own run, which starts right below.
+      this.#abort(false, { source: 'steer' });
     }
     const accepted = this.#accept([message], true);
     if (accepted.action === 'persist') throw new Error('unreachable: chat messages always wake');
@@ -1206,7 +1227,11 @@ export class ClaudeCodeSession implements AgentSession {
         run.queue = [];
       }
     } catch (error) {
-      if (run.settled) return;
+      if (run.settled) {
+        // Stopped while it set up, then the setup failed: the chat already heard of the stop, the log hears of this.
+        console.warn('[claude-code harness] A stopped run failed while it wound down.', { sessionId: this.id, runId: run.runId, error });
+        return;
+      }
       threw = true;
       failure = error;
       reason = 'error';
@@ -1222,7 +1247,10 @@ export class ClaudeCodeSession implements AgentSession {
         park = parked;
       }
       // A parked run says so instead of failing: the chat shows when it resumes, not an error.
-      if (!park) this.#emit({ type: 'error', error: failure });
+      if (!park) {
+        console.warn('[claude-code harness] Run ended in error.', { sessionId: this.id, runId: run.runId, error: failure });
+        this.#emit({ type: 'error', error: failure });
+      }
     }
     // A run that could not start says so only once it settled: a send that follows at once starts a
     // run of its own, instead of joining this one's queue and ending with its failure.
@@ -1252,11 +1280,17 @@ export class ClaudeCodeSession implements AgentSession {
   #settle(
     run: ActiveRun,
     reason: AgentRunEndReason,
-    { drainFollowUps = true, park }: { drainFollowUps?: boolean; park?: Omit<UsageLimitPark, 'continueTurn'> } = {},
+    {
+      drainFollowUps = true,
+      park,
+      reportUndelivered = false,
+    }: { drainFollowUps?: boolean; park?: Omit<UsageLimitPark, 'continueTurn'>; reportUndelivered?: boolean } = {},
   ) {
     if (run.settled) return;
     run.settled = true;
     if (this.#run === run) this.#run = undefined;
+    // A person's messages the chat shows as sent that Claude never read: they wait for the next turn.
+    let undelivered = 0;
     if (reason === 'aborted' || reason === 'error') {
       const thread = this.#threadState(run.threadId);
       if (park && run.threadId === this.#record.threadId) {
@@ -1269,21 +1303,34 @@ export class ClaudeCodeSession implements AgentSession {
       // a person's messages. A signal with an id stays undelivered instead, so its sender (the
       // dispatcher's replay guard) sends it again.
       const kept = (input: ClaudePendingInput) => input.kind === 'notification' || input.gate || !input.id;
+      const waiting = [...(run.unsent ?? []), ...run.queue].filter(kept);
       if (run.unsent) {
         thread.pendingInputs.unshift(...run.unsent.filter(kept));
         run.unsent = undefined;
       }
       thread.pendingInputs.push(...run.queue.filter(kept));
       run.queue = [];
+      undelivered = waiting.filter(isShownMessage).length;
     }
     run.markStarted();
     void this.#save().catch(() => {});
     run.resolveEnded(reason);
     const parked = this.#threadState(run.threadId).usageLimitPark;
     if (park && parked) this.#emitPark({ type: 'usage_limit_parked', park: { ...parked } });
-    this.#emit({ type: 'agent_end', reason });
     // A parked session waits for the limit: its follow-ups go with the resume, not into another limited run.
-    if (drainFollowUps && reason !== 'suspended' && !park) this.#drainFollowUps(run.threadId);
+    const drain = drainFollowUps && reason !== 'suspended' && !park;
+    // Follow-ups about to start their own run take the waiting messages along: nothing is left to say.
+    const drainsNow = drain && (this.#threadState(run.threadId).followUps?.length ?? 0) > 0;
+    if (reason === 'aborted' && reportUndelivered && undelivered > 0 && !drainsNow) {
+      console.warn('[claude-code harness] Run stopped before Claude read the message; it waits for the next turn.', {
+        sessionId: this.id,
+        runId: run.runId,
+        messages: undelivered,
+      });
+      this.#emit({ type: 'error', error: new ClaudeCodeError('undelivered', UNDELIVERED_MESSAGE) });
+    }
+    this.#emit({ type: 'agent_end', reason });
+    if (drain) this.#drainFollowUps(run.threadId);
   }
 
   /** Starts a run with what waited for the last one to end (follow-ups, a high notice that came mid-run). */

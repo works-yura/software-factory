@@ -116,7 +116,7 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
     async deleteSession(sessionId) {
       const session = await load(sessionId);
       if (!session) return;
-      session.abort();
+      session.abort('delete');
       sessions.delete(sessionId);
       // Left in the store, the next lookup would load it again: a deleted session would still exist.
       await config.store.delete?.(sessionId);
@@ -124,7 +124,7 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
 
     async releaseSession(sessionId) {
       const session = await load(sessionId);
-      session?.abort();
+      session?.abort('release');
       sessions.delete(sessionId);
       if (!config.store.delete) throw new Error('This Claude Code session store cannot give a session up.');
       await config.store.delete(sessionId);

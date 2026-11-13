@@ -402,7 +402,8 @@
       "rateLimited": "Provider rate limit reached",
       "unavailable": "Model provider temporarily unavailable",
       "modelRequestFailed": "Model request failed",
-      "runStopped": "Run stopped"
+      "runStopped": "Run stopped",
+      "undelivered": "Claude didn’t get your message"
     },
     "messages": {
       "quotaNext": "Check the provider account’s billing or usage allowance, or use another credential or model.",
@@ -415,7 +416,8 @@
       "rateLimited": "Wait a moment, then send a message to continue the run.",
       "unavailable": "The provider could not complete the request. Send a message to continue the run.",
       "noReason": "The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.",
-      "unexpected": "An unexpected error stopped the run. Copy the error details to investigate."
+      "unexpected": "An unexpected error stopped the run. Copy the error details to investigate.",
+      "undelivered": "The run was stopped before Claude read it. The message is kept and goes to Claude with the next one you send."
     },
     "reviewAccounts": "Review {{harness}} accounts",
     "openModelSettings": "Open model settings",

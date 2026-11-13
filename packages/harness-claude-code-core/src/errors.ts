@@ -12,7 +12,9 @@ export type ClaudeCodeErrorKind =
   | 'max_turns'
   | 'timeout'
   | 'process'
-  | 'failed';
+  | 'failed'
+  /** The run was stopped before Claude read a person's message; it waits for the next turn. */
+  | 'undelivered';
 
 export class ClaudeCodeError extends Error {
   readonly kind: ClaudeCodeErrorKind;

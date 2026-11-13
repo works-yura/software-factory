@@ -1815,6 +1815,90 @@ describe('ClaudeCodeSession state', () => {
     expect(session.cwd).toBe(workdir);
   });
 
+  describe('stopped while its removed checkout is set up again', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // 2026-11-13: a person's message to a card session whose checkout was gone waited ~3 min on the
+    // checkout's setup; a stop that came meanwhile ended the run before any `claude -p` started, and the
+    // chat, the log and the board said nothing: the message sat unanswered.
+    async function stoppedDuringSetup() {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const workdir = await mkdtemp(join(tmpdir(), 'claude-cwd-slow-'));
+      const { mkdir } = await import('node:fs/promises');
+      const setupStarted = deferred();
+      const setupDone = deferred();
+      let setups = 0;
+      const cwdFor = vi.fn(async () => {
+        setups += 1;
+        if (setups === 2) {
+          setupStarted.resolve();
+          await setupDone.promise;
+        }
+        await mkdir(workdir, { recursive: true });
+        return workdir;
+      });
+      const context = await setup([COMPLETE, COMPLETE], { cwdFor });
+      let end = nextEnd(context.session);
+      await context.signal('one', 'first');
+      await end;
+      await rm(workdir, { recursive: true, force: true });
+
+      end = nextEnd(context.session);
+      await context.session.sendChatMessage({ content: 'Deposits and catalog: go ahead.' });
+      await setupStarted.promise;
+      return { ...context, info, warn, setupDone, end };
+    }
+
+    it('says in the chat that Claude did not get the message, logs who stopped it, and keeps the message', async () => {
+      const { fake, session, events, store, info, warn, setupDone, end } = await stoppedDuringSetup();
+      const before = events.length;
+      session.abort('chat');
+      expect(await end).toBe('aborted');
+
+      const after = events.slice(before);
+      expect(after.map(event => event.type)).toEqual(['error', 'agent_end']);
+      const failure = (after[0] as Extract<AgentEvent, { type: 'error' }>).error;
+      expect(failure).toBeInstanceOf(ClaudeCodeError);
+      expect(failure).toMatchObject({ kind: 'undelivered' });
+      expect(info).toHaveBeenCalledWith(
+        '[claude-code harness] Run stopped.',
+        expect.objectContaining({ sessionId: 'card-1', source: 'chat', stage: 'setting up, no Claude process yet' }),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        '[claude-code harness] Run stopped before Claude read the message; it waits for the next turn.',
+        expect.objectContaining({ sessionId: 'card-1', messages: 1 }),
+      );
+      expect((await store.get('card-1'))!.threads['thread-1']!.pendingInputs.map(input => input.text)).toEqual([
+        'Deposits and catalog: go ahead.',
+      ]);
+
+      // The setup finishes behind the stop and starts nothing.
+      setupDone.resolve();
+      const next = nextEnd(session);
+      await session.sendChatMessage({ content: 'continue' });
+      expect(await next).toBe('complete');
+      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls[1]!.stdin).toContain('Deposits and catalog: go ahead.');
+      expect(fake.calls[1]!.stdin).toContain('continue');
+    });
+
+    it('says nothing more when a steer stops it: the steer runs the waiting message at once', async () => {
+      const { fake, session, events, setupDone, end } = await stoppedDuringSetup();
+      const before = events.length;
+      const next = end.then(() => nextEnd(session));
+      expect(await session.sendChatMessage({ content: 'and keep it short', delivery: 'steer' })).toEqual({ action: 'wake' });
+      expect(await end).toBe('aborted');
+      setupDone.resolve();
+      expect(await next).toBe('complete');
+      expect(events.slice(before).some(event => event.type === 'error')).toBe(false);
+      expect(fake.calls[1]!.stdin).toContain('Deposits and catalog: go ahead.');
+      expect(fake.calls[1]!.stdin).toContain('and keep it short');
+    });
+  });
+
   it('reports transcript entries with their run and thread, and stops once unsubscribed', async () => {
     const { session, signal } = await setup([COMPLETE, COMPLETE]);
     const metas: Array<{ runId: string; threadId: string }> = [];

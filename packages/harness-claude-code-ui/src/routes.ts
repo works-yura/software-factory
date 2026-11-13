@@ -345,7 +345,8 @@ export class ClaudeSessionUi {
         return c.json({ ok: true });
       }
       case 'POST /abort':
-        session.abort();
+        // The chat's Stop (its button, Escape, `/abort`): named so the harness's log tells it from the host's stops.
+        session.abort('chat');
         return c.json({ ok: true });
       // "Resume now" on a session parked on a usage limit: tried at once; still limited, it stays
       // parked and the answer says until when.
