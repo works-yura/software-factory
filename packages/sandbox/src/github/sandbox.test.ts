@@ -437,6 +437,36 @@ describe('checkoutSessionBranch', () => {
     expect(sandbox.calls.join('\\n')).not.toContain('glpat-secret');
   });
 
+  it('resumes the session branch the remote already has instead of starting it again from the base', async () => {
+    // A removed checkout set up again: the fresh clone sits on the base, while
+    // the session pushed its branch (an open PR) earlier.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/pr-1\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
+
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin factory/pr-1');
+    expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/pr-1 FETCH_HEAD');
+    expect(sandbox.calls).not.toContain('git -C /workspace/repo fetch origin main');
+  });
+
+  it('starts the session branch from the base when the remote does not have it', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
+
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin main');
+    expect(sandbox.calls).not.toContain('git -C /workspace/repo fetch origin factory/pr-1');
+  });
+
   it('keeps the current branch when uncommitted work blocks the switch', async () => {
     // The session's agent switched branches itself (e.g. `gh pr checkout`)
     // and left uncommitted edits; git refuses to switch back over them.

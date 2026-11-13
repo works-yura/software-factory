@@ -822,6 +822,31 @@ async function checkoutSessionBranchImpl(
     return;
   }
 
+  // The session pushed its branch before and this checkout is fresh (a
+  // removed checkout set up again, another host): resume the remote branch
+  // instead of starting a new one from the base and losing its commits.
+  const remoteHeads = await gitTransfer(
+    sandbox,
+    ['-C', workdir, 'ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+    { env: authEnv, timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'session branch probe' },
+  );
+  if (remoteHeads.exitCode !== 0) throw classifyGitFailure(remoteHeads, 'pull-failed');
+  if (remoteHeads.stdout.trim()) {
+    const fetchBranch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', branch], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'session branch fetch',
+    });
+    if (fetchBranch.exitCode !== 0) throw classifyGitFailure(fetchBranch, 'pull-failed');
+    const resume = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'session branch resume',
+    });
+    if (resume.exitCode === 0 || isBlockedByLocalWork(resume)) return;
+    throw classifyGitFailure(resume, 'clone-failed');
+  }
+
   const shallowClone =
     changeRequestSession &&
     (await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--is-shallow-repository'])).stdout.trim() === 'true';
