@@ -93,6 +93,8 @@ export class SandboxSleeper {
   readonly #logger: SandboxSleeperLogger;
   readonly #sizes = new Map<string, { at: number; bytes: number }>();
   #sweeping: Promise<SweepReport> | undefined;
+  readonly #maintain: (() => Promise<void>) | undefined;
+  #maintainedAt = 0;
 
   constructor(options: {
     sandbox: LocalFactorySandbox;
@@ -102,6 +104,8 @@ export class SandboxSleeper {
     graceMs?: number;
     /** Over the limit, only sandboxes idle at least this long sleep, so a busy machine does not churn. */
     minIdleForLimitMs?: number;
+    /** Daily upkeep of the kept refs (the template's `pruneKeptRefsEverywhere`). */
+    maintain?: () => Promise<void>;
     now?: () => number;
     logger?: SandboxSleeperLogger;
   }) {
@@ -111,6 +115,7 @@ export class SandboxSleeper {
     this.#policyFor = options.policyFor ?? (async () => DEFAULT_SLEEP_POLICY);
     this.#graceMs = options.graceMs ?? DEFAULT_SLEEP_GRACE_MS;
     this.#minIdleForLimitMs = options.minIdleForLimitMs ?? DEFAULT_MIN_IDLE_FOR_LIMIT_MS;
+    this.#maintain = options.maintain;
     this.#now = options.now ?? Date.now;
     this.#logger = options.logger ?? consoleLogger;
   }
@@ -242,6 +247,11 @@ export class SandboxSleeper {
 
   async #sweep(): Promise<SweepReport> {
     const report: SweepReport = { slept: [], failed: [], overLimit: [] };
+    // Once a day, kept refs past the retention go, so they never hold a mirror forever.
+    if (this.#maintain && this.#now() - this.#maintainedAt >= 24 * 60 * 60_000) {
+      this.#maintainedAt = this.#now();
+      await this.#maintain().catch(error => this.#logger.warn('kept-ref maintenance failed', { reason: String(error) }));
+    }
     let records = await this.#registry.list();
     await this.#heartbeat(records);
     records = await this.#registry.list();

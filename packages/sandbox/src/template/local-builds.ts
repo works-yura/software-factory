@@ -56,6 +56,8 @@ export interface LocalEnvironmentBuildsOptions {
   pruneIdleMs?: number;
   /** Drops published session work the remote no longer needs (ADR-0039). */
   pruneHiddenRefs?: (input: { cloneUrl: string; authEnv?: Record<string, string>; retentionMs: number }) => Promise<string[]>;
+  /** Drops kept refs (trash, superseded, conflict) past the retention. */
+  pruneKeptRefs?: (input: { cloneUrl: string; retentionMs: number }) => Promise<string[]>;
 }
 
 /** `owner/repo` of a clone URL, for logs and directory names. */
@@ -208,6 +210,7 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
           // Published session work the remote no longer needs goes (the fetch just brought its state).
           const pruned = await this.#options.pruneHiddenRefs?.({ cloneUrl, ...(authEnv ? { authEnv } : {}), retentionMs }).catch(() => []);
           if (pruned?.length) log(`${slug}: dropped published work of ${pruned.join(', ')}`);
+          await this.#options.pruneKeptRefs?.({ cloneUrl, retentionMs }).catch(() => []);
           const head = await ctx.resolveHead?.(cloneUrl, token);
           if (head && !(await cache.hasCommit(cloneUrl, head))) {
             throw new Error(`the pinned commit ${head} is not in the mirror after the fetch`);

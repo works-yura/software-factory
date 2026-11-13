@@ -98,12 +98,8 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
       const oldHead = await resolveIn(checkout, mirror, heads);
       const oldTree = await resolveIn(checkout, mirror, trees);
       let superseded: SessionWorkSaveResult['superseded'];
-      if (oldHead && oldHead !== snapshot.head) {
-        const contained = await runGitIn(checkout.sandbox, mirror, ['merge-base', '--is-ancestor', oldHead, snapshot.head]);
-        // Anything but a clear yes keeps the old commits.
-        if (contained.exitCode !== 0) {
-          superseded = { ref: `refs/factory/wip/superseded/${snapshot.branch}/${this.#now()}`, head: oldHead };
-        }
+      if (oldHead && oldHead !== snapshot.head && (await this.#losesWork(checkout, mirror, oldHead, snapshot.head))) {
+        superseded = { ref: `refs/factory/wip/superseded/${snapshot.branch}/${this.#now()}`, head: oldHead };
       }
       const updates = [
         ...(oldHead === snapshot.head ? [] : [{ ref: heads, next: snapshot.head, old: oldHead }]),
@@ -127,6 +123,27 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
       }
     }
     throw new SessionWorkError('the mirror refs changed under every save attempt');
+  }
+
+  /**
+   * Whether replacing `oldHead` with `newHead` would lose work: a commit of
+   * the old tip that no remote branch holds and whose change (patch-id) the
+   * new tip does not carry. An amend that keeps the change or a rebase is not
+   * a loss; a dropped commit is. When git cannot tell, the old commits are kept.
+   */
+  async #losesWork(checkout: SessionCheckout, mirror: string, oldHead: string, newHead: string): Promise<boolean> {
+    const contained = await runGitIn(checkout.sandbox, mirror, ['merge-base', '--is-ancestor', oldHead, newHead]);
+    if (contained.exitCode === 0) return false;
+    const unpublished = await runGitIn(checkout.sandbox, mirror, ['rev-list', oldHead, '--not', newHead, '--branches']);
+    if (unpublished.exitCode !== 0) return true;
+    const candidates = new Set(unpublished.stdout.split('\n').map(line => line.trim()).filter(Boolean));
+    if (candidates.size === 0) return false;
+    const cherry = await runGitIn(checkout.sandbox, mirror, ['cherry', newHead, oldHead]);
+    if (cherry.exitCode !== 0) return true;
+    return cherry.stdout
+      .split('\n')
+      .map(line => line.trim())
+      .some(line => line.startsWith('+ ') && candidates.has(line.slice(2)));
   }
 
   async load(checkout: SessionCheckout, branch: string): Promise<LoadedSessionWork | undefined> {
@@ -187,7 +204,7 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
 
   /**
    * Move the branch's refs that still hold `expected` to
-   * `refs/factory/trash/<time>/…` (maintenance drops trash after a while):
+   * `refs/factory/trash/<time>/…` (`LocalEnvironmentTemplate.pruneKeptRefs` drops it after the retention):
    * another session's later save of the same branch is left alone, and a
    * mistaken forget can be undone.
    */

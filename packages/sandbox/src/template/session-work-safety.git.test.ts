@@ -89,6 +89,54 @@ describe('session work safety, with real git', () => {
     expect(fx.git(mirror, 'show', `${tree}:keep.txt`)).toBe('keep');
   });
 
+  it('an amend or a rebase that keeps every change sets nothing aside; a dropped commit does', async () => {
+    const { folder, dir } = await freshCheckout();
+    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-31');
+    await fx.commit(dir, 'one.txt', 'one\n', 'one');
+    await fx.commit(dir, 'two.txt', 'two\n', 'two');
+    await template.saveFolder(folder);
+    // Reword the tip: same change, new commit.
+    fx.git(dir, 'commit', '--quiet', '--amend', '-m', 'two, reworded');
+    expect((await template.saveFolder(folder)).saved[0]?.superseded).toBeUndefined();
+    // Rebase onto a newer main: same changes again.
+    await fx.commit(fx.seed, 'main.txt', 'main\n');
+    fx.git(fx.seed, 'push', '--quiet', 'origin', 'main');
+    fx.git(dir, 'fetch', '--quiet', 'origin');
+    fx.git(dir, 'rebase', '--quiet', 'origin/main');
+    expect((await template.saveFolder(folder)).saved[0]?.superseded).toBeUndefined();
+    expect(fx.git(mirror, 'for-each-ref', 'refs/factory/wip/superseded')).toBe('');
+    // Drop `two`: its change is gone from the new tip.
+    fx.git(dir, 'reset', '--quiet', '--hard', 'HEAD~1');
+    expect((await template.saveFolder(folder)).saved[0]?.superseded).toBeTruthy();
+  });
+
+  it('drops kept refs (trash, superseded, conflict) once past the retention, never before', async () => {
+    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const main = fx.git(mirror, 'rev-parse', 'refs/heads/main');
+    const day = 24 * 60 * 60_000;
+    const old = Date.now() - 40 * day;
+    const recent = Date.now() - day;
+    for (const ref of [
+      `refs/factory/trash/${old}/heads/a`,
+      `refs/factory/wip/superseded/b/${old}`,
+      `refs/factory/wip/conflict/c/${old}`,
+      `refs/factory/trash/${recent}/heads/d`,
+      `refs/factory/wip/superseded/e/${recent}`,
+    ]) {
+      fx.git(mirror, 'update-ref', ref, main);
+    }
+    const dropped = await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 30 * day });
+    expect(dropped.sort()).toEqual([`refs/factory/trash/${old}/heads/a`, `refs/factory/wip/conflict/c/${old}`, `refs/factory/wip/superseded/b/${old}`]);
+    expect(fx.git(mirror, 'for-each-ref', '--format=%(refname)', 'refs/factory').split('\n').sort()).toEqual([
+      `refs/factory/trash/${recent}/heads/d`,
+      `refs/factory/wip/superseded/e/${recent}`,
+    ]);
+    // Without session work left, the mirror can be pruned again.
+    await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 0 });
+    expect(await template.repositoryCache.holdsSessionWork(mirror)).toBe(false);
+  });
+
   it('refuses to remove a checkout whose work cannot be named: detached with commits of its own', async () => {
     const { folder, dir } = await freshCheckout();
     fx.git(dir, 'checkout', '--quiet', '--detach');

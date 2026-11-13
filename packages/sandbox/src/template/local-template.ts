@@ -139,6 +139,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
       logger: this.#logger,
       ...(options.pruneIdleMs !== undefined ? { pruneIdleMs: options.pruneIdleMs } : {}),
       pruneHiddenRefs: input => this.pruneHiddenRefs(input),
+      pruneKeptRefs: input => this.pruneKeptRefs(input),
     });
   }
 
@@ -527,6 +528,45 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     }
     if (pruned.length) this.#logger.info('pruned published work the remote no longer needs', { cloneUrl: input.cloneUrl, branches: pruned });
     return pruned;
+  }
+
+  /**
+   * Drop kept refs older than `retentionMs` from a mirror: the trash of
+   * forgotten work, commits set aside as superseded, and uncommitted work that
+   * did not apply. Their time is in their name; younger ones stay, so nothing
+   * goes before the retention passed. Answers the refs dropped.
+   */
+  async pruneKeptRefs(input: { cloneUrl: string; retentionMs: number; now?: number }): Promise<string[]> {
+    const host = this.repositoryCache.host;
+    const mirror = this.repositoryCache.mirrorPath(input.cloneUrl);
+    const now = input.now ?? Date.now();
+    const listed = await runGitIn(host, mirror, [
+      'for-each-ref',
+      '--format=%(refname) %(objectname)',
+      'refs/factory/trash',
+      'refs/factory/wip/superseded',
+      'refs/factory/wip/conflict',
+    ]);
+    if (listed.exitCode !== 0) return [];
+    const dropped: string[] = [];
+    for (const line of listed.stdout.split('\n').map(text => text.trim()).filter(Boolean)) {
+      const [ref, sha] = line.split(' ');
+      if (!ref || !sha) continue;
+      // trash/<time>/…, or wip/superseded|conflict/<branch>/<time>.
+      const time = ref.startsWith('refs/factory/trash/') ? Number(ref.split('/')[3]) : Number(ref.split('/').at(-1));
+      if (!Number.isFinite(time) || now - time < input.retentionMs) continue;
+      if ((await runGitIn(host, mirror, ['update-ref', '-d', ref, sha])).exitCode === 0) dropped.push(ref);
+    }
+    if (dropped.length) this.#logger.info('dropped kept refs past their retention', { mirror, dropped });
+    return dropped;
+  }
+
+  /** Kept refs past the retention in every mirror (the sweep runs it daily). */
+  async pruneKeptRefsEverywhere(retentionMs: number): Promise<void> {
+    for (const mirror of await this.repositoryCache.listMirrors()) {
+      const meta = await this.repositoryCache.readMeta(mirror);
+      if (meta?.cloneUrl) await this.pruneKeptRefs({ cloneUrl: meta.cloneUrl, retentionMs }).catch(() => []);
+    }
   }
 
   /**
