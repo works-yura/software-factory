@@ -72,6 +72,23 @@ describe('session work safety, with real git', () => {
     expect(fx.git(mirror, 'show', `${tree}:a.txt`)).toBe('a');
   });
 
+  it('a run-end save queued as removal starts never runs beside it or after the files go', async () => {
+    const { folder, dir } = await freshCheckout();
+    fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-30');
+    await writeFile(path.join(dir, 'keep.txt'), 'keep\n');
+    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    // Removal starts, and a run ends in the same tick: its save is queued before the removal's own.
+    const removing = template.removeFolder(folder, {
+      remove: async () => {
+        await rm(folder, { recursive: true, force: true });
+      },
+    });
+    const saving = template.saveFolder(folder);
+    await Promise.all([removing, saving]);
+    const tree = fx.git(mirror, 'rev-parse', 'refs/factory/wip/tree/factory/item-30');
+    expect(fx.git(mirror, 'show', `${tree}:keep.txt`)).toBe('keep');
+  });
+
   it('refuses to remove a checkout whose work cannot be named: detached with commits of its own', async () => {
     const { folder, dir } = await freshCheckout();
     fx.git(dir, 'checkout', '--quiet', '--detach');

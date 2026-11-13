@@ -109,7 +109,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   readonly #logger: LocalMirrorLogger;
   readonly #queues = new Map<string, Promise<unknown>>();
   /** Folders (real paths) being put to sleep and removed right now. */
-  readonly #removing = new Set<string>();
+  readonly #removing = new Map<string, number>();
   #repositoryAccess: RepositoryAccessResolver | undefined;
   readonly #isPublicRepository: LocalEnvironmentTemplateOptions['isPublicRepository'];
   /** Told about kept work the person should know of; the host routes it to them. */
@@ -273,7 +273,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
 
   /** True while the folder holding `dir` is being put to sleep and removed: a run-end save then does nothing. */
   #beingRemoved(real: string): boolean {
-    for (const folder of this.#removing) if (real === folder || real.startsWith(folder + path.sep)) return true;
+    for (const folder of this.#removing.keys()) if (real === folder || real.startsWith(folder + path.sep)) return true;
     return false;
   }
 
@@ -414,18 +414,19 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     const real = await this.#real(folder);
     const notices: string[] = [];
     const failures: FolderSaveResult['failures'] = [];
-    const dirs = await this.checkoutsIn(folder);
-    const reals = await Promise.all(dirs.map(dir => this.#real(dir)));
-    // Wait for saves already running on each checkout, then hold them all off.
-    await Promise.all(reals.map(key => this.#serial(key, async () => {})));
-    this.#removing.add(real);
+    // Marked first: a run-end save queued from here on does nothing, whenever it runs.
+    this.#removing.set(real, (this.#removing.get(real) ?? 0) + 1);
     try {
+      const dirs = await this.checkoutsIn(folder);
       for (const dir of dirs) {
-        try {
-          notices.push(...(await this.#sleepCheckout(dir, options)));
-        } catch (error) {
-          failures.push({ dir, error: error instanceof Error ? error.message : String(error) });
-        }
+        // In the checkout's queue: after any save already queued, never beside one.
+        await this.#serial(await this.#real(dir), async () => {
+          try {
+            notices.push(...(await this.#sleepCheckout(dir, options)));
+          } catch (error) {
+            failures.push({ dir, error: error instanceof Error ? error.message : String(error) });
+          }
+        });
       }
       if (failures.length) {
         this.#logger.warn('folder not put to sleep; keeping it', { folder, failures });
@@ -434,7 +435,9 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
       await options.remove();
       return notices;
     } finally {
-      this.#removing.delete(real);
+      const left = (this.#removing.get(real) ?? 1) - 1;
+      if (left > 0) this.#removing.set(real, left);
+      else this.#removing.delete(real);
     }
   }
 
