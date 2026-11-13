@@ -3585,6 +3585,8 @@ export class MastraFactory {
       factoryReady,
       domains,
       feed: commentsDomain,
+      // Workers get it too: a polling GitHub lane receives pushes only through its event worker.
+      ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
       ...(githubIntegration ? { sourceControlOwnerId: 'github' as const } : {}),
     };
     const integrationContext = (integrationId: string) => buildIntegrationContext(integrationContextArgs, integrationId);

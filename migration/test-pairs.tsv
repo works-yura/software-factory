@@ -82,7 +82,7 @@ integrations/issue-reconcile-worker.test.ts	integrations/src/issue-reconcile-wor
 integrations/issue-reconciler.test.ts	server/src/integrations/issue-reconciler.test.ts	-1	Linear reconciler case dropped with the integration
 integrations/platform/api-client.test.ts	integrations/src/platform-api-client.test.ts
 integrations/platform/connect/routes.test.ts	integrations/src/platform-connect-routes.test.ts	-1	Jira/incident.io providers dropped; GitLab connect case merged into the generic one
-integrations/platform/github/event-worker.lifecycle.test.ts	server/src/integrations/platform/github/event-worker.lifecycle.test.ts
+integrations/platform/github/event-worker.lifecycle.test.ts	server/src/integrations/platform/github/event-worker.lifecycle.test.ts	+1	upstream #30135: a push polled by the Platform GitHub worker starts a template build (+1)
 integrations/platform/github/event-worker.test.ts	integration-github/src/platform/event-worker.test.ts
 integrations/platform/github/integration.test.ts	integration-github/src/platform/integration.test.ts	+8	upstream #29472: reinstall recovery skips dead installations (+4); upstream #30032: concurrent mints share one in-flight mint (+2); upstream #30093: GitHub tokens minted ten repositories at a time (+2)
 integrations/platform/gitlab/event-worker.test.ts	integration-gitlab/src/platform/event-worker.test.ts
