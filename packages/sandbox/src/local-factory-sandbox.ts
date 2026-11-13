@@ -1,4 +1,5 @@
-import { lstat, mkdir, rename, rm, stat, symlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { lstat, mkdir, realpath, rename, rm, stat, symlink } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
@@ -109,6 +110,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     this.#options = options;
     this.builds = options.template?.builds;
     const template = options.template;
+    // A crash mid-delete leaves only the trash behind; empty it.
+    void this.emptyTrash();
     if (template) {
       // Saved commits set aside by a save: the person hears it on the folder's record.
       template.onNotice = notice => {
@@ -132,15 +135,28 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
    * follows: gone (or asleep, when the sleeper removes it), and a failed save
    * becomes a problem the person sees, with the folder kept.
    */
-  async #removeFolder(directory: string, options: { publish: boolean; sessionId?: string }): Promise<void> {
-    const remove = () => rm(directory, { recursive: true, force: true });
+  async #removeFolder(
+    directory: string,
+    options: { publish: boolean; sessionId?: string; mayRemove?: () => Promise<boolean> },
+  ): Promise<boolean> {
     const template = this.#options.template;
-    if (!template) return remove();
+    if (!template) {
+      await this.#removeDirectory(directory);
+      return true;
+    }
     const key = this.folderKeyOf(directory);
+    let removed = false;
+    const remove = async () => {
+      // Checked again at the last moment: work may have started while the save ran.
+      if (options.mayRemove && !(await options.mayRemove())) return;
+      await this.#removeDirectory(directory);
+      removed = true;
+    };
     try {
       // Published while no sleeper holds it: the card is closing (its refs may go sooner, ADR-0039).
       const closing = options.publish && Boolean(key) && !this.#sleeping.has(key!);
-      const notices = await template.removeFolder(directory, { ...options, closing, remove });
+      const { mayRemove: _mayRemove, ...rest } = options;
+      const notices = await template.removeFolder(directory, { ...rest, closing, remove });
       if (key && notices.length) {
         await template.sandboxes
           .addProblem(key, { kind: 'public-repository', message: notices.join('\n') }, this.#recordDefaults(key))
@@ -154,7 +170,81 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       }
       throw error;
     }
-    if (key && !this.#sleeping.has(key)) await template.sandboxes.remove(key).catch(() => {});
+    if (removed && key && !this.#sleeping.has(key)) await template.sandboxes.remove(key).catch(() => {});
+    return removed;
+  }
+
+  /** Where folders go to be deleted: renamed there first (atomic), so a crash mid-delete never leaves a half folder in use. */
+  #trash(): string {
+    return join(resolve(this.#options.root), '.trash');
+  }
+
+  async #removeDirectory(directory: string): Promise<void> {
+    const trash = this.#trash();
+    await mkdir(trash, { recursive: true });
+    const away = join(trash, randomUUID());
+    try {
+      await rename(directory, away);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    await rm(away, { recursive: true, force: true });
+  }
+
+  /** Empty the trash a crash left (at start); never touches a folder in use. */
+  async emptyTrash(): Promise<void> {
+    await rm(this.#trash(), { recursive: true, force: true }).catch(() => {});
+  }
+
+  /**
+   * Stop every process whose working directory is in the folder: what a
+   * sandbox's own tracking misses (`nohup`, a harness's background shells)
+   * would keep ports and files. SIGTERM, then SIGKILL after a grace period;
+   * answers what was signalled.
+   */
+  async stopProcessesIn(directory: string, graceMs = 3_000): Promise<number[]> {
+    const host = hostExecutor();
+    const listed = await host.executeCommand('lsof', ['-a', '-d', 'cwd', '-F', 'pn'], { timeout: 30_000 });
+    // lsof names the real path (/private/var/… for /var/…).
+    const folder = await realpath(directory).catch(() => resolve(directory));
+    const pids: number[] = [];
+    let pid: number | undefined;
+    for (const line of listed.stdout.split('\n')) {
+      if (line.startsWith('p')) pid = Number(line.slice(1));
+      else if (line.startsWith('n') && pid && pid !== process.pid) {
+        const cwd = line.slice(1);
+        if (cwd === folder || cwd.startsWith(folder + sep)) pids.push(pid);
+      }
+    }
+    const unique = [...new Set(pids)];
+    const alive = (target: number) => {
+      try {
+        process.kill(target, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (const target of unique) {
+      try {
+        process.kill(target, 'SIGTERM');
+      } catch {
+        // Gone already.
+      }
+    }
+    const deadline = Date.now() + graceMs;
+    while (unique.some(alive) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+    const stubborn = unique.filter(alive);
+    for (const target of stubborn) {
+      try {
+        process.kill(target, 'SIGKILL');
+      } catch {
+        // Gone already.
+      }
+    }
+    if (unique.length) console.warn('[factory:sleep] stopped processes left in a sandbox folder', { directory, pids: unique, killed: stubborn });
+    return unique;
   }
 
   /** The folder key (`<session>` or `work-items/<factory>/<card>`) a path lies in. */
@@ -189,25 +279,24 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
    * are released first and the folder then saved, published and removed. The
    * folder's record stays, asleep. Throws when anything could not be kept.
    */
-  async sleepFolder(key: string, input: { sessionIds: string[]; release: (sessionId: string) => Promise<void> }): Promise<void> {
+  async sleepFolder(
+    key: string,
+    input: { sessionIds: string[]; release: (sessionId: string) => Promise<void>; stillIdle: () => Promise<boolean> },
+  ): Promise<'slept' | 'active'> {
     const template = this.#options.template;
     const directory = this.folderPathOf(key);
     if (!template || !directory) throw new Error(`No sandbox folder for ${key}`);
-    const card = key.startsWith(`${WORK_ITEM_FOLDERS_DIR}/`);
     this.#sleeping.add(key);
     try {
-      if (!card) {
-        const notices = await template.sleepFolder(directory, { publish: true });
-        if (notices.length) {
-          await template.sandboxes.addProblem(key, { kind: 'public-repository', message: notices.join('\n') }, this.#recordDefaults(key)).catch(() => {});
-        }
-      }
+      // Checked right before each irreversible step: a message may have started a run meanwhile.
+      if (!(await input.stillIdle())) return 'active';
+      // Released first, card or session alike: processes stop; a released session's own folder
+      // stays while it sleeps (its removal below is the one that saves, publishes and checks).
       for (const sessionId of input.sessionIds) await input.release(sessionId);
-      const still = await stat(directory).then(
-        () => true,
-        () => false,
-      );
-      if (still) await this.#removeFolder(directory, { publish: card });
+      if (!(await input.stillIdle())) return 'active';
+      await this.stopProcessesIn(directory);
+      const removed = await this.#removeFolder(directory, { publish: true, mayRemove: input.stillIdle });
+      return removed ? 'slept' : 'active';
     } finally {
       this.#sleeping.delete(key);
     }
@@ -251,7 +340,7 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       () => true,
     );
     if (!link) await this.#removeFolder(directory, { publish: false, sessionId });
-    else await rm(directory, { recursive: true, force: true });
+    else await rm(directory, { force: true });
   }
 
   /**
@@ -267,7 +356,6 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       () => false,
     );
     if (present) await this.#removeFolder(directory, { publish: true });
-    else await rm(directory, { recursive: true, force: true });
   }
 
   /** Drop exactly what a deleted session saved (the person discarded it); a later save of the branch by another session stays. */
@@ -336,7 +424,12 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       this.#options.root,
       shared,
       shared ? resolveContainedLocalWorkdir(this.#options.root, ctx.sessionId) : undefined,
-      (directory, sessionId) => this.#removeFolder(directory, { publish: false, sessionId }),
+      async (directory, sessionId) => {
+        // A sleeper releasing this session removes the folder itself, after its last checks.
+        const key = this.folderKeyOf(directory);
+        if (key && this.#sleeping.has(key)) return;
+        await this.#removeFolder(directory, { publish: false, sessionId });
+      },
     );
   }
 }

@@ -31,7 +31,7 @@ export interface SleepChoice {
 export function chooseSandboxesToSleep(
   candidates: readonly SleepCandidate[],
   policy: SleepPolicy,
-  { now, graceMs }: { now: number; graceMs: number },
+  { now, graceMs, minIdleForLimitMs = 0 }: { now: number; graceMs: number; minIdleForLimitMs?: number },
 ): SleepChoice {
   const resting = (candidate: SleepCandidate) => !candidate.active && now - candidate.lastActivityAt >= graceMs;
   const sleep: SleepChoice['sleep'] = [];
@@ -44,7 +44,10 @@ export function chooseSandboxesToSleep(
   }
   let awake = candidates.length - chosen.size;
   const longestIdleFirst = candidates
-    .filter(candidate => !chosen.has(candidate.key) && resting(candidate))
+    .filter(
+      candidate =>
+        !chosen.has(candidate.key) && resting(candidate) && now - candidate.lastActivityAt >= Math.max(graceMs, minIdleForLimitMs),
+    )
     .sort((a, b) => a.lastActivityAt - b.lastActivityAt || a.key.localeCompare(b.key));
   for (const candidate of longestIdleFirst) {
     if (awake <= policy.maxActive) break;

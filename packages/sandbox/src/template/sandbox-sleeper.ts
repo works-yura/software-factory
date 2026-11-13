@@ -22,8 +22,16 @@ import type { SleepPolicy } from './sleep-policy.ts';
 
 /** What the sleeper needs from the host about sessions. */
 export interface SandboxSleeperSessions {
-  /** An agent run is in progress in the session (agent session id). */
+  /**
+   * The session is at work: a run in progress, or a run parked on a person's
+   * answer or an approval (agent session id).
+   */
   isRunning(sessionId: string): boolean;
+  /**
+   * The session's card is mid-pipeline: its run binding is active, so the next
+   * stage may start any moment. Absent: not checked.
+   */
+  hasActiveBinding?(sessionId: string): Promise<boolean>;
   /** Stop the session's sandbox and drop it from memory, keeping the session; its next message sets it up again. */
   release(sessionId: string): Promise<void>;
 }
@@ -70,6 +78,8 @@ const consoleLogger: SandboxSleeperLogger = {
 
 /** Work seen this recently keeps a sandbox awake whatever the policy says. */
 export const DEFAULT_SLEEP_GRACE_MS = 10 * 60_000;
+/** Over the limit, a sandbox idle less than this stays awake. */
+export const DEFAULT_MIN_IDLE_FOR_LIMIT_MS = 30 * 60_000;
 const SIZE_CACHE_MS = 5 * 60_000;
 
 export class SandboxSleeper {
@@ -78,6 +88,7 @@ export class SandboxSleeper {
   readonly #sessions: SandboxSleeperSessions;
   readonly #policyFor: (factoryProjectId: string) => Promise<SleepPolicy>;
   readonly #graceMs: number;
+  readonly #minIdleForLimitMs: number;
   readonly #now: () => number;
   readonly #logger: SandboxSleeperLogger;
   readonly #sizes = new Map<string, { at: number; bytes: number }>();
@@ -89,6 +100,8 @@ export class SandboxSleeper {
     sessions: SandboxSleeperSessions;
     policyFor?: (factoryProjectId: string) => Promise<SleepPolicy>;
     graceMs?: number;
+    /** Over the limit, only sandboxes idle at least this long sleep, so a busy machine does not churn. */
+    minIdleForLimitMs?: number;
     now?: () => number;
     logger?: SandboxSleeperLogger;
   }) {
@@ -97,8 +110,26 @@ export class SandboxSleeper {
     this.#sessions = options.sessions;
     this.#policyFor = options.policyFor ?? (async () => DEFAULT_SLEEP_POLICY);
     this.#graceMs = options.graceMs ?? DEFAULT_SLEEP_GRACE_MS;
+    this.#minIdleForLimitMs = options.minIdleForLimitMs ?? DEFAULT_MIN_IDLE_FOR_LIMIT_MS;
     this.#now = options.now ?? Date.now;
     this.#logger = options.logger ?? consoleLogger;
+  }
+
+  /**
+   * The one rule every decision uses (sweep, list, the manual stop): at work
+   * now, or work seen within the grace period (which carries other
+   * processes' heartbeats and the Files panel's reads), or its card
+   * mid-pipeline.
+   */
+  async #busy(record: SandboxRecord): Promise<boolean> {
+    if (this.#active(record)) return true;
+    if (this.#now() - (Date.parse(record.lastActivityAt) || 0) < this.#graceMs) return true;
+    if (this.#sessions.hasActiveBinding) {
+      for (const sessionId of Object.keys(record.sessions)) {
+        if (await this.#sessions.hasActiveBinding(sessionId).catch(() => true)) return true;
+      }
+    }
+    return false;
   }
 
   /** An agent works in the folder, or a setup for it is under way in this process. */
@@ -135,7 +166,7 @@ export class SandboxSleeper {
       if (record.factoryProjectId !== factoryProjectId) continue;
       const present = await this.#present(record.key);
       if (!present && record.state !== 'asleep') continue;
-      const state: SandboxView['state'] = !present ? 'asleep' : this.#active(record) ? 'active' : 'idle';
+      const state: SandboxView['state'] = !present ? 'asleep' : (await this.#busy(record)) ? 'active' : 'idle';
       const size = present ? await this.#size(record.key) : undefined;
       views.push({
         key: record.key,
@@ -165,12 +196,17 @@ export class SandboxSleeper {
     return withWorkItemFolderLock(key, async () => {
       const current = (await this.#registry.get(key)) ?? record;
       if (!(await this.#present(key))) return { outcome: 'missing' } as const;
-      if (this.#active(current)) return { outcome: 'active' } as const;
+      if (await this.#busy(current)) return { outcome: 'active' } as const;
       try {
-        await this.#sandbox.sleepFolder(key, {
+        const slept = await this.#sandbox.sleepFolder(key, {
           sessionIds: Object.keys(current.sessions),
           release: sessionId => this.#sessions.release(sessionId),
+          stillIdle: async () => !(await this.#busy((await this.#registry.get(key)) ?? current)),
         });
+        if (slept === 'active') {
+          this.#logger.info('sandbox became active while going to sleep; left awake', { key, reason });
+          return { outcome: 'active' } as const;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.#logger.warn('sandbox could not be put to sleep; its folder stays', { key, reason, message });
@@ -224,11 +260,15 @@ export class SandboxSleeper {
         this.#logger.warn('sleep policy could not be read; skipping this Factory', { factoryProjectId, reason: String(error) });
         continue;
       }
-      const choice = chooseSandboxesToSleep(
-        group.map(record => ({ key: record.key, active: this.#active(record), lastActivityAt: Date.parse(record.lastActivityAt) || 0 })),
-        policy,
-        { now: this.#now(), graceMs: this.#graceMs },
-      );
+      const candidates = [];
+      for (const record of group) {
+        candidates.push({ key: record.key, active: await this.#busy(record), lastActivityAt: Date.parse(record.lastActivityAt) || 0 });
+      }
+      const choice = chooseSandboxesToSleep(candidates, policy, {
+        now: this.#now(),
+        graceMs: this.#graceMs,
+        minIdleForLimitMs: this.#minIdleForLimitMs,
+      });
       for (const { key, reason } of choice.sleep) {
         const outcome = await this.sleep(key, reason);
         if (outcome.outcome === 'slept') report.slept.push({ key, reason });

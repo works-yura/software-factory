@@ -4166,15 +4166,19 @@ describe('factory environment sandbox context', () => {
         workspaceRegistry,
       });
       const next = await replacement.resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-      await next!.sandbox!.getInfo!();
+      // The replacement's setup waits for the folder's lock, which the retired boot still holds.
+      const replaced = next!.sandbox!.getInfo!();
+      release();
+      await rejected;
+      await replaced;
+      // The retired boot published nothing; the replacement's state and teardown stand.
+      expect(peekSessionEnvironment('session-a')?.repositories.map(repo => repo.slug)).toEqual(['octocat/hello']);
+      expect(peekSessionEnvironmentTeardown('session-a').map(entry => entry.command)).toEqual(['echo new-teardown']);
+      return;
     }
-    const state = peekSessionEnvironment('session-a');
-    const teardown = peekSessionEnvironmentTeardown('session-a');
     release();
     await rejected;
-    expect(peekSessionEnvironment('session-a')).toBe(state);
-    expect(peekSessionEnvironmentTeardown('session-a')).toEqual(teardown);
-    if (reopen) expect(state?.repositories.map(repo => repo.slug)).toEqual(['octocat/hello']);
+    expect(peekSessionEnvironment('session-a')).toBeUndefined();
   });
 
   it('looks for project skills inside every checkout of an environment session, its own first', async () => {

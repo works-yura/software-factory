@@ -990,7 +990,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // A card's sessions share one checkout: their setups take turns, so a
         // later role finds the clone and markers the first one left instead of
         // cloning beside it.
-        await (folder ? withWorkItemFolderLock(folder.key, async () => guardedSetup(args)) : guardedSetup(args));
+        // A session of its own takes its folder's lock too (its key is the session row id, the
+        // folder's name), so putting the folder to sleep never overlaps a setup (ADR-0039).
+        await withWorkItemFolderLock(folder?.key ?? session.id, async () => guardedSetup(args));
         progress.finish();
       } catch (error) {
         progress.finish(error);

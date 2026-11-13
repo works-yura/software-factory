@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { chmod, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describeFactorySandbox } from '@mastra/core/workspace';
@@ -83,6 +84,7 @@ describe('putting sandboxes to sleep, with real git', () => {
   let sandbox: LocalFactorySandbox;
   let sandboxRoot: string;
   const running = new Set<string>();
+  const startsOnRelease = new Set<string>();
   const released: string[] = [];
   let clock = Date.now();
 
@@ -94,6 +96,8 @@ describe('putting sandboxes to sleep, with real git', () => {
         isRunning: sessionId => running.has(sessionId),
         release: async sessionId => {
           released.push(sessionId);
+          // A message arrives while the sandbox is being released.
+          if (startsOnRelease.has(sessionId)) running.add(sessionId);
           // A released session of its own destroys its sandbox, which removes its folder.
           if (sessionId.startsWith('own-')) await sandbox.create({ sessionId: sessionId.slice(4), getRepositoryAccess: undefined }).destroy();
         },
@@ -136,8 +140,10 @@ describe('putting sandboxes to sleep, with real git', () => {
     sandbox = new LocalFactorySandbox({ root: sandboxRoot, template });
     await template.repositoryCache.refresh({ cloneUrl: fx.origin });
     running.clear();
+    startsOnRelease.clear();
     released.length = 0;
-    clock = Date.now();
+    // Past the grace period of the work the fixtures record, unless a test moves it.
+    clock = Date.now() + 15 * 60_000;
   });
 
   afterEach(async () => {
@@ -244,6 +250,52 @@ describe('putting sandboxes to sleep, with real git', () => {
     const later = Date.now() + 31 * day;
     expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later })).toEqual(['factory/item-12']);
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-11').status).toBe(0);
+  });
+
+  it('a run that starts while a card sandbox goes to sleep keeps it awake: checked again before removal', async () => {
+    const card = await folder('work-items/f/card-20', 'agent-20', 'factory/item-20');
+    startsOnRelease.add('agent-20');
+    expect(await sleeper().sleep('work-items/f/card-20', 'manual')).toEqual({ outcome: 'active' });
+    expect(await exists(card.path)).toBe(true);
+    expect((await template.sandboxes.get('work-items/f/card-20'))?.state).toBe('awake');
+  });
+
+  it('a session of its own is released before anything is published or removed, and a run starting then keeps it', async () => {
+    const own = await folder('row-21', 'own-row-21', 'user/session-21');
+    startsOnRelease.add('own-row-21');
+    expect(await sleeper().sleep('row-21', 'manual')).toEqual({ outcome: 'active' });
+    expect(released).toEqual(['own-row-21']);
+    // Its released sandbox did not take the folder, and nothing went to the remote yet.
+    expect(await exists(own.path)).toBe(true);
+    expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/user/session-21').status).not.toBe(0);
+  });
+
+  it('stops processes left in the folder (nohup, background shells) before removing it', async () => {
+    const card = await folder('work-items/f/card-22', 'agent-22', 'factory/item-22');
+    const stray = spawn('sleep', ['60'], { cwd: card.dir, detached: true, stdio: 'ignore' });
+    stray.unref();
+    const alive = () => {
+      try {
+        process.kill(stray.pid!, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    expect(alive()).toBe(true);
+    expect(await sleeper().sleep('work-items/f/card-22', 'manual')).toEqual({ outcome: 'slept' });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(alive()).toBe(false);
+  });
+
+  it('deletes a folder through the trash, so a crash mid-delete never leaves a half folder in use; the trash empties on start', async () => {
+    const card = await folder('work-items/f/card-23', 'agent-23', 'factory/item-23');
+    await sandbox.removeWorkItemFolder('work-items/f/card-23');
+    expect(await exists(card.path)).toBe(false);
+    // What a crash mid-delete leaves: a renamed folder in the trash, not the half folder at its path.
+    await mkdir(path.join(sandboxRoot, '.trash', 'crashed', 'repo'), { recursive: true });
+    await new LocalFactorySandbox({ root: sandboxRoot, template }).emptyTrash();
+    expect(await exists(path.join(sandboxRoot, '.trash'))).toBe(false);
   });
 
   it('offers the limits as Factory settings with their defaults', () => {
