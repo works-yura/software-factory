@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mastra/core": "1.82.0"
+    "@mastra/core": "1.83.0"
   },
   "devDependencies": {
     "@types/node": "22.20.1",

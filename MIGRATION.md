@@ -368,6 +368,15 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | Типи в `apps/ui` | `paths` для `react`, `react-dom` і `class-variance-authority` в `apps/ui/src/ui/tsconfig.json` прибрано: `.d.ts` пакета тепер лежать у воркспейсі й бачать власні `node_modules` |
 | Правки типів | лише для версій, які закріплює воркспейс: `flame-graph`, `chart-frame`, `workflow-data-edge`, `field-wrapper`, `collapsible-panel`, `use-workflow-graph-runtime` (без зміни поведінки) |
 
+## Оновлення Mastra до 1.83
+
+`@mastra/core`, `@mastra/server` 1.82.0 → 1.83.0, `@mastra/pg` 1.35.0 → 1.36.0, `@mastra/libsql` 1.29.0 → 1.30.0, `@mastra/memory` 1.41.0 → 1.41.1, `@mastra/code-sdk` 1.18.0 → 1.19.0, `@mastra/client-js` 1.59.0 → 1.60.0, `@mastra/mcp` 2.8.0 → 2.9.0, `@mastra/react` 1.14.1 → 1.15.0, `@mastra/ai-sdk` 1.11.3 → 1.12.0, `@mastra/schema-compat` 1.3.17 → 1.4.0, `@mastra/hono` 1.7.24 → 1.7.25, `@mastra/redis-streams` 0.8.0 → 0.8.1, CLI `mastra` 1.38.0 → 1.39.0 (`agent-browser` 0.6.0 без змін). Реліз — upstream `055a8c3b82` («version packages», 2026-11-12). pnpm-патчів нема (прибрані при оновленні до 1.82), перевіряти нічого. Пакети молодші за `minimumReleaseAge` pnpm, тож `pnpm install` дописав їх у `minimumReleaseAgeExclude` у `pnpm-workspace.yaml`.
+
+| Що | Як |
+| --- | --- |
+| Відкладені фікси бібліотеки | тепер приходять з npm: `@mastra/core` — `49e71082bd`, `b621401159`, `d0cc2fdc13`, `708262393a`, `a169a8014c`, `b0ef22e7bf`; `@mastra/pg` — `3b27a10322`, `562a451e22`; `@mastra/server` — `9027829db3`, `8896651bd1`; `@mastra/code-sdk` — `067314bcb3` (див. «Не перенесено з upstream після ab40f6ee5d») |
+| Розклади без cron | core 1.83 додав одноразові розклади (`b0ef22e7bf`), `schedule.cron` став необов'язковим; `harness-mastra/src/environment/build-schedule.ts` віддає `cron: null` — це upstream `9efd1ea8df` (#30098), перенесено в цьому ж коміті, бо без нього не проходить typecheck |
+
 ## Оновлення Mastra до 1.82
 
 `@mastra/core`, `@mastra/server` і `@mastra/deployer` 1.79.0 → 1.82.0, `@mastra/mcp` 2.5.0 → 2.8.0, решта `@mastra/*` — на версії, що їх тягне core 1.82.0 (`code-sdk` 1.18.0, `client-js` 1.59.0, `react` 1.14.1, `libsql` 1.29.0, `pg` 1.35.0, `memory` 1.41.0, `hono` 1.7.24, `ai-sdk` 1.11.3, `schema-compat` 1.3.17, `redis-streams` 0.8.0, `agent-browser` 0.6.0, CLI `mastra` 1.38.0). Тека `patches/` і `patchedDependencies` у `pnpm-workspace.yaml` прибрані — усі чотири патчі тепер є в upstream або обійдені:
