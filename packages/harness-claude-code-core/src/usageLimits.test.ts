@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 
 import type { AgentEvent } from '@factory/harness';
 
@@ -6,6 +10,9 @@ import { fakeClaude, fixture } from './__fixtures__/fake-claude.ts';
 import { createClaudeCodeHarness } from './harness.ts';
 import { createInMemorySessionStore } from './store.ts';
 import { claudeOAuthUsageToLimits, claudeRateLimitWindows } from './usageLimits.ts';
+
+/** A real directory: a turn checks its recorded cwd is still on disk. */
+const WORKDIR = await mkdtemp(join(tmpdir(), 'claude-cwd-'));
 
 const RESET = 1_793_000_000;
 const checkedAt = '2026-11-11T18:00:00.000Z';
@@ -147,7 +154,7 @@ describe('ClaudeCodeSession usage limits', () => {
       store: createInMemorySessionStore(),
       spawn: fake.spawn,
       credentials: async () => ({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'token' }, accountId: 'acc-1' }),
-      cwdFor: () => '/work/card-1',
+      cwdFor: () => WORKDIR,
       env: { PATH: '/usr/bin' },
     });
     const session = await harness.createSession({ sessionId: 'card-1', threadId: 'thread-1', resourceId: 'fp-1' });

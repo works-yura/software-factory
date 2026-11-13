@@ -20,6 +20,9 @@ import { ACCOUNT_SWITCH_PROMPT, MAX_ACCOUNT_SWITCHES, MESSAGE_AUTHOR_KEY, writeM
 import type { ClaudeCodeSession, ClaudeCredentialFailure, ClaudeCredentialRequest } from './session.ts';
 import { createInMemorySessionStore, emptyThreadState, type ClaudeSessionStore, type ClaudeThreadState } from './store.ts';
 
+/** A real directory: a turn checks its recorded cwd is still on disk. */
+const WORKDIR = await mkdtemp(join(tmpdir(), 'claude-cwd-'));
+
 const CLAUDE_SESSION = '9f0c1a52-6b1e-4d6a-9a43-2f3b8f0e7c11';
 
 async function setup(turns: FakeTurn[], overrides: Partial<ClaudeCodeHarnessConfig> & { store?: ClaudeSessionStore } = {}) {
@@ -29,7 +32,7 @@ async function setup(turns: FakeTurn[], overrides: Partial<ClaudeCodeHarnessConf
     store,
     spawn: fake.spawn,
     credentials: async session => ({ ANTHROPIC_API_KEY: `sk-for-${session.id}` }),
-    cwdFor: () => '/work/card-1',
+    cwdFor: () => WORKDIR,
     env: { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'server-key', CLAUDECODE: '1' },
     ...overrides,
   });
@@ -101,7 +104,7 @@ describe('ClaudeCodeSession', () => {
     expect(call!.args.slice(0, 6)).toEqual(['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose']);
     expect(call!.args).not.toContain('--resume');
     expect(call!.stdin).toBe('Update the README.');
-    expect(call!.cwd).toBe('/work/card-1');
+    expect(call!.cwd).toBe(WORKDIR);
 
     expect(events.map(event => event.type)).toEqual(['usage_update', 'usage_update', 'agent_end']);
     expect(transcript.map(entry => entry.kind)).toEqual(['input', 'init', 'thinking', 'tool_call', 'tool_result', 'text', 'result']);
@@ -681,7 +684,7 @@ describe('ClaudeCodeSession', () => {
         store,
         spawn: fakeClaude([]).spawn,
         credentials: async () => ({}),
-        cwdFor: () => '/work/card-1',
+        cwdFor: () => WORKDIR,
       });
       const session = await restarted.getSession('card-1');
       expect(session?.suspensions.hasPending()).toBe(true);
@@ -1539,7 +1542,7 @@ async function restored(
     sessionId: 'card-1',
     threadId: 'thread-1',
     resourceId: 'fp-1',
-    cwd: '/work/card-1',
+    cwd: WORKDIR,
     threads: { 'thread-1': { ...emptyThreadState(), claudeSessionId: CLAUDE_SESSION, ...thread } },
     updatedAt: '2026-10-01T00:00:00.000Z',
   });
@@ -1749,7 +1752,7 @@ describe('ClaudeCodeSession notifications', () => {
 describe('ClaudeCodeSession state', () => {
   it('names its thread and run, fixes its cwd once, and switches threads only between runs', async () => {
     const hold = deferred();
-    const cwdFor = vi.fn(() => '/work/card-1');
+    const cwdFor = vi.fn(() => WORKDIR);
     const { session, signal, store } = await setup([{ lines: fixture('turn-complete.jsonl'), holdAt: 5, hold: hold.promise }, COMPLETE], {
       cwdFor,
     });
@@ -1764,7 +1767,7 @@ describe('ClaudeCodeSession state', () => {
     await expect(session.thread.switch({ threadId: 'thread-2' })).rejects.toThrow('Cannot switch threads while a run is in flight.');
     hold.resolve();
     await end;
-    expect(session.cwd).toBe('/work/card-1');
+    expect(session.cwd).toBe(WORKDIR);
 
     end = nextEnd(session);
     await signal('two', 'second');
@@ -1773,6 +1776,43 @@ describe('ClaudeCodeSession state', () => {
 
     await session.thread.switch({ threadId: 'thread-2' });
     expect((await store.get('card-1'))!.threads['thread-2']).toEqual({ settings: {}, pendingInputs: [], deliveredIds: [], dedupeKeys: [] });
+  });
+
+  it('sets the checkout up again at the same path when it was removed from disk between turns', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'claude-cwd-gone-'));
+    const { mkdir } = await import('node:fs/promises');
+    const cwdFor = vi.fn(async () => {
+      await mkdir(workdir, { recursive: true });
+      return workdir;
+    });
+    const { session, signal } = await setup([COMPLETE, COMPLETE], { cwdFor });
+
+    let end = nextEnd(session);
+    await signal('one', 'first');
+    await end;
+    await rm(workdir, { recursive: true, force: true });
+
+    end = nextEnd(session);
+    await signal('two', 'second');
+    expect(await end).toBe('complete');
+    expect(cwdFor).toHaveBeenCalledTimes(2);
+    expect(session.cwd).toBe(workdir);
+    expect(existsSync(workdir)).toBe(true);
+  });
+
+  it('refuses a removed checkout that comes back somewhere else', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'claude-cwd-moved-'));
+    const elsewhere = await mkdtemp(join(tmpdir(), 'claude-cwd-elsewhere-'));
+    const cwdFor = vi.fn<() => Promise<string>>().mockResolvedValueOnce(workdir).mockResolvedValue(elsewhere);
+    const { session, signal } = await setup([COMPLETE, COMPLETE], { cwdFor });
+
+    const end = nextEnd(session);
+    await signal('one', 'first');
+    await end;
+    await rm(workdir, { recursive: true, force: true });
+
+    await expect(signal('two', 'second')).rejects.toThrow(`is gone from ${workdir}`);
+    expect(session.cwd).toBe(workdir);
   });
 
   it('reports transcript entries with their run and thread, and stops once unsubscribed', async () => {
@@ -2916,7 +2956,7 @@ describe('ClaudeCodeSession usage-limit park', () => {
       store,
       spawn: fake.spawn,
       credentials: limitedPool({ at: resetsAt }),
-      cwdFor: () => '/work/card-1',
+      cwdFor: () => WORKDIR,
       parkOnUsageLimit: () => true,
     });
     const session = (await harness.getSession('card-1'))!;

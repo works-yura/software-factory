@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -1425,7 +1425,24 @@ export class ClaudeCodeSession implements AgentSession {
   }
 
   async #cwd(): Promise<string> {
-    if (this.#record.cwd) return this.#record.cwd;
+    const recorded = this.#record.cwd;
+    if (recorded) {
+      if (await directoryExists(recorded)) return recorded;
+      // The checkout was removed from disk (a retired sandbox, a cleaned folder): asking for the cwd
+      // again sets it up anew. It must come back at the same path, since the CLI files the session's
+      // transcripts by project directory; anywhere else is refused rather than silently moved.
+      const restored = await this.#config.cwdFor(this.id);
+      if (restored !== recorded) {
+        throw new ClaudeCodeError(
+          'process',
+          `The checkout of session ${this.id} is gone from ${recorded}, and setting it up again put it at ${restored}.`,
+        );
+      }
+      if (!(await directoryExists(restored))) {
+        throw new ClaudeCodeError('process', `The checkout of session ${this.id} is gone from ${recorded} and could not be set up again.`);
+      }
+      return recorded;
+    }
     this.#record.cwd = await this.#config.cwdFor(this.id);
     await this.#save();
     return this.#record.cwd;
@@ -1860,4 +1877,13 @@ export async function writeMcpConfigFile(
     servers: Object.keys(servers),
     cleanup: () => rm(folder, { recursive: true, force: true }).catch(() => {}),
   };
+}
+
+/** Whether `path` is a directory on this host's disk. */
+async function directoryExists(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
 }
