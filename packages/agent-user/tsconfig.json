@@ -1,4 +1,8 @@
 {
   "extends": "../../tsconfig.node.json",
-  "include": ["src/**/*.ts", "vitest.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "bin/**/*.ts",
+    "vitest.config.ts"
+  ]
 }
