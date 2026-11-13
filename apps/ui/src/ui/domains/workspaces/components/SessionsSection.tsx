@@ -38,6 +38,7 @@ import { SidebarNewSessionButton } from './SidebarNewSessionButton';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { useTranslation } from 'react-i18next';
 import { i18n } from '../../../i18n';
+import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 
 export function SessionsSection() {
   const { t } = useTranslation('nav');
@@ -189,20 +190,12 @@ export function SessionsSection() {
       </div>
 
       {loadFailed && (
-        <div className="flex items-center gap-2 px-2 py-1">
-          <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
-            Couldn’t load sessions
-          </Txt>
-          <Button variant="ghost" size="sm" onClick={retry}>
-            Retry
-          </Button>
-        </div>
+        // Sessions has always reported a failed load without an alert; sharing the row doesn't change that.
+        <SidebarLoadError onRetry={retry} announce={false}>
+          Couldn’t load sessions
+        </SidebarLoadError>
       )}
-      {loaded && emptyMessage !== undefined && (
-        <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
-          {emptyMessage}
-        </Txt>
-      )}
+      {loaded && emptyMessage !== undefined && <SidebarEmptyNote>{emptyMessage}</SidebarEmptyNote>}
 
       {deletion.pendingConfirmation && (
         <DeleteSessionDialog

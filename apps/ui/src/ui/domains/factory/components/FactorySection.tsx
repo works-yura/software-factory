@@ -14,6 +14,7 @@ import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { boardTitle } from '../../../i18n/boardLabels';
 import { useTranslation } from 'react-i18next';
+import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -79,9 +80,15 @@ export function FactorySection() {
           {catalog.isPending ? (
             <li role="status">{t('loadingBoards')}</li>
           ) : catalog.isError ? (
-            <li role="alert">{t('boardsError')}</li>
+            <li>
+              <SidebarLoadError onRetry={() => void catalog.refetch()} retrying={catalog.isFetching}>
+                {t('boardsError')}
+              </SidebarLoadError>
+            </li>
           ) : catalog.data.length === 0 ? (
-            <li>{t('noBoards')}</li>
+            <li>
+              <SidebarEmptyNote>{t('noBoards')}</SidebarEmptyNote>
+            </li>
           ) : (
             boards.map(board => (
               <FactoryLink

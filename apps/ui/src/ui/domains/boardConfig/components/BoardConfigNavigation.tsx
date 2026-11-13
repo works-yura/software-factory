@@ -21,6 +21,7 @@ import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
 import { boardTitle } from '../../../i18n/boardLabels';
 import { translator } from '../../../i18n/t';
+import { SidebarLoadError } from '../../../ui/LoadErrorState';
 
 const tk = translator('boardConfig');
 
@@ -55,7 +56,9 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills }: 
         {query.isPending ? (
           <SkeletonRows label={tk('nav.loadingPhases')} rows={4} />
         ) : query.isError ? (
-          <p role="alert">{tk('nav.phasesError')}</p>
+          <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
+            {tk('nav.phasesError')}
+          </SidebarLoadError>
         ) : (
           <PhaseList
             factoryId={factoryId}

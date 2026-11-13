@@ -10,6 +10,7 @@ import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardContent } from './board/BoardContent';
 import { translator } from '../i18n/t';
+import { LoadErrorState } from '../ui/LoadErrorState';
 
 const tk = translator('board');
 
@@ -51,7 +52,14 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
     );
   }
   if (catalog.isError) {
-    return <EmptyState variant="fill" titleSlot={<span role="alert">{tk('landing.loadFailed')}</span>} />;
+    return (
+      <LoadErrorState
+        title={tk('landing.loadFailed')}
+        error={catalog.error}
+        onRetry={() => void catalog.refetch()}
+        retrying={catalog.isFetching}
+      />
+    );
   }
   const definition = catalog.data.find(board => board.id === kind);
   if (!definition) {

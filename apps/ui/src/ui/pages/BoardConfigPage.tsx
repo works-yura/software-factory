@@ -17,6 +17,7 @@ import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfig
 import { boardPath } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { SkeletonRows } from '../ui/SkeletonRows';
+import { LoadErrorState } from '../ui/LoadErrorState';
 import { translator } from '../i18n/t';
 
 const tk = translator('boardConfig');
@@ -86,16 +87,17 @@ export function BoardConfigPage() {
           <SettingsContainer>
             <SkeletonRows label={tk('page.loadingBoard')} rows={3} />
           </SettingsContainer>
-        ) : query.isError ? (
+        ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
           <EmptyState
             variant="fill"
-            titleSlot={
-              <span role="alert">
-                {query.error instanceof BoardRequestError && query.error.code === 'board_not_found'
-                  ? tk('page.notInstalled')
-                  : tk('page.loadError')}
-              </span>
-            }
+            titleSlot={<span role="alert">{tk('page.notInstalled')}</span>}
+          />
+        ) : query.isError ? (
+          <LoadErrorState
+            title={tk('page.loadError')}
+            error={query.error}
+            onRetry={() => void query.refetch()}
+            retrying={query.isFetching}
           />
         ) : (
           <BoardConfigEditor

@@ -21,5 +21,17 @@
   "harnessUnavailable": {
     "executableMissing": "{{name}} isn’t installed on this server.",
     "connectionMissing": "You have no {{name}} account connected."
+  },
+  "loadError": {
+    "unreachable": "The server could not be reached. Check your connection and try again.",
+    "sessionExpired": "Your session expired. Sign in again to continue.",
+    "forbidden": "You don’t have access to this factory.",
+    "notFound": "This factory isn’t in your organization. It may have been deleted.",
+    "rateLimited": "Too many requests. Wait a moment and try again.",
+    "serverError": "The server returned an error. Try again in a moment.",
+    "signIn": "Sign in",
+    "retry": "Try again",
+    "retrying": "Trying again…",
+    "retryShort": "Retry"
   }
 }
