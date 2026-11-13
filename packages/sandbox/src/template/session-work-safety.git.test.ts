@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LocalFactorySandbox } from '../local-factory-sandbox.ts';
 import { ENV_FILES_MANIFEST } from '../sandbox-env-files.ts';
 import { withFileLock } from './file-lock.ts';
-import { LocalEnvironmentTemplate, SessionWorkNotSavedError } from './local-template.ts';
+import { hostExecutor } from './host-exec.ts';
+import { LocalEnvironmentTemplate, probeRepositoryVisibility, SessionWorkNotSavedError } from './local-template.ts';
 import { gitFixture } from './test-git.ts';
 import type { GitFixture } from './test-git.ts';
 
@@ -259,6 +260,48 @@ describe('session work safety, with real git', () => {
     await sandbox.saveSessionWork(one.dir);
     for (const url of [fx.origin, second]) {
       expect(fx.tryGit(template.repositoryCache.mirrorPath(url), 'rev-parse', '--verify', 'refs/factory/wip/tree/factory/item-6').status).toBe(0);
+    }
+  });
+});
+
+describe('repository visibility for publishing, with real git', () => {
+  const PRIVATE_URL = 'https://example.invalid/acme/private.git';
+
+  it('the default probe never trusts the host git config: a rewrite or helper cannot make a private repository look public', async () => {
+    const fx = await gitFixture('factory-visibility-');
+    try {
+      // The host's own git maps the private URL onto a repository it can read.
+      const config = path.join(fx.root, 'host-gitconfig');
+      await writeFile(config, `[url "${fx.origin}"]\n\tinsteadOf = ${PRIVATE_URL}\n[credential]\n\thelper = store\n`);
+      const host = hostExecutor({ env: { ...fx.env, GIT_CONFIG_GLOBAL: config } });
+      expect(await probeRepositoryVisibility(host, PRIVATE_URL)).toBe('unknown');
+      // A repository readable with no configuration at all is public.
+      expect(await probeRepositoryVisibility(host, fx.origin)).toBe('public');
+
+      // Unknown: the commits are published, uncommitted work is not, and the person hears why.
+      const template = new LocalEnvironmentTemplate({ root: path.join(fx.root, 'template'), env: { ...fx.env, GIT_CONFIG_GLOBAL: config }, logger: silent, freshnessMs: 0 });
+      template.setRepositoryAccess(async () => ({ cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer', token: 't' } }));
+      await template.repositoryCache.refresh({ cloneUrl: PRIVATE_URL });
+      const folder = path.join(fx.root, 'sandboxes', 'card');
+      const dir = path.join(folder, 'repo');
+      await mkdir(dir, { recursive: true });
+      expect((await template.repositoryCache.checkout(host, { cloneUrl: PRIVATE_URL }, { workdir: dir, branch: 'main' })).source).toBe('mirror');
+      fx.git(dir, 'config', 'factory.orgId', 'org-1');
+      fx.git(dir, 'config', 'factory.repositoryId', 'repo-1');
+      fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-40');
+      const head = await fx.commit(dir, 'forty.txt', '40\n');
+      await writeFile(path.join(dir, 'draft.txt'), 'draft\n');
+      const notices = await template.sleepFolder(folder, { publish: true });
+      expect(notices.join('\n')).toMatch(/visibility unknown/);
+      expect(fx.git(fx.origin, 'rev-parse', 'refs/factory/wip/heads/factory/item-40')).toBe(head);
+      expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/tree/factory/item-40').status).not.toBe(0);
+
+      // The integration's answer wins over the probe: private means everything is published.
+      template.setRepositoryVisibility(async () => 'private');
+      await template.sleepFolder(folder, { publish: true });
+      expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/tree/factory/item-40').status).toBe(0);
+    } finally {
+      await rm(fx.root, { recursive: true, force: true });
     }
   });
 });

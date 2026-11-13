@@ -482,6 +482,8 @@ export interface SessionFsDeps {
   /** Resolves the memory resource a session runs on, so a session still on its owner's memory stays the owner's. */
   controller?: SessionThreadLookup;
   workItems?: SessionRunBindings;
+  /** Told when a person reads a session's files: its sandbox counts as in use (it does not go to sleep, ADR-0039). */
+  onAccess?: (session: SourceControlSession) => void;
 }
 
 /**
@@ -515,6 +517,11 @@ async function resolveAuthorizedSession(
     if (!canReadSessionResource(session, resourceId, tenant)) {
       throw new Error('Session is not available to the current user');
     }
+  }
+  try {
+    deps.onAccess?.(session);
+  } catch {
+    // Marking the sandbox in use never fails a read.
   }
   return session;
 }

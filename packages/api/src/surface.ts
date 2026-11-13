@@ -197,6 +197,8 @@ export interface FactoryApiRoutesDeps {
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** With a local sandbox: attaches a session's checkout on disk without starting it (file panels, sandbox start). */
   attachLocalCheckout?: LocalCheckoutAttacher;
+  /** A person read a session's files (Files panel): its sandbox counts as in use (ADR-0039). */
+  onSessionFilesAccess?: (session: import('@factory/store').SourceControlSession) => void;
   /** With a local sandbox: sets a Claude Code or Codex session's checkout up when none is on disk (sandbox start). */
   createLocalCheckout?: LocalCheckoutAttacher;
   /** Providers the operator opted in to run on the server process's own credentials. */
@@ -975,6 +977,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         auth: deps.auth,
         sessions: sourceControlSessions,
         ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
+        ...(deps.onSessionFilesAccess ? { onAccess: deps.onSessionFilesAccess } : {}),
         controller: deps.controller,
         ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
       },

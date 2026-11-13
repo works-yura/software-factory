@@ -209,7 +209,16 @@ import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox, LocalFactorySandbox, workItemFolderKey } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
-import { CachedSandboxEnvs, peekSessionSandbox, SandboxSleeper, SessionRetirementCoordinator, settleSessionNotes, sleepPolicyOf } from '@factory/sandbox';
+import {
+  CachedSandboxEnvs,
+  hiddenRefRetentionMsOf,
+  peekSessionSandbox,
+  SandboxSleeper,
+  SessionRetirementCoordinator,
+  settleSessionNotes,
+  sleepPolicyOf,
+} from '@factory/sandbox';
+import { githubRepositoryVisibility } from './repository-visibility.ts';
 
 /** How often idle local sandboxes are looked for (ADR-0039); the grace period is twice this. */
 const SANDBOX_SWEEP_INTERVAL_MS = 5 * 60_000;
@@ -1374,7 +1383,7 @@ export class MastraFactory {
     // A Product session reads a sibling card's unmerged change from that card's folder on this machine.
     const localSandbox = sandboxConfig instanceof LocalFactorySandbox ? sandboxConfig : undefined;
     // Putting a closing card's work on the remote's hidden refs needs that repository's credentials.
-    localSandbox?.environmentTemplate?.setRepositoryAccess(async owner => {
+    const repositoryAccessOf = async (owner: { orgId: string; repositoryId: string }) => {
       let lastError: unknown;
       for (const integration of integrations) {
         if (!integration.versionControl) continue;
@@ -1385,7 +1394,12 @@ export class MastraFactory {
         }
       }
       throw lastError instanceof Error ? lastError : new Error('No source-control integration knows this repository.');
-    });
+    };
+    localSandbox?.environmentTemplate?.setRepositoryAccess(repositoryAccessOf);
+    // Whether a repository is public comes from its host's API, never from this machine's git setup (H2).
+    localSandbox?.environmentTemplate?.setRepositoryVisibility(async owner =>
+      githubRepositoryVisibility(await repositoryAccessOf(owner)),
+    );
     const productCardFolderPath = localSandbox
       ? ({ factoryProjectId, branch }: { factoryProjectId: string; branch: string }) =>
           localSandbox.workItemFolderPath(workItemFolderKey(factoryProjectId, branch))
@@ -1426,7 +1440,26 @@ export class MastraFactory {
             sandbox: localSandbox,
             registry: sandboxTemplate.sandboxes,
             sessions: {
-              isRunning: sessionId => liveSessionRegistry?.isRunning(sessionId) ?? true,
+              // At work: running, or parked on a person's answer or an approval (M5).
+              isRunning: sessionId =>
+                liveSessionRegistry
+                  ? liveSessionRegistry.isRunning(sessionId) || liveSessionRegistry.parked(sessionId) !== undefined
+                  : true,
+              // A card mid-pipeline keeps its run binding active between stages.
+              ...(workItemsReady
+                ? {
+                    hasActiveBinding: async (sessionId: string) => {
+                      const row = await sourceControlSessions.getBySessionId(sessionId);
+                      if (!row?.factoryProjectId) return false;
+                      const binding = await workItemsStorage.findActiveRunBindingForSession({
+                        orgId: row.orgId,
+                        factoryProjectId: row.factoryProjectId,
+                        sessionId,
+                      });
+                      return Boolean(binding);
+                    },
+                  }
+                : {}),
               release: async sessionId => {
                 const [sourceControl, row] = await Promise.all([
                   sourceControlSessions.getSourceControlBySessionId(sessionId),
@@ -1438,6 +1471,7 @@ export class MastraFactory {
             },
             policyFor: async factoryProjectId =>
               sleepPolicyOf((await factoryProjectsStorage.getById({ id: factoryProjectId }))?.sandboxSettings),
+            maintain: () => sandboxTemplate.pruneKeptRefsEverywhere(hiddenRefRetentionMsOf({})),
           })
         : undefined;
     this.#sandboxSleeper = sandboxSleeper;
@@ -1453,6 +1487,14 @@ export class MastraFactory {
         orgId: row.orgId,
         ...(row.factoryProjectId ? { factoryProjectId: row.factoryProjectId } : {}),
       });
+    };
+    // Browsing a session's files keeps its sandbox awake; marked at most once a minute per session.
+    const accessTouchedAt = new Map<string, number>();
+    const touchSandboxOnAccess = (sessionId: string) => {
+      const now = Date.now();
+      if (now - (accessTouchedAt.get(sessionId) ?? 0) < 60_000) return;
+      accessTouchedAt.set(sessionId, now);
+      void touchSandboxOf(sessionId).catch(() => {});
     };
     this.#watchSandboxActivity = () =>
       liveSessionRegistry?.onRunChanged(session => {
@@ -3171,6 +3213,7 @@ export class MastraFactory {
             controller,
             liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, sourceControlSessions, controller, claudeLiveSessions)),
             ...(sandboxProblems ? { sandboxProblems } : {}),
+            ...(sandboxTemplate ? { onSessionFilesAccess: (session: { sessionId: string }) => touchSandboxOnAccess(session.sessionId) } : {}),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,

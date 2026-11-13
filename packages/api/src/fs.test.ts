@@ -755,6 +755,25 @@ describe('live session file tree', () => {
     expect(ensureUser).toHaveBeenCalledTimes(5);
   });
 
+  it('marks the session’s sandbox in use when its files are read, never for a caller refused', async () => {
+    await seedHostCheckouts();
+    const { deps } = makeSessionFs();
+    const onAccess = vi.fn();
+    const tree = await requestSessionRoute('/web/workspace/tree', { ...deps, onAccess } as never);
+    expect((await tree(`?workspacePath=${makeSession().sessionId}&path=src`)).status).toBe(200);
+    expect(onAccess).toHaveBeenCalledWith(expect.objectContaining({ sessionId: makeSession().sessionId }));
+
+    const refused = makeSessionFs({ session: makeSession({ visibility: 'private', userId: 'someone-else' }) });
+    const otherAccess = vi.fn();
+    const blocked = await requestSessionRoute('/web/workspace/tree', {
+      ...refused.deps,
+      auth: { ...refused.deps.auth, tenant: () => ({ orgId: makeSession().orgId, userId: 'me' }) },
+      onAccess: otherAccess,
+    } as never);
+    await blocked(`?workspacePath=${makeSession().sessionId}&path=src`);
+    expect(otherAccess).not.toHaveBeenCalled();
+  });
+
   it("refuses another user's private session before touching its sandbox", async () => {
     const { executeCommand } = await seedHostCheckouts();
     const { deps } = makeSessionFs({ session: makeSession({ visibility: 'private' }) });

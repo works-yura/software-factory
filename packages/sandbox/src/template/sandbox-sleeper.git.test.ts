@@ -58,6 +58,19 @@ describe('which sandboxes sleep', () => {
     expect(busy).toEqual({ sleep: [], overLimit: 1 });
   });
 
+  it('over the limit, leaves a sandbox idle less than the minimum alone, so a busy machine does not churn', () => {
+    const choice = chooseSandboxesToSleep(
+      [
+        { key: 'a', active: false, lastActivityAt: at(0.3) },
+        { key: 'b', active: false, lastActivityAt: at(0.4) },
+        { key: 'c', active: false, lastActivityAt: at(0.6) },
+      ],
+      policy,
+      { ...grace, minIdleForLimitMs: 30 * 60_000 },
+    );
+    expect(choice).toEqual({ sleep: [{ key: 'c', reason: 'limit' }], overLimit: 0 });
+  });
+
   it('never sleeps a sandbox with work seen within the grace period (a setup starting, another replica)', () => {
     expect(
       chooseSandboxesToSleep(
@@ -88,12 +101,14 @@ describe('putting sandboxes to sleep, with real git', () => {
   const released: string[] = [];
   let clock = Date.now();
 
+  const bound = new Set<string>();
   const sleeper = (policy = { maxActive: 5, idleMs: 2 * HOUR }) =>
     new SandboxSleeper({
       sandbox,
       registry: template.sandboxes,
       sessions: {
         isRunning: sessionId => running.has(sessionId),
+        hasActiveBinding: async sessionId => bound.has(sessionId),
         release: async sessionId => {
           released.push(sessionId);
           // A message arrives while the sandbox is being released.
@@ -141,6 +156,7 @@ describe('putting sandboxes to sleep, with real git', () => {
     await template.repositoryCache.refresh({ cloneUrl: fx.origin });
     running.clear();
     startsOnRelease.clear();
+    bound.clear();
     released.length = 0;
     // Past the grace period of the work the fixtures record, unless a test moves it.
     clock = Date.now() + 15 * 60_000;
@@ -296,6 +312,20 @@ describe('putting sandboxes to sleep, with real git', () => {
     await mkdir(path.join(sandboxRoot, '.trash', 'crashed', 'repo'), { recursive: true });
     await new LocalFactorySandbox({ root: sandboxRoot, template }).emptyTrash();
     expect(await exists(path.join(sandboxRoot, '.trash'))).toBe(false);
+  });
+
+  it('one rule decides active everywhere: work in the grace period or a card mid-pipeline is never stopped, by hand or by sweep', async () => {
+    const card = await folder('work-items/f/card-24', 'agent-24', 'factory/item-24');
+    // Within the grace period (another replica's heartbeat, the Files panel): active.
+    clock = Date.now() + 2 * 60_000;
+    expect(await sleeper().sleep('work-items/f/card-24', 'manual')).toEqual({ outcome: 'active' });
+    expect((await sleeper().list('f'))[0]?.state).toBe('active');
+    // Past it, but its card's run binding is active (between pipeline stages): still active.
+    clock = Date.now() + 5 * HOUR;
+    bound.add('agent-24');
+    expect(await sleeper().sleep('work-items/f/card-24', 'manual')).toEqual({ outcome: 'active' });
+    expect((await sleeper({ maxActive: 0, idleMs: HOUR }).sweep()).slept).toEqual([]);
+    expect(await exists(card.path)).toBe(true);
   });
 
   it('offers the limits as Factory settings with their defaults', () => {

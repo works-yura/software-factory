@@ -42,6 +42,40 @@ export function checkoutServicesOf(sandbox: unknown): FactorySandboxCheckoutServ
   return services && (services.repositoryCache || services.sessionWork) ? services : undefined;
 }
 
+export type RepositoryVisibility = 'public' | 'private' | 'unknown';
+
+/** A repository's visibility as its integration knows it (GitHub's `private`); `unknown` when it cannot say. */
+export type RepositoryVisibilityResolver = (owner: { orgId: string; repositoryId: string }) => Promise<RepositoryVisibility>;
+
+const AUTH_REFUSED = /authentication failed|could not read username|terminal prompts disabled|repository not found|not found|\b40[134]\b|permission denied|access denied/i;
+
+/**
+ * Ask the remote anonymously whether it serves the repository: readable means
+ * public, refused means private, anything else (no network) unknown. No
+ * configuration of the host's git takes part: no global or system config
+ * (credential helpers, `insteadOf` rewrites), no helper, no prompt.
+ */
+export async function probeRepositoryVisibility(sandbox: SessionCheckout['sandbox'], cloneUrl: string): Promise<RepositoryVisibility> {
+  const probe = await gitTransfer(
+    sandbox,
+    ['-c', 'credential.helper=', '-c', 'core.askPass=', 'ls-remote', '--heads', '--', cloneUrl, 'refs/heads/__factory_probe__'],
+    {
+      env: {
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_COUNT: '0',
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_ASKPASS: '/usr/bin/false',
+        SSH_ASKPASS: '/usr/bin/false',
+      },
+      phase: 'visibility probe',
+      timeoutMs: 60_000,
+    },
+  );
+  if (probe.exitCode === 0) return 'public';
+  return AUTH_REFUSED.test(`${probe.stderr}\n${probe.stdout}`) ? 'private' : 'unknown';
+}
+
 /** Credentials for a repository the server knows by its owner ids; set by the host once integrations exist. */
 export type RepositoryAccessResolver = (owner: { orgId: string; repositoryId: string }) => Promise<FactoryRepositoryAccess>;
 
@@ -111,6 +145,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   /** Folders (real paths) being put to sleep and removed right now. */
   readonly #removing = new Map<string, number>();
   #repositoryAccess: RepositoryAccessResolver | undefined;
+  #repositoryVisibility: RepositoryVisibilityResolver | undefined;
   readonly #isPublicRepository: LocalEnvironmentTemplateOptions['isPublicRepository'];
   /** Told about kept work the person should know of; the host routes it to them. */
   onNotice: ((notice: SessionWorkNotice) => void) | undefined;
@@ -166,6 +201,11 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   /** Lets publishing mint credentials for a repository by its owner ids. */
   setRepositoryAccess(resolver: RepositoryAccessResolver | undefined): void {
     this.#repositoryAccess = resolver;
+  }
+
+  /** Lets publishing ask the integration whether a repository is public. */
+  setRepositoryVisibility(resolver: RepositoryVisibilityResolver | undefined): void {
+    this.#repositoryVisibility = resolver;
   }
 
   /** The checkouts in a session or card folder: the folder itself, or each repository directory in it. */
@@ -240,18 +280,20 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   }
 
   /**
-   * Whether the repository is readable without credentials: then it is
-   * public, and uncommitted work (which can hold anything) is never
-   * published to it.
+   * The repository's visibility: the integration's answer when the host gave
+   * one (GitHub's `private`), else an anonymous probe. Public: nothing is
+   * published. Unknown: commits are, uncommitted work (which can hold
+   * anything) is not.
    */
-  async #isPublic(checkout: SessionCheckout): Promise<boolean> {
-    if (this.#isPublicRepository) return this.#isPublicRepository(checkout);
-    const probe = await gitTransfer(checkout.sandbox, ['ls-remote', '--heads', '--', checkout.cloneUrl, 'refs/heads/__factory_probe__'], {
-      env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'false', SSH_ASKPASS: 'false', GIT_CONFIG_NOSYSTEM: '1' },
-      phase: 'visibility probe',
-      timeoutMs: 60_000,
-    });
-    return probe.exitCode === 0;
+  async #visibility(checkout: SessionCheckout): Promise<RepositoryVisibility> {
+    if (this.#isPublicRepository) return (await this.#isPublicRepository(checkout)) ? 'public' : 'private';
+    const owner =
+      checkout.owner ?? (await this.repositoryCache.readMeta(this.repositoryCache.mirrorPath(checkout.cloneUrl)))?.owner;
+    if (owner && this.#repositoryVisibility) {
+      const answer = await this.#repositoryVisibility(owner).catch(() => 'unknown' as const);
+      if (answer !== 'unknown') return answer;
+    }
+    return probeRepositoryVisibility(checkout.sandbox, checkout.cloneUrl);
   }
 
   /** The real path, so one checkout reached through a link or another spelling queues once. */
@@ -391,12 +433,21 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
       await this.sessionWork.store.forget(checkout, snapshot.branch, { head: snapshot.head });
       return notices;
     }
-    if (await this.#isPublic(checkout)) {
+    const visibility = await this.#visibility(checkout);
+    if (visibility === 'public') {
       notices.push(`${checkout.cloneUrl}: public repository, work kept in the mirror only`);
       this.#logger.warn('public repository: session work is kept in the mirror only, never published', { dir, branch: snapshot.branch });
       return notices;
     }
-    await this.sessionWork.sleepStore.save(credentialed, snapshot);
+    let published = snapshot;
+    if (visibility === 'unknown' && snapshot.tree) {
+      // Commits only: uncommitted work never goes where it might be public.
+      const { tree: _tree, ...commitsOnly } = snapshot;
+      published = commitsOnly;
+      notices.push(`${checkout.cloneUrl}: visibility unknown, uncommitted work kept in the mirror only`);
+      this.#logger.warn('repository visibility unknown: uncommitted work kept in the mirror only', { dir, branch: snapshot.branch });
+    }
+    await this.sessionWork.sleepStore.save(credentialed, published);
     await this.#recordPublished(checkout.cloneUrl, snapshot.branch, Boolean(options.closing));
     return notices;
   }
