@@ -66,8 +66,13 @@ import type {
   WorkItemFolders,
 } from '@factory/sandbox';
 import { repositoryDirectoryName } from '@factory/sandbox';
-import { createSandboxSetupReporter, silentSandboxSetupReporter } from '@factory/sandbox';
-import type { SandboxSetupReporter } from '@factory/sandbox';
+import {
+  checkoutServicesOf,
+  createSandboxSetupReporter,
+  gitAuthenticationEnvironment,
+  silentSandboxSetupReporter,
+} from '@factory/sandbox';
+import type { MaterializeResult, SandboxSetupReporter } from '@factory/sandbox';
 import {
   clearSessionEnvironment,
   recordSessionEnvironment,
@@ -813,6 +818,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error('A sandbox is required to create a Factory session workspace');
     }
     const factorySandbox = sandboxConfig;
+    // The provider's mirror and session-work store, when it keeps them (ADR-0039).
+    const checkoutServices = checkoutServicesOf(factorySandbox);
     const githubProvider = sourceControl.github;
 
     const storage = sourceControl.storage;
@@ -1588,6 +1595,67 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const retiredError = () =>
       new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
 
+    /**
+     * After a materialization: say where the clone came from when that is
+     * news, and put the session's saved work back into a fresh checkout
+     * (ADR-0039). A restore that fails is told, never fatal: the checkout
+     * starts as it would without saved work, which stays saved.
+     */
+    const afterMaterialize = async (
+      target: SessionSandbox,
+      materialized: MaterializeResult | undefined,
+      repo: { slug: string; dir: string; access: RepositoryAccess; token: string },
+      progress: SandboxSetupReporter,
+    ) => {
+      const where = { orgId: session.orgId, sessionId: session.sessionId, repo: repo.slug };
+      if (!materialized) return;
+      if (materialized.stale) {
+        progress.notice({ code: 'mirror_stale', repo: repo.slug, message: redactCredentials(materialized.stale) });
+      }
+      if (materialized.fallbackReason && !['missing', 'empty', 'disabled'].includes(materialized.fallbackReason)) {
+        console.warn('[Factory] Mirror could not serve the checkout; cloned from the network', {
+          ...where,
+          reason: redactCredentials(materialized.fallbackReason),
+        });
+        progress.notice({ code: 'network_fallback', repo: repo.slug, message: redactCredentials(materialized.fallbackReason) });
+      }
+      const sessionWork = checkoutServices?.sessionWork;
+      if (!materialized.cloned || !sessionWork) return;
+      try {
+        const restored = await timedPhase(`workspace.restore(${repo.slug})`, () =>
+          sessionWork.restore(
+            {
+              sandbox: target,
+              dir: repo.dir,
+              cloneUrl: repo.access.cloneUrl,
+              authEnv: gitAuthenticationEnvironment(
+                repo.access.cloneUrl,
+                repo.token,
+                repo.access.authorization?.username ?? 'x-access-token',
+                'pull-failed',
+              ),
+            },
+            session.branch,
+          ),
+        );
+        if (restored.outcome === 'none') return;
+        console.info('[Factory] Restored saved session work into a fresh checkout', { ...where, ...restored });
+        progress.notice({ code: 'restored', repo: repo.slug });
+        if (restored.diverged) {
+          progress.notice({
+            code: 'diverged',
+            repo: repo.slug,
+            message: `Kept the saved commits (${restored.diverged.saved.slice(0, 12)}); the remote branch is at origin/${session.branch} (${restored.diverged.remote.slice(0, 12)}).`,
+          });
+        }
+        if (restored.tree === 'conflict') progress.notice({ code: 'wip_conflict', repo: repo.slug });
+      } catch (error) {
+        const message = redactCredentials(error instanceof Error ? error.message : String(error));
+        console.warn('[Factory] Saved session work could not be restored', { ...where, reason: message });
+        progress.notice({ code: 'restore_failed', repo: repo.slug, message });
+      }
+    };
+
     // The session's setup work: materialize the repo (disk-truth idempotent),
     // check out the session branch, run the configured setup command. Minted
     // tokens are fetched inside the run so a replacement VM healed mid-session
@@ -1606,7 +1674,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind)) ?? token;
         target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));
       }
-      await materializeRepo({
+      const materialized = await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
         repoInfo: {
           repoFullName,
@@ -1618,11 +1686,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         storage: storage.sessions,
         progress: {
-          cloning: () => progress.step('clone', repoFullName),
+          cloning: source => progress.step('clone', repoFullName, { source }),
           transfer: transfer => progress.transfer(repoFullName, transfer),
         },
+        ...(checkoutServices?.repositoryCache ? { repositoryCache: checkoutServices.repositoryCache } : {}),
+        owner: { orgId: session.orgId, repositoryId: repository.id },
       });
       progress.step('checkout', repoFullName);
+      await afterMaterialize(target, materialized, { slug: repoFullName, dir: workdir, access, token }, progress);
       await checkoutSessionBranch(target, workdir, {
         identity: gitIdentity,
         branch: session.branch,
@@ -1778,7 +1849,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             const token = access.authorization?.token;
             if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
-            await materializeRepo({
+            const materialized = await materializeRepo({
               row: { id: session.id, sandboxWorkdir: entry.dir, materializedAt: null },
               repoInfo: {
                 repoFullName: repo.slug,
@@ -1791,11 +1862,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               // `materialized_at` is the session's own repository's.
               storage: { markMaterialized: async () => {} },
               progress: {
-                cloning: () => progress.step('clone', repo.slug),
+                cloning: source => progress.step('clone', repo.slug, { source }),
                 transfer: transfer => progress.transfer(repo.slug, transfer),
               },
+              ...(checkoutServices?.repositoryCache ? { repositoryCache: checkoutServices.repositoryCache } : {}),
+              owner: { orgId: session.orgId, repositoryId: repo.repositoryId },
             });
             progress.step('checkout', repo.slug);
+            await afterMaterialize(target, materialized, { slug: repo.slug, dir: entry.dir, access, token }, progress);
             const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
               syncEnvironmentRepository(target, entry.dir, {
                 identity: gitIdentity,

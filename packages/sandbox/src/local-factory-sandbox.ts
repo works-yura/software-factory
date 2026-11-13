@@ -1,8 +1,9 @@
-import { mkdir, rename, rm, stat, symlink } from 'node:fs/promises';
+import { lstat, mkdir, rename, rm, stat, symlink } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
-import type { FactorySandboxContext } from '@mastra/core/workspace';
+import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
 
+import type { FactorySandboxCheckoutServices, LocalEnvironmentTemplate } from './template/local-template.ts';
 import { WORK_ITEM_FOLDERS_DIR } from './work-item-folder.ts';
 import { resolveContainedLocalWorkdir } from './workdir.ts';
 
@@ -11,6 +12,12 @@ export interface LocalFactorySandboxOptions {
   root: string;
   /** Environment for commands run in the sandbox. */
   env?: Record<string, string>;
+  /**
+   * The environment template (ADR-0039): repository mirrors, builds, shared
+   * package stores, session work kept outside the folder. Without it every
+   * session clones from the network and a removed folder takes its work along.
+   */
+  template?: LocalEnvironmentTemplate;
 }
 
 /**
@@ -33,17 +40,20 @@ class SessionLocalSandbox extends LocalSandbox {
   readonly #root: string;
   readonly #shared: boolean;
   readonly #legacyDirectory: string | undefined;
+  readonly #template: LocalEnvironmentTemplate | undefined;
 
   constructor(
     options: ConstructorParameters<typeof LocalSandbox>[0],
     root: string,
     shared: boolean,
     legacyDirectory?: string,
+    template?: LocalEnvironmentTemplate,
   ) {
     super(options);
     this.#root = resolve(root);
     this.#shared = shared;
     this.#legacyDirectory = legacyDirectory;
+    this.#template = template;
   }
 
   /**
@@ -69,6 +79,8 @@ class SessionLocalSandbox extends LocalSandbox {
     const directory = resolve(this.workingDirectory);
     // Only a session's own directory under the root, never the root itself or anything outside it.
     if (!directory.startsWith(this.#root + sep)) return;
+    // Its work goes to the mirror first; when that cannot be verified the folder stays (and this throws).
+    await this.#template?.sleepFolder(directory);
     await rm(directory, { recursive: true, force: true });
   }
 }
@@ -84,10 +96,30 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
   readonly provider = 'local';
 
   readonly #options: LocalFactorySandboxOptions;
+  /** Environment builds, present with a template: the same workflow, triggers and UI as remote templates. */
+  override readonly builds: FactorySandboxBuilds<Record<string, never>> | undefined;
 
   constructor(options: LocalFactorySandboxOptions) {
     super();
     this.#options = options;
+    this.builds = options.template?.builds;
+  }
+
+  /** The environment template, when configured. */
+  get environmentTemplate(): LocalEnvironmentTemplate | undefined {
+    return this.#options.template;
+  }
+
+  /** What materialization clones from and keeps session work in (ADR-0039). */
+  get checkoutServices(): FactorySandboxCheckoutServices | undefined {
+    return this.#options.template?.checkoutServices;
+  }
+
+  /** The sandbox environment plus the template's shared package stores. */
+  #env(): Record<string, string> | undefined {
+    const stores = this.#options.template?.packageStoreEnv();
+    if (!stores || Object.keys(stores).length === 0) return this.#options.env;
+    return { ...stores, ...this.#options.env };
   }
 
   /** The absolute directory of a card folder; refuses a key outside `<root>/work-items`. */
@@ -105,12 +137,44 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
    * move left (never what it points to). Its sandbox must be stopped first.
    */
   async removeLegacySessionFolder(sessionId: string): Promise<void> {
-    await rm(resolveContainedLocalWorkdir(this.#options.root, sessionId), { recursive: true, force: true });
+    const directory = resolveContainedLocalWorkdir(this.#options.root, sessionId);
+    const link = await lstat(directory).then(
+      entry => entry.isSymbolicLink(),
+      () => true,
+    );
+    if (!link) await this.#options.template?.sleepFolder(directory);
+    await rm(directory, { recursive: true, force: true });
   }
 
-  /** Delete a card's folder from disk. Its sessions must be stopped first. */
+  /**
+   * Delete a card's folder from disk. Its sessions must be stopped first.
+   * With a template the card's work is put to sleep first (mirror, and the
+   * remote's hidden refs for what the remote lacks); when that cannot be
+   * verified the folder stays and this throws.
+   */
   async removeWorkItemFolder(folder: string): Promise<void> {
-    await rm(this.workItemFolderPath(folder), { recursive: true, force: true });
+    const directory = this.workItemFolderPath(folder);
+    const present = await stat(directory).then(
+      () => true,
+      () => false,
+    );
+    if (present) await this.#options.template?.sleepFolder(directory, { publish: true });
+    await rm(directory, { recursive: true, force: true });
+  }
+
+  /** Drop the saved work of a deleted session's branch (the person discarded it). */
+  async forgetSessionWork(branch: string): Promise<void> {
+    await this.#options.template?.forgetBranch(branch);
+  }
+
+  /** Keep the work in a session's folder after a run ended; never throws. */
+  async saveSessionWork(directory: string, context: Record<string, unknown> = {}): Promise<void> {
+    const template = this.#options.template;
+    if (!template) return;
+    const resolved = resolve(directory);
+    // Only folders under the sandbox root.
+    if (!resolved.startsWith(resolve(this.#options.root) + sep)) return;
+    await template.saveFolder(resolved, context);
   }
 
   create(ctx: FactoryWorkspaceSandboxContext): LocalSandbox {
@@ -122,11 +186,12 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
         workingDirectory: shared
           ? this.workItemFolderPath(ctx.workItemFolder!)
           : join(this.#options.root, ctx.sessionId),
-        ...(this.#options.env ? { env: this.#options.env } : {}),
+        ...(this.#env() ? { env: this.#env() } : {}),
       },
       this.#options.root,
       shared,
       shared ? resolveContainedLocalWorkdir(this.#options.root, ctx.sessionId) : undefined,
+      this.#options.template,
     );
   }
 }

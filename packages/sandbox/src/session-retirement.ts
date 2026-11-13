@@ -299,6 +299,17 @@ export class SessionRetirementCoordinator {
           });
         }
         if (folder) await this.#releaseFolderOfDeletedSession(input, session, folder, teardown!);
+        // A session of its own discarded its branch's saved work with it; a
+        // card's work stays for the card's other sessions until the card closes.
+        else if (this.#sandbox instanceof LocalFactorySandbox) {
+          await this.#sandbox.forgetSessionWork(session.branch).catch((error: unknown) =>
+            this.#warn('Factory saved session work could not be dropped', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+              error: boundedError(error),
+            }),
+          );
+        }
       }
     }
   }

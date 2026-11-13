@@ -23,6 +23,7 @@ import { timedPhase } from '@factory/observability';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../sandbox-env.ts';
 import { gitProgressReader, withoutGitProgress } from '../setup-progress.ts';
 import type { SandboxSetupTransfer } from '../setup-progress.ts';
+import type { RepositoryCache, RepositorySource } from '../template/repository-cache.ts';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
@@ -358,10 +359,29 @@ export interface MaterializeRepoOptions {
   token: string;
   storage: MaterializationStore;
   /**
-   * Told when a clone begins and, from `git clone --progress`, how far it has
-   * got. Without it the clone runs without `--progress`.
+   * Told when a clone begins (and where from) and, from `git clone --progress`,
+   * how far it has got. Without it the clone runs without `--progress`.
    */
-  progress?: { cloning(): void; transfer(transfer: SandboxSetupTransfer): void };
+  progress?: { cloning(source: RepositorySource): void; transfer(transfer: SandboxSetupTransfer): void };
+  /**
+   * Where a fresh checkout is cloned from before the network (ADR-0039). When
+   * it cannot serve the checkout, the network clone runs as without it and the
+   * result says why.
+   */
+  repositoryCache?: RepositoryCache;
+  /** The repository's owner ids, kept beside its cache entry for later housekeeping. */
+  owner?: { orgId: string; repositoryId: string };
+}
+
+/** What a materialization did. */
+export interface MaterializeResult {
+  /** False when a checkout was already there and left as it was. */
+  cloned: boolean;
+  source?: RepositorySource;
+  /** Why the cache did not serve a network clone (`missing`, `corrupt: …`). */
+  fallbackReason?: string;
+  /** The mirror could not be refreshed and served what it had. */
+  stale?: string;
 }
 
 export async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promise<void> {
@@ -388,11 +408,11 @@ export async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string):
  * stored remote remains credential-free. Sets `materialized_at` on the
  * per-user sandbox binding row.
  */
-export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
+export async function materializeRepo(options: MaterializeRepoOptions): Promise<MaterializeResult> {
   return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
 }
 
-async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
+async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<MaterializeResult> {
   const { row: sandboxRow, repoInfo, sandbox, token, storage } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
@@ -432,6 +452,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // checkout that follows fetches the base branch it needs.
   const cleanCloneUrl = repoInfo.cloneUrl ?? cleanUrl(repo);
   const existing = await existingCheckoutRemote(sandbox, workdir, cleanCloneUrl);
+  let result: MaterializeResult = { cloned: false };
   if (existing !== null) {
     // A token an earlier start failed to scrub must not outlive it; the
     // remote already carries the plain URL otherwise, so this costs nothing
@@ -456,7 +477,26 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     );
     await clearWorkdir(sandbox, workdir);
     const progress = options.progress;
-    progress?.cloning();
+    let fallbackReason: string | undefined;
+    if (options.repositoryCache) {
+      // The mirror first: a local clone of hard-linked objects after a delta fetch.
+      progress?.cloning('mirror');
+      const cached = await options.repositoryCache.checkout(
+        sandbox,
+        { cloneUrl: cleanCloneUrl, authEnv, ...(options.owner ? { owner: options.owner } : {}) },
+        {
+          workdir,
+          branch: repoInfo.defaultBranch,
+          ...(progress ? { onTransfer: (transfer: SandboxSetupTransfer) => progress.transfer(transfer) } : {}),
+        },
+      );
+      if (cached.source === 'mirror') {
+        await storage.markMaterialized({ id: sandboxRow.id });
+        return { cloned: true, source: 'mirror', ...(cached.stale ? { stale: cached.stale } : {}) };
+      }
+      fallbackReason = cached.reason;
+    }
+    progress?.cloning('network');
     let readProgress = gitProgressReader();
     const clone = await gitTransfer(
       sandbox,
@@ -494,10 +534,12 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     if (clone.exitCode !== 0) {
       throw classifyGitFailure(progress ? { ...clone, stderr: withoutGitProgress(clone.stderr) } : clone, 'clone-failed');
     }
+    result = { cloned: true, source: 'network', ...(fallbackReason ? { fallbackReason } : {}) };
   }
 
   // 4. Mark materialized.
   await storage.markMaterialized({ id: sandboxRow.id });
+  return result;
 }
 
 export interface SessionBranchOptions {

@@ -164,7 +164,8 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
 
   async #checkout(dir: string, withCredentials: boolean): Promise<SessionCheckout | undefined> {
     const host = this.repositoryCache.host;
-    const origin = await runGitIn(host, dir, ['remote', 'get-url', 'origin']);
+    // The configured URL, not `remote get-url`, which applies `insteadOf` rewrites.
+    const origin = await runGitIn(host, dir, ['config', '--get', 'remote.origin.url']);
     const cloneUrl = origin.exitCode === 0 ? origin.stdout.trim() : '';
     if (!cloneUrl || /\/\/[^/]*@/.test(cloneUrl)) return undefined;
     const checkout: SessionCheckout = { sandbox: host, dir, cloneUrl };

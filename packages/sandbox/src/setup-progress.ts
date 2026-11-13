@@ -49,6 +49,34 @@ export interface SandboxSetupTransfer {
   percent?: number;
 }
 
+/** Where a repository's clone comes from: the server's mirror of it, or the git host over the network. */
+export type SandboxSetupSource = 'mirror' | 'network';
+
+/**
+ * Something the person should know about a setup that went on (ADR-0039):
+ * - `restored`: the session's saved work (commits, uncommitted changes) was put back into a fresh checkout;
+ * - `diverged`: the saved commits and the branch on the git host went apart; the checkout keeps the saved
+ *   ones and the host's stays at `origin/<branch>`;
+ * - `wip_conflict`: saved uncommitted work no longer applies; it stays saved, the checkout is clean;
+ * - `mirror_stale`: the mirror could not be refreshed and served what it had;
+ * - `network_fallback`: the mirror could not serve the clone, so it came from the network;
+ * - `restore_failed`: saved work could not be put back; it stays saved and the checkout starts as without it.
+ */
+export type SandboxSetupNoticeCode =
+  | 'restored'
+  | 'diverged'
+  | 'wip_conflict'
+  | 'mirror_stale'
+  | 'network_fallback'
+  | 'restore_failed';
+
+export interface SandboxSetupNotice {
+  code: SandboxSetupNoticeCode;
+  repo?: string;
+  /** The server's own words, in English. */
+  message?: string;
+}
+
 export interface SandboxSetupProgressEvent extends SandboxSetupTransfer {
   type: typeof SANDBOX_SETUP_EVENT;
   /** `running` until the setup ends; then `failed` when any step failed, even one the setup went on without. */
@@ -61,12 +89,17 @@ export interface SandboxSetupProgressEvent extends SandboxSetupTransfer {
   /** The repository's position among the session's repositories, from 1. */
   index?: number;
   total: number;
+  /** For a `clone` step: where the clone comes from. */
+  source?: SandboxSetupSource;
   failures?: SandboxSetupFailure[];
+  notices?: SandboxSetupNotice[];
 }
 
 export interface SandboxSetupReporter {
-  /** A repository (or, without one, the workspace) enters a step. */
-  step(phase: SandboxSetupPhase, repo?: string): void;
+  /** A repository (or, without one, the workspace) enters a step; a clone says where it comes from. */
+  step(phase: SandboxSetupPhase, repo?: string, detail?: { source?: SandboxSetupSource }): void;
+  /** Something the person should know, kept on every later event of the setup. */
+  notice(notice: SandboxSetupNotice): void;
   /** A clone moved on; sent at most every so often. */
   transfer(repo: string, transfer: SandboxSetupTransfer): void;
   /** A step failed and the setup goes on without it; `at` defaults to the repository's last step. */
@@ -130,6 +163,7 @@ const TRANSFER_INTERVAL_MS = 1000;
 /** A reporter that reports nothing, for setups nobody watches. */
 export const silentSandboxSetupReporter: SandboxSetupReporter = {
   step() {},
+  notice() {},
   transfer() {},
   fail() {},
   finish() {},
@@ -149,9 +183,10 @@ export function createSandboxSetupReporter(
   const total = Math.max(repos.length, 1);
   const lastPhase = new Map<string | undefined, SandboxSetupPhase>();
   const failures: SandboxSetupFailure[] = [];
+  const notices: SandboxSetupNotice[] = [];
   // An error already reported by `fail` that the setup then rethrows is not a second failure.
   const recorded = new Set<unknown>();
-  let current: { phase?: SandboxSetupPhase; repo?: string } = {};
+  let current: { phase?: SandboxSetupPhase; repo?: string; source?: SandboxSetupSource } = {};
   let lastTransferAt = Number.NEGATIVE_INFINITY;
   let finished = false;
 
@@ -172,7 +207,9 @@ export function createSandboxSetupReporter(
       ...(index !== undefined ? { index } : {}),
       ...(transfer.receivedBytes !== undefined ? { receivedBytes: transfer.receivedBytes } : {}),
       ...(transfer.percent !== undefined ? { percent: transfer.percent } : {}),
+      ...(current.source && current.phase === 'clone' ? { source: current.source } : {}),
       ...(failures.length ? { failures: failures.map(failure => ({ ...failure })) } : {}),
+      ...(notices.length ? { notices: notices.map(notice => ({ ...notice })) } : {}),
     });
   };
   const record = (error: unknown, at: { repo?: string; phase?: SandboxSetupPhase }) => {
@@ -191,10 +228,10 @@ export function createSandboxSetupReporter(
   // The chat names the setup at once, before its first step is known.
   emit('running');
   return {
-    step(phase, repo) {
+    step(phase, repo, detail) {
       if (finished) return;
       lastPhase.set(repo, phase);
-      current = { phase, ...(repo !== undefined ? { repo } : {}) };
+      current = { phase, ...(repo !== undefined ? { repo } : {}), ...(detail?.source ? { source: detail.source } : {}) };
       lastTransferAt = Number.NEGATIVE_INFINITY;
       emit('running');
     },
@@ -203,8 +240,16 @@ export function createSandboxSetupReporter(
       const at = now();
       if (at - lastTransferAt < transferIntervalMs) return;
       lastTransferAt = at;
-      current = { phase: 'clone', repo };
+      current = { phase: 'clone', repo, ...(current.repo === repo && current.source ? { source: current.source } : {}) };
       emit('running', transfer);
+    },
+    notice(notice) {
+      if (finished) return;
+      notices.push({
+        ...notice,
+        ...(notice.message ? { message: notice.message.slice(-MAX_FAILURE_MESSAGE) } : {}),
+      });
+      emit('running');
     },
     fail(error, at) {
       if (finished) return;

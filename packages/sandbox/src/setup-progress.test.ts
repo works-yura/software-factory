@@ -170,7 +170,10 @@ describe('gitProgressReader', () => {
 class StreamingSandbox implements ExecutableSandbox {
   readonly id = 'sandbox';
   readonly executions: Array<{ command: string; args: string[] }> = [];
-  constructor(private readonly clone: (options?: ExecuteCommandOptions) => SandboxCommandResult) {}
+  readonly clone: (options?: ExecuteCommandOptions) => SandboxCommandResult;
+  constructor(clone: (options?: ExecuteCommandOptions) => SandboxCommandResult) {
+    this.clone = clone;
+  }
   async executeCommand(command: string, args: string[] = [], options?: ExecuteCommandOptions): Promise<SandboxCommandResult> {
     this.executions.push({ command, args });
     if (command === 'git' && args.includes('get-url')) return { exitCode: 2, stdout: '', stderr: '' };
