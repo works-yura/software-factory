@@ -41,7 +41,7 @@ describe('sandbox notes for the agent', () => {
     expect(restoredRepositoryNote({ slug: 'acme/api', branch: 'b', tree: 'restored' })).toBeUndefined();
   });
 
-  it('a Mastra run sees them in its environment signal, even without a recorded environment', async () => {
+  it('a Mastra run sees them in its environment signal, even without a recorded environment, and stops seeing them once settled', async () => {
     queueSessionNote('sess-1', RESTORED_SANDBOX_NOTE);
     const context = new RequestContext();
     context.set('controller', { sessionId: 'sess-1', resourceId: 'p', threadId: 't', getState: () => ({}) });
@@ -54,5 +54,18 @@ describe('sandbox notes for the agent', () => {
       deltasSinceSnapshot: [],
     } as never)) as { contents: string } | undefined;
     expect(signal?.contents).toContain('restored from saved work');
+    settleSessionNotes('sess-1');
+    // The notes-only snapshot is replaced, not left for every later turn to read.
+    const next = (await new FactoryEnvironmentStateProcessor().computeStateSignal({
+      requestContext: context,
+      threadId: 't',
+      resourceId: 'sess-1',
+      activeStateSignals: [],
+      contextWindow: { hasSnapshot: true },
+      lastSnapshot: { metadata: { state: { cacheKey: (signal as unknown as { cacheKey: string }).cacheKey } } },
+      deltasSinceSnapshot: [],
+    } as never)) as { contents: string; cacheKey: string } | undefined;
+    expect(next?.contents).toBeDefined();
+    expect(next?.contents).not.toContain('restored from saved work');
   });
 });

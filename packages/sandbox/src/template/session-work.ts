@@ -87,6 +87,13 @@ export const SNAPSHOT_SECRET_PATHSPECS = [
   ':(glob)**/*.pem',
   ':(glob)**/*-sa.json',
   ':(glob)**/*.key',
+  ':(glob)**/credentials.json',
+  ':(glob)**/id_rsa*',
+  ':(glob)**/id_ed25519*',
+  ':(glob)**/.npmrc',
+  ':(glob)**/.pypirc',
+  ':(glob)**/*.p12',
+  ':(glob)**/.netrc',
 ] as const;
 
 /** Files over this size stay out of the uncommitted-work commit. */

@@ -360,6 +360,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
           if (snapshot && (snapshot.tree || !(await this.#onRemote(checkout, snapshot.head)) || (await this.#hasSaved(checkout, snapshot.branch)))) {
             const saved = await this.sessionWork.store.save(checkout, snapshot);
             await this.#recordSave(context.sessionId, checkout, snapshot);
+            await this.#reopened(checkout.cloneUrl, snapshot.branch);
             this.#report(saved, dir, snapshot, context);
             result.saved.push({ dir, snapshot, ...(saved.superseded ? { superseded: saved.superseded } : {}) });
           } else {
@@ -498,6 +499,21 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     return this.removeFolder(folder, { ...options, remove: async () => {} });
   }
 
+  /** Work on a branch whose card had closed: the card is open again, its published work must not age out as closed. */
+  async #reopened(cloneUrl: string, branch: string): Promise<void> {
+    const file = this.#publishedFile(cloneUrl, branch);
+    let current: Partial<PublishedRecord>;
+    try {
+      current = JSON.parse(await readFile(file, 'utf8')) as Partial<PublishedRecord>;
+    } catch {
+      return;
+    }
+    if (!current.closedAt) return;
+    const { closedAt: _closedAt, ...open } = current;
+    const temporary = `${file}.${process.pid}.${Date.now()}`;
+    await writeFile(temporary, JSON.stringify(open)).then(() => rename(temporary, file)).catch(() => rm(temporary, { force: true }));
+  }
+
   #publishedFile(cloneUrl: string, branch: string): string {
     return path.join(this.root, 'published', `${createHash('sha256').update(`${cloneUrl}\n${branch}`).digest('hex').slice(0, 32)}.json`);
   }
@@ -507,8 +523,8 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     const file = this.#publishedFile(cloneUrl, branch);
     const at = new Date().toISOString();
     try {
-      const current = JSON.parse(await readFile(file, 'utf8').catch(() => '{}')) as Partial<PublishedRecord>;
-      const next: PublishedRecord = { cloneUrl, branch, publishedAt: at, ...(closing ? { closedAt: at } : current.closedAt ? { closedAt: current.closedAt } : {}) };
+      // Published while not closing: the card is open (again), so an earlier close no longer counts.
+      const next: PublishedRecord = { cloneUrl, branch, publishedAt: at, ...(closing ? { closedAt: at } : {}) };
       await mkdir(path.dirname(file), { recursive: true });
       const temporary = `${file}.${process.pid}.${Date.now()}`;
       await writeFile(temporary, JSON.stringify(next));

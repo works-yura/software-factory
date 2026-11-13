@@ -197,12 +197,29 @@ describe('session work safety, with real git', () => {
       await truncate(path.join(dir, 'huge.bin'), 101 * 1024 * 1024);
     });
     await writeFile(path.join(dir, 'kept.txt'), 'kept\n');
+    for (const name of ['credentials.json', 'id_rsa', 'id_ed25519.pub', '.npmrc', '.pypirc', 'cert.p12', '.netrc']) {
+      await writeFile(path.join(dir, name), 'secret\n');
+    }
     const saved = await template.saveFolder(folder);
     expect(saved.saved[0]?.snapshot?.skipped).toEqual(['huge.bin']);
     const mirror = template.repositoryCache.mirrorPath(fx.origin);
     const files = fx.git(mirror, 'ls-tree', '-r', '--name-only', 'refs/factory/wip/tree/factory/item-4');
     expect(files).toContain('kept.txt');
-    for (const secret of ['config.yml', '.secrets/factory-sa.json', '.env.local', 'deploy.pem', '.env', 'huge.bin']) {
+    for (const secret of [
+      'config.yml',
+      '.secrets/factory-sa.json',
+      '.env.local',
+      'deploy.pem',
+      '.env',
+      'huge.bin',
+      'credentials.json',
+      'id_rsa',
+      'id_ed25519.pub',
+      '.npmrc',
+      '.pypirc',
+      'cert.p12',
+      '.netrc',
+    ]) {
       expect(files.split('\n')).not.toContain(secret);
     }
     // The session's own index still has what it staged.

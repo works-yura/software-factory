@@ -264,9 +264,15 @@ describe('putting sandboxes to sleep, with real git', () => {
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-12').status).toBe(0);
 
     const later = Date.now() + 31 * day;
-    expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later })).toEqual(['factory/item-12']);
+    // Reopened: the card works on its branch again, so its earlier close no longer counts.
+    const reopened = await folder('work-items/f/card-13', 'agent-13', 'factory/item-12');
+    await template.saveFolder(reopened.path);
+    expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later })).toEqual([]);
+    await sandbox.removeWorkItemFolder('work-items/f/card-13');
+    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later + 31 * day })).toEqual(['factory/item-12']);
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-11').status).toBe(0);
-  });
+  }, 30_000);
 
   it('a run that starts while a card sandbox goes to sleep keeps it awake: checked again before removal', async () => {
     const card = await folder('work-items/f/card-20', 'agent-20', 'factory/item-20');
