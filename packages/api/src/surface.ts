@@ -150,6 +150,8 @@ export interface FactoryApiRoutesDeps {
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
   /** Syncs an organization's integration-managed MCP servers after an integration's settings change. */
   onManagedMcpServersChanged?: IntegrationHooks['onManagedMcpServersChanged'];
+  /** Saved-environment hand-off for environment builds, present when the sandbox can build templates. */
+  onEnvironmentSaved?: (projectId: string) => void;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -1025,7 +1027,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
-    ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
+    ...(sourceControls.length === 0
+      ? []
+      : buildSourceControlSettingsRoutes({
+          auth: deps.auth,
+          sourceControls,
+          ...(deps.onEnvironmentSaved ? { onEnvironmentSaved: deps.onEnvironmentSaved } : {}),
+        })),
     ...providerRoutes,
     // Settings › Підключення: every integration's connections through one registry (ADR-0035), and
     // the accounts each turn-based harness runs on (ADR-0036).

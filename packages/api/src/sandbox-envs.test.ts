@@ -16,6 +16,7 @@ async function setup(
     enabled?: boolean;
     admin?: boolean;
     isProjectRepository?: (scope: { projectRepositoryId: string }) => Promise<boolean>;
+    onEnvironmentSaved?: (projectId: string) => void;
   } = {},
 ) {
   const seed = await createFactoryStorageForTests();
@@ -40,6 +41,7 @@ async function setup(
       writable: options.writable ?? true,
       ...(options.audit ? { audit: options.audit } : {}),
       ...(options.isProjectRepository ? { isProjectRepository: options.isProjectRepository } : {}),
+      ...(options.onEnvironmentSaved ? { onEnvironmentSaved: options.onEnvironmentSaved } : {}),
     }).routes(),
   );
   const base = `/web/factory/projects/${project.id}/sandbox-envs`;
@@ -60,7 +62,8 @@ async function setup(
 describe('SandboxEnvRoutes', () => {
   it('sets, lists, updates and deletes a variable without ever returning its value', async () => {
     const audit = { emit: vi.fn(async () => {}) };
-    const { seed, project, send } = await setup({ audit });
+    const onEnvironmentSaved = vi.fn();
+    const { seed, project, send } = await setup({ audit, onEnvironmentSaved });
 
     const put = await send('PUT', '/NPM_TOKEN', { value: SENTINEL, appliesTo: 'runtime' });
     expect(put.status).toBe(200);
@@ -129,6 +132,8 @@ describe('SandboxEnvRoutes', () => {
       },
     ]);
     expect(JSON.stringify(audit.emit.mock.calls)).not.toContain(SENTINEL);
+    // Build variables are template inputs: every stored change, and only those, hands the project to builds.
+    expect(onEnvironmentSaved.mock.calls).toEqual([[project.id], [project.id], [project.id]]);
   });
 
   it('marks every response no-store, including errors', async () => {

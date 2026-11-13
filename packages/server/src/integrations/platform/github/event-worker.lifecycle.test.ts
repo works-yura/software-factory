@@ -11,6 +11,7 @@ import type { FactoryProjectsStorage } from '@factory/store';
 import { subscribeToPullRequest } from '@factory/integration-github';
 
 import { PlatformGithubIntegration } from '@factory/integration-github';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
 
 const harness = vi.hoisted(() => {
   let mastra: Mastra | undefined;
@@ -375,6 +376,16 @@ describe('Platform GitHub push rebuilds the environment template', () => {
         expect(built?.activeTemplateId).toBe('tpl-1');
         expect(built?.activeTemplateHeads).toEqual({ 'octo/hello': SHA_NEW });
       });
+      // The finished build checks once more for a saved change; nothing changed, so it ends without one.
+      const workflow = harness.controller.getMastra()!.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID);
+      await vi.waitFor(async () => {
+        const { runs } = await workflow.listWorkflowRuns();
+        const statuses = runs.flatMap(({ snapshot }) =>
+          typeof snapshot !== 'string' && snapshot.context.input?.projectId === project.id ? [snapshot.status] : [],
+        );
+        expect(statuses.sort()).toEqual(['success', 'success']);
+      });
+      expect(sandbox.started).toHaveLength(1);
     } finally {
       await harness.controller.getMastra()?.stopWorkers();
       await storage.close();

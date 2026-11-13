@@ -3071,7 +3071,12 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
-            ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
+            ...(environmentBuilds
+              ? {
+                  onRepositoryPush: environmentBuilds.onRepositoryPush,
+                  onEnvironmentSaved: environmentBuilds.onEnvironmentSaved,
+                }
+              : {}),
             onManagedMcpServersChanged: orgId => managedMcpServers.sync(orgId),
             sessionRetirement,
             // Without a retirement coordinator, the delete route removes a session's CLI config dir itself.
@@ -3299,6 +3304,7 @@ export class MastraFactory {
               }
               return false;
             },
+            ...(environmentBuilds ? { onEnvironmentSaved: environmentBuilds.onEnvironmentSaved } : {}),
           }).routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),

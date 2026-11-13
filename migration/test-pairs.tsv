@@ -38,8 +38,8 @@ secret-encryption.test.ts	store/src/secret-encryption.test.ts	1	upstream #29644:
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts	+1	one sandbox folder per card: sessions of a factory on a branch (+1)
 auth-seam.test.ts	server/src/auth-seam.test.ts	-7	WorkOS env fallback, isWorkOSAuth/getWorkOSProvider and Studio custom-domain cases dropped with @mastra/auth-workos and @mastra/auth-studio (-8); /auth/me provider report (+1)
 auth.test.ts	auth/src/auth.test.ts	+6	WorkOS env fallback cases replaced by explicit-provider selection (3 cases → 2); better-auth user picture read from `image` (+1); a provider that cannot answer (session, organization, admin check) gives 503 auth_unavailable, not 401, also on /auth/me, routes and navigations (ADR-0030) (+6)
-environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule.test.ts
-environment/build.test.ts	harness-mastra/src/environment/build.test.ts
+environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule.test.ts	+3	upstream #30148: stuck environment builds recover, saved changes rebuild (+3)
+environment/build.test.ts	harness-mastra/src/environment/build.test.ts	+3	upstream #30148: stuck environment builds recover, saved changes rebuild (+3)
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
 factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
 factory.test.ts	server/src/factory.test.ts	-1	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2); upstream #28823: app skills are checked at construction (+2); Studio default auth and cookie-domain cases and the Platform-only recreate-sandbox case dropped with @mastra/auth-studio and @mastra/platform-workspace (-7); missing-auth refusal (+1); upstream #29494: the boot time is reported once when finalize() finishes (+1); Mastra 1.82: Knowledge is off without its config, the removed Subconscious flag refuses to boot (+2); upstream #30025: boot does not wait for the bound-thread reconcile (+1)
@@ -101,12 +101,12 @@ routes/intake.test.ts	api/src/intake.test.ts	+3	upstream #28877: an unreadable p
 routes/knowledge.test.ts	api/src/knowledge.test.ts	-35	Mastra 1.82 (upstream #28353, #28362): the node/record routes are replaced by the page-store routes, rewritten as upstream
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
-routes/projects.test.ts	api/src/projects.test.ts	+6	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1); upstream 6650c2687c (#29322): repositories in the project list (+2); upstream #29888: the retired review test check switch is accepted and ignored (+1); upstream #29979: apply-default-model runs in the background (+1)
+routes/projects.test.ts	api/src/projects.test.ts	+8	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1); upstream 6650c2687c (#29322): repositories in the project list (+2); upstream #29888: the retired review test check switch is accepted and ignored (+1); upstream #29979: apply-default-model runs in the background (+1); upstream #30148: stuck environment builds recover, saved changes rebuild (+2)
 routes/session-access.test.ts	session/src/session-access.test.ts	+5	model-switch guard and multipart body cases ported from upstream 8fb8a82428; upstream #30010: non-uuid resources and failed checks in active runs (+3)
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts	+12	upstream #28823: skills catalog origin (+2); upstream #29042: frontmatter in the catalog, project skill edit routes (+10)
 routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+6	personal chats of a Claude Code Factory create Claude Code sessions; a delete without a retirement coordinator tells the host (+1); deleting a session another harness runs
-routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts
+routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts	+1	upstream #30148: stuck environment builds recover, saved changes rebuild (+1)
 routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+5	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one; upstream #28721: a replacement work board has only its own lanes (+1); upstream #29346: one card for an issue and its pull requests: PR review on an issue card binds the pull request branch and its own review session (+3)
 routes/telemetry.test.ts	api/src/telemetry.test.ts
