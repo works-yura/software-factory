@@ -5,22 +5,23 @@
 #
 #   scripts/mac-mini/isolation/2-system.sh                       # status; changes nothing
 #   sudo scripts/mac-mini/isolation/2-system.sh ownership-on     # a. the disk respects file owners
-#        scripts/mac-mini/isolation/2-system.sh close-dot        # b. top-level folders 700, disk 711
+#   sudo scripts/mac-mini/isolation/2-system.sh close-dot        # b. top-level folders 700, disk 711
 #   sudo scripts/mac-mini/isolation/2-system.sh add-user         # c. create the standard user "factory"
 #
 # Rollback, in reverse order:
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-user      # deletes "factory" AND /Users/factory
-#        scripts/mac-mini/isolation/2-system.sh open-dot         # original modes back
+#   sudo scripts/mac-mini/isolation/2-system.sh open-dot         # original modes back
 #   sudo scripts/mac-mini/isolation/2-system.sh ownership-off     # disk ignores owners again
 #
 # a. /Volumes/dot has "Owners: Disabled": macOS shows every file there as the logged-in user's and
 #    lets any local user read and write all of it. ownership-on makes the disk honour the owner
-#    each file has on it. Files written elsewhere may turn out to belong to another uid; it lists
-#    the first such files so you can `sudo chown -R <you> <path>` them.
+#    each file has on it. Files written elsewhere may turn out to belong to another uid: status
+#    (run as you, after ownership-on) lists them so you can `sudo chown -R <you> <path>` them.
+#    The disk root itself belongs to root; that is expected.
 # b. Owners alone do not close anything: most folders are 755 (anyone may read). close-dot makes
 #    each top-level folder 700 except factory-sandboxes (where agents will work), and the disk
 #    root 711 (others may pass through to factory-sandboxes but not list the disk). Hidden system
-#    folders (.Spotlight-V100, .Trashes, ...) are left alone.
+#    folders (.Spotlight-V100, .Trashes, ...) are left alone. Needs sudo: the disk root is root's.
 # c. A standard (not admin) user, so it cannot sudo. You set its password; it is not used for
 #    anything else in this step.
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -43,6 +44,17 @@ dot_entries() {
 status() {
   step "a. File owners on $DOT"
   say "  Owners: $(ownership_state)   (Disabled = any local user can read and write everything there)"
+  if [ "$(ownership_state)" = Enabled ]; then
+    # Three levels deep: the whole disk (node_modules, pnpm store, builds) takes far too long.
+    local foreign
+    foreign="$(find "$DOT" -xdev -mindepth 1 -maxdepth 3 ! -user "$OWNER" -not -path "$DOT/.*" 2>/dev/null | head -30 || true)"
+    if [ -z "$foreign" ]; then
+      say "  everything three levels deep is $OWNER's (the disk root is root's, as it should be)"
+    else
+      say "  not $OWNER's (first 30; take back with: sudo chown -R $OWNER <path>):"
+      printf '%s\n' "$foreign" | sed 's/^/    /'
+    fi
+  fi
 
   step "b. Top-level of $DOT open to other users"
   say "  $DOT itself: $(stat -f '%Sp %Su' "$DOT")"
@@ -80,17 +92,9 @@ ownership_on() {
   need_root ownership-on
   step "Enabling owners on $DOT"
   diskutil enableOwnership "$DOT"
-  # Three levels deep: the whole disk (node_modules, pnpm store, builds) takes far too long.
-  # Full scan, if wanted: find /Volumes/dot -xdev ! -user <you> | head
-  step "Files not owned by $OWNER, three levels deep (first 30)"
-  local found
-  found="$(find "$DOT" -xdev -maxdepth 3 ! -user "$OWNER" -not -path "$DOT/.*" 2>/dev/null | head -30 || true)"
-  if [ -z "$found" ]; then
-    say "  none"
-  else
-    printf '%s\n' "$found" | sed 's/^/  /'
-    say "  To take one back: sudo chown -R $OWNER <path>"
-  fi
+  # No owner scan here: right after enabling, a scan run as root still sees the old view (every
+  # file as root's). status, run as you, shows the real owners.
+  say "  Now check the real owners, without sudo: $0 status"
 }
 
 ownership_off() {
@@ -100,12 +104,12 @@ ownership_off() {
 }
 
 close_dot() {
-  not_root
+  need_root close-dot
   [ "$(ownership_state)" = Enabled ] || die "owners are disabled on $DOT; run sudo $0 ownership-on first (without it these modes protect nothing)"
   step "Saving the current modes"
   { echo "$DOT"; dot_entries; } | save_modes 2-dot
   step "Closing"
-  chmod 711 "$DOT" || die "could not chmod $DOT (owner: $(stat -f '%Su' "$DOT")); sudo chown $OWNER $DOT and rerun"
+  chmod 711 "$DOT"
   local entry
   while IFS= read -r entry; do
     chmod go-rwx "$entry"
@@ -115,7 +119,7 @@ close_dot() {
 }
 
 open_dot() {
-  not_root
+  need_root open-dot
   step "Restoring the modes from before close-dot"
   restore_modes 2-dot
   status
