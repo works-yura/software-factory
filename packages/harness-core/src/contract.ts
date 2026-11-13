@@ -142,7 +142,11 @@ export interface AgentSession {
     /** The current thread, or undefined before the session has one. */
     getId(): string | undefined;
     requireId(): string;
-    switch(input: { threadId: string }): Promise<unknown>;
+    /**
+     * `requestContext` runs the switch as someone: subscribing to the thread resolves its memory and
+     * model credentials, which need the session owner.
+     */
+    switch(input: { threadId: string; requestContext?: AgentRunContext }): Promise<unknown>;
     /** Messages of the thread's current run window; a delivered signal appears here under its id. */
     listActiveMessages(): Promise<Array<{ id: string }>>;
     getSetting(input: { key: string }): Promise<unknown>;

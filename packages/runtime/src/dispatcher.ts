@@ -400,7 +400,11 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
   });
 }
 
-type ThreadSwitchSession = Pick<AgentSession, 'thread'>;
+/** Who a bound session's work runs as: the person who started it, in the card's organization. */
+interface SessionOwner {
+  userId: string;
+  orgId: string;
+}
 type DispatcherSession = AgentSession;
 
 export interface FactoryBindingPreparationInput {
@@ -1481,7 +1485,7 @@ export class FactoryDecisionDispatcher {
         }
         await this.#withBindingSkillRun(binding.id, async () => {
           const { startedBy, item } = await this.#runOwner(binding);
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: binding.orgId });
           const requestContext = this.#harness.runContext(session, {
             userId: startedBy,
             orgId: record.orgId,
@@ -1505,7 +1509,7 @@ export class FactoryDecisionDispatcher {
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
-          await this.#switchThread(session, binding);
+          await this.#switchThread(session, binding, { userId: startedBy, orgId: binding.orgId });
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
@@ -1761,7 +1765,7 @@ export class FactoryDecisionDispatcher {
         // Nobody live on the card means nobody to tell, not a failure to retry.
         if (!binding) return;
         const { startedBy } = await this.#runOwner(binding);
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: binding.orgId });
         const requestContext = this.#harness.runContext(session, {
           userId: startedBy,
           orgId: record.orgId,
@@ -1804,7 +1808,7 @@ export class FactoryDecisionDispatcher {
         // A notification can wake the idle session, so it runs as the session's
         // owner like any other Factory-started run, never as nobody.
         const { startedBy } = await this.#runOwner(binding);
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: binding.orgId });
         const requestContext = this.#harness.runContext(session, {
           userId: startedBy,
           orgId: record.orgId,
@@ -2378,7 +2382,11 @@ export class FactoryDecisionDispatcher {
     }
     if (!first.board.isTerminal(first.route.phase)) {
       const binding = await this.#findBinding(record);
-      const session = binding ? await this.#findSession(binding) : undefined;
+      // A binding with no recorded owner never started a run, so it has none in flight.
+      const startedBy = binding ? runBindingOwner(first.item, binding) : undefined;
+      if (binding && startedBy) await this.#primeCredentials?.({ orgId: binding.orgId, userId: startedBy });
+      const session =
+        binding && startedBy ? await this.#findSession(binding, { userId: startedBy, orgId: binding.orgId }) : undefined;
       // Checked again on the next claim: the card may have moved, or the routes changed, by then.
       if (binding && session && (await this.#hasRunInFlight(session, binding))) {
         throw new FactoryDecisionPostponed();
@@ -2531,7 +2539,7 @@ export class FactoryDecisionDispatcher {
     const binding = await this.#findBinding(record);
     if (!binding) return;
     const { startedBy } = await this.#runOwner(binding);
-    const session = await this.#requireSession(binding);
+    const session = await this.#requireSession(binding, { userId: startedBy, orgId: binding.orgId });
     const author = decision.author
       ? `@${decision.author}${decision.authorTrusted ? '' : ' (untrusted author)'}`
       : decision.authorTrusted
@@ -2651,10 +2659,10 @@ export class FactoryDecisionDispatcher {
     return this.#requireBinding(record, role);
   }
 
-  async #findSession(binding: FactoryRunBindingRecord): Promise<AgentSession | undefined> {
+  async #findSession(binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<AgentSession | undefined> {
     const session = await this.#harness.getSession(binding.sessionId);
     if (!session) return undefined;
-    await this.#switchThread(session, binding);
+    await this.#switchThread(session, binding, owner);
     return session;
   }
 
@@ -2755,15 +2763,23 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  async #requireSession(binding: FactoryRunBindingRecord): Promise<AgentSession> {
-    const session = await this.#findSession(binding);
+  async #requireSession(binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<AgentSession> {
+    const session = await this.#findSession(binding, owner);
     if (!session) throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
     return session;
   }
 
-  async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
+  // Switching subscribes to the thread, which resolves memory and model
+  // credentials, so it always runs as the session owner (upstream #30179).
+  async #switchThread(session: AgentSession, binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<void> {
     if (session.thread.requireId() === binding.threadId) return;
-    await session.thread.switch({ threadId: binding.threadId });
+    const requestContext = this.#harness.runContext(session, {
+      userId: owner.userId,
+      orgId: owner.orgId,
+      threadId: binding.threadId,
+      resourceId: binding.resourceId,
+    });
+    await session.thread.switch({ threadId: binding.threadId, requestContext });
   }
 
   async #withBindingSkillRun(bindingId: string, effect: () => Promise<void>): Promise<void> {
@@ -2935,7 +2951,7 @@ export class FactoryDecisionDispatcher {
           // Wake runs build the Factory workspace, which requires the
           // authenticated session owner on the request context.
           const { startedBy, item } = await this.#runOwner(binding);
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: binding.orgId });
           const requestContext = this.#harness.runContext(session, {
             userId: startedBy,
             orgId: record.orgId,
