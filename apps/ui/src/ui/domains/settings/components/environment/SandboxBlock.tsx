@@ -108,6 +108,9 @@ function SettingRow({
 }) {
   const { t } = useTranslation('settings');
   const label = t(`environment.sandbox.settingLabels.${name}`, { defaultValue: schema.title ?? name });
+  const description = schema.description
+    ? t(`environment.sandbox.settingDescriptions.${name}`, { defaultValue: schema.description })
+    : undefined;
   const type = Array.isArray(schema.type) ? schema.type.find(t => t !== 'null') : schema.type;
   const placeholder = schema.default === undefined ? undefined : String(schema.default);
   const choices = schemaChoices(schema);
@@ -199,7 +202,7 @@ function SettingRow({
     );
   }
   return (
-    <SettingsRow label={label} description={schema.description}>
+    <SettingsRow label={label} description={description}>
       {control}
     </SettingsRow>
   );

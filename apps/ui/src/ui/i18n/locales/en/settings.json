@@ -185,6 +185,11 @@
         "maxActiveSandboxes": "Awake sandboxes at most",
         "idleSleepMinutes": "Sleep after idle (minutes)",
         "hiddenRefRetentionDays": "Keep published work (days)"
+      },
+      "settingDescriptions": {
+        "maxActiveSandboxes": "Over this, the sandboxes idle longest go to sleep.",
+        "idleSleepMinutes": "A sandbox without work this long goes to sleep.",
+        "hiddenRefRetentionDays": "Work published to hidden refs on GitHub is removed after this long once the remote holds it, or its card closed."
       }
     },
     "repository": {
