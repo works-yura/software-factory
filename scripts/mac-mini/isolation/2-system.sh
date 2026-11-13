@@ -5,6 +5,7 @@
 #
 #   scripts/mac-mini/isolation/2-system.sh                       # status; changes nothing
 #   sudo scripts/mac-mini/isolation/2-system.sh ownership-on     # a. the disk respects file owners
+#   sudo scripts/mac-mini/isolation/2-system.sh fix-owners       # a2. files with no real owner become yours
 #   sudo scripts/mac-mini/isolation/2-system.sh close-dot        # b. top-level folders 700, disk 711
 #   sudo scripts/mac-mini/isolation/2-system.sh add-user         # c. create the standard user "factory"
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-path       # d. let "factory" through to sandboxes only
@@ -20,6 +21,12 @@
 #    each file has on it. Files written elsewhere may turn out to belong to another uid: status
 #    (run as you, after ownership-on) lists them so you can `sudo chown -R <you> <path>` them.
 #    The disk root itself belongs to root; that is expected.
+# a2. Files written while owners were disabled are stored with the "unknown" owner (uid 99), and
+#    HFS+ shows such a file as owned by whoever looks at it: you see it as yours, "factory" sees it
+#    as its own and gets the owner's rights, modes notwithstanding. fix-owners stores you as the
+#    real owner of everything on the disk (system folders excepted). Nothing changes for you. Run it
+#    once after ownership-on; it walks the whole disk (minutes). Not undone by rollback: owning
+#    your own files is harmless, and ownership-off makes owners meaningless again anyway.
 # b. Owners alone do not close anything: most folders are 755 (anyone may read). close-dot makes
 #    each top-level folder 700 and the disk root 711 (others may pass through but not list it).
 #    Hidden system folders (.Spotlight-V100, .Trashes, ...) are left alone. Needs sudo: the disk
@@ -157,6 +164,30 @@ ownership_on() {
   say "  Now check the real owners, without sudo: $0 status"
 }
 
+# Everything on the disk but macOS's own hidden folders.
+owner_targets() {
+  local entry
+  for entry in "$DOT"/* "$DOT"/.[!.]*; do
+    case "$(basename "$entry")" in
+      .Spotlight-V100|.fseventsd|.Trashes|.DocumentRevisions-V100|.TemporaryItems|.com.apple.*) continue ;;
+    esac
+    [ -e "$entry" ] || [ -L "$entry" ] && echo "$entry"
+  done
+}
+
+fix_owners() {
+  need_root fix-owners
+  [ "$(ownership_state)" = Enabled ] || die "owners are disabled on $DOT; run sudo $0 ownership-on first"
+  step "Storing $OWNER as the real owner of everything on $DOT (whole disk: minutes)"
+  chown "$OWNER" "$DOT"
+  local entry
+  while IFS= read -r entry; do
+    say "  $entry"
+    chown -R -h "$OWNER" "$entry"
+  done < <(owner_targets)
+  say "  done. Check as the agent: sudo -u $AGENT_USER bash -s < $HERE/check-as-agent.sh"
+}
+
 ownership_off() {
   need_root ownership-off
   step "Disabling owners on $DOT"
@@ -259,11 +290,12 @@ case "${1:-status}" in
   status) status ;;
   ownership-on) ownership_on ;;
   ownership-off) ownership_off ;;
+  fix-owners) fix_owners ;;
   close-dot) close_dot ;;
   open-dot) open_dot ;;
   add-user) add_user ;;
   remove-user) remove_user ;;
   agent-path) agent_path ;;
   close-agent-path) close_agent_path ;;
-  *) die "usage: $0 [status|ownership-on|close-dot|add-user|agent-path|close-agent-path|remove-user|open-dot|ownership-off]" ;;
+  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|remove-user|open-dot|ownership-off]" ;;
 esac
