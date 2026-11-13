@@ -452,6 +452,41 @@
     "done": "Done",
     "error": "Something went wrong"
   },
+  "sandboxSetup": {
+    "running": "Setting up the sandbox",
+    "done": "Sandbox ready in {{time}}",
+    "failed": "Sandbox setup failed",
+    "position": "({{index}} of {{total}})",
+    "phase": {
+      "clone": "cloning {{repo}}",
+      "checkout": "checking out the session branch of {{repo}}",
+      "env-files": "writing env files for {{repo}}",
+      "setup": "installing dependencies of {{repo}}",
+      "workspaceSetup": "running the workspace setup"
+    },
+    "step": {
+      "clone": "clone",
+      "checkout": "branch checkout",
+      "env-files": "env files",
+      "setup": "setup command"
+    },
+    "reason": {
+      "timeout": "timed out: the git host answered too slowly",
+      "network": "could not reach the git host",
+      "no_access": "the git host refused access",
+      "clone_failed": "git could not clone or check out",
+      "setup_failed": "the command failed",
+      "unknown": "unexpected error"
+    },
+    "failure": "{{where}}: {{reason}}",
+    "more": "and {{count}} more",
+    "workspace": "workspace",
+    "seconds": "{{seconds}} s",
+    "minutes": "{{minutes}} min {{seconds}} s",
+    "kilobytes": "{{value}} KB",
+    "megabytes": "{{value}} MB",
+    "gigabytes": "{{value}} GB"
+  },
   "turnGap": {
     "later": "{{amount}} later"
   },

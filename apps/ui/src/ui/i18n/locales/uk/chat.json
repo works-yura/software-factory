@@ -454,6 +454,41 @@
     "done": "Готово",
     "error": "Щось пішло не так"
   },
+  "sandboxSetup": {
+    "running": "Розгортаю пісочницю",
+    "done": "Пісочницю розгорнуто за {{time}}",
+    "failed": "Не вдалося розгорнути пісочницю",
+    "position": "({{index}} з {{total}})",
+    "phase": {
+      "clone": "клоную {{repo}}",
+      "checkout": "перемикаю {{repo}} на гілку сесії",
+      "env-files": "записую env-файли {{repo}}",
+      "setup": "встановлюю залежності {{repo}}",
+      "workspaceSetup": "налаштовую робочий простір"
+    },
+    "step": {
+      "clone": "клонування",
+      "checkout": "перемикання гілки",
+      "env-files": "env-файли",
+      "setup": "команда налаштування"
+    },
+    "reason": {
+      "timeout": "час вичерпано: git-хостинг відповідав надто повільно",
+      "network": "немає з'єднання з git-хостингом",
+      "no_access": "git-хостинг відмовив у доступі",
+      "clone_failed": "git не зміг клонувати або перемкнути репозиторій",
+      "setup_failed": "команда завершилася з помилкою",
+      "unknown": "неочікувана помилка"
+    },
+    "failure": "{{where}}: {{reason}}",
+    "more": "і ще {{count}}",
+    "workspace": "робочий простір",
+    "seconds": "{{seconds}} с",
+    "minutes": "{{minutes}} хв {{seconds}} с",
+    "kilobytes": "{{value}} КБ",
+    "megabytes": "{{value}} МБ",
+    "gigabytes": "{{value}} ГБ"
+  },
   "turnGap": {
     "later": "{{amount}} по тому"
   },

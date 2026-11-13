@@ -96,6 +96,7 @@ function ChatRuntimeValueProvider({
         bufferingMessages: runtime.bufferingMessages,
         bufferingObservations: runtime.bufferingObservations,
         goal: runtime.goal,
+        sandboxSetup: runtime.sandboxSetup,
         runsStarted: runtime.runsStarted,
         tokensPerSec: runtime.tokensPerSec,
       }}
