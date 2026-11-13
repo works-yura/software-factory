@@ -1265,6 +1265,13 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/me');
   });
 
+  it('ends its routes with the JSON 404s for /web and /auth, so every real route answers before them', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string; method: string }>;
+    const routes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
+    expect(routes.slice(-2).map(route => `${route.method} ${route.path}`)).toEqual(['ALL /web/*', 'ALL /auth/*']);
+  });
+
   it('registers the Factory transition tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });

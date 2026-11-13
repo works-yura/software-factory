@@ -240,7 +240,7 @@ import { createSourceControlTools } from '@factory/harness-mastra';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from '@factory/session';
 import { observeSessionThreadStamp } from '@factory/session';
 import { observeSessionThreadTitle } from '@factory/session';
-import { createSpaStaticMiddleware, resolveUiDistDir } from '@factory/http';
+import { buildUnknownServerRoutes, createSpaStaticMiddleware, resolveUiDistDir } from '@factory/http';
 import { createStateSigner } from '@factory/auth';
 import { observeAgentGitAction } from '@factory/harness-mastra';
 import { AuditStorage } from '@factory/store';
@@ -3310,6 +3310,9 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
+          // Last: a JSON 404 for any `/web` or `/auth` path the routes above do not answer, before the
+          // deployer's catch-all answers it with its HTML welcome page (see `buildUnknownServerRoutes`).
+          ...buildUnknownServerRoutes(),
           ];
         },
         buildServerConfig: () => {
