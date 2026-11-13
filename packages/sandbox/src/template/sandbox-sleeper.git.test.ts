@@ -5,6 +5,7 @@ import { describeFactorySandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LocalFactorySandbox } from '../local-factory-sandbox.ts';
+import { withWorkItemFolderLock } from '../session-sandbox.ts';
 import { sleepPolicyOf } from './local-sandbox-settings.ts';
 import { LocalEnvironmentTemplate } from './local-template.ts';
 import { SandboxSleeper } from './sandbox-sleeper.ts';
@@ -98,6 +99,8 @@ describe('putting sandboxes to sleep, with real git', () => {
   let sandboxRoot: string;
   const running = new Set<string>();
   const startsOnRelease = new Set<string>();
+  const queuesStartOnRelease = new Map<string, Set<string>>();
+  const queuedStarts: Promise<unknown>[] = [];
   const released: string[] = [];
   let clock = Date.now();
 
@@ -113,6 +116,11 @@ describe('putting sandboxes to sleep, with real git', () => {
           released.push(sessionId);
           // A message arrives while the sandbox is being released.
           if (startsOnRelease.has(sessionId)) running.add(sessionId);
+          // Or its session starts and waits for the folder's lock the sleeper holds.
+          if (queuesStartOnRelease.has(sessionId)) {
+            const key = sessionId.startsWith('own-') ? sessionId.slice(4) : [...queuesStartOnRelease.get(sessionId)!][0]!;
+            queuedStarts.push(withWorkItemFolderLock(key, async () => {}));
+          }
           // A released session of its own destroys its sandbox, which removes its folder.
           if (sessionId.startsWith('own-')) await sandbox.create({ sessionId: sessionId.slice(4), getRepositoryAccess: undefined }).destroy();
         },
@@ -156,6 +164,8 @@ describe('putting sandboxes to sleep, with real git', () => {
     await template.repositoryCache.refresh({ cloneUrl: fx.origin });
     running.clear();
     startsOnRelease.clear();
+    queuesStartOnRelease.clear();
+    queuedStarts.length = 0;
     bound.clear();
     released.length = 0;
     // Past the grace period of the work the fixtures record, unless a test moves it.
@@ -331,6 +341,14 @@ describe('putting sandboxes to sleep, with real git', () => {
     bound.add('agent-24');
     expect(await sleeper().sleep('work-items/f/card-24', 'manual')).toEqual({ outcome: 'active' });
     expect((await sleeper({ maxActive: 0, idleMs: HOUR }).sweep()).slept).toEqual([]);
+    expect(await exists(card.path)).toBe(true);
+  });
+
+  it('a session start waiting for the folder while it goes to sleep keeps it awake, so the message never fails as retired', async () => {
+    const card = await folder('work-items/f/card-25', 'agent-25', 'factory/item-25');
+    queuesStartOnRelease.set('agent-25', new Set(['work-items/f/card-25']));
+    expect(await sleeper().sleep('work-items/f/card-25', 'manual')).toEqual({ outcome: 'active' });
+    await Promise.all(queuedStarts);
     expect(await exists(card.path)).toBe(true);
   });
 

@@ -15,7 +15,12 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { LocalFactorySandbox } from '../local-factory-sandbox.ts';
-import { peekSessionSandbox, peekWorkItemFolderSessions, withWorkItemFolderLock } from '../session-sandbox.ts';
+import {
+  peekSessionSandbox,
+  peekWorkItemFolderSessions,
+  withWorkItemFolderLock,
+  workItemFolderLockWaiters,
+} from '../session-sandbox.ts';
 import type { SandboxProblem, SandboxRecord, SandboxRegistry } from './sandbox-registry.ts';
 import { chooseSandboxesToSleep, DEFAULT_SLEEP_POLICY } from './sleep-policy.ts';
 import type { SleepPolicy } from './sleep-policy.ts';
@@ -140,6 +145,8 @@ export class SandboxSleeper {
   /** An agent works in the folder, or a setup for it is under way in this process. */
   #active(record: SandboxRecord): boolean {
     if (Object.keys(record.sessions).some(sessionId => this.#sessions.isRunning(sessionId))) return true;
+    // A start waiting for the folder's lock (the sleeper holds it): a message arrived.
+    if (workItemFolderLockWaiters(record.key) > 0) return true;
     const starting = (status: unknown) => status === 'starting' || status === 'pending-start';
     const entries =
       record.kind === 'card'
