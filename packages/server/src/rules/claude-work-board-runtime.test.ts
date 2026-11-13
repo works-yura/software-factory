@@ -346,7 +346,10 @@ describe('Work board on the Claude Code harness', () => {
     // 3. Approval: a person moves the card to Building; the build resumes the same Claude session.
     await expect(move('execute')).resolves.toMatchObject({ status: 'accepted' });
     await drain();
-    expect(fake.calls).toHaveLength(3);
+    // The fake build ends its turn without moving the card: that run is incomplete (upstream #30101),
+    // so Factory delivers Building once more in the same session.
+    expect(fake.calls).toHaveLength(4);
+    expect(fake.calls[3]!.args).toEqual(expect.arrayContaining(['--resume', CLAUDE_SESSION]));
     const build = fake.calls[2]!;
     expect(build.args).toEqual(
       expect.arrayContaining(['--resume', CLAUDE_SESSION, '--permission-mode', 'acceptEdits']),
@@ -396,7 +399,10 @@ describe('Work board on the Claude Code harness', () => {
     // The approved plan goes to Building, as a Mastra plan does.
     expect(await card()).toMatchObject({ stages: ['execute'] });
     await drain();
-    expect(fake.calls).toHaveLength(3);
+    // The fake build ends its turn without moving the card: that run is incomplete (upstream #30101),
+    // so Factory delivers Building once more in the same session.
+    expect(fake.calls).toHaveLength(4);
+    expect(fake.calls[3]!.args).toEqual(expect.arrayContaining(['--resume', CLAUDE_SESSION]));
     const build = fake.calls[2]!;
     expect(build.args).toEqual(expect.arrayContaining(['--resume', CLAUDE_SESSION, '--permission-mode', 'acceptEdits']));
     expect(build.stdin).toMatch(/^The plan was approved\. Implement it\./);
