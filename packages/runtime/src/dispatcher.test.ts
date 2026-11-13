@@ -6151,6 +6151,7 @@ describe('FactoryDecisionDispatcher', () => {
     const legacy = (await new Cards(seeded.storage.ops).findOne({ id: elsewhere.item.id }))!;
     delete legacy.work_item;
     delete legacy.work_item_sources;
+    delete legacy.changed_at;
     await seeded.storage.ops.insertOne('work_items', { ...legacy, claim_key: 'gitlab:issue:1' });
     const parent = await createItem(storage);
     const transitionService = new FactoryTransitionService({

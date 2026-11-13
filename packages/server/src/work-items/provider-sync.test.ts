@@ -714,6 +714,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         const legacy = await new Cards(storage.ops).findOne({ id: item.id });
         delete legacy!.work_item;
         delete legacy!.work_item_sources;
+        delete legacy!.changed_at;
         await storage.ops.insertOne('work_items', legacy!);
         await storage.ops.deleteMany('factory_board_items', { id: item.id });
         await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: item.workItem.id });
@@ -763,6 +764,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const legacy = await new Cards(storage.ops).findOne({ id: item.id });
     delete legacy!.work_item;
     delete legacy!.work_item_sources;
+    delete legacy!.changed_at;
     await storage.ops.insertOne('work_items', legacy!);
     await storage.ops.deleteMany('factory_board_items', { id: item.id });
     await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: item.workItem.id });
@@ -844,6 +846,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const legacy = await new Cards(storage.ops).findOne({ id: item.id });
     delete legacy!.work_item;
     delete legacy!.work_item_sources;
+    delete legacy!.changed_at;
     await storage.ops.insertOne('work_items', legacy!);
     const board = await storage.ops.findOne<{ work_item_id: string }>('factory_board_items', { id: item.id });
     await storage.ops.deleteMany('factory_board_items', { id: item.id });
@@ -863,6 +866,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const legacy = await new Cards(storage.ops).findOne({ id: item.id });
     delete legacy!.work_item;
     delete legacy!.work_item_sources;
+    delete legacy!.changed_at;
     await storage.ops.insertOne('work_items', legacy!);
     await workItems.delete({ orgId: scope.orgId, id: item.id });
     const before = await storage.ops.findOne('work_items', { id: item.id });
