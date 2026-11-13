@@ -9,8 +9,14 @@
 #   sudo scripts/mac-mini/isolation/2-system.sh close-dot        # b. top-level folders 700, disk 711
 #   sudo scripts/mac-mini/isolation/2-system.sh add-user         # c. create the standard user "factory"
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-path       # d. let "factory" through to sandboxes only
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-group      # e1. shared group + ACLs on sandboxes
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-profile    # e2. install the Seatbelt profile
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-sudo       # e3. sudoers rule: the server starts agents
 #
 # Rollback, in reverse order:
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-sudo
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-profile
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-group
 #   sudo scripts/mac-mini/isolation/2-system.sh close-agent-path # "factory" stopped at the disk again
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-user      # deletes "factory" AND /Users/factory
 #   sudo scripts/mac-mini/isolation/2-system.sh open-dot         # original modes back
@@ -41,13 +47,42 @@
 #    and adds an inheritable deny for "factory" to both folders, so a folder created there later
 #    is closed to it even with the default 755. Rollback removes both ACL entries and puts the
 #    modes back; the deny that new folders already inherited stays (it only ever denies "factory").
+# e. What the server needs to start agents as "factory" (ADR-0041, @factory/agent-user):
+#    e1. agent-group: a group with you and "factory" in it, and ACLs on the sandboxes folder (as
+#        SandVault does on its shared folder) so both of you read and write what either makes
+#        there: folders get the rights and pass them on, files get them without execute. Plus the
+#        agent's own temp folder (~factory/.tmp, its TMPDIR).
+#    e2. agent-profile: the Seatbelt profile every agent command runs under, generated from the
+#        package (bin/print-profile.ts) and installed root-owned in /var/factory, where the agent
+#        cannot change it. Rerun after the sandboxes folder moves.
+#    e3. agent-sudo: /etc/sudoers.d/50-factory-agent, checked with visudo before it is installed:
+#        you may run `env` and `kill` as "factory" without a password (env starts every agent
+#        command, kill stops them), and keep fd 3 open across sudo (closefrom_override), where the
+#        agent's environment travels. Nothing else, and nothing as root.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/common.sh"
+REPO="$(cd "$HERE/../../.." && pwd)"
 
 # Where agents work: the only place "factory" may reach on the disk.
 AGENT_ROOT="$DOT/Project/factory/sandboxes"
 ACL_PASS="user:$AGENT_USER allow search"
 ACL_DENY_NEW="user:$AGENT_USER deny list,search,add_file,add_subdirectory,delete_child,read,write,append,execute,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown,delete,file_inherit,directory_inherit,only_inherit"
+
+AGENT_GROUP="factory-agents"
+PROFILE_DIR="/var/factory"
+PROFILE="$PROFILE_DIR/agent-$AGENT_USER.sb"
+SUDOERS="/etc/sudoers.d/50-factory-agent"
+# Directories: the rights and their inheritance. Files: the same without search (= execute).
+ACL_DIR="group:$AGENT_GROUP allow read,write,append,delete,delete_child,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown,search,list,add_file,add_subdirectory,directory_inherit"
+ACL_FILE_INHERIT="group:$AGENT_GROUP allow read,write,append,delete,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown,file_inherit,directory_inherit,only_inherit"
+ACL_FILE="group:$AGENT_GROUP allow read,write,append,delete,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown"
+
+group_exists() { dscl . -read "/Groups/$AGENT_GROUP" >/dev/null 2>&1; }
+
+node_binary() {
+  if [ -n "${NODE:-}" ]; then echo "$NODE"; return; fi
+  ls -d "$OWNER_HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | tail -1
+}
 
 ownership_state() { diskutil info "$DOT" | awk -F: '/Owners/{gsub(/ /,"",$2); print $2}'; }
 user_exists() { id "$AGENT_USER" >/dev/null 2>&1; }
@@ -152,6 +187,16 @@ status() {
     say "  open to others next to the path (a pass-through would expose them):"
     printf '%s\n' "$neighbours" | sed 's/^/    /'
   fi
+
+  step "e. What the server needs to start agents"
+  if group_exists; then
+    say "  group $AGENT_GROUP: $(dscl . -read "/Groups/$AGENT_GROUP" GroupMembership 2>/dev/null | cut -d: -f2-)"
+  else
+    say "  group $AGENT_GROUP: missing"
+  fi
+  has_acl "group:$AGENT_GROUP" "$AGENT_ROOT" && say "  sandboxes ACL: set" || say "  sandboxes ACL: missing"
+  [ -f "$PROFILE" ] && say "  profile: $PROFILE ($(stat -f '%Su %Sp' "$PROFILE"))" || say "  profile: missing"
+  [ -f "$SUDOERS" ] && say "  sudoers: $SUDOERS" || say "  sudoers: missing"
   return 0
 }
 
@@ -287,6 +332,81 @@ close_agent_path() {
   status
 }
 
+agent_group() {
+  need_root agent-group
+  user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
+  step "Group $AGENT_GROUP with $OWNER and $AGENT_USER"
+  group_exists || dseditgroup -o create -r "Factory server and its agents" "$AGENT_GROUP"
+  dseditgroup -o edit -a "$OWNER" -t user "$AGENT_GROUP"
+  dseditgroup -o edit -a "$AGENT_USER" -t user "$AGENT_GROUP"
+  step "ACLs on $AGENT_ROOT (every file: minutes for big checkouts)"
+  find "$AGENT_ROOT" \( -type d -exec chmod -h +a "$ACL_DIR" {} + -exec chmod -h +a "$ACL_FILE_INHERIT" {} + \) \
+    -o \( ! -type d -exec chmod -h +a "$ACL_FILE" {} + \) 2>/dev/null || say "  (some entries refused an ACL; see above)"
+  step "Agent temp folder"
+  install -d -o "$AGENT_USER" -g staff -m 700 "/Users/$AGENT_USER/.tmp"
+  status
+}
+
+remove_agent_group() {
+  need_root remove-agent-group
+  step "Removing $AGENT_GROUP ACLs from $AGENT_ROOT"
+  # Inherited copies do not match the original text, so strip every ACL there (as SandVault does on
+  # its shared folder): agent-group is the only thing that puts ACLs inside the sandboxes folder.
+  find "$AGENT_ROOT" -exec chmod -h -N {} + 2>/dev/null || true
+  group_exists && dseditgroup -o delete "$AGENT_GROUP"
+  status
+}
+
+agent_profile() {
+  need_root agent-profile
+  local node
+  node="$(node_binary)"
+  [ -x "$node" ] || die "no node found; run with NODE=/path/to/node"
+  step "Generating the profile with $node"
+  local tmp
+  tmp="$(mktemp)"
+  FACTORY_AGENT_USER="$AGENT_USER" FACTORY_SERVER_USER="$OWNER" MASTRACODE_LOCAL_SANDBOX_ROOT="$AGENT_ROOT" \
+    "$node" "$REPO/packages/agent-user/bin/print-profile.ts" > "$tmp" || { rm -f "$tmp"; die "could not generate the profile"; }
+  /usr/bin/sandbox-exec -f "$tmp" /usr/bin/true || { rm -f "$tmp"; die "sandbox-exec refuses the generated profile"; }
+  install -d -o root -g wheel -m 755 "$PROFILE_DIR"
+  install -o root -g wheel -m 644 "$tmp" "$PROFILE"
+  rm -f "$tmp"
+  say "  installed $PROFILE"
+}
+
+remove_agent_profile() {
+  need_root remove-agent-profile
+  rm -f "$PROFILE"
+  rmdir "$PROFILE_DIR" 2>/dev/null || true
+  say "  removed $PROFILE"
+}
+
+agent_sudo() {
+  need_root agent-sudo
+  user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
+  local tmp
+  tmp="$(mktemp)"
+  cat > "$tmp" <<SUDOERS_RULE
+# Factory: the server ($OWNER) starts and stops agent processes as $AGENT_USER (ADR-0041).
+# env starts every agent command (env -i ... sandbox-exec ...), kill stops them; fd 3 carries
+# the agent's environment across sudo. Written by scripts/mac-mini/isolation/2-system.sh.
+Defaults:$OWNER closefrom_override
+$OWNER ALL=($AGENT_USER) NOPASSWD: /usr/bin/env, /bin/kill
+SUDOERS_RULE
+  visudo -cf "$tmp" >/dev/null || { rm -f "$tmp"; die "visudo rejects the rule"; }
+  install -o root -g wheel -m 440 "$tmp" "$SUDOERS"
+  rm -f "$tmp"
+  visudo -c >/dev/null || { rm -f "$SUDOERS"; die "sudoers as a whole did not parse; the rule was removed"; }
+  say "  installed $SUDOERS"
+  say "  check, without sudo: sudo -n -u $AGENT_USER -- /usr/bin/env id -un"
+}
+
+remove_agent_sudo() {
+  need_root remove-agent-sudo
+  rm -f "$SUDOERS"
+  say "  removed $SUDOERS"
+}
+
 case "${1:-status}" in
   status) status ;;
   ownership-on) ownership_on ;;
@@ -298,5 +418,11 @@ case "${1:-status}" in
   remove-user) remove_user ;;
   agent-path) agent_path ;;
   close-agent-path) close_agent_path ;;
-  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|remove-user|open-dot|ownership-off]" ;;
+  agent-group) agent_group ;;
+  remove-agent-group) remove_agent_group ;;
+  agent-profile) agent_profile ;;
+  remove-agent-profile) remove_agent_profile ;;
+  agent-sudo) agent_sudo ;;
+  remove-agent-sudo) remove_agent_sudo ;;
+  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
 esac
