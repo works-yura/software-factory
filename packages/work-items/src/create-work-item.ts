@@ -18,6 +18,8 @@ import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factor
 import type { Card } from '@factory/store';
 import { arrivalSourceFacts, WorkItemUpdateConflictError } from '@factory/store';
 
+import { CARD_NUMBER_METADATA_KEY } from './card-number.ts';
+
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */
 export type FactoryAuditEmit = (input: EmitAuditInput) => Promise<void>;
 
@@ -25,13 +27,6 @@ type TransitionResult = Awaited<ReturnType<FactoryTransitionService['transition'
 
 /** Attempts at each step after the upsert before a card that keeps changing under its creator is left as is. */
 const STEP_ATTEMPTS = 3;
-
-/**
- * Board metadata key holding the `#number` of a card filed without an issue
- * behind it. Kept apart from `number`, which integrations read as the source
- * issue's number.
- */
-export const CARD_NUMBER_METADATA_KEY = 'cardNumber';
 
 /** One past the highest number given to a manually filed card in the project. */
 async function nextCardNumber(workItems: WorkItemsStorage, orgId: string, factoryProjectId: string): Promise<number> {

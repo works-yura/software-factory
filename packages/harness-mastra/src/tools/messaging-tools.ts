@@ -24,12 +24,12 @@ import {
   resolveSessionThread,
 } from './deliver.ts';
 import type { FactoryDeliveryController, FactoryDeliveryResult } from './deliver.ts';
-import { workItemNumber } from './read-tools.ts';
 import { reportNotification, workItemReportAttributes, workItemReportRecipients } from './reports.ts';
 import { requirePerson } from './scope.ts';
 import type { FactoryToolScope } from './scope.ts';
 import { listSideSessions, sessionModel } from './side-sessions.ts';
 import type { LiveSessions } from '@factory/session';
+import { workItemNumber } from '@factory/work-items/card-number';
 
 /** Messages plus replies, per sender session, per target thread, per window. */
 export const SIGNAL_RATE_LIMIT = 10;

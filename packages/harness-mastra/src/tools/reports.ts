@@ -15,7 +15,7 @@ import type { SourceControlSessionLookup } from '@factory/session';
 import type { WorkItemsStorage } from '@factory/store';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE } from './deliver.ts';
 import type { FactoryDeliveryResult, FactoryDeliveryTarget } from './deliver.ts';
-import { workItemNumber } from './read-tools.ts';
+import { workItemNumber } from '@factory/work-items/card-number';
 
 export type FactoryReportStatus = 'progress' | 'blocked' | 'done' | 'failed';
 

@@ -10,6 +10,8 @@ import { boardFlow, boardForWorkItem, isPullRequestCard, workItemSource } from '
 import type { FactoryRuleBoardFlow, InstalledBoard } from '@factory/core';
 import type { workItemStartersResponseSchema } from '@factory/contracts';
 import type { Card, FactoryDeferredDecisionRecord } from '@factory/store';
+import { sourceMetadata } from '@factory/work-items/card-facts';
+import { metadataLabels } from '@factory/work-items/card-labels';
 
 export type WorkItemStarters = z.infer<typeof workItemStartersResponseSchema>;
 
@@ -50,20 +52,6 @@ export function cardsWithFailedRun(
     if (status === 'failed') failed.add(workItemId);
   }
   return failed;
-}
-
-/**
- * What the card's source says about it. A Factory card has no source: its facts are its work
- * item's with the card's own on top, as clients read them. A synced one keeps them on its work item.
- */
-function sourceFacts(card: Card): Record<string, unknown> {
-  const { workItem } = card;
-  if (workItem.provider === 'factory') return { ...workItem.metadata, ...card.metadata };
-  return { ...workItem.metadata, labels: workItem.labels, state: workItem.state };
-}
-
-function labelsOf({ labels }: Record<string, unknown>): string[] {
-  return Array.isArray(labels) ? labels.filter((label): label is string => typeof label === 'string') : [];
 }
 
 function isPullRequest(card: Card): boolean {
@@ -183,7 +171,7 @@ export function workItemStarters({
       (board.initialPhase === firstPhase && !card.stages.some(stage => Object.hasOwn(board.phases, stage)));
 
     if (isPullRequest(card)) {
-      const facts = sourceFacts(card);
+      const facts = sourceMetadata(card);
       if (!isOpenPullRequest(facts, finished)) continue;
       // Factory's verdict sits on the card, over what the source reports.
       const verdict = { ...card.workItem.metadata, ...card.metadata };
@@ -212,7 +200,7 @@ export function workItemStarters({
 
     const notStarted = resting || (triagePhase !== undefined && card.stages.includes(triagePhase));
     if (!notStarted) continue;
-    const labels = labelsOf(sourceFacts(card));
+    const labels = metadataLabels(sourceMetadata(card));
     if (
       seats.planner !== undefined &&
       labels.some(label => label.toLowerCase() === 'bug') &&

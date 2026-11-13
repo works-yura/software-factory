@@ -5,7 +5,7 @@ import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { Card } from '@factory/store';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE, resolveSessionThread } from './deliver.ts';
 import type { FactoryDeliveryController } from './deliver.ts';
-import { workItemNumber } from './read-tools.ts';
+import { workItemNumber } from '@factory/work-items/card-number';
 import type { FactoryToolScope } from './scope.ts';
 
 /** Recent notifications scanned to find each side session's last report. */

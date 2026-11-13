@@ -36,11 +36,11 @@ import {
   workItemRefSchema,
   truncate,
   workItemNotFound,
-  workItemNumber,
   workItemStage,
 } from './read-tools.ts';
 import { requirePerson } from './scope.ts';
 import type { FactoryToolScope } from './scope.ts';
+import { workItemNumber } from '@factory/work-items/card-number';
 
 export interface FactoryWorkItemToolDependencies {
   workItems: WorkItemsStorage;
