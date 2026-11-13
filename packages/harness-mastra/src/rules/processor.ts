@@ -575,22 +575,36 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
 
     if (!binding) return;
     if (binding.status !== 'active') {
-      if (!hasBase || prior?.status !== 'active') return;
-      // Say where the card went, so the session stops its work instead of guessing why its phase vanished.
+      // Said once per context window: a window that already holds the note needs nothing more.
+      if (hasBase && prior?.status !== 'active') return;
+      // Say where the card is and who works it now, so the session never guesses why its card
+      // tools went away (a person may write here days after the card moved on).
       const moved = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
       const movedBoards = moved ? await this.boards.load(binding) : undefined;
       const movedTo = moved && movedBoards ? ruleStage(movedBoards, moved) : undefined;
       const movedName = movedTo
         ? (movedBoards?.get(boardForWorkItem(moved!))?.phases[movedTo]?.name ?? movedTo)
         : undefined;
+      // Nothing to retract and nothing to say: the card is gone or its phase unknown.
+      if (!hasBase && !movedName) return;
+      const finished = moved && movedBoards ? workItemPhaseSemantics(movedBoards, moved)?.kind === 'terminal' : false;
+      const seat = moved?.sessions[binding.role];
+      const current = seat && seat.sessionId !== binding.sessionId ? seat.sessionId : undefined;
+      // The card by id only: its details belong to the card, not to a session no longer on it.
+      const card = moved ? `(card ${escapeText(moved.id)})` : '';
+      const contents = !movedName
+        ? '\n'
+        : finished
+          ? `This session no longer works its Factory card; the card is now in ${escapeText(movedName)}. Your part is done: do not continue its work here. Answer questions only.\n`
+          : current
+            ? `This session is no longer the active session of its Factory card ${card}: the card is now in ${escapeText(movedName)}, and session ${escapeText(current)} works its ${escapeText(binding.role)} seat. Factory card tools are off here. Do not continue the card's work or guess its state; answer questions only, and point the person to that session (or the card on its board) to continue.\n`
+            : `This session is no longer bound to its Factory card ${card}, which is now in ${escapeText(movedName)}: Factory card tools are off here. Do not continue the card's work or guess its state; answer questions only, and tell the person the card needs a new run from its board to continue.\n`;
       return {
         id: STATE_ID,
-        cacheKey: `factory:none:${prior.bindingId ?? 'revoked'}${movedTo ? `:${movedTo}` : ''}`,
+        cacheKey: `factory:none:${prior?.bindingId ?? binding.id}${movedTo ? `:${movedTo}` : ''}${current ? `:${current}` : ''}`,
         mode: 'snapshot',
         tagName: 'factory-phase',
-        contents: movedName
-          ? `This session no longer works its Factory card; the card is now in ${escapeText(movedName)}. Your part is done: do not continue its work here. Answer questions only.\n`
-          : '\n',
+        contents,
         value: { phase: { status: 'none' } },
         attributes: { status: 'none' },
         metadata: { value: { phase: { status: 'none' } } },
