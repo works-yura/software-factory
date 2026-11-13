@@ -194,7 +194,7 @@ export const GIT_TRANSFER_STALL_SECONDS = 60;
  * egress) is terminal and must surface immediately rather than be retried into
  * a slow failure.
  */
-function isTransientGitFailure(result: SandboxCommandResult): boolean {
+export function isTransientGitFailure(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
   return /HTTP2 framing layer|RPC failed; curl|Operation too slow|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
     output,
@@ -210,7 +210,7 @@ function isTransientGitFailure(result: SandboxCommandResult): boolean {
  * `beforeRetry` lets a call site clear whatever the aborted attempt left
  * behind — a half-written clone directory blocks the next `git clone` outright.
  */
-async function gitTransfer(
+export async function gitTransfer(
   sandbox: ExecutableSandbox,
   args: string[],
   options: CommandOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
@@ -297,7 +297,7 @@ function credentialScope(
  * in argv, a remote URL, or persistent git config. Git reads the URL-scoped
  * extra header from its process environment and discards it on exit.
  */
-function gitAuthenticationEnvironment(
+export function gitAuthenticationEnvironment(
   cloneUrl: string,
   token: string,
   username: string,
@@ -323,7 +323,7 @@ function gitAuthenticationEnvironment(
   };
 }
 
-function normalizedRemoteUrl(value: string): string | null {
+export function normalizedRemoteUrl(value: string): string | null {
   let url: URL;
   try {
     url = new URL(value);
@@ -364,7 +364,7 @@ export interface MaterializeRepoOptions {
   progress?: { cloning(): void; transfer(transfer: SandboxSetupTransfer): void };
 }
 
-async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promise<void> {
+export async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promise<void> {
   const mkdir = await execute(sandbox, 'mkdir', ['-p', workdir]);
   if (mkdir.exitCode !== 0) throw classifyGitFailure(mkdir, 'clone-failed');
   const clear = await execute(sandbox, 'find', [
@@ -982,7 +982,7 @@ async function scrubRemote(
  * Turn a failed git command into an actionable error, detecting the common
  * "cannot reach github.com" egress failure.
  */
-function classifyGitFailure(
+export function classifyGitFailure(
   result: SandboxCommandResult,
   fallback: 'clone-failed' | 'pull-failed' | 'push-failed',
 ): MaterializeError {
@@ -1007,6 +1007,9 @@ function classifyGitFailure(
 // ---------------------------------------------------------------------------
 
 export { isValidGitRef };
+
+/** One argv command in a sandbox, bounded by the hang guard; transport errors retried. */
+export { execute as runSandboxCommand };
 
 /** Identity used to author commits inside the sandbox. */
 export interface GitIdentity {
