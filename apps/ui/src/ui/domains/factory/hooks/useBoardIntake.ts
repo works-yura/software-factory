@@ -110,7 +110,7 @@ export function useBoardIntake({
 
   const config = configQuery.data;
   const gitlabStatusQuery = useGitLabStatusQuery();
-  const githubEnabled = config?.github.enabled ?? true;
+  const githubEnabled = config?.github.enabled ?? false;
   // Work watches pull requests on every linked GitHub repository, and browses issues only from
   // the repositories the project's intake routes name (a GitHub route on `source.repository`):
   // routes are the one subscription model. Until the routes load, every linked one is browsed.

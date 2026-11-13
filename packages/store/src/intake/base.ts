@@ -234,7 +234,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     orgId: string;
     /**
      * When provided, the result contains exactly these integration ids, with
-     * unset integrations defaulting to `{ enabled: true, sourceIds: null }`.
+     * unset integrations defaulting to `{ enabled: false, sourceIds: null }`.
      */
     integrationIds?: string[];
   }): Promise<IntakeConfig> {
@@ -242,7 +242,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     const saved = structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
     if (!integrationIds) return saved;
     return Object.fromEntries(
-      integrationIds.map(integrationId => [integrationId, saved[integrationId] ?? { enabled: true, sourceIds: null }]),
+      integrationIds.map(integrationId => [integrationId, saved[integrationId] ?? { enabled: false, sourceIds: null }]),
     );
   }
 
@@ -463,7 +463,7 @@ export class IntakeStorage extends FactoryStorageDomain {
           ) {
             const config = structuredClone(configRow.config);
             config[integrationId] = {
-              ...(config[integrationId] ?? { enabled: true }),
+              ...(config[integrationId] ?? { enabled: false }),
               sourceIds: nextSelected.length > 0 ? nextSelected : null,
             };
             await ops.updateMany('intake_org_settings', { org_id: orgId }, { config, updated_at: now });
