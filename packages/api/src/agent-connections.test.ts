@@ -225,6 +225,22 @@ describe.each(CASES)('$harness.label accounts as a connector', harnessCase => {
     expect(await seed.credentials.getAccount('org1', account.id)).toBeUndefined();
   });
 
+  // The Factory's card runs spend a person's sign-in only when that person shares it.
+  it("lets only the owner share a sign-in with the Factory's card runs; an admin may stop it", async () => {
+    const { send, seed, addSignIn, connector } = await setup(harnessCase);
+    const account = await addSignIn('alice');
+    const id = `${connector}:${account.id}`;
+    const share = (as: string, enabled: boolean) =>
+      send(as, 'PATCH', `/web/connections/${id}/settings`, { section: 'factoryRuns', values: { enabled } });
+
+    expect((await share('admin', true)).status).toBe(403);
+    expect((await seed.credentials.getAccount('org1', account.id))?.factoryRuns).toBe(false);
+    expect((await share('alice', true)).status).toBe(200);
+    expect((await seed.credentials.getAccount('org1', account.id))?.factoryRuns).toBe(true);
+    expect((await share('admin', false)).status).toBe(200);
+    expect((await seed.credentials.getAccount('org1', account.id))?.factoryRuns).toBe(false);
+  });
+
   it('only lets the owner sign in to an account again', async () => {
     const { send, addSignIn, connector } = await setup(harnessCase);
     const account = await addSignIn('alice');
@@ -294,16 +310,20 @@ describe.each(CASES)('$harness.label accounts as a connector', harnessCase => {
 
     const { body } = await send('alice', 'GET', `/web/connections/${connector}:${account.id}/detail`);
     const types = body.sections.map((section: { type: string }) => section.type);
-    expect(types).toEqual(['facts', 'table', 'settings', 'table']);
+    expect(types).toEqual(['facts', 'table', 'settings', 'settings', 'table']);
     expect(body.sections[1]).toMatchObject({ title: 'Usage limits', rows: [{ cells: ['5-hour', '42%', expect.any(String)] }, { cells: ['Weekly', '81%', expect.any(String)] }] });
     expect(body.sections[2]).toMatchObject({ id: 'rotation', fields: [{ name: 'enabled', type: 'boolean', value: true }] });
-    expect(body.sections[3]).toMatchObject({ rows: [{ cells: ['2026-11-11', '1', '1,200'] }] });
+    // Not shared with the Factory's card runs until its owner says so.
+    expect(body.sections[3]).toMatchObject({ id: 'factoryRuns', fields: [{ name: 'enabled', type: 'boolean', value: false }] });
+    expect(body.sections[4]).toMatchObject({ rows: [{ cells: ['2026-11-11', '1', '1,200'] }] });
     expect(readAccountLimits).toHaveBeenCalledWith({ orgId: 'org1', accountId: account.id });
 
     // Another member sees the account, not the work that ran on it; the switch is theirs to read only.
     const other = await send('bob', 'GET', `/web/connections/${connector}:${account.id}/detail`);
-    expect(other.body.sections.map((section: { type: string }) => section.type)).toEqual(['facts', 'table', 'settings']);
+    expect(other.body.sections.map((section: { type: string }) => section.type)).toEqual(['facts', 'table', 'settings', 'settings']);
     expect(other.body.sections[2].fields[0].disabled).toEqual({ reason: expect.any(String) });
+    // Only the person who signed in may share their sign-in with the Factory's cards.
+    expect(other.body.sections[3].fields[0].disabled).toEqual({ reason: expect.any(String) });
   });
 });
 

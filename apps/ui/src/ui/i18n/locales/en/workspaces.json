@@ -453,7 +453,14 @@
         "closed": "Closed merge request",
         "merged": "Merged merge request"
       }
-    }
+    },
+    "approve": "Approve",
+    "decline": "Decline",
+    "runByFactory": "Run by Factory",
+    "runByFactoryBadge": "run by Factory",
+    "approved": "Approved",
+    "declined": "Declined",
+    "answerFailed": "Failed to answer the approval"
   },
   "preview": {
     "label": "{{name}} session details",

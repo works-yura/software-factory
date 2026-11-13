@@ -459,7 +459,14 @@
         "closed": "Закритий merge request",
         "merged": "Злитий merge request"
       }
-    }
+    },
+    "approve": "Схвалити",
+    "decline": "Відхилити",
+    "runByFactory": "Запускає Factory",
+    "runByFactoryBadge": "запускає Factory",
+    "approved": "Схвалено",
+    "declined": "Відхилено",
+    "answerFailed": "Не вдалося відповісти на схвалення"
   },
   "preview": {
     "label": "Деталі сесії {{name}}",

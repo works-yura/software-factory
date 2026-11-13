@@ -223,7 +223,8 @@ import { githubRepositoryVisibility } from './repository-visibility.ts';
 /** How often idle local sandboxes are looked for (ADR-0039); the grace period is twice this. */
 const SANDBOX_SWEEP_INTERVAL_MS = 5 * 60_000;
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
-import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
+import { backfillUntilDone, factoryPrincipalId, WorkItemSplitModeError } from '@factory/store';
+import { factoryRunsNeedSharedSignIn } from './accounts/pool.ts';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -1751,8 +1752,11 @@ export class MastraFactory {
             },
           })
         : undefined;
+    // Known once the harnesses are set up below; a role start reads it only at run time.
+    let factoryRunAccountsCheck: ((project: { id: string; orgId: string; harness: string }) => Promise<string | undefined>) | undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
     const factoryToolDeps: FactoryToolDependencies = {
+      factoryRunAccounts: async project => factoryRunAccountsCheck?.(project),
       workItems: workItemsStorage,
       comments: workItemCommentsStorage,
       feed: commentsDomain,
@@ -2237,6 +2241,23 @@ export class MastraFactory {
           ...(claudeCodeConfig.onCredentialFailure ? { onCredentialFailure: claudeCodeConfig.onCredentialFailure } : {}),
         }
       : createClaudeCodeCredentials({ credentials: modelCredentialsStorage });
+    const codexCredentials = codexConfig
+      ? (codexConfig.credentials ?? createCodexCredentials({ credentials: modelCredentialsStorage }))
+      : undefined;
+    // A card's run belongs to the Factory (`factoryPrincipalId`): on Claude Code and Codex it runs only on the
+    // sign-ins their owners shared with the Factory's card runs, and its start says so when there is none.
+    const factoryRunAccounts = async (project: { id: string; orgId: string; harness: string }) => {
+      const tenant = { orgId: project.orgId, userId: factoryPrincipalId(project.id) };
+      if (project.harness === 'claude-code') {
+        const usable = 'usable' in claudeCodeCredentials ? claudeCodeCredentials.usable : undefined;
+        return usable && !(await usable(tenant)) ? factoryRunsNeedSharedSignIn('Claude') : undefined;
+      }
+      if (project.harness === 'codex' && codexCredentials) {
+        return (await codexCredentials.usable(tenant)) ? undefined : factoryRunsNeedSharedSignIn('Codex');
+      }
+      return undefined;
+    };
+    factoryRunAccountsCheck = factoryRunAccounts;
     // Every session's token usage, and the turn harnesses' accounts' allowances (`./usage`).
     const factoryUsage = createFactoryUsage({
       storage: usageStorage,
@@ -2552,7 +2573,7 @@ export class MastraFactory {
           ...((codexExecutable ?? codexConfig.command) ? { command: codexExecutable ?? codexConfig.command } : {}),
           ...(codexConfig.launchArgs ? { launchArgs: codexConfig.launchArgs } : {}),
           ...(codexConfig.sessionHomeRoot ? { sessionHomeRoot: codexConfig.sessionHomeRoot } : {}),
-          credentials: codexConfig.credentials ?? createCodexCredentials({ credentials: modelCredentialsStorage }),
+          credentials: codexCredentials!,
           ...(codexConfig.spawn ? { spawn: codexConfig.spawn } : {}),
           ...(codexConfig.env ? { env: codexConfig.env } : {}),
           ...(codexConfig.skillsDir ? { skillsDir: codexConfig.skillsDir } : {}),
@@ -3186,6 +3207,7 @@ export class MastraFactory {
           ...(device ? device.routes : []),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
+            factoryRunAccounts,
             // Settings › Підключення: MCP servers are a connector beside the integrations (ADR-0035),
             // then the connector packages loaded at boot (ADR-0037).
             connectors: [
@@ -3666,6 +3688,7 @@ export class MastraFactory {
               threadId: session.thread.getId(),
               ...request,
             }),
+          answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },
       );
       observeSessionThreadStamp(session);

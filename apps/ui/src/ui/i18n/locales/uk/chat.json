@@ -70,7 +70,8 @@
     "currentTasks": "Поточні задачі",
     "teammateNamed": "Ви керуєте сесією користувача {{name}}",
     "teammate": "Ви керуєте сесією колеги",
-    "conversation": "Розмова"
+    "conversation": "Розмова",
+    "factoryOwned": "Ви керуєте сесією Factory"
   },
   "emptyThread": {
     "title": "Що допомогти вам створити?",
@@ -365,7 +366,16 @@
     "openOnGitHub": "Відкрити в GitHub",
     "openTarget": "Відкрити ціль сповіщення",
     "notification": "сповіщення",
-    "summary": "Зведення сповіщень"
+    "summary": "Зведення сповіщень",
+    "waiting": {
+      "label": "Сесія, що чекає",
+      "approve": "Схвалити",
+      "decline": "Відхилити",
+      "approved": "Схвалено",
+      "declined": "Відхилено",
+      "answered": "Відповідь дано",
+      "open": "Відкрити сесію"
+    }
   },
   "changeRequest": {
     "open": "Відкрити {{noun}} {{number}} у {{repo}} ({{status}})",

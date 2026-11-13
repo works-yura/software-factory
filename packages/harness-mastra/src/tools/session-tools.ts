@@ -25,6 +25,7 @@ import type { SourceControlSessionLookup } from '@factory/session';
 import {
   ensureFactorySourceSession,
   hydrateFactorySession,
+  requireOrganizationModelKey,
   resolveFactorySessionModel,
 } from '@factory/session';
 import { recordSessionRunStart, toBoardSource } from '@factory/runtime';
@@ -34,6 +35,7 @@ import type { AuditRecorder } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';
+import { factoryPrincipalId } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
@@ -93,6 +95,11 @@ export interface FactorySessionToolDependencies {
   /** A fixed registry, or the per-project boards. */
   boards: BoardRegistry | ProjectBoardSource;
   auditRecorder: AuditRecorder;
+  /**
+   * For a Factory on a harness that runs on sign-ins (Claude Code, Codex): why its own card runs
+   * cannot start, or `undefined` when a sign-in is shared with them.
+   */
+  factoryRunAccounts?: (project: { id: string; orgId: string; harness: string }) => Promise<string | undefined>;
   /** The browser Start's coordinator; absent until the Factory runtime is ready. */
   startCoordinator: () => Pick<FactoryStartCoordinator, 'prepare'> | undefined;
   /**
@@ -482,6 +489,18 @@ export function createFactorySessionTools(
     if (!messaging) throw new Error('Starting sessions is not available on this server.');
     const project = await deps.sessionModel.projects.get({ orgId: scope.orgId, id: scope.factoryProjectId });
     if (!project) throw new Error('This Factory no longer exists.');
+    // A card's session is the Factory's own, as when the board starts it; the person asking
+    // stays the one who started it, and follows it from this session.
+    const ownerUserId = factoryPrincipalId(project.id);
+    await requireOrganizationModelKey(
+      {
+        modelCredentials: deps.sessionModel.tenantCatalog?.credentials,
+        customProviders: deps.sessionModel.tenantCatalog?.customProviders,
+        deploymentModelProviders: deps.sessionModel.tenantCatalog?.deploymentProviders,
+        ...(deps.factoryRunAccounts ? { harnessAccounts: deps.factoryRunAccounts } : {}),
+      },
+      project,
+    );
     const projectRepositoryId = await resolveRepository(sourceControl, item);
 
     const sessionId = globalThis.crypto.randomUUID();
@@ -492,7 +511,7 @@ export function createFactorySessionTools(
       sessionId,
       branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
       projectRepositoryId,
-      attributeToUserId: scope.userId,
+      attributeToUserId: ownerUserId,
       // A run works a shared card, so the org can open it and answer its approvals even when the session that
       // started it is private.
       visibility: 'org',
@@ -518,7 +537,8 @@ export function createFactorySessionTools(
     try {
       prepared = await coordinator.prepare({
         orgId: scope.orgId,
-        userId: scope.userId,
+        userId: ownerUserId,
+        startedBy: { type: 'human', id: scope.userId },
         factoryProjectId: scope.factoryProjectId,
         sessionId: ensured.sessionId,
         threadTitle: title ?? `${label} ${role}`,
@@ -570,7 +590,8 @@ export function createFactorySessionTools(
     // The run's end reaches this item's followers through the session's listener.
     const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
     const kickoffContext = new RequestContext();
-    kickoffContext.set('user', { id: scope.userId, organizationId: scope.orgId });
+    // The run acts as its session's owner, the Factory, from its first turn.
+    kickoffContext.set('user', { id: ownerUserId, organizationId: scope.orgId });
     try {
       await session.sendSignal(
         { id: kickoffId, type: 'user', tagName: 'user', contents: prompt },

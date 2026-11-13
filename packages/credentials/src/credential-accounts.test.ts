@@ -17,6 +17,7 @@ function account(id: string, overrides: Partial<CredentialAccount> = {}): Creden
     kind: 'api_key',
     priority: 0,
     disabled: false,
+    factoryRuns: false,
     hint: '0000',
     createdBy: 'admin',
     createdAt: new Date(now.getTime() - 1_000_000 + created),
@@ -87,5 +88,15 @@ describe('pickCredentialAccount', () => {
     expect(pickCredentialAccount([account('off', { disabled: true })], { userId: 'u', now })).toEqual({
       hasCandidates: false,
     });
+  });
+
+  // A card's run belongs to the Factory: it never borrows a person's sign-in on its own.
+  it("gives the Factory's runs only the sign-ins shared with them, and the organization's keys", () => {
+    const factory = 'factory-project:fp-1';
+    const personal = account('personal', { kind: 'claude_login', ownerUserId: 'alice' });
+    expect(pickCredentialAccount([personal], { userId: factory, now })).toEqual({ hasCandidates: false });
+    const shared = account('shared', { kind: 'claude_login', ownerUserId: 'bob', factoryRuns: true });
+    expect(ids(pickCredentialAccount([personal, shared], { userId: factory, now }))).toBe('shared');
+    expect(ids(pickCredentialAccount([personal, account('key')], { userId: factory, now }))).toBe('key');
   });
 });

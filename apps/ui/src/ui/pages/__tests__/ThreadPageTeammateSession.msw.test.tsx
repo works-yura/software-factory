@@ -147,6 +147,21 @@ describe("a teammate's Factory session", () => {
       expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
       expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
     });
+
+    // A card's phase session runs as the Factory, not as a person.
+    it('says the session is the Factory’s when a card runs in it', async () => {
+      openWardSessionAs('user-caleb', {
+        session: {
+          ...wardSession,
+          userId: `factory-project:${FACTORY_ID}`,
+          owner: { id: `factory-project:${FACTORY_ID}`, name: 'Factory' },
+          branch: 'factory/issue-49',
+        },
+        path: BOARD_THREAD_PATH,
+      });
+
+      expect(await screen.findByText('You’re steering the Factory’s session')).toBeInTheDocument();
+    });
   });
 
   describe('when a teammate tries to change its model', () => {

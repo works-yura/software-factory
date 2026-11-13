@@ -8410,6 +8410,106 @@ describe('board phase automation', () => {
       }
     }
   });
+
+  /**
+   * The pauses the card's followers are told of: the run's listener asks the dispatcher
+   * (`autoApproves`) about each pause once the dispatcher's own watch has seen it.
+   */
+  function pausesFollowersHearOf(session: unknown, dispatcher: FactoryDecisionDispatcher) {
+    const told: Array<string | undefined> = [];
+    (session as { subscribe(listener: (event: { type: string; toolName?: string; toolCallId?: string }) => void): void }).subscribe(
+      event => {
+        if (event.type !== 'tool_suspended' || !event.toolCallId) return;
+        const { toolCallId, toolName } = event;
+        queueMicrotask(() => {
+          if (!dispatcher.autoApproves(toolCallId)) told.push(toolName);
+        });
+      },
+    );
+    return told;
+  }
+
+  // A phase that approves its own exit tool carries on by itself: asking the card's followers to
+  // approve it sends them to a call that is already answered.
+  it.each([
+    ['submit_plan', { suspendsOnPlan: true }, 'call-plan'],
+    ['sign_off', { suspendsOnTool: 'sign_off' }, 'call-tool'],
+  ] as const)(
+    'asks nobody to approve %s where the phase approves it itself, and asks where its rule does not match the card',
+    async (exitTool, parks, toolCallId) => {
+      const boards = boardsWithBuilding({
+        exitTool: { id: exitTool, autoApprove: true, autoApproveWhen: LOW_EFFORT },
+      });
+      for (const [labels, approvedByItself] of [
+        [['effort:low'], true],
+        [['effort:high'], false],
+      ] as const) {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const { transitionService } = await queueBuild(storage, [...labels], `notice-${exitTool}-${labels[0]}`);
+        const { controller, session } = createSession(undefined, parks);
+        const dispatcher = new FactoryDecisionDispatcher({
+          harness: controller as never,
+          transitionService,
+          storage,
+          boards: autoStartingBoards(boards),
+          ownerId: 'worker-1',
+        });
+        const told = pausesFollowersHearOf(session, dispatcher);
+
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+        if (approvedByItself) {
+          expect(session.respondToToolSuspension).toHaveBeenCalledWith(
+            expect.objectContaining({ resumeData: { action: 'approved' }, toolCallId }),
+          );
+          expect(told).toEqual([]);
+          expect(dispatcher.autoApproves(toolCallId)).toBe(false);
+        } else {
+          expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+          expect(told).toEqual([exitTool]);
+        }
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+      }
+    },
+  );
+
+  it('asks a person once the phase has approved as many plans as it will, and the run plans again', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueBuild(storage, ['effort:low'], 'notice-plan-cap');
+    const { controller, session } = createSession(undefined, { suspendsOnPlan: true, replansAfterApproval: true });
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      transitionService,
+      storage,
+      boards: autoStartingBoards(boardsWithBuilding({ exitTool: { id: 'submit_plan', autoApprove: true } })),
+      ownerId: 'worker-1',
+    });
+    const told = pausesFollowersHearOf(session, dispatcher);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.respondToToolSuspension).toHaveBeenCalledTimes(3);
+    expect(told).toEqual(['submit_plan']);
+  });
+
+  it('still asks a person about a pause that is not the exit tool of an auto-approving phase', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueBuild(storage, ['effort:low'], 'notice-other-tool');
+    const { controller, session } = createSession(undefined, { suspendsOnTool: 'sign_off' });
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      transitionService,
+      storage,
+      boards: autoStartingBoards(boardsWithBuilding({ exitTool: { id: 'submit_plan', autoApprove: true } })),
+      ownerId: 'worker-1',
+    });
+    const told = pausesFollowersHearOf(session, dispatcher);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    expect(told).toEqual(['sign_off']);
+  });
 });
 
 describe('review status comment lifecycle', () => {

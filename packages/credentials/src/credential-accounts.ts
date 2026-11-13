@@ -4,8 +4,9 @@
  * Rules, in order:
  * 1. Disabled accounts, accounts the run already tried, and accounts out of
  *    usage (`limitedUntil` in the future) are skipped.
- * 2. A subscription or Claude sign-in is used only by its owner's runs;
- *    organization API keys by any run.
+ * 2. A subscription or Claude sign-in is used only by its owner's runs, and by
+ *    the Factory's card runs when its owner shared it with them; organization
+ *    API keys by any run.
  * 3. The account the session used last goes first while it is usable, so the
  *    provider's prompt cache keeps working; then the caller's own
  *    subscriptions and sign-ins; then organization keys; each by priority, then age.
@@ -14,7 +15,7 @@
  * reset tells the caller when to try again.
  */
 
-import { isPersonalCredentialKind } from '@factory/store';
+import { isFactoryPrincipalId, isPersonalCredentialKind } from '@factory/store';
 import type { CredentialAccount } from '@factory/store';
 
 export interface PickCredentialAccountInput {
@@ -37,8 +38,15 @@ export type PickedCredentialAccount =
       hasCandidates: boolean;
     };
 
+/**
+ * Organization API keys serve every run. A sign-in serves its owner's runs, and a run the
+ * Factory owns (`factoryPrincipalId`) only when its owner shared it with the Factory's card
+ * runs: the Factory never borrows a person's sign-in on its own.
+ */
 export function usableBy(account: CredentialAccount, userId: string): boolean {
-  return account.kind === 'api_key' || account.ownerUserId === userId;
+  if (account.kind === 'api_key') return true;
+  if (isFactoryPrincipalId(userId)) return account.factoryRuns;
+  return account.ownerUserId === userId;
 }
 
 export function pickCredentialAccount(

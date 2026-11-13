@@ -34,7 +34,7 @@ import { normalizeSessionTitle } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter } from '@factory/feed';
 import type { MemorySettingsStorage } from '@factory/store';
-import { deleteSessionRecord, factoryMemorySettingsUserId } from '@factory/store';
+import { deleteSessionRecord, factoryMemorySettingsUserId, isFactoryPrincipalId } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type {
   ProjectRepository,
@@ -1242,10 +1242,16 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 
   return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    if (!users) return new Map();
-
-    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
     const profiles = new Map<string, SessionOwnerProfile>();
+    // A session the Factory owns has no person to look up; it is named for what it is.
+    for (const userId of userIds) {
+      if (isFactoryPrincipalId(userId)) profiles.set(userId, { id: userId, name: 'Factory' });
+    }
+    if (!users) return profiles;
+
+    const requestedUserIds = [...new Set(userIds)]
+      .filter(userId => !isFactoryPrincipalId(userId))
+      .slice(0, MAX_SESSION_OWNER_PROFILES);
     const unresolvedUserIds: string[] = [];
     const now = Date.now();
 

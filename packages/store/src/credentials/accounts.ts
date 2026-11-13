@@ -65,6 +65,12 @@ export interface CredentialAccount {
   kind: CredentialAccountKind;
   /** Whose subscription this is; absent for an organization API key. */
   ownerUserId?: string;
+  /**
+   * Its owner shared this sign-in with the Factory's card runs: phase sessions run as the
+   * Factory (`factoryPrincipalId`), never as a person, so they use only sign-ins shared here
+   * and organization API keys.
+   */
+  factoryRuns: boolean;
   /** Lower goes first. */
   priority: number;
   /** Skipped by every run: turned off by a person, or by a failed sign-in. */
@@ -99,6 +105,8 @@ export interface UpdateCredentialAccountInput {
   label?: string;
   priority?: number;
   disabled?: boolean;
+  /** Share the sign-in with the Factory's card runs, or stop sharing it. */
+  factoryRuns?: boolean;
   /** A new secret also clears the account's limit and error, and turns it back on. */
   secret?: string;
   /** A new sign-in for a sign-in account; like a new secret, it turns the account back on. */
@@ -120,6 +128,8 @@ export const CREDENTIAL_ACCOUNTS_SCHEMA: CollectionSchema = {
     secret_hint: { type: 'text' },
     priority: { type: 'integer', default: 0 },
     disabled: { type: 'boolean', default: false },
+    // Added after the table shipped: nullable, so existing rows read as not shared.
+    factory_runs: { type: 'boolean', nullable: true },
     limited_until: { type: 'timestamp', nullable: true },
     last_error: { type: 'text', nullable: true },
     last_used_at: { type: 'timestamp', nullable: true },
@@ -142,6 +152,7 @@ export interface CredentialAccountDbRow extends Record<string, unknown> {
   secret_hint: string;
   priority: number;
   disabled: boolean | number;
+  factory_runs?: boolean | number | null;
   limited_until: Date | null;
   last_error: string | null;
   last_used_at: Date | null;
@@ -183,6 +194,7 @@ export function toCredentialAccount(row: CredentialAccountDbRow): CredentialAcco
     ...(row.owner_user_id ? { ownerUserId: row.owner_user_id } : {}),
     priority: Number(row.priority ?? 0),
     disabled: Boolean(row.disabled),
+    factoryRuns: Boolean(row.factory_runs),
     ...(row.limited_until ? { limitedUntil: row.limited_until } : {}),
     ...(row.last_error ? { lastError: row.last_error } : {}),
     ...(row.last_used_at ? { lastUsedAt: row.last_used_at } : {}),

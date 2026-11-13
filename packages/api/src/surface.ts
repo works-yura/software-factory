@@ -28,7 +28,7 @@ import type {
 import { getGithubFeatureDiagnostics } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { MaterializeError } from '@factory/sandbox';
-import { FactoryDispatchError, secretKeyMismatchHint, secretKeyProblem } from '@factory/store';
+import { FactoryDispatchError, factoryPrincipalId, isFactoryPrincipalId, secretKeyMismatchHint, secretKeyProblem } from '@factory/store';
 import type { FactorySecretDecryptionError } from '@factory/store';
 import { toBoardSource } from '@factory/runtime';
 import type { FactoryBindingPreparationInput, ProjectBoardCache, ProjectBoardSource } from '@factory/runtime';
@@ -41,8 +41,9 @@ import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactorySourceControl,
+  requireOrganizationModelKey,
 } from '@factory/session';
-import type { EnsuredFactorySourceSession } from '@factory/session';
+import type { EnsuredFactorySourceSession, OrganizationModelSources } from '@factory/session';
 import type { LiveSessions } from '@factory/session';
 import { resolveWorkItemRepository, workItemRunsInLink } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
@@ -57,7 +58,7 @@ import type { FilesystemStorage } from '@factory/store';
 import type { IntakeStorage } from '@factory/store';
 import type { IntegrationStorage } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
-import type { FactoryProjectsStorage } from '@factory/store';
+import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import type { QueueHealthStorage } from '@factory/store';
 import {
   SessionBranchHeldError,
@@ -68,6 +69,7 @@ import type { SourceControlStorage, SourceControlStorageHandle } from '@factory/
 import { isAgentActor } from '@factory/store';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '@factory/store';
 import { workItemSource } from '@factory/core';
+import type { FactoryRuleActor } from '@factory/core';
 import {
   legacyGithubWorkItemBranch,
   pullRequestBranch,
@@ -205,6 +207,11 @@ export interface FactoryApiRoutesDeps {
   createLocalCheckout?: LocalCheckoutAttacher;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
+  /**
+   * For Factories on a harness that runs on sign-ins (Claude Code, Codex): why the Factory's own
+   * card runs cannot start, or `undefined` when a sign-in is shared with them.
+   */
+  factoryRunAccounts?: OrganizationModelSources['harnessAccounts'];
   knowledgeKey?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
@@ -411,6 +418,31 @@ function restingExitLane(board: InstalledBoard | undefined, role: string, hasPul
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
+/** What the autonomous start reads to decide who a phase session runs as. */
+export interface PhaseSessionOwnerSources extends OrganizationModelSources {
+  workItems?: Pick<WorkItemsStorage, 'findRunBindingById'>;
+}
+
+/**
+ * Who started the work, as the move that starts the run records them. An agent stays an
+ * agent: recorded as a person, its move would count as a person accepting the work.
+ */
+async function starterOf(
+  workItems: Pick<WorkItemsStorage, 'findRunBindingById'> | undefined,
+  project: Pick<FactoryProject, 'id' | 'orgId'>,
+  approver: string,
+): Promise<FactoryRuleActor> {
+  if (!approver.startsWith('agent:')) return { type: 'human', id: approver };
+  const bindingId = approver.slice('agent:'.length);
+  if (bindingId.startsWith('session:')) return { type: 'agent', bindingId, role: 'session' };
+  const binding = await workItems?.findRunBindingById({
+    orgId: project.orgId,
+    factoryProjectId: project.id,
+    id: bindingId,
+  });
+  return { type: 'agent', bindingId, role: binding?.role ?? 'agent' };
+}
+
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -424,6 +456,7 @@ export async function prepareFactoryRuleBinding(
   projects: FactoryProjectsStorage,
   boards: BoardRegistry | ProjectBoardSource,
   input: FactoryBindingPreparationInput,
+  owner?: PhaseSessionOwnerSources,
 ): Promise<void> {
   try {
     const sourceControl =
@@ -514,20 +547,23 @@ export async function prepareFactoryRuleBinding(
     // names none, under the environment's position-1 link. The sandbox holds
     // every environment repository either way.
     const resolvedRepository = repository;
-    const preparedSession =
+    const existingSession =
       boundSession ??
       (await legacyPlanSession(sourceControl, input, boardId, branch, link =>
         workItemRunsInLink(resolvedRepository, link),
-      )) ??
+      ));
+    // A session that already exists keeps its owner; a new one belongs to the Factory.
+    const ownerUserId = existingSession?.userId ?? factoryPrincipalId(project.id);
+    if (isFactoryPrincipalId(ownerUserId)) await requireOrganizationModelKey(owner, project);
+    const preparedSession =
+      existingSession ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
         projectRepositoryId: repository.projectRepositoryId,
         branch,
-        // A person who approved the run is its interactive user: attribute it to
-        // them, not the repo connector. An agent's pre-approval names no person.
-        attributeToUserId: isAgentActor(approver) ? undefined : approver,
+        attributeToUserId: ownerUserId,
       }).catch(error => {
         if (error instanceof FactorySourceSessionResolutionError && error.reason === 'repository') {
           // The card resolved to a linked repository the sandbox will not check out.
@@ -555,6 +591,7 @@ export async function prepareFactoryRuleBinding(
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
+      ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       defaultModelId: project.defaultModelId ?? undefined,
@@ -887,6 +924,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
           controller: deps.controller,
+          ...(deps.audit ? { audit: deps.audit } : {}),
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
           ...(deps.onSessionDeleted ? { onSessionDeleted: deps.onSessionDeleted } : {}),
@@ -964,6 +1002,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                 deps.domains.projects,
                 deps.boardRegistry,
                 input,
+                {
+                  workItems: deps.domains.workItems,
+                  modelCredentials: deps.domains.modelCredentials,
+                  customProviders: deps.domains.customProviders,
+                  deploymentModelProviders: deps.deploymentModelProviders,
+                  ...(deps.factoryRunAccounts ? { harnessAccounts: deps.factoryRunAccounts } : {}),
+                },
               );
             },
           }

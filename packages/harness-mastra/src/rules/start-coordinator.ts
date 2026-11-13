@@ -8,18 +8,24 @@ import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
 import type { EnvironmentRepositoryRef } from '@factory/session';
+import { isFactoryPrincipalId } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { toBoardSource } from '@factory/runtime';
 import type { FactoryTransitionService, ProjectBoardSource } from '@factory/runtime';
 import { externallyAuthoredWorkItem } from '@factory/core';
-import type { FactoryRuleStage, FactoryTransitionResult } from '@factory/core';
+import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from '@factory/core';
 
 export interface FactoryStartRequest {
   orgId: string;
   userId: string;
   factoryProjectId: string;
+  /**
+   * Who started the work, where that is not the session's owner: the Factory owns the
+   * sessions it runs, and the move a start makes is still the mover's.
+   */
+  startedBy?: FactoryRuleActor;
   sessionId: string;
   threadTitle: string;
   kickoffKey: string;
@@ -277,7 +283,12 @@ export async function commitRunStart({
       board: boardForWorkItem(prepared.item),
       stage: destinationStage,
       expectedRevision: prepared.item.revision,
-      actor: { type: 'human', id: request.userId },
+      // The mover stays on record for the move; the Factory, when it owns the run, moves as the system.
+      actor:
+        request.startedBy ??
+        (isFactoryPrincipalId(request.userId)
+          ? { type: 'system', id: request.userId }
+          : { type: 'human', id: request.userId }),
       ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
       cause: 'run_start',
     });

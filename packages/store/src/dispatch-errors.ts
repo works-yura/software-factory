@@ -4,6 +4,7 @@ import type {
 } from './work-items/base.ts';
 
 interface FactoryDispatchFailureMetadata {
+  /** A person may retry the failed decision. */
   canRetry: boolean;
   label: string;
   /**
@@ -42,6 +43,13 @@ const FAILURE_METADATA = {
   // Every model account the run may use is out of usage: the run waits for the reset on its own,
   // and fails with this only once it has waited too long.
   run_usage_limited: { canRetry: true, label: 'Model usage limit reached' },
+  // Factory runs as the Factory, on the organization's keys only. Trying again cannot add one,
+  // so the dispatcher stops at once; a person retries after adding the key.
+  factory_org_key_missing: {
+    canRetry: true,
+    needsPerson: true,
+    label: 'Add an organization model key to run this card',
+  },
   run_failed: { canRetry: true, label: 'Agent run ended in error' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
