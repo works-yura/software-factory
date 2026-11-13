@@ -29,6 +29,7 @@ import { AgentBrowser } from '@mastra/agent-browser';
 import {
   attachOnFirstRequest,
   createFactorySecretEncryption,
+  LocalEnvironmentTemplate,
   LocalFactorySandbox,
   LocalFileBlobStore,
   MastraFactory,
@@ -356,9 +357,22 @@ if (sandboxProvider !== 'local' && !localDevelopmentMode) {
   );
 }
 
+const sandboxRoot = process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes');
+// The local environment template (ADR-0039): repository mirrors, builds, shared package stores and session work
+// kept outside session folders. On the sandboxes' volume by default, since session clones hard-link the mirrors'
+// objects. FACTORY_LOCAL_TEMPLATE=off turns it off: every session clones from the network again.
+const localTemplateEnabled = process.env.FACTORY_LOCAL_TEMPLATE?.trim().toLowerCase() !== 'off';
 const sandbox = new LocalFactorySandbox({
-  root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+  root: sandboxRoot,
   env: localSandboxEnv(),
+  ...(localTemplateEnabled
+    ? {
+        template: new LocalEnvironmentTemplate({
+          root: process.env.FACTORY_LOCAL_TEMPLATE_ROOT?.trim() || join(sandboxRoot, '.factory-template'),
+          env: localSandboxEnv(),
+        }),
+      }
+    : {}),
 });
 
 /**

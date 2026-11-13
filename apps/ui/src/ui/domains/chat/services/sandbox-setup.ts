@@ -7,6 +7,22 @@ export const SANDBOX_SETUP_EVENT = 'factory_sandbox_setup';
 export type SandboxSetupPhase = 'clone' | 'checkout' | 'env-files' | 'setup';
 export type SandboxSetupFailureCode = 'timeout' | 'network' | 'no_access' | 'clone_failed' | 'setup_failed' | 'unknown';
 
+export type SandboxSetupSource = 'mirror' | 'network';
+export type SandboxSetupNoticeCode =
+  | 'restored'
+  | 'diverged'
+  | 'wip_conflict'
+  | 'mirror_stale'
+  | 'network_fallback'
+  | 'restore_failed';
+
+/** Something the person should know about a setup that went on: restored work, a diverged branch… */
+export interface SandboxSetupNotice {
+  code: SandboxSetupNoticeCode;
+  repo?: string;
+  message?: string;
+}
+
 export interface SandboxSetupFailure {
   code: SandboxSetupFailureCode;
   message: string;
@@ -26,11 +42,15 @@ export interface SandboxSetupState {
   total: number;
   receivedBytes?: number;
   percent?: number;
+  /** Where the clone in progress comes from. */
+  source?: SandboxSetupSource;
   failures: SandboxSetupFailure[];
+  notices: SandboxSetupNotice[];
 }
 
 const PHASES = new Set<string>(['clone', 'checkout', 'env-files', 'setup']);
 const CODES = new Set<string>(['timeout', 'network', 'no_access', 'clone_failed', 'setup_failed', 'unknown']);
+const NOTICES = new Set<string>(['restored', 'diverged', 'wip_conflict', 'mirror_stale', 'network_fallback', 'restore_failed']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -47,6 +67,13 @@ function readFailure(value: unknown): SandboxSetupFailure | undefined {
   return { code, message: text(value.message) ?? '', ...(phase ? { phase } : {}), ...(repo ? { repo } : {}) };
 }
 
+function readNotice(value: unknown): SandboxSetupNotice | undefined {
+  if (!isRecord(value) || typeof value.code !== 'string' || !NOTICES.has(value.code)) return undefined;
+  const repo = text(value.repo);
+  const message = text(value.message);
+  return { code: value.code as SandboxSetupNoticeCode, ...(repo ? { repo } : {}), ...(message ? { message } : {}) };
+}
+
 /** The setup an event reports, or `undefined` for any other event. */
 export function readSandboxSetupEvent(event: { type: string }, now = Date.now()): SandboxSetupState | undefined {
   if (event.type !== SANDBOX_SETUP_EVENT) return undefined;
@@ -58,12 +85,15 @@ export function readSandboxSetupEvent(event: { type: string }, now = Date.now())
   const index = count(raw.index);
   const receivedBytes = count(raw.receivedBytes);
   const percent = count(raw.percent);
+  const source = raw.source === 'mirror' || raw.source === 'network' ? raw.source : undefined;
   return {
     status,
     startedAt: now - elapsedMs,
     elapsedMs,
     total: count(raw.total) ?? 1,
     failures: Array.isArray(raw.failures) ? raw.failures.flatMap(failure => readFailure(failure) ?? []) : [],
+    notices: Array.isArray(raw.notices) ? raw.notices.flatMap(notice => readNotice(notice) ?? []) : [],
+    ...(source ? { source } : {}),
     ...(phase ? { phase } : {}),
     ...(repo ? { repo } : {}),
     ...(index !== undefined ? { index } : {}),
@@ -108,6 +138,10 @@ function failureWords(failure: SandboxSetupFailure): string {
   return tk('sandboxSetup.failure', { where, reason: tk(`sandboxSetup.reason.${failure.code}`) });
 }
 
+function noticeWords(notice: SandboxSetupNotice): string {
+  return tk(`sandboxSetup.notice.${notice.code}`, { repo: notice.repo ? repoName(notice.repo) : tk('sandboxSetup.workspace') });
+}
+
 export interface SandboxSetupWords {
   label: string;
   detail?: string;
@@ -118,21 +152,31 @@ export interface SandboxSetupWords {
 /** What the chat line says about a setup, `now` being the clock the line ticks on. */
 export function sandboxSetupWords(setup: SandboxSetupState, now: number): SandboxSetupWords {
   const elapsed = setup.status === 'running' ? Math.max(setup.elapsedMs, now - setup.startedAt) : setup.elapsedMs;
+  const notices = setup.notices.map(noticeWords);
+  const noticeTitle = setup.notices.map(notice => notice.message).filter(Boolean).join('\n\n');
   if (setup.status === 'failed') {
     const [first, ...rest] = setup.failures;
-    if (!first) return { label: tk('sandboxSetup.failed') };
+    if (!first) return { label: tk('sandboxSetup.failed'), ...(notices.length ? { detail: notices.join(' · ') } : {}) };
     return {
       label: tk('sandboxSetup.failed'),
-      detail: [failureWords(first), ...(rest.length ? [tk('sandboxSetup.more', { count: rest.length })] : [])].join(' · '),
-      title: setup.failures.map(failure => failure.message).filter(Boolean).join('\n\n') || undefined,
+      detail: [failureWords(first), ...(rest.length ? [tk('sandboxSetup.more', { count: rest.length })] : []), ...notices].join(' · '),
+      title: [...setup.failures.map(failure => failure.message), noticeTitle].filter(Boolean).join('\n\n') || undefined,
     };
   }
-  if (setup.status === 'done') return { label: tk('sandboxSetup.done', { time: formatSetupTime(elapsed) }) };
+  if (setup.status === 'done') {
+    return {
+      label: tk('sandboxSetup.done', { time: formatSetupTime(elapsed) }),
+      ...(notices.length ? { detail: notices.join(' · ') } : {}),
+      ...(noticeTitle ? { title: noticeTitle } : {}),
+    };
+  }
   const parts: string[] = [];
   if (setup.phase) {
+    const phaseKey =
+      setup.phase === 'clone' && setup.source ? (setup.source === 'mirror' ? 'cloneMirror' : 'cloneNetwork') : setup.phase;
     parts.push(
       setup.repo
-        ? tk(`sandboxSetup.phase.${setup.phase}`, { repo: repoName(setup.repo) })
+        ? tk(`sandboxSetup.phase.${phaseKey}`, { repo: repoName(setup.repo) })
         : tk('sandboxSetup.phase.workspaceSetup'),
     );
     if (setup.repo && setup.index !== undefined && setup.total > 1) {
@@ -142,5 +186,6 @@ export function sandboxSetupWords(setup: SandboxSetupState, now: number): Sandbo
   if (setup.phase === 'clone' && setup.receivedBytes !== undefined) parts.push(formatBytes(setup.receivedBytes));
   if (setup.phase === 'clone' && setup.percent !== undefined) parts.push(`${setup.percent}%`);
   parts.push(formatSetupTime(elapsed));
-  return { label: tk('sandboxSetup.running'), detail: parts.join(' · ') };
+  parts.push(...notices);
+  return { label: tk('sandboxSetup.running'), detail: parts.join(' · '), ...(noticeTitle ? { title: noticeTitle } : {}) };
 }

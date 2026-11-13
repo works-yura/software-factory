@@ -464,7 +464,9 @@
       "checkout": "checking out the session branch of {{repo}}",
       "env-files": "writing env files for {{repo}}",
       "setup": "installing dependencies of {{repo}}",
-      "workspaceSetup": "running the workspace setup"
+      "workspaceSetup": "running the workspace setup",
+      "cloneMirror": "cloning {{repo}} from the mirror",
+      "cloneNetwork": "cloning {{repo}} from the network"
     },
     "step": {
       "clone": "clone",
@@ -487,7 +489,15 @@
     "minutes": "{{minutes}} min {{seconds}} s",
     "kilobytes": "{{value}} KB",
     "megabytes": "{{value}} MB",
-    "gigabytes": "{{value}} GB"
+    "gigabytes": "{{value}} GB",
+    "notice": {
+      "restored": "{{repo}}: saved work restored",
+      "diverged": "{{repo}}: the branch went apart from the remote — your saved commits are kept, the remote one is at origin",
+      "wip_conflict": "{{repo}}: saved uncommitted changes no longer apply — they stay saved",
+      "mirror_stale": "{{repo}}: the mirror could not be refreshed, cloned what it had",
+      "network_fallback": "{{repo}}: the mirror could not be used, cloned from the network",
+      "restore_failed": "{{repo}}: saved work could not be restored — it stays saved"
+    }
   },
   "turnGap": {
     "later": "{{amount}} later"

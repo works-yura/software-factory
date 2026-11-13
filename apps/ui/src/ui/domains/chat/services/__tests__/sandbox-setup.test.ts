@@ -74,7 +74,35 @@ describe('sandbox setup words', () => {
     expect(readSandboxSetupEvent({ type: 'agent_start' })).toBeUndefined();
     expect(
       readSandboxSetupEvent(wire({ type: 'factory_sandbox_setup', status: 'weird', phase: 'teleport', failures: [{ code: 'x' }] }), NOW),
-    ).toEqual({ status: 'running', startedAt: NOW, elapsedMs: 0, total: 1, failures: [{ code: 'unknown', message: '' }] });
+    ).toEqual({ status: 'running', startedAt: NOW, elapsedMs: 0, total: 1, failures: [{ code: 'unknown', message: '' }], notices: [] });
+  });
+
+  it('says whether a clone comes from the mirror or the network', async () => {
+    expect(sandboxSetupWords(setup({ ...cloning, source: 'mirror' }), NOW).detail).toBe('cloning book_fate from the mirror (2 of 5) · 1 min 15 s');
+    expect(sandboxSetupWords(setup({ ...cloning, source: 'network' }), NOW).detail).toBe('cloning book_fate from the network (2 of 5) · 1 min 15 s');
+    await i18n.changeLanguage('uk');
+    expect(sandboxSetupWords(setup({ ...cloning, source: 'mirror' }), NOW).detail).toBe('клоную book_fate з дзеркала (2 з 5) · 1 хв 15 с');
+  });
+
+  it('keeps what the person should know on the finished line: restored work, a diverged branch', async () => {
+    const done = setup({
+      status: 'done',
+      elapsedMs: 2_000,
+      notices: [
+        { code: 'restored', repo: 'acme/book_fate' },
+        { code: 'diverged', repo: 'acme/book_fate', message: 'Kept the saved commits (abc); the remote branch is at origin/x (def).' },
+        { code: 'teleported' },
+      ],
+    });
+    expect(done.notices).toHaveLength(2);
+    expect(sandboxSetupWords(done, NOW)).toEqual({
+      label: 'Sandbox ready in 2 s',
+      detail:
+        'book_fate: saved work restored · book_fate: the branch went apart from the remote — your saved commits are kept, the remote one is at origin',
+      title: 'Kept the saved commits (abc); the remote branch is at origin/x (def).',
+    });
+    await i18n.changeLanguage('uk');
+    expect(sandboxSetupWords(done, NOW).detail).toContain('гілка розійшлася з GitHub');
   });
 });
 

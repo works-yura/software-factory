@@ -34,7 +34,9 @@ export function ActivityLine({ stretchLive }: { stretchLive: boolean }) {
     );
   const setupLine =
     setup &&
-    (setup.status === 'failed' || (runLine && live && setup.elapsedMs >= SANDBOX_SETUP_SUMMARY_MIN_MS)) ? (
+    (setup.status === 'failed' ||
+      setup.notices.length > 0 ||
+      (runLine && live && setup.elapsedMs >= SANDBOX_SETUP_SUMMARY_MIN_MS)) ? (
       <SandboxSetupLine setup={setup} />
     ) : null;
   if (!setupLine) return runLine;

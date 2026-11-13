@@ -90,7 +90,7 @@
     "provider": {
       "named": "Sandboxes run on {{provider}}.",
       "platform": "Sandboxes run on the Mastra platform.",
-      "local": "Sandboxes run on the local machine.",
+      "local": "Sandboxes run on the local machine; sessions clone from local mirrors of the repositories, which a build refreshes.",
       "custom": "Sandboxes run on a custom sandbox.",
       "none": "Sandboxes run on no sandbox."
     },

@@ -60,6 +60,35 @@ describe('SandboxSetupLine', () => {
     expect(screen.getByText('Thinking')).toBeInTheDocument();
   });
 
+  it('says a clone comes from the mirror, and keeps restored work and a diverged branch on the line however fast', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    session.finishWorkspace();
+    await waitForMutationsIdle(client);
+    await send(user);
+    await session.emit({ type: 'agent_start' });
+
+    await session.emit(setupEvent({ status: 'running', phase: 'clone', repo: 'acme/book_fate', index: 1, elapsedMs: 500, source: 'mirror' }));
+    await waitFor(() => expect(line()).toHaveTextContent('cloning book_fate from the mirror (1 of 5)'));
+
+    await session.emit(
+      setupEvent({
+        status: 'done',
+        phase: 'checkout',
+        elapsedMs: 1_500,
+        notices: [
+          { code: 'restored', repo: 'acme/book_fate' },
+          { code: 'diverged', repo: 'acme/book_fate', message: 'Kept the saved commits.' },
+        ],
+      }),
+    );
+    await waitFor(() => expect(line()).toHaveTextContent('Sandbox ready in 2 s'));
+    expect(line()).toHaveTextContent('book_fate: saved work restored');
+    expect(line()).toHaveTextContent('the branch went apart from the remote');
+    expect(line()).toHaveAttribute('title', 'Kept the saved commits.');
+  });
+
   it('leaves no summary behind a setup that took no time', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();

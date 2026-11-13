@@ -466,7 +466,9 @@
       "checkout": "перемикаю {{repo}} на гілку сесії",
       "env-files": "записую env-файли {{repo}}",
       "setup": "встановлюю залежності {{repo}}",
-      "workspaceSetup": "налаштовую робочий простір"
+      "workspaceSetup": "налаштовую робочий простір",
+      "cloneMirror": "клоную {{repo}} з дзеркала",
+      "cloneNetwork": "клоную {{repo}} з мережі"
     },
     "step": {
       "clone": "клонування",
@@ -489,7 +491,15 @@
     "minutes": "{{minutes}} хв {{seconds}} с",
     "kilobytes": "{{value}} КБ",
     "megabytes": "{{value}} МБ",
-    "gigabytes": "{{value}} ГБ"
+    "gigabytes": "{{value}} ГБ",
+    "notice": {
+      "restored": "{{repo}}: збережену роботу відновлено",
+      "diverged": "{{repo}}: гілка розійшлася з GitHub — збережені коміти лишено, віддалена гілка — в origin",
+      "wip_conflict": "{{repo}}: збережені незакомічені зміни більше не накладаються — вони лишаються збереженими",
+      "mirror_stale": "{{repo}}: дзеркало не вдалося оновити, склоновано те, що в ньому було",
+      "network_fallback": "{{repo}}: дзеркало не підійшло, склоновано з мережі",
+      "restore_failed": "{{repo}}: збережену роботу не вдалося відновити — вона лишається збереженою"
+    }
   },
   "turnGap": {
     "later": "{{amount}} по тому"

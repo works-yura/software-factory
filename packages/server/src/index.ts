@@ -34,6 +34,7 @@ export type {
   FactorySandboxStart,
 } from './factory.ts';
 export { LocalFactorySandbox, type LocalFactorySandboxOptions } from '@factory/sandbox';
+export { LocalEnvironmentTemplate, type LocalEnvironmentTemplateOptions } from '@factory/sandbox';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
 // annotate a custom handler without importing the deep integration subpath.
 export type { GithubRuleOverrides } from '@factory/integration-github';

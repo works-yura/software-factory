@@ -1365,6 +1365,19 @@ export class MastraFactory {
         : undefined;
     // A Product session reads a sibling card's unmerged change from that card's folder on this machine.
     const localSandbox = sandboxConfig instanceof LocalFactorySandbox ? sandboxConfig : undefined;
+    // Putting a closing card's work on the remote's hidden refs needs that repository's credentials.
+    localSandbox?.environmentTemplate?.setRepositoryAccess(async owner => {
+      let lastError: unknown;
+      for (const integration of integrations) {
+        if (!integration.versionControl) continue;
+        try {
+          return await integration.versionControl.getRepositoryAccess(owner);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error('No source-control integration knows this repository.');
+    });
     const productCardFolderPath = localSandbox
       ? ({ factoryProjectId, branch }: { factoryProjectId: string; branch: string }) =>
           localSandbox.workItemFolderPath(workItemFolderKey(factoryProjectId, branch))
@@ -1472,7 +1485,24 @@ export class MastraFactory {
       workItems: workItemsStorage,
       reporting: factoryReporting,
     };
-    const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
+    const reportRunEnd = createSessionRunEndReporter(sessionReports);
+    // After every run end the session's work (commits, uncommitted changes) is kept in the
+    // local mirrors, so losing the folder loses nothing (ADR-0039). In the background, never
+    // holding the report; a failure is logged with the session and repository by the template.
+    const saveSessionWorkAfterRun = (sessionId: string) => {
+      const sandbox = sandboxConfig instanceof LocalFactorySandbox ? sandboxConfig : undefined;
+      if (!sandbox?.environmentTemplate) return;
+      void (async () => {
+        const row = await sourceControlSessions.getBySessionId(sessionId);
+        if (!row) return;
+        const folder = row.sandboxWorkdir || peekSessionSandbox(row.id)?.workdir;
+        if (folder) await sandbox.saveSessionWork(folder, { sessionId });
+      })().catch(error => console.warn('[factory] Session work could not be saved after a run', { sessionId, error }));
+    };
+    const reportSessionRunEnd: typeof reportRunEnd = async args => {
+      saveSessionWorkAfterRun(args.sessionId);
+      return reportRunEnd(args);
+    };
     const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
     // Claude Code sessions are not the agent controller's: the host announces them to the live-session registry.
     const claudeLiveSessions = createSessionNotifier();
