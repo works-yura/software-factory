@@ -357,13 +357,39 @@ const folderLocks = new Map<string, Promise<unknown>>();
  */
 export async function withWorkItemFolderLock<T>(folder: string, work: () => Promise<T>): Promise<T> {
   const previous = folderLocks.get(folder) ?? Promise.resolve();
-  const current = previous.catch(() => {}).then(work);
+  folderLockWaiters.set(folder, (folderLockWaiters.get(folder) ?? 0) + 1);
+  let waiting = true;
+  const stopWaiting = () => {
+    if (!waiting) return;
+    waiting = false;
+    const left = (folderLockWaiters.get(folder) ?? 1) - 1;
+    if (left > 0) folderLockWaiters.set(folder, left);
+    else folderLockWaiters.delete(folder);
+  };
+  const current = previous
+    .catch(() => {})
+    .then(() => {
+      stopWaiting();
+      return work();
+    });
   folderLocks.set(folder, current);
   try {
     return await current;
   } finally {
+    stopWaiting();
     if (folderLocks.get(folder) === current) folderLocks.delete(folder);
   }
+}
+
+const folderLockWaiters = new Map<string, number>();
+
+/**
+ * How many callers wait for the folder's lock in this process (not counting
+ * the one holding it): a session start queued behind a sleeping folder means
+ * a message arrived, so the folder must stay awake.
+ */
+export function workItemFolderLockWaiters(folder: string): number {
+  return folderLockWaiters.get(folder) ?? 0;
 }
 
 /** Drop the memoized instance (on stop/destroy/retirement or construction failure). */

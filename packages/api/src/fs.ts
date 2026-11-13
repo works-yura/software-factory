@@ -19,6 +19,9 @@ import type { RouteAuth } from '@factory/http';
 import { canReadSessionResource, canViewSourceControlSession, sessionMemoryResourceId } from '@factory/session';
 import type { SessionRunBindings, SessionThreadLookup } from '@factory/session';
 
+import { sessionSandboxStartState } from './session-sandbox-starts.ts';
+import type { SessionSandboxStartError } from './session-sandbox-starts.ts';
+
 /**
  * Server-side directory browser for the web project picker.
  *
@@ -101,6 +104,10 @@ export interface WorkspaceTreeListing {
   /** False when this process holds no sandbox for the session, so nothing was read. */
   available: boolean;
   entries: WorkspaceTreeEntry[];
+  /** Set while a sandbox start the Files tab asked for runs: nothing is read until it ends. */
+  starting?: boolean;
+  /** Why the last sandbox start failed (its kind and the server's message), while the session has no sandbox to read. */
+  startError?: SessionSandboxStartError;
 }
 
 export type WorkspaceChangeStatus =
@@ -475,6 +482,8 @@ export interface SessionFsDeps {
   /** Resolves the memory resource a session runs on, so a session still on its owner's memory stays the owner's. */
   controller?: SessionThreadLookup;
   workItems?: SessionRunBindings;
+  /** Told when a person reads a session's files: its sandbox counts as in use (it does not go to sleep, ADR-0039). */
+  onAccess?: (session: SourceControlSession) => void;
 }
 
 /**
@@ -508,6 +517,11 @@ async function resolveAuthorizedSession(
     if (!canReadSessionResource(session, resourceId, tenant)) {
       throw new Error('Session is not available to the current user');
     }
+  }
+  try {
+    deps.onAccess?.(session);
+  } catch {
+    // Marking the sandbox in use never fails a read.
   }
   return session;
 }
@@ -789,9 +803,14 @@ export async function listSessionWorkspaceTree(
   attach?: LocalCheckoutAttacher,
 ): Promise<WorkspaceTreeListing> {
   const requested = path.trim() ? path : '';
-  const handle = await sessionSandbox(session, attach);
   const listing = { workspacePath: session.sessionId, path: requested };
-  if (!handle) return { ...listing, available: false, entries: [] };
+  // A start in flight is still cloning: its half-made checkout is neither read nor attached.
+  const start = sessionSandboxStartState(session.sessionId);
+  if (start.starting) return { ...listing, available: false, entries: [], starting: true };
+  const handle = await sessionSandbox(session, attach);
+  if (!handle) {
+    return { ...listing, available: false, entries: [], ...(start.error ? { startError: start.error } : {}) };
+  }
 
   const { layout, sandbox, filesystem } = handle;
   const location = treeLocation(layout, requested);

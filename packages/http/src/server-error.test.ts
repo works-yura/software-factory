@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { timeout } from 'hono/timeout';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { handleServerError } from './server-error.ts';
 
@@ -41,6 +43,59 @@ describe('handleServerError', () => {
     expect(logged).toContain('db connection refused');
     // Stack trace, not just the message.
     expect(logged).toContain('at ');
+  });
+
+  it("answers another hono copy's HTTPException by its status, as the deployer's bundled hono throws", async () => {
+    // Shaped like hono's class, but not ours: `instanceof` cannot recognize it.
+    class ForeignHttpException extends Error {
+      readonly status: number;
+      constructor(status: number, message: string) {
+        super(message);
+        this.status = status;
+      }
+      getResponse() {
+        return new Response(this.message, { status: this.status });
+      }
+    }
+    const app = new Hono();
+    app.onError(handleServerError);
+    app.get('/limit', () => {
+      throw new ForeignHttpException(413, 'Request body too large');
+    });
+
+    const res = await app.request('/limit');
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: 'Request body too large' });
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('answers a request timeout with a 504, and keeps quiet when its handler ends afterwards', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    let ended!: () => void;
+    const handlerEnded = new Promise<void>(resolve => (ended = resolve));
+    // The deployer's order: the timeout wraps CORS, which sets headers after the handler answers.
+    const app = new Hono();
+    app.onError(handleServerError);
+    app.use('*', timeout(20), cors({ origin: ['http://localhost:5173'], credentials: true }));
+    app.post('/slow', async c => {
+      await new Promise(resolve => setTimeout(resolve, 60));
+      setTimeout(ended, 0);
+      return c.json({ started: true });
+    });
+
+    const res = await app.request('/slow', { method: 'POST', headers: { origin: 'http://localhost:5173' } });
+
+    expect(res.status).toBe(504);
+    expect(await res.json()).toEqual({
+      error: 'gateway_timeout',
+      message: 'The server stopped waiting for this request after its time limit; what it started may still finish.',
+    });
+    await handlerEnded;
+    // CORS then writes onto the response already read, which throws; that is no server fault.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('POST /slow ended after its timeout answered'));
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('passes HTTPException status + message through without logging', async () => {

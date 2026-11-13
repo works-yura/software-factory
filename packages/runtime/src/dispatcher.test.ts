@@ -752,6 +752,55 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.stop();
   });
 
+  it('keeps a 3-day-old binding of a card waiting in a gate phase on a person, with nothing pending', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Brief for the client',
+          board: 'product',
+          stages: ['client-review'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'product',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-gate',
+      kickoffMessage: null,
+    });
+    await storage.markPendingStart(prepared.binding.id, 'sent');
+    // Idle: not running, no ask_user or submit_plan pending (questions go through question cards).
+    const { controller, session } = createSession();
+    session.suspensions.hasPending.mockReturnValue(false);
+    session.run.isRunning.mockReturnValue(false);
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
+      storage,
+      staleBindingSweepIntervalMs: 10 * 60_000,
+      staleBindingTtlMs: 24 * 60 * 60_000,
+    });
+
+    const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
+    const t0 = new Date(Date.now() + 3 * 24 * 60 * 60_000);
+    await dispatcher.runOnce(t0);
+    await dispatcher.runOnce(new Date(t0.getTime() + 11 * 60_000));
+    expect(sweep).toHaveBeenCalledTimes(1);
+    await expect(sweep.mock.results[0]?.value).resolves.toBe(0);
+    await dispatcher.stop();
+
+    await expect(storage.listRunBindings('org-1', PROJECT_ID, prepared.item.id)).resolves.toEqual([
+      expect.objectContaining({ id: prepared.binding.id, status: 'active' }),
+    ]);
+  });
+
   it('keeps claiming dispatches when the stale-binding sweep fails', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const sweep = vi.spyOn(storage, 'revokeStaleRunBindings').mockRejectedValue(new Error('sweep boom'));

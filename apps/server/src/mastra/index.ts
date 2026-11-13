@@ -29,6 +29,7 @@ import { AgentBrowser } from '@mastra/agent-browser';
 import {
   attachOnFirstRequest,
   createFactorySecretEncryption,
+  LocalEnvironmentTemplate,
   LocalFactorySandbox,
   LocalFileBlobStore,
   MastraFactory,
@@ -71,11 +72,22 @@ if (authSetting && authSetting !== 'google') {
 }
 const googleAuthEnabled = authSetting === 'google';
 /**
- * The server runs on the person's own machine: a development server (`dev:local`) that signs in
- * with Google. Claude and ChatGPT sign-in (which open a browser page here), device preview and the
- * machine credential key are offered only then.
+ * A production server that still runs on the person's own machine (`start:local`, the Mac mini)
+ * says so with FACTORY_OWN_MACHINE=1: it keeps everything a development server there has, on the
+ * same data — the local libSQL database without DATABASE_URL, the machine credential key, and the
+ * features below. Only with Google sign-in.
  */
-const ownMachine = googleAuthEnabled && process.env.NODE_ENV === 'development';
+const ownMachineOptIn = process.env.FACTORY_OWN_MACHINE?.trim() === '1';
+if (ownMachineOptIn && !googleAuthEnabled) {
+  throw new Error('FACTORY_OWN_MACHINE=1 needs FACTORY_AUTH=google.');
+}
+/**
+ * The server runs on the person's own machine: a development server (`dev:local`) or a production
+ * one that opted in with FACTORY_OWN_MACHINE=1, signing in with Google. Claude and ChatGPT sign-in
+ * (which open a browser page here), device preview and the machine credential key are offered only
+ * then.
+ */
+const ownMachine = googleAuthEnabled && (process.env.NODE_ENV === 'development' || ownMachineOptIn);
 
 function credentialEncryption() {
   // A development server on this machine keeps a stable key in ~/.mastracode (the same file local dev
@@ -302,8 +314,8 @@ if (process.env.APP_DATABASE_URL?.trim() && !process.env.DATABASE_URL?.trim()) {
       'The old name is honored as a fallback for now, but new deploys should use DATABASE_URL.',
   );
 }
-if (!databaseUrl && !localDevelopmentMode) {
-  throw new Error('DATABASE_URL is required outside local development and tests.');
+if (!databaseUrl && !localDevelopmentMode && !ownMachine) {
+  throw new Error('DATABASE_URL is required outside local development and tests (or FACTORY_OWN_MACHINE=1).');
 }
 
 const storage = databaseUrl
@@ -356,9 +368,24 @@ if (sandboxProvider !== 'local' && !localDevelopmentMode) {
   );
 }
 
+const sandboxRoot = process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes');
+// The local environment template (ADR-0039): repository mirrors, builds, shared package stores and session work
+// kept outside session folders. On the sandboxes' volume by default, since session clones hard-link the mirrors'
+// objects. FACTORY_LOCAL_TEMPLATE=off turns it off: every session clones from the network again.
+const localTemplateEnabled = process.env.FACTORY_LOCAL_TEMPLATE?.trim().toLowerCase() !== 'off';
 const sandbox = new LocalFactorySandbox({
-  root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+  root: sandboxRoot,
   env: localSandboxEnv(),
+  ...(localTemplateEnabled
+    ? {
+        template: new LocalEnvironmentTemplate({
+          root: process.env.FACTORY_LOCAL_TEMPLATE_ROOT?.trim() || join(sandboxRoot, '.factory-template'),
+          env: localSandboxEnv(),
+          // Shared package stores move pnpm off the store existing checkouts were installed from: opt-in.
+          packageStores: process.env.FACTORY_LOCAL_PACKAGE_STORES?.trim().toLowerCase() === 'on',
+        }),
+      }
+    : {}),
 });
 
 /**

@@ -155,7 +155,8 @@ export interface AgentSession {
   readonly stream: { isActive(): boolean };
   readonly run: { isRunning(): boolean };
   readonly suspensions: { hasPending(): boolean };
-  abort(): void;
+  /** Stops the run in flight; `source` names who stopped it, for a harness that logs it. */
+  abort(source?: string): void;
   sendMessage(input: { content: string; requestContext?: AgentRunContext }): Promise<unknown>;
   /** Starts a run on an idle session, or joins the run in flight. */
   sendSignal(

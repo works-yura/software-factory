@@ -404,6 +404,108 @@ describe('WorkspaceViewerPanel', () => {
       await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
 
       expect(await screen.findByText('setup failed')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/The sandbox could not start/);
+    });
+
+    it.each([
+      [500, { error: 'internal_error', message: 'boom' }, /The sandbox could not start/, 'boom'],
+      [504, { error: 'gateway_timeout', message: 'stopped waiting' }, /The sandbox start timed out/, 'stopped waiting'],
+    ])('names a %i start failure in words, never as its code', async (status, body, line, detail) => {
+      installHandlers();
+      server.use(
+        http.get(TREE_URL, () =>
+          HttpResponse.json({ workspacePath: WORKSPACE, path: '', available: false, entries: [] }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/sandbox/start`, () =>
+          HttpResponse.json(body, { status }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(line);
+      expect(alert).toHaveTextContent(detail);
+      expect(alert).not.toHaveTextContent(body.error);
+    });
+
+    describe('when the start runs in the background', () => {
+      const START_URL = `${TEST_BASE_URL}/web/user-sessions/:sessionId/sandbox/start`;
+      const notRunning = { workspacePath: WORKSPACE, path: '', available: false, entries: [] };
+
+      /** The tree answers `starting` to the first poll after the start, then `ended`. */
+      function startInBackground(ended: Record<string, unknown>) {
+        let phase: 'idle' | 'starting' | 'ended' = 'idle';
+        const starts: string[] = [];
+        server.use(
+          http.get(TREE_URL, () => {
+            if (phase === 'idle') return HttpResponse.json(notRunning);
+            if (phase === 'starting') {
+              phase = 'ended';
+              return HttpResponse.json({ ...notRunning, starting: true });
+            }
+            return HttpResponse.json(ended);
+          }),
+          http.post(START_URL, ({ params }) => {
+            starts.push(String(params.sessionId));
+            phase = 'starting';
+            return HttpResponse.json({ starting: true }, { status: 202 });
+          }),
+        );
+        return starts;
+      }
+
+      it('stays waking while it clones, then lists the files, without falling back in between', async () => {
+        installHandlers();
+        const starts = startInBackground({
+          workspacePath: WORKSPACE,
+          path: '',
+          available: true,
+          entries: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        });
+        const user = userEvent.setup();
+
+        renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+        await user.click(await screen.findByRole('button', { name: /^Files/ }));
+        await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
+
+        expect(await screen.findByText(/Starting the sandbox/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Waking sandbox/ })).toBeDisabled();
+        let fellBack = false;
+        await waitFor(
+          () => {
+            if (screen.queryByText(/The sandbox isn.t running/) || screen.queryByRole('alert')) fellBack = true;
+            expect(screen.getByText('README.md')).toBeInTheDocument();
+          },
+          { timeout: 8_000 },
+        );
+        expect(fellBack).toBe(false);
+        expect(starts).toEqual([WORKSPACE]);
+      });
+
+      it('shows why the start failed once it ends, and offers to try again', async () => {
+        installHandlers();
+        startInBackground({
+          ...notRunning,
+          startError: { code: 'timeout', message: 'Sandbox command timed out after 900s.' },
+        });
+        const user = userEvent.setup();
+
+        renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+        await user.click(await screen.findByRole('button', { name: /^Files/ }));
+        await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
+
+        expect(await screen.findByText(/Starting the sandbox/)).toBeInTheDocument();
+        const alert = await screen.findByRole('alert', {}, { timeout: 8_000 });
+        // The kind of failure in the viewer's language, the server's message under it.
+        expect(alert).toHaveTextContent(/The sandbox start timed out/);
+        expect(alert).toHaveTextContent('Sandbox command timed out after 900s.');
+        expect(screen.getByText(/The sandbox isn.t running/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeEnabled();
+      });
     });
 
     it('shows a folder the server refuses as an error inside that folder', async () => {

@@ -1,3 +1,7 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { InMemoryStore } from '@mastra/core/storage';
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
@@ -20,6 +24,9 @@ import { createClaudeSessionUi, type ClaudeSessionUi } from './routes.ts';
 
 /** A Factory id: Factory project ids are uuids, and the access guard checks only uuids against the store. */
 const FACTORY_ID = '00000000-0000-4000-8000-0000000000f1';
+
+/** A real directory: a turn checks its recorded cwd is still on disk. */
+const WORKDIR = await mkdtemp(join(tmpdir(), 'claude-ui-cwd-'));
 
 const BASE = '/api/agent-controller/code/sessions';
 const OWNER: TestAuthUser = { id: 'owner', organizationId: 'org-1' };
@@ -55,7 +62,7 @@ async function setup(
     store: createInMemorySessionStore(),
     spawn: fake.spawn,
     credentials: async () => ({ ANTHROPIC_API_KEY: 'sk-test' }),
-    cwdFor: () => '/work/card-1',
+    cwdFor: () => WORKDIR,
     env: { PATH: '/usr/bin' },
     ...(options.mode ? { mode: options.mode } : {}),
     ...options.harness,

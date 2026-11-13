@@ -7,17 +7,23 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { passageLines, passageLink } from '../../passage-lines';
+
 /**
  * Notes on a document, as the chat takes notes on a message: select a passage, write a note. Each passage
- * is quoted with the file's path, and they all go to the session with the next message. Only inside a
- * chat; a viewer without one shows the file as before.
+ * is quoted under a link to the file and the lines it came from (`path:262-275`), so the agent goes
+ * straight to them and the person can open the file from the sent message. They all go to the session
+ * with the next message. Only inside a chat; a viewer without one shows the file as before.
  */
 export function FileAnnotations({
   containerRef,
   filePath,
+  source,
 }: {
   containerRef: RefObject<HTMLElement | null>;
   filePath: string;
+  /** The file's markdown, which the passage's lines are counted in. */
+  source: string;
 }) {
   const chat = useOptionalChatAnnotations();
   if (!chat) return null;
@@ -34,7 +40,10 @@ export function FileAnnotations({
       />
       <AnnotationSelectionToolbar
         containerRef={containerRef}
-        onAnnotate={annotation => addAnnotation({ ...annotation, text: `\`${filePath}\`\n${annotation.text}` })}
+        onAnnotate={annotation => {
+          const lines = passageLines(source, annotation.text, annotation.source.textBefore);
+          addAnnotation({ ...annotation, text: `${passageLink(filePath, lines)}\n${annotation.text}` });
+        }}
       />
     </>
   );

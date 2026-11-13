@@ -222,8 +222,9 @@ export function MessageBubble({
         if (activation) return <SkillMessage activation={activation} appearance="inline" />;
         // The raw block the agent reads is left out; its references show with the sent files.
         const { body, refs: partRefs } = parseRefs(part.text);
-        if (partRefs.length === 0) return <MarkdownRenderer>{part.text}</MarkdownRenderer>;
-        return body.trim() ? <MarkdownRenderer>{body}</MarkdownRenderer> : null;
+        // A note on a file links it (`path:262-275`); a click opens it in the Files panel.
+        if (partRefs.length === 0) return <MarkdownRenderer components={fileLinks}>{part.text}</MarkdownRenderer>;
+        return body.trim() ? <MarkdownRenderer components={fileLinks}>{body}</MarkdownRenderer> : null;
       }
 
       return (

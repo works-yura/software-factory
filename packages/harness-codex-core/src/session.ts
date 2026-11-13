@@ -60,7 +60,7 @@ import type {
   ToolRequestUserInputParams,
   TurnStartParams,
 } from './protocol/schema.ts';
-import { rm } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { emptyCodexThreadState, type CodexPendingInput, type CodexSessionMode, type CodexSessionRecord, type CodexSessionStore, type CodexThreadState } from './store.ts';
@@ -1279,7 +1279,21 @@ export class CodexSession implements AgentSession {
   }
 
   async #cwd(): Promise<string> {
-    if (this.#record.cwd) return this.#record.cwd;
+    const recorded = this.#record.cwd;
+    if (recorded) {
+      if (await directoryExists(recorded)) return recorded;
+      // The checkout was removed from disk (the sandbox went to sleep, a retired or cleaned folder):
+      // asking for the cwd again sets it up anew. It must come back at the same path, as Claude
+      // Code's does; anywhere else is refused rather than silently moved.
+      const restored = await this.#config.cwdFor(this.id);
+      if (restored !== recorded) {
+        throw new CodexError(
+          'process',
+          `The checkout of session ${this.id} is gone from ${recorded}, and setting it up again put it at ${restored}.`,
+        );
+      }
+      return recorded;
+    }
     this.#record.cwd = await this.#config.cwdFor(this.id);
     await this.#save();
     return this.#record.cwd;
@@ -1734,5 +1748,13 @@ export class CodexSession implements AgentSession {
       result = await this.#awaitTurn(run, watch);
     }
     return result;
+  }
+}
+
+async function directoryExists(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
   }
 }

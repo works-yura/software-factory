@@ -135,6 +135,9 @@ export interface FactoryApiRoutesDeps {
   controller: AgentController<MastraCodeState>;
   /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
   liveSessions: LiveSessions;
+  /** Problems with local sandboxes' kept work, listed in «Потребує вас» (ADR-0039). */
+  sandboxProblems?: import('@factory/activity').SandboxProblemSource;
+
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
   /** Optional user directory for resolving persisted owners to display profiles. */
@@ -196,6 +199,10 @@ export interface FactoryApiRoutesDeps {
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** With a local sandbox: attaches a session's checkout on disk without starting it (file panels, sandbox start). */
   attachLocalCheckout?: LocalCheckoutAttacher;
+  /** A person read a session's files (Files panel): its sandbox counts as in use (ADR-0039). */
+  onSessionFilesAccess?: (session: import('@factory/store').SourceControlSession) => void;
+  /** With a local sandbox: sets a Claude Code or Codex session's checkout up when none is on disk (sandbox start). */
+  createLocalCheckout?: LocalCheckoutAttacher;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -892,6 +899,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
           ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
           ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
+          ...(deps.createLocalCheckout ? { createLocalCheckout: deps.createLocalCheckout } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
@@ -971,6 +979,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         auth: deps.auth,
         sessions: sourceControlSessions,
         ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
+        ...(deps.onSessionFilesAccess ? { onAccess: deps.onSessionFilesAccess } : {}),
         controller: deps.controller,
         ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
       },
@@ -1086,6 +1095,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+          ...(deps.sandboxProblems ? { sandboxProblems: deps.sandboxProblems } : {}),
           ...(deps.releaseWorkItemSandboxes ? { releaseWorkItemSandboxes: deps.releaseWorkItemSandboxes } : {}),
         }).routes()
       : []),

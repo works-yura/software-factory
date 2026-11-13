@@ -43,7 +43,7 @@ scripts/mac-mini/install.sh https://factory.tail5c61c7.ts.net
 
 ### Викатка: сервер працює з викоченого коміту, не з робочої папки
 
-**Правки в робочій папці (`v4/`) на сервер Mac mini не потрапляють**, навіть збережені й закомічені. Сервер працює з окремої копії — git worktree у `../v4-runtime/` (слоти `a` і `b`, посилання `current` на активний), бо дев-сервер у робочій папці перезапускався від кожного збереженого файлу, недописаного теж. Викотити:
+**Правки в робочій папці (`v4/`) на сервер Mac mini не потрапляють**, навіть збережені й закомічені. Сервер працює з окремої папки проду `/Volumes/dot/Project/eclipt-ai/factory-prod` — git worktree цього репозиторію (слоти `a` і `b`, посилання `current` на активний), бо дев-сервер у робочій папці перезапускався від кожного збереженого файлу, недописаного теж. Папку задає `FACTORY_RUNTIME` у `~/.mastracode/factory-v4/server.env` (без нього — `../v4-runtime` поруч із репозиторієм); кожна викатка записує в `server.env` `FACTORY_REPO=<папка>/current`, звідки автозапуск і стартує. Руками в папці проду нічого не правити. Викотити:
 
 ```sh
 scripts/mac-mini/deploy.sh            # поточний HEAD (лише закомічене)
@@ -51,14 +51,26 @@ scripts/mac-mini/deploy.sh <коміт>    # будь-який коміт — т
 scripts/mac-mini/deploy.sh --status   # що працює зараз
 ```
 
-`deploy.sh` ставить неактивний слот на коміт, робить `pnpm install` і збірку UI; лише якщо все вдалося — перемикає `current` і перезапускає агент. Збірка впала — сервер лишається на старому коміті. `.env` у слотах — посилання на `v4/apps/server/.env` (секрети в одному місці). `apps/ui` у робочій папці для сервера збирати більше не треба.
+`deploy.sh` ставить неактивний слот на коміт, робить `pnpm install`, збірку UI і production-збірку сервера (`pnpm build` → `apps/server/.mastra/output`, ~2 хв; `mastra build` сам ставить залежності бандла в `.mastra/output/node_modules`); лише якщо все вдалося — перемикає `current`, встановлює `start-server.sh` цього слота в `~/.mastracode/factory-v4/` і перезапускає агент. Збірка впала — сервер лишається на старому коміті. `.env` у слотах — посилання на `v4/apps/server/.env` (секрети в одному місці). `apps/ui` у робочій папці для сервера збирати більше не треба.
+
+### Режим: production-збірка (`start:local`), на тих самих даних (ADR-0040)
+
+Сервер працює не як дев-сервер, а зі збірки: `corepack pnpm start:local` в `apps/server` = `NODE_ENV=production`, `mastra start` на `.mastra/output` слота. Без стеження за файлами й без збірки на старті: здоровий за ~6 с (дев — 30–60 с), ~0,7 ГБ пам'яті (дев — ~1,1 ГБ).
+
+**Дані ті самі, що в `dev:local`, нічого не копіюється:** `MASTRA_DB_PATH` = `~/.mastracode/factory-v4/mastra.db` (поруч `mastra-vectors.db`, `factory-attachments`, `factory-device`), ключ облікових даних `~/.mastracode/factory-local-dev-key`, сесії харнесів `~/.mastracode/web/{claude-code,codex}-sessions`, `.env` слота (посилання на `v4/apps/server/.env`: `MASTRACODE_LOCAL_SANDBOX_ROOT=/Volumes/dot/factory-sandboxes`, шаблон — `…/.factory-template`), `FACTORY_AUTH=google`, `HOST`, `PORT=5874`, `MASTRACODE_PUBLIC_URL` з `server.env`, UI з `apps/ui/dist` слота. `start:local` ставить ті самі змінні, що `dev:local`, плюс `NODE_ENV=production`, `FACTORY_OWN_MACHINE=1` (production на власній машині: libSQL без `DATABASE_URL`, ключ машини, вхід Claude/ChatGPT, пристрої) і `FACTORY_SANDBOX_PROVIDER=local`.
+
+- **Перед першим production-стартом** `deploy.sh` один раз робить копію БД: `~/.mastracode/factory-v4/backup-<дата>-before-prod-mode.db` (`sqlite3 .backup`, перевірка `quick_check`). Не вдалося — викатка зупиняється, сервер не чіпається.
+- **Повернутись до дев-режиму** (одна змінна): дописати `FACTORY_SERVER_MODE=dev` у `~/.mastracode/factory-v4/server.env` і `launchctl kickstart -k gui/$UID/ai.eclipt.factory`; прибрати рядок — знову production (`dev:local` стирає `.mastra/output` слота, тож після нього спершу `deploy.sh`). Слот без збірки сам падає на `dev:local` (рядок `no production build … falling back to dev:local` у лозі).
+- Який режим зараз: `scripts/mac-mini/deploy.sh --status` (`last start: … starting start:local`) або `grep 'starting ' ~/Library/Logs/factory.log | tail -1`.
+- Відмінності production, які лишаються: логер Mastra — лише `WARN` і вище (журнали `[factory]` як і були); реєстр моделей — вбудований у `@mastra/core`, без щогодинного оновлення з мережі; better-auth обмежує частоту запитів входу; помилки API без стеку; немає `/swagger-ui`. Деталі — ADR-0040.
+- Сервер слухає всі інтерфейси (`*:5874`), як і дев-сервер: `HOST` бачить лише `mastra dev`, сам сервер читає `MASTRA_HOST`.
 
 | Що | Де |
 | --- | --- |
 | Адреса | `https://factory.tail5c61c7.ts.net` — лише в tailnet; Tailscale Service `svc:factory` (машина з тегом `tag:server`), проксі на `http://127.0.0.1:5874` |
 | Автозапуск сервера | LaunchAgent `ai.eclipt.factory` (шаблон `scripts/mac-mini/ai.eclipt.factory.plist`): `RunAtLoad`, `KeepAlive` лише при невдалому виході, `ThrottleInterval` 30 с |
-| Скрипт запуску | `scripts/mac-mini/start-server.sh`: node з `nvm` (`default`), чекає `.env` викоченого слота (диск монтується пізно, до 5 хв), читає `server.env` (`FACTORY_REPO` = `…/v4-runtime/current`) і запускає `corepack pnpm dev:local` в `apps/server` |
-| Сторож | той самий скрипт: кожні 20 с `GET http://127.0.0.1:5874/health` (відповідає без входу); 6 невдач поспіль (2 хв) — зупиняє всю групу процесів і виходить з 1, launchd піднімає знову. Потрібен, бо `mastra dev` живе далі, коли сервер у ньому впав. Старт до першої здорової відповіді — до 15 хв. Рядки `[watchdog …]` у лозі |
+| Скрипт запуску | `scripts/mac-mini/start-server.sh` (встановлює `deploy.sh` зі слота або `install.sh`): node з `nvm` (`default`), чекає `.env` викоченого слота (диск монтується пізно, до 5 хв), читає `server.env` (`FACTORY_REPO` = `…/factory-prod/current`, його оновлює `deploy.sh`; `FACTORY_SERVER_MODE`) і запускає в `apps/server` `corepack pnpm start:local` (або `dev:local` у дев-режимі) |
+| Сторож | той самий скрипт: кожні 20 с `GET http://127.0.0.1:5874/health` (відповідає без входу); 3 невдачі поспіль (1 хв; у дев-режимі 6 — 2 хв) — зупиняє групу процесів і всіх нащадків (varlock запускає сервер в окремій групі) і виходить з 1, launchd піднімає знову. Потрібен, бо завислий сервер не виходить сам (а `mastra dev` живе далі, коли сервер у ньому впав). Старт до першої здорової відповіді — до 3 хв (у дев-режимі до 15 хв). Рядки `[watchdog …]` у лозі |
 | CLI агентів | `claude` — у `~/.local/bin`, `codex` — з node nvm. launchd дає голий `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`); сервер однаково знаходить їх сам (ADR-0038), а `start-server.sh` ще й дописує ці теки в `PATH`. Перевірити: `grep -E 'Claude Code:|Codex:' ~/Library/Logs/factory.log` або Settings › Налагодження. Закріпити конкретний бінарник — `FACTORY_CLAUDE_CODE_COMMAND` / `FACTORY_CODEX_COMMAND` (абсолютний шлях) у `apps/server/.env` |
 | Лог | `~/Library/Logs/factory.log` |
 | Tailscale | Login Items (System Settings › General › Login Items); serve-конфіг сервісу зберігається між перезавантаженнями |
@@ -83,7 +95,7 @@ tailscale funnel --https=443 off                              # закрити �
 
 Дозвіл на Funnel — у політиці tailnet (`nodeAttrs`, `attr: funnel` для цієї машини). Не відкривати Funnel на весь порт сервера (`/` → `:5874`): тоді UI і API стануть публічними.
 
-`MASTRACODE_PUBLIC_URL` задає `server.env`, не `.env` проєкту: `dev:local` у `package.json` сам ставить `http://localhost:5874`, якщо змінної немає, і це перекриває `.env`. Без неї Google після входу повертає на `localhost`.
+`MASTRACODE_PUBLIC_URL` задає `server.env`, не `.env` проєкту: `start:local` і `dev:local` у `package.json` самі ставлять `http://localhost:5874`, якщо змінної немає, і це перекриває `.env`. Без неї Google після входу повертає на `localhost`.
 
 Керування (на Mac mini):
 
@@ -94,6 +106,8 @@ launchctl bootstrap gui/$UID ~/Library/LaunchAgents/ai.eclipt.factory.plist   # 
 launchctl print gui/$UID/ai.eclipt.factory | grep -E 'state|pid'               # стан
 ```
 
+- **Відкат:** `scripts/mac-mini/deploy.sh <попередній коміт>` (збирає й вмикає його разом з його `start-server.sh`; коміт до ADR-0040 повертає `dev:local`). Швидше, без збірки (у папці проду): `ln -sfn <інший слот> current.next && mv -fh current.next current` і `kickstart -k` (у слоті має бути збірка, інакше — дев-режим). Дані після production-запуску ті самі, повертати БД не треба; копія `backup-…-before-prod-mode.db` — на крайній випадок (сервер зупинити, `mastra.db`, `-wal`, `-shm` відкласти, копію покласти як `mastra.db`).
+- **Перенести папку проду:** змінити `FACTORY_RUNTIME` у `server.env` і викотити двічі (зберуться обидва слоти нової папки, автозапуск переключиться сам); потім старі слоти — `git worktree remove <стара папка>/a` (і `b`). Переносити `mv` не можна: слоти — worktree, а збірка тримає абсолютні шляхи.
 - **Не вбивати за PID і не запускати `pnpm dev:*` поруч**: launchd підніме сервер знову через 30 с, і два екземпляри впадуть на «Another development server instance is already running». Для повного перезапуску — `kickstart -k`; для e2e чи ручного запуску — спершу `bootout`, після — `bootstrap`.
 - Поки сервер не відповідає, сторінка показує зверху плашку «Сервер не відповідає — можливо, перезапускається» з відліком до наступної перевірки й «Спробувати зараз»; коли `/health` відповів — «Сервер знову доступний», запити TanStack Query на цей час стають на паузу (`onlineManager`) і продовжуються самі (`apps/ui/src/ui/lib/serverReachability`). Сторінка, відкрита вже під час простою, бачить «502 Bad Gateway» від Tailscale.
 - Після зміни імені машини чи tailnet адреса сервісу не змінюється; змінилась адреса — `install.sh <нова адреса>` і клієнт Google.

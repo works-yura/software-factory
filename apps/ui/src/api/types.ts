@@ -52,6 +52,7 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@factory/api/fs';
+export type { SessionSandboxStartError } from '@factory/api/session-sandbox-starts';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {

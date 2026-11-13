@@ -89,6 +89,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
   liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  /** Problems with local sandboxes' kept work, listed in «Потребує вас» (ADR-0039). */
+  sandboxProblems?: import('@factory/activity').SandboxProblemSource;
   /**
    * Called once a card is deleted: its sandbox folder, shared by its sessions,
    * is torn down and removed and its sessions stop. A failure is logged; the
@@ -683,6 +685,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         boards: this.#boards,
         comments: this.deps.comments,
         liveSessions,
+        ...(this.deps.sandboxProblems ? { sandboxProblems: this.deps.sandboxProblems } : {}),
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 

@@ -1502,6 +1502,7 @@ describe('FactoryPhaseStateProcessor', () => {
       bindingId: prepared.binding.id,
       revokedAt: new Date(),
     });
+    // A window without the card's phase still learns why the card's tools are gone.
     await expect(
       processor.computeStateSignal(
         stateArgs(context, {
@@ -1510,7 +1511,11 @@ describe('FactoryPhaseStateProcessor', () => {
           tracking: { currentCacheKey: first?.cacheKey },
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      mode: 'snapshot',
+      contents: expect.stringContaining('This session is no longer bound to its Factory card'),
+      attributes: { status: 'none' },
+    });
     const retraction = await processor.computeStateSignal(
       stateArgs(context, {
         contextWindow: { hasSnapshot: true },
@@ -1522,11 +1527,41 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(retraction).toMatchObject({
       cacheKey: `factory:none:${prepared.binding.id}:planning`,
       mode: 'snapshot',
-      contents: expect.stringContaining('the card is now in Planning. Your part is done'),
+      contents: expect.stringContaining('which is now in Planning: Factory card tools are off here'),
       attributes: { status: 'none' },
       metadata: { value: { phase: { status: 'none' } } },
     });
     expect(JSON.stringify(retraction)).not.toContain('Improve the settings UI');
+  });
+
+  it("tells a session no longer bound to its card which session works the card's seat now", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+    });
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+    await storage.update({
+      orgId: 'org-1',
+      id: prepared.item.id,
+      userId: 'user-1',
+      patch: { sessions: { work: { sessionId: 'session-next', branch: 'factory/issue-1', threadId: 'thread-next' } } },
+    });
+
+    // A person writes days later, in a fresh context window: the session says where the card's work went.
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(signal).toMatchObject({ mode: 'snapshot', attributes: { status: 'none' } });
+    expect(signal?.contents).toContain(
+      `This session is no longer the active session of its Factory card (card ${prepared.item.id}): the card is now in Planning, and session session-next works its work seat.`,
+    );
+    expect(signal?.cacheKey).toBe(`factory:none:${prepared.binding.id}:planning:session-next`);
   });
 
   it('tells a session whose card moved to a phase another context works that its part is done', async () => {

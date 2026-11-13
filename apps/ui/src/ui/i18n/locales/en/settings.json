@@ -90,7 +90,7 @@
     "provider": {
       "named": "Sandboxes run on {{provider}}.",
       "platform": "Sandboxes run on the Mastra platform.",
-      "local": "Sandboxes run on the local machine.",
+      "local": "Sandboxes run on the local machine; sessions clone from local mirrors of the repositories, which a build refreshes.",
       "custom": "Sandboxes run on a custom sandbox.",
       "none": "Sandboxes run on no sandbox."
     },
@@ -180,6 +180,16 @@
         "between": "Enter a number between {{min}} and {{max}}",
         "atLeast": "Enter a number of at least {{min}}",
         "atMost": "Enter a number of at most {{max}}"
+      },
+      "settingLabels": {
+        "maxActiveSandboxes": "Awake sandboxes at most",
+        "idleSleepMinutes": "Sleep after idle (minutes)",
+        "hiddenRefRetentionDays": "Keep published work (days)"
+      },
+      "settingDescriptions": {
+        "maxActiveSandboxes": "Over this, the sandboxes idle longest go to sleep.",
+        "idleSleepMinutes": "A sandbox without work this long goes to sleep.",
+        "hiddenRefRetentionDays": "Work published to hidden refs on GitHub is removed after this long once the remote holds it, or its card closed."
       }
     },
     "repository": {
@@ -200,6 +210,40 @@
       "teardownDescription": "Runs when the session is retired, and again if setup fails.",
       "teardownAria": "Teardown command for {{name}}",
       "teardownPlaceholder": "e.g. docker compose down"
+    },
+    "sandboxes": {
+      "title": "Sandboxes",
+      "description": "Each card and session works in its own folder on this machine. An idle sandbox goes to sleep: its work is saved (to the mirror and hidden refs on the remote), its processes stop and the folder is removed; the next message restores it. The limits are in the sandbox settings above.",
+      "empty": "No sandboxes yet.",
+      "adminOnly": "Only organization admins see and manage sandboxes.",
+      "loadFailed": "Could not load the sandboxes.",
+      "saveAndStop": "Save and stop",
+      "sleeping": "Saving…",
+      "activeTooltip": "An agent is working in this sandbox; it is never stopped.",
+      "slept": "{{name}} saved and stopped",
+      "sleepFailed": "Could not save and stop the sandbox",
+      "lastActivity": "last activity {{time}}",
+      "asleepSince": "asleep since {{time}} ({{reason}})",
+      "state": {
+        "active": "Active",
+        "idle": "Idle",
+        "asleep": "Asleep"
+      },
+      "kind": {
+        "card": "card",
+        "session": "session"
+      },
+      "reason": {
+        "idle": "idle",
+        "limit": "over the limit",
+        "manual": "by hand"
+      },
+      "problem": {
+        "save-failed": "Its work could not be saved, so its folder is kept. Fix the cause; the next sleep retries.",
+        "superseded": "Saved commits the branch no longer contains were kept aside:",
+        "public-repository": "Public repository: its work is kept on this machine only, never published.",
+        "processes-unchecked": "The processes in its folder could not be checked; some may still run and hold ports."
+      }
     }
   },
   "repositories": {

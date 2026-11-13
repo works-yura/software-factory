@@ -4,6 +4,8 @@ import type { TokenUsage } from '@mastra/core/agent-controller';
 import { replaceEqualDeep } from '@tanstack/react-query';
 
 import type { OMBudgets } from './om';
+import { readSandboxSetupEvent } from './sandbox-setup';
+import type { SandboxSetupState } from './sandbox-setup';
 
 export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'threadId' | 'omProgress' | 'tokenUsage'>;
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
@@ -20,6 +22,8 @@ export interface ChatRuntimeState {
   bufferingMessages: boolean;
   bufferingObservations: boolean;
   goal?: GoalSnapshot;
+  /** The session's sandbox setup, while it runs and after it ended until the next run starts. */
+  sandboxSetup?: SandboxSetupState;
   runsStarted: number;
   tokensPerSec: number;
   /** Assistant message the decode window measures; a different message starts a new window. */
@@ -104,12 +108,16 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
   }
 
   const event = action.event;
+  const sandboxSetup = readSandboxSetupEvent(event);
+  if (sandboxSetup) return { ...state, sandboxSetup };
   if (!isKnownAgentControllerEvent(event)) return state;
 
   switch (event.type) {
     case 'agent_start':
       return {
         ...state,
+        // An ended setup belongs to the run before; one still running is this run's wait.
+        sandboxSetup: state.sandboxSetup?.status === 'running' ? state.sandboxSetup : undefined,
         runsStarted: state.runsStarted + 1,
         tokensPerSec: 0,
         _decodeMessageId: undefined,

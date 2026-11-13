@@ -333,6 +333,9 @@ describe('factory-environment-build workflow', () => {
     runner.onRepositoryPush({ ...event, projectRepository: { ...event.projectRepository, inEnvironment: false } });
     // A link's own branch is the session base, not what the template clones.
     runner.onRepositoryPush({ ...event, ref: 'refs/heads/release' });
+    // Session work published to hidden refs (ADR-0039) never starts a build.
+    runner.onRepositoryPush({ ...event, ref: 'refs/factory/wip/heads/main' });
+    runner.onRepositoryPush({ ...event, ref: 'refs/factory/wip/tree/factory/item-1' });
     runner.onRepositoryPush(event);
     await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
     expect(start).toHaveBeenCalledWith(project.id, 'push');

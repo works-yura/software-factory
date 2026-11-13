@@ -21,6 +21,9 @@ import type { ExecutableSandbox, SandboxCommandResult } from '../materialization
 import type { SourceControlStorageHandle } from '@factory/store';
 import { timedPhase } from '@factory/observability';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../sandbox-env.ts';
+import { gitProgressReader, withoutGitProgress } from '../setup-progress.ts';
+import type { SandboxSetupTransfer } from '../setup-progress.ts';
+import type { RepositoryCache, RepositorySource } from '../template/repository-cache.ts';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
@@ -62,6 +65,8 @@ interface ShOptions {
 interface CommandOptions extends ShOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  /** Streams the command's stderr as it arrives, e.g. a clone's `--progress`. */
+  onStderr?: (chunk: string) => void;
 }
 
 /**
@@ -155,6 +160,7 @@ async function executeOnce(
         timeout: timeoutMs,
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
         ...(options.env !== undefined ? { env: options.env } : {}),
+        ...(options.onStderr !== undefined ? { onStderr: options.onStderr } : {}),
       }),
       hangGuard,
     ]);
@@ -165,6 +171,15 @@ async function executeOnce(
 
 const GIT_TRANSFER_RETRIES = 2;
 const GIT_TRANSFER_RETRY_DELAY_MS = 2000;
+/**
+ * A transfer that stalls (the connection stays open but nothing arrives) is
+ * aborted by git itself once it moves less than this many bytes a second for
+ * {@link GIT_TRANSFER_STALL_SECONDS}, and then retried like a dropped one —
+ * instead of hanging until the 15-minute command guard while the session
+ * waits on its first turn.
+ */
+export const GIT_TRANSFER_STALL_BYTES_PER_SECOND = 1000;
+export const GIT_TRANSFER_STALL_SECONDS = 60;
 
 /**
  * True when a git transfer died mid-flight rather than being refused.
@@ -180,9 +195,9 @@ const GIT_TRANSFER_RETRY_DELAY_MS = 2000;
  * egress) is terminal and must surface immediately rather than be retried into
  * a slow failure.
  */
-function isTransientGitFailure(result: SandboxCommandResult): boolean {
+export function isTransientGitFailure(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /HTTP2 framing layer|RPC failed; curl|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
+  return /HTTP2 framing layer|RPC failed; curl|Operation too slow|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
     output,
   );
 }
@@ -196,16 +211,22 @@ function isTransientGitFailure(result: SandboxCommandResult): boolean {
  * `beforeRetry` lets a call site clear whatever the aborted attempt left
  * behind — a half-written clone directory blocks the next `git clone` outright.
  */
-async function gitTransfer(
+export async function gitTransfer(
   sandbox: ExecutableSandbox,
   args: string[],
   options: CommandOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
 ): Promise<SandboxCommandResult> {
   const { beforeRetry, ...commandOptions } = options;
   const deadlineMs = Date.now() + (commandOptions.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+  const env = {
+    GIT_HTTP_LOW_SPEED_LIMIT: String(GIT_TRANSFER_STALL_BYTES_PER_SECOND),
+    GIT_HTTP_LOW_SPEED_TIME: String(GIT_TRANSFER_STALL_SECONDS),
+    ...commandOptions.env,
+  };
   for (let attempt = 0; ; attempt++) {
     const result = await execute(sandbox, 'git', args, {
       ...commandOptions,
+      env,
       timeoutMs: Math.max(deadlineMs - Date.now(), 1),
     });
     if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
@@ -277,7 +298,7 @@ function credentialScope(
  * in argv, a remote URL, or persistent git config. Git reads the URL-scoped
  * extra header from its process environment and discards it on exit.
  */
-function gitAuthenticationEnvironment(
+export function gitAuthenticationEnvironment(
   cloneUrl: string,
   token: string,
   username: string,
@@ -303,7 +324,7 @@ function gitAuthenticationEnvironment(
   };
 }
 
-function normalizedRemoteUrl(value: string): string | null {
+export function normalizedRemoteUrl(value: string): string | null {
   let url: URL;
   try {
     url = new URL(value);
@@ -337,9 +358,33 @@ export interface MaterializeRepoOptions {
   /** A freshly minted, short-lived installation access token. */
   token: string;
   storage: MaterializationStore;
+  /**
+   * Told when a clone begins (and where from) and, from `git clone --progress`,
+   * how far it has got. Without it the clone runs without `--progress`.
+   */
+  progress?: { cloning(source: RepositorySource): void; transfer(transfer: SandboxSetupTransfer): void };
+  /**
+   * Where a fresh checkout is cloned from before the network (ADR-0039). When
+   * it cannot serve the checkout, the network clone runs as without it and the
+   * result says why.
+   */
+  repositoryCache?: RepositoryCache;
+  /** The repository's owner ids, kept beside its cache entry for later housekeeping. */
+  owner?: { orgId: string; repositoryId: string };
 }
 
-async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promise<void> {
+/** What a materialization did. */
+export interface MaterializeResult {
+  /** False when a checkout was already there and left as it was. */
+  cloned: boolean;
+  source?: RepositorySource;
+  /** Why the cache did not serve a network clone (`missing`, `corrupt: …`). */
+  fallbackReason?: string;
+  /** The mirror could not be refreshed and served what it had. */
+  stale?: string;
+}
+
+export async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promise<void> {
   const mkdir = await execute(sandbox, 'mkdir', ['-p', workdir]);
   if (mkdir.exitCode !== 0) throw classifyGitFailure(mkdir, 'clone-failed');
   const clear = await execute(sandbox, 'find', [
@@ -363,11 +408,11 @@ async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promis
  * stored remote remains credential-free. Sets `materialized_at` on the
  * per-user sandbox binding row.
  */
-export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
+export async function materializeRepo(options: MaterializeRepoOptions): Promise<MaterializeResult> {
   return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
 }
 
-async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
+async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<MaterializeResult> {
   const { row: sandboxRow, repoInfo, sandbox, token, storage } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
@@ -407,6 +452,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // checkout that follows fetches the base branch it needs.
   const cleanCloneUrl = repoInfo.cloneUrl ?? cleanUrl(repo);
   const existing = await existingCheckoutRemote(sandbox, workdir, cleanCloneUrl);
+  let result: MaterializeResult = { cloned: false };
   if (existing !== null) {
     // A token an earlier start failed to scrub must not outlive it; the
     // remote already carries the plain URL otherwise, so this costs nothing
@@ -430,25 +476,81 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       'clone-failed',
     );
     await clearWorkdir(sandbox, workdir);
+    const progress = options.progress;
+    let fallbackReason: string | undefined;
+    if (options.repositoryCache) {
+      // The mirror first: a local clone of hard-linked objects after a delta fetch.
+      progress?.cloning('mirror');
+      const cached = await options.repositoryCache.checkout(
+        sandbox,
+        { cloneUrl: cleanCloneUrl, authEnv, ...(options.owner ? { owner: options.owner } : {}) },
+        {
+          workdir,
+          branch: repoInfo.defaultBranch,
+          ...(progress ? { onTransfer: (transfer: SandboxSetupTransfer) => progress.transfer(transfer) } : {}),
+        },
+      );
+      if (cached.source === 'mirror') {
+        if (options.owner) {
+          await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.orgId', options.owner.orgId]);
+          await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.repositoryId', options.owner.repositoryId]);
+        }
+        await storage.markMaterialized({ id: sandboxRow.id });
+        return { cloned: true, source: 'mirror', ...(cached.stale ? { stale: cached.stale } : {}) };
+      }
+      fallbackReason = cached.reason;
+    }
+    progress?.cloning('network');
+    let readProgress = gitProgressReader();
     const clone = await gitTransfer(
       sandbox,
-      ['clone', '--depth=1', '--single-branch', '--branch', repoInfo.defaultBranch, '--', cleanCloneUrl, workdir],
+      [
+        'clone',
+        ...(progress ? ['--progress'] : []),
+        '--depth=1',
+        '--single-branch',
+        '--branch',
+        repoInfo.defaultBranch,
+        '--',
+        cleanCloneUrl,
+        workdir,
+      ],
       {
         env: authEnv,
         phase: 'repository clone',
+        ...(progress
+          ? {
+              onStderr: (chunk: string) => {
+                const transfer = readProgress(chunk);
+                if (transfer) progress.transfer(transfer);
+              },
+            }
+          : {}),
         beforeRetry: async () => {
           // A clone that died partway leaves the destination non-empty, which
           // git refuses to clone into. Clear its contents so the retry starts
           // clean without removing LocalSandbox's process cwd.
           await clearWorkdir(sandbox, workdir);
+          readProgress = gitProgressReader();
         },
       },
     );
-    if (clone.exitCode !== 0) throw classifyGitFailure(clone, 'clone-failed');
+    if (clone.exitCode !== 0) {
+      throw classifyGitFailure(progress ? { ...clone, stderr: withoutGitProgress(clone.stderr) } : clone, 'clone-failed');
+    }
+    result = { cloned: true, source: 'network', ...(fallbackReason ? { fallbackReason } : {}) };
+  }
+
+  // The owner ids ride in the checkout's own config (not secret), so saving its
+  // work later can name the repository whatever else was lost.
+  if (options.owner) {
+    await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.orgId', options.owner.orgId]);
+    await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.repositoryId', options.owner.repositoryId]);
   }
 
   // 4. Mark materialized.
   await storage.markMaterialized({ id: sandboxRow.id });
+  return result;
 }
 
 export interface SessionBranchOptions {
@@ -837,6 +939,31 @@ async function checkoutSessionBranchImpl(
     return;
   }
 
+  // The session pushed its branch before and this checkout is fresh (a
+  // removed checkout set up again, another host): resume the remote branch
+  // instead of starting a new one from the base and losing its commits.
+  const remoteHeads = await gitTransfer(
+    sandbox,
+    ['-C', workdir, 'ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+    { env: authEnv, timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'session branch probe' },
+  );
+  if (remoteHeads.exitCode !== 0) throw classifyGitFailure(remoteHeads, 'pull-failed');
+  if (remoteHeads.stdout.trim()) {
+    const fetchBranch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', branch], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'session branch fetch',
+    });
+    if (fetchBranch.exitCode !== 0) throw classifyGitFailure(fetchBranch, 'pull-failed');
+    const resume = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'session branch resume',
+    });
+    if (resume.exitCode === 0 || isBlockedByLocalWork(resume)) return;
+    throw classifyGitFailure(resume, 'clone-failed');
+  }
+
   const shallowClone =
     changeRequestSession &&
     (await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--is-shallow-repository'])).stdout.trim() === 'true';
@@ -938,7 +1065,7 @@ async function scrubRemote(
  * Turn a failed git command into an actionable error, detecting the common
  * "cannot reach github.com" egress failure.
  */
-function classifyGitFailure(
+export function classifyGitFailure(
   result: SandboxCommandResult,
   fallback: 'clone-failed' | 'pull-failed' | 'push-failed',
 ): MaterializeError {
@@ -963,6 +1090,9 @@ function classifyGitFailure(
 // ---------------------------------------------------------------------------
 
 export { isValidGitRef };
+
+/** One argv command in a sandbox, bounded by the hang guard; transport errors retried. */
+export { execute as runSandboxCommand };
 
 /** Identity used to author commits inside the sandbox. */
 export interface GitIdentity {

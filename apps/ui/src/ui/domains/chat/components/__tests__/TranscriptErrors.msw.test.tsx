@@ -314,5 +314,37 @@ describe('chat run errors', () => {
       expect(screen.queryByText(/^The limit resets /)).toBeNull();
       expect(screen.queryByRole('link')).toBeNull();
     });
+
+    it('says a message the run was stopped before reading waits for the next one, as stored', () => {
+      renderWithProviders(
+        <ErrorSession
+          messages={[
+            {
+              id: 'undelivered',
+              role: 'assistant',
+              createdAt: new Date('2026-11-13T12:47:20Z'),
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'error',
+                    error: {
+                      name: 'ClaudeCodeError',
+                      message: 'The run was stopped before Claude read this message.',
+                      kind: 'undelivered',
+                    },
+                  },
+                ],
+              },
+            } as unknown as MastraDBMessage,
+          ]}
+          harness={CLAUDE_CODE_HARNESS}
+        />,
+      );
+
+      expect(screen.getByText('Claude didn’t get your message')).toBeVisible();
+      expect(screen.getByText(/goes to Claude with the next one you send\.$/)).toBeVisible();
+      expect(screen.queryByRole('link')).toBeNull();
+    });
   });
 });

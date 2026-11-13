@@ -19,6 +19,8 @@ import type {
 import { factoryAttentionKey } from '@factory/store';
 import { ActivityAttentionProvider } from './attention-activity.ts';
 import { ParkedRunAttentionProvider } from './attention-parked.ts';
+import { SandboxProblemAttentionProvider } from './attention-sandbox.ts';
+import type { SandboxProblemSource } from './attention-sandbox.ts';
 import { proposedDecisionAttentionSpec } from './attention-proposed.ts';
 import type {
   AttentionPageResult,
@@ -41,6 +43,8 @@ interface AttentionRouteDependencies {
   boards: BoardRegistry | ProjectBoardSource;
   comments: WorkItemCommentsStorage;
   liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
+  /** Problems with local sandboxes' kept work (ADR-0039); absent when the sandbox keeps none. */
+  sandboxProblems?: SandboxProblemSource;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
 
@@ -173,6 +177,8 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),
     new ParkedRunAttentionProvider({ workItems, liveSessions }),
+    // Always listed, so every kind has its count; a server without a sandbox template has no problems.
+    new SandboxProblemAttentionProvider({ workItems, source: dependencies.sandboxProblems ?? { problemsIn: async () => [] } }),
   ];
 
   return [

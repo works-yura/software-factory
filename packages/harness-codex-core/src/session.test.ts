@@ -1,3 +1,4 @@
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -91,6 +92,36 @@ describe('CodexSession', () => {
     installed = true;
     expect(await session.sendMessage({ content: 'Fix the bug' })).toEqual({ reason: 'complete' });
     expect(spawn.calls.map(call => call.command)).toEqual(['/opt/homebrew/bin/codex']);
+  });
+
+  it('sets a slept session\'s checkout up again at the same path, and refuses one that comes back elsewhere', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'codex-cwd-'));
+    const checkout = join(root, 'repo');
+    await mkdir(checkout);
+    let setups = 0;
+    let moved = false;
+    const spawn = scripted([reply('Done.'), reply('Again.'), reply('Never.')]);
+    const { session } = await harnessWith(spawn, {
+      cwdFor: async () => {
+        setups++;
+        if (moved) return join(root, 'elsewhere');
+        await mkdir(checkout, { recursive: true });
+        return checkout;
+      },
+    });
+    try {
+      expect(await session.sendMessage({ content: 'one' })).toEqual({ reason: 'complete' });
+      // The sandbox went to sleep: its folder is gone.
+      await rm(checkout, { recursive: true, force: true });
+      expect(await session.sendMessage({ content: 'two' })).toEqual({ reason: 'complete' });
+      expect(setups).toBe(2);
+      expect(spawn.calls.map(call => call.cwd)).toEqual([checkout, checkout]);
+      await rm(checkout, { recursive: true, force: true });
+      moved = true;
+      await expect(session.sendMessage({ content: 'three' })).rejects.toThrow(/is gone from .* and setting it up again put it at/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('runs a message sent right after a run that could not start, instead of failing it with that run', async () => {

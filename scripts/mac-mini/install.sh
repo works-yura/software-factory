@@ -11,6 +11,8 @@ PUBLIC_URL="${1:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 STATE="$HOME/.mastracode/factory-v4"
+# Where deploy.sh keeps the server's slots; FACTORY_RUNTIME=<folder> install.sh … picks another.
+RUNTIME="${FACTORY_RUNTIME:-$(dirname "$REPO")/v4-runtime}"
 LABEL="ai.eclipt.factory"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
@@ -21,7 +23,8 @@ if [ -n "$PUBLIC_URL" ] || [ ! -f "$STATE/server.env" ]; then
   : "${PUBLIC_URL:?usage: $0 <public url, e.g. https://factory.tail5c61c7.ts.net>}"
   cat > "$STATE/server.env" <<CONF
 # Read by start-server.sh. Rerun install.sh with a new URL, or edit and restart the agent.
-FACTORY_REPO="$(dirname "$REPO")/v4-runtime/current"
+FACTORY_RUNTIME="$RUNTIME"
+FACTORY_REPO="$RUNTIME/current"
 MASTRACODE_PUBLIC_URL="$PUBLIC_URL"
 PORT=5874
 CONF

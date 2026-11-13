@@ -257,9 +257,12 @@ export class SessionRetirementCoordinator {
     // The folder its sandbox was built in wins over a fresh derivation: that is where its processes run.
     const memo = peekSessionSandbox(session.id);
     let folder = memo?.folder;
+    // Saved work is forgotten only for a session known to work in a folder of its own.
+    let folderResolved = true;
     try {
       folder ??= await this.#folderOf(session);
     } catch (error) {
+      folderResolved = false;
       // A session whose card cannot be told apart still retires, as a session
       // of its own: no card folder is touched for it.
       this.#warn('Factory card folder of a session could not be resolved', {
@@ -299,6 +302,17 @@ export class SessionRetirementCoordinator {
           });
         }
         if (folder) await this.#releaseFolderOfDeletedSession(input, session, folder, teardown!);
+        // A session of its own discarded its branch's saved work with it; a
+        // card's work stays for the card's other sessions until the card closes.
+        else if (folderResolved && this.#sandbox instanceof LocalFactorySandbox) {
+          await this.#sandbox.forgetSessionWork(session.id).catch((error: unknown) =>
+            this.#warn('Factory saved session work could not be dropped', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+              error: boundedError(error),
+            }),
+          );
+        }
       }
     }
   }

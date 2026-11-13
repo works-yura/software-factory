@@ -181,7 +181,7 @@ import { FactoryModelSwitchProcessor } from '@factory/session';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
 import type { FactoryApiRoutesDeps } from '@factory/api';
 import { TelemetryRoutes } from '@factory/api';
-import { SandboxEnvRoutes } from '@factory/api';
+import { SandboxEnvRoutes, SandboxRoutes } from '@factory/api';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
@@ -209,7 +209,19 @@ import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox, LocalFactorySandbox, workItemFolderKey } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
-import { CachedSandboxEnvs, peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
+import {
+  CachedSandboxEnvs,
+  hiddenRefRetentionMsOf,
+  peekSessionSandbox,
+  SandboxSleeper,
+  SessionRetirementCoordinator,
+  settleSessionNotes,
+  sleepPolicyOf,
+} from '@factory/sandbox';
+import { githubRepositoryVisibility } from './repository-visibility.ts';
+
+/** How often idle local sandboxes are looked for (ADR-0039); the grace period is twice this. */
+const SANDBOX_SWEEP_INTERVAL_MS = 5 * 60_000;
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
@@ -296,6 +308,7 @@ import { observeSessionRunReports } from '@factory/harness-mastra';
 import { FactorySessionsStateProcessor } from '@factory/harness-mastra';
 import { assertFactorySkills, createWorkspaceFactory, FactoryWorkspaceRegistry, findBoardSkillProblems } from '@factory/harness-mastra';
 import type { FactorySandboxStart } from '@factory/harness-mastra';
+import { forwardSandboxSetupProgress } from './sandbox-setup-progress.ts';
 import { createCardRunCheck, createUsageLimitResumer, storeParkedSessions, type ParkedSessionSource, type UsageLimitResumer } from './session/usage-limit-resume.ts';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -664,6 +677,12 @@ export class MastraFactory {
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeSandboxSetupProgress: (() => void) | undefined;
+  /** Puts idle local sandboxes to sleep (ADR-0039); undefined without a sandbox template. */
+  #sandboxSleeper: SandboxSleeper | undefined;
+  #watchSandboxActivity: (() => (() => void) | undefined) | undefined;
+  #stopSandboxActivity: (() => void) | undefined;
+  #stopSandboxSleeper: (() => void) | undefined;
   #mcpServers: McpServerHub | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
@@ -1363,6 +1382,24 @@ export class MastraFactory {
         : undefined;
     // A Product session reads a sibling card's unmerged change from that card's folder on this machine.
     const localSandbox = sandboxConfig instanceof LocalFactorySandbox ? sandboxConfig : undefined;
+    // Putting a closing card's work on the remote's hidden refs needs that repository's credentials.
+    const repositoryAccessOf = async (owner: { orgId: string; repositoryId: string }) => {
+      let lastError: unknown;
+      for (const integration of integrations) {
+        if (!integration.versionControl) continue;
+        try {
+          return await integration.versionControl.getRepositoryAccess(owner);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error('No source-control integration knows this repository.');
+    };
+    localSandbox?.environmentTemplate?.setRepositoryAccess(repositoryAccessOf);
+    // Whether a repository is public comes from its host's API, never from this machine's git setup (H2).
+    localSandbox?.environmentTemplate?.setRepositoryVisibility(async owner =>
+      githubRepositoryVisibility(await repositoryAccessOf(owner)),
+    );
     const productCardFolderPath = localSandbox
       ? ({ factoryProjectId, branch }: { factoryProjectId: string; branch: string }) =>
           localSandbox.workItemFolderPath(workItemFolderKey(factoryProjectId, branch))
@@ -1394,6 +1431,95 @@ export class MastraFactory {
             ...(workItemFolders ? { workItemFolders } : {}),
           })
         : undefined;
+    // Idle local sandboxes go to sleep within each Factory's limits (ADR-0039): saved, stopped, removed; the
+    // next message restores them. A released session keeps its row and thread; its sandbox is set up again.
+    const sandboxTemplate = localSandbox?.environmentTemplate;
+    const sandboxSleeper =
+      localSandbox && sandboxTemplate && sessionRetirement
+        ? new SandboxSleeper({
+            sandbox: localSandbox,
+            registry: sandboxTemplate.sandboxes,
+            sessions: {
+              // At work: running, or parked on a person's answer or an approval (M5).
+              isRunning: sessionId =>
+                liveSessionRegistry
+                  ? liveSessionRegistry.isRunning(sessionId) || liveSessionRegistry.parked(sessionId) !== undefined
+                  : true,
+              // A card mid-pipeline keeps its run binding active between stages.
+              ...(workItemsReady
+                ? {
+                    hasActiveBinding: async (sessionId: string) => {
+                      const row = await sourceControlSessions.getBySessionId(sessionId);
+                      if (!row?.factoryProjectId) return false;
+                      const binding = await workItemsStorage.findActiveRunBindingForSession({
+                        orgId: row.orgId,
+                        factoryProjectId: row.factoryProjectId,
+                        sessionId,
+                      });
+                      return Boolean(binding);
+                    },
+                  }
+                : {}),
+              release: async sessionId => {
+                const [sourceControl, row] = await Promise.all([
+                  sourceControlSessions.getSourceControlBySessionId(sessionId),
+                  sourceControlSessions.getBySessionId(sessionId),
+                ]);
+                if (!sourceControl || !row) return;
+                await sessionRetirement.recreateSessionSandbox({ sourceControl, orgId: row.orgId, sessionId });
+              },
+            },
+            policyFor: async factoryProjectId =>
+              sleepPolicyOf((await factoryProjectsStorage.getById({ id: factoryProjectId }))?.sandboxSettings),
+            maintain: () => sandboxTemplate.pruneKeptRefsEverywhere(hiddenRefRetentionMsOf({})),
+          })
+        : undefined;
+    this.#sandboxSleeper = sandboxSleeper;
+    // Every run's start and end marks its sandbox folder awake, with its session and owner.
+    const touchSandboxOf = async (sessionId: string) => {
+      if (!localSandbox?.environmentTemplate) return;
+      const row = await sourceControlSessions.getBySessionId(sessionId);
+      const folder = row ? row.sandboxWorkdir || peekSessionSandbox(row.id)?.workdir : undefined;
+      if (!row || !folder) return;
+      await localSandbox.touchSandbox(folder, {
+        sessionId,
+        rowId: row.id,
+        orgId: row.orgId,
+        ...(row.factoryProjectId ? { factoryProjectId: row.factoryProjectId } : {}),
+      });
+    };
+    // Browsing a session's files keeps its sandbox awake; marked at most once a minute per session.
+    const accessTouchedAt = new Map<string, number>();
+    const touchSandboxOnAccess = (sessionId: string) => {
+      const now = Date.now();
+      if (now - (accessTouchedAt.get(sessionId) ?? 0) < 60_000) return;
+      accessTouchedAt.set(sessionId, now);
+      void touchSandboxOf(sessionId).catch(() => {});
+    };
+    this.#watchSandboxActivity = () =>
+      liveSessionRegistry?.onRunChanged(session => {
+        const sessionId = session.identity.getId();
+        if (!liveSessionRegistry?.isRunning(sessionId)) return;
+        void touchSandboxOf(sessionId).catch(error =>
+          console.warn('[factory] Could not mark a sandbox active', { sessionId, error }),
+        );
+      });
+    const sandboxProblems = sandboxTemplate
+      ? {
+          problemsIn: async (factoryProjectId: string) =>
+            (await sandboxTemplate.sandboxes.list())
+              .filter(record => record.factoryProjectId === factoryProjectId)
+              .flatMap(record =>
+                (record.problems ?? []).map(problem => ({
+                  key: record.key,
+                  sandboxKind: record.kind,
+                  problem: problem.kind,
+                  message: problem.message,
+                  at: problem.at,
+                })),
+              ),
+        }
+      : undefined;
     // A card that is done or deleted takes its sandbox folder with it: torn
     // down once, removed, and every session of the card retired.
     const retireWorkItemSandboxes = sessionRetirement
@@ -1470,7 +1596,29 @@ export class MastraFactory {
       workItems: workItemsStorage,
       reporting: factoryReporting,
     };
-    const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
+    const reportRunEnd = createSessionRunEndReporter(sessionReports);
+    // After every run end the session's work (commits, uncommitted changes) is kept in the
+    // local mirrors, so losing the folder loses nothing (ADR-0039). In the background, never
+    // holding the report; a failure is logged with the session and repository by the template.
+    const saveSessionWorkAfterRun = (sessionId: string) => {
+      const sandbox = sandboxConfig instanceof LocalFactorySandbox ? sandboxConfig : undefined;
+      if (!sandbox?.environmentTemplate) return;
+      void (async () => {
+        const row = await sourceControlSessions.getBySessionId(sessionId);
+        if (!row) return;
+        const folder = row.sandboxWorkdir || peekSessionSandbox(row.id)?.workdir;
+        if (!folder) return;
+        await touchSandboxOf(sessionId);
+        // Keyed by the row id, as the sandbox and retirement name the session.
+        await sandbox.saveSessionWork(folder, { sessionId: row.id });
+      })().catch(error => console.warn('[factory] Session work could not be saved after a run', { sessionId, error }));
+    };
+    const reportSessionRunEnd: typeof reportRunEnd = async args => {
+      // Sandbox notes the run showed the agent are done with.
+      settleSessionNotes(args.sessionId);
+      saveSessionWorkAfterRun(args.sessionId);
+      return reportRunEnd(args);
+    };
     const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
     // Claude Code sessions are not the agent controller's: the host announces them to the live-session registry.
     const claudeLiveSessions = createSessionNotifier();
@@ -3064,6 +3212,8 @@ export class MastraFactory {
             controllerId: CONTROLLER_ID,
             controller,
             liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, sourceControlSessions, controller, claudeLiveSessions)),
+            ...(sandboxProblems ? { sandboxProblems } : {}),
+            ...(sandboxTemplate ? { onSessionFilesAccess: (session: { sessionId: string }) => touchSandboxOnAccess(session.sessionId) } : {}),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
@@ -3140,6 +3290,17 @@ export class MastraFactory {
                     (await claudeCode?.harness.getSession(session.sessionId)) || (await codex?.harness.getSession(session.sessionId))
                       ? localCheckoutAttacher(session)
                       : false,
+                  // No checkout on disk: set it up through the same resolver its next turn uses.
+                  createLocalCheckout: async (session: { id: string; sessionId: string }) => {
+                    const checkout = (await claudeCode?.harness.getSession(session.sessionId))
+                      ? claudeCheckout
+                      : (await codex?.harness.getSession(session.sessionId))
+                        ? codexCheckout
+                        : undefined;
+                    if (!checkout) return false;
+                    await checkout(session.sessionId);
+                    return localCheckoutAttacher(session);
+                  },
                 }
               : {}),
             // Signing in (`claude auth login`, `codex login`) opens the CLI's browser page on this
@@ -3288,6 +3449,11 @@ export class MastraFactory {
             },
           }),
           ...projectRoutes.routes(),
+          ...new SandboxRoutes({
+            auth: routeAuth,
+            projects: factoryProjectsStorage,
+            ...(sandboxSleeper ? { sleeper: sandboxSleeper } : {}),
+          }).routes(),
           ...new SandboxEnvRoutes({
             auth: routeAuth,
             projects: factoryProjectsStorage,
@@ -3565,6 +3731,12 @@ export class MastraFactory {
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
+    // The chat shows a session's sandbox setup step by step while its turn waits on it.
+    this.#unsubscribeSandboxSetupProgress?.();
+    this.#unsubscribeSandboxSetupProgress = forwardSandboxSetupProgress({
+      turnChannel: sessionId => this.#claudeSessionUi.channel(sessionId),
+      mastraSession: sessionId => prepared.base.controller.getSession(sessionId),
+    });
 
     // Chat-platform channels (Slack, Discord, …) contributed by integrations,
     // attached to the mounted controller so inbound platform messages reach
@@ -3693,6 +3865,9 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    // Sandbox folders follow their runs; idle ones go to sleep every few minutes.
+    this.#stopSandboxActivity = this.#watchSandboxActivity?.();
+    this.#stopSandboxSleeper = this.#sandboxSleeper?.start(SANDBOX_SWEEP_INTERVAL_MS);
     // Chat sessions that parked on a usage limit before this process started resume when it resets.
     void this.#usageLimitResumer
       ?.start()
@@ -3726,6 +3901,10 @@ export class MastraFactory {
         ),
       );
     this.#usageLimitResumer?.stop();
+    this.#stopSandboxSleeper?.();
+    this.#stopSandboxActivity?.();
+    this.#unsubscribeSandboxSetupProgress?.();
+    this.#unsubscribeSandboxSetupProgress = undefined;
     const backfill = this.#workItemSplitBackfill;
     backfill?.controller.abort();
     await Promise.all([

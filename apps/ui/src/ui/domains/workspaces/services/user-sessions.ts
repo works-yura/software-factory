@@ -7,6 +7,7 @@
 import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import { translator } from '../../../i18n/t';
+import type { SessionSandboxStartError } from '../../../../api/types';
 
 const tk = translator('workspaces');
 
@@ -153,14 +154,38 @@ export async function recreateSessionSandbox(
   return { recreated: body.recreated === true, aborted: body.aborted === true };
 }
 
-/** Start the session's sandbox without sending it a message. Resolves once it's running. */
-export async function startSessionSandbox(baseUrl: string, sessionId: string): Promise<void> {
+/**
+ * Start the session's sandbox without sending it a message. Resolves once the server has begun:
+ * `starting` while it clones in the background (the workspace tree reports how it ends), or
+ * already running.
+ */
+export async function startSessionSandbox(baseUrl: string, sessionId: string): Promise<{ starting: boolean }> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/sandbox/start`, {
     method: 'POST',
     credentials: 'include',
   });
-  const body: { error?: string } = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? tk('errors.startSandbox', { status: res.status }));
+  const body: { starting?: boolean; error?: string; message?: string } = await res.json().catch(() => ({}));
+  if (!res.ok) throw sandboxStartRequestError(res.status, body);
+  return { starting: body.starting === true };
+}
+
+/** A start request the server refused or failed, with the kind of failure the page names. */
+export class SandboxStartRequestError extends Error {
+  readonly code: SessionSandboxStartError['code'];
+  constructor(code: SessionSandboxStartError['code'], message: string) {
+    super(message);
+    this.name = 'SandboxStartRequestError';
+    this.code = code;
+  }
+}
+
+/** A machine code (`internal_error`, `gateway_timeout`) is never a message to show. */
+const ERROR_CODE = /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/;
+
+function sandboxStartRequestError(status: number, body: { error?: string; message?: string }) {
+  const text = body.error && !ERROR_CODE.test(body.error) ? body.error : body.message;
+  if (status === 504 || body.error === 'gateway_timeout') return new SandboxStartRequestError('timeout', text ?? '');
+  return new SandboxStartRequestError('unknown', text ?? tk('errors.startSandbox', { status }));
 }
 
 /** Ask the title model to re-name a session's conversation. Resolves to the new title. */

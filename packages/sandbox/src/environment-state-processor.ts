@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { readSessionNotes } from './session-notes.ts';
+
 const STATE_ID = 'factory-environment';
 
 export type EnvironmentRepositorySetupStatus = 'ok' | 'failed' | 'skipped';
@@ -131,8 +133,12 @@ export function renderSessionEnvironment(state: SessionEnvironmentState): string
   );
 }
 
-function environmentCacheKey(state: SessionEnvironmentState): string {
-  return `environment:${createHash('sha256').update(JSON.stringify(state)).digest('hex').slice(0, 16)}`;
+/** The snapshot that replaces a notes-only one once its notes are settled. */
+const NO_NOTES_CACHE_KEY = 'environment:none';
+
+function environmentCacheKey(state: SessionEnvironmentState, notes: readonly string[] = []): string {
+  const keyed = notes.length ? { state, notes } : state;
+  return `environment:${createHash('sha256').update(JSON.stringify(keyed)).digest('hex').slice(0, 16)}`;
 }
 
 /**
@@ -148,14 +154,34 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
     const sessionId = sessionIdFromContext(args.requestContext);
     if (!sessionId) return;
-    const state = environments.get(sessionId)?.state;
-    if (!state) return;
-    const cacheKey = environmentCacheKey(state);
+    const notes = readSessionNotes(sessionId);
+    const recorded = environments.get(sessionId)?.state;
+    const state = recorded ?? (notes.length ? { workingDirectory: '', repositories: [] } : undefined);
+    if (!state) {
+      // Notes alone were the last snapshot and are settled now: replace it, or the agent keeps
+      // reading them every turn.
+      const last = args.lastSnapshot?.metadata?.state as { cacheKey?: unknown } | undefined;
+      const lastKey = args.tracking?.currentCacheKey ?? last?.cacheKey;
+      if (typeof lastKey !== 'string' || !lastKey.startsWith('environment:') || lastKey === NO_NOTES_CACHE_KEY) return;
+      return {
+        id: STATE_ID,
+        cacheKey: NO_NOTES_CACHE_KEY,
+        mode: 'snapshot',
+        tagName: 'factory-environment',
+        contents: 'No open notes about your sandbox.',
+        value: { environment: null },
+        attributes: {},
+        metadata: { value: { environment: null } },
+      };
+    }
+    const cacheKey = environmentCacheKey(state, notes);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
     const only = state.repositories.length === 1 ? state.repositories[0] : undefined;
-    const contents = renderSessionEnvironment(state);
+    const contents = [...(state.repositories.length ? [renderSessionEnvironment(state)] : []), ...notes.map(escapeText)].join(
+      '\n\n',
+    );
     return {
       id: STATE_ID,
       cacheKey,

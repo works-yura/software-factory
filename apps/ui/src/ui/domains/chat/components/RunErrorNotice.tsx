@@ -120,10 +120,13 @@ function cardRunResumes(
 function describeHarnessError(
   error: MastraErrorPart['error'],
   facts: HarnessErrorFacts,
-  copy: RunErrorCopy,
+  copy: RunErrorCopy & { undelivered: { title: string; message: string } },
 ): RunErrorDescription {
   const described = describeRunError(error, copy);
   switch (facts.kind) {
+    // The run was stopped before Claude read the person's message: it waits for their next one.
+    case 'undelivered':
+      return { ...described, title: copy.undelivered.title, message: copy.undelivered.message, recoveries: [] };
     case 'auth':
       return { ...described, title: copy.titles.auth, message: error.message, recoveries: ['credentials'] };
     case 'rate_limit':
@@ -168,7 +171,11 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
   const displayedThread = useContext(ChatThreadMessagesContext);
   const harness = session?.harness;
   const facts = harnessErrorFacts(error, harness);
-  const { title, message, recoveries, model } = describeHarnessError(error, facts, useRunErrorCopy());
+  const copy = useRunErrorCopy();
+  const { title, message, recoveries, model } = describeHarnessError(error, facts, {
+    ...copy,
+    undelivered: { title: t('runError.titles.undelivered'), message: t('runError.messages.undelivered') },
+  });
   const factoryScoped = harness?.modelScope === 'factory';
   const cardResumes = cardRunResumes(error, facts, session?.kind);
   const diagnostics = JSON.stringify(

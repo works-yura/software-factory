@@ -10,7 +10,8 @@
       "automation-failed": "збій",
       "automation-proposed": "пропозиція",
       "supervisor-finding": "знахідка",
-      "agent-waiting": "очікує"
+      "agent-waiting": "очікує",
+      "sandbox-problem": "пісочниця"
     },
     "openThreadFor": "Відкрити тред «{{title}}»",
     "viewCardFor": "Переглянути картку «{{title}}»",
@@ -42,7 +43,8 @@
       "read": "Не вдалося позначити як прочитане",
       "archive": "Не вдалося архівувати",
       "restore": "Не вдалося відновити"
-    }
+    },
+    "openSandboxesFor": "Відкрити пісочниці: {{title}}"
   },
   "workItem": {
     "actions": {

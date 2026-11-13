@@ -3,16 +3,21 @@
 # ~/.mastracode/factory-v4/ (outside the project: the project may sit on a volume that mounts
 # after login). Runbook: docs/runbooks/dev-server.md › "Mac mini".
 #
-# Why a watchdog: `mastra dev` outlives a crashed server (it waits for a file change), so launchd
-# never sees the crash. This script polls GET /health and, after HEALTH_FAILS failures in a row,
-# stops the whole process group and exits 1; launchd (KeepAlive) starts it again.
+# The server runs as a production build (`pnpm start:local`: NODE_ENV=production, `mastra start` on
+# the .mastra/output that deploy.sh built in the slot), on the same data as the development server
+# (`dev:local`). FACTORY_SERVER_MODE=dev in server.env switches back to `dev:local` (bundles on every
+# start, watches files); a slot without a build falls back to it too.
+#
+# Why a watchdog: a hung server never exits, and `mastra dev` outlives a crashed one (it waits for a
+# file change), so launchd never sees either. This script polls GET /health and, after HEALTH_FAILS
+# failures in a row, stops the whole process group and exits 1; launchd (KeepAlive) starts it again.
 #
 # Before the server it applies the Tailscale side (see ensure_tailscale): the tailnet service people
 # open, and the public webhook paths (Funnel). Both are idempotent, so every start re-applies them
 # and a new machine gets them from this script alone.
 #
 # Settings come from ~/.mastracode/factory-v4/server.env (written by install.sh):
-#   FACTORY_REPO, MASTRACODE_PUBLIC_URL, PORT, TS_SERVICE, FUNNEL_ROUTES.
+#   FACTORY_REPO, MASTRACODE_PUBLIC_URL, PORT, TS_SERVICE, FUNNEL_ROUTES, FACTORY_SERVER_MODE.
 
 # launchd starts with a bare PATH: take node and corepack from nvm's default, as a login shell
 # would. Before `set -u`: nvm.sh reads unset variables.
@@ -35,11 +40,11 @@ TS_SERVICE="${TS_SERVICE:-}"
 # Public webhook paths on this machine's name, "<public path>=<server path>" separated by spaces.
 # Only these paths are reachable from the internet; everything else answers 404.
 FUNNEL_ROUTES="${FUNNEL_ROUTES:-}"
+# prod (default): `pnpm start:local`, the build deploy.sh made. dev: `pnpm dev:local`, as before.
+FACTORY_SERVER_MODE="${FACTORY_SERVER_MODE:-prod}"
 
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
 HEALTH_INTERVAL=20   # seconds between checks
-HEALTH_FAILS=6       # failures in a row before a restart: 2 minutes, longer than a dev rebuild
-STARTUP_LIMIT=900    # seconds the first start may take before it counts as stuck
 MOUNT_WAIT=300       # seconds to wait for the server's .env (its volume may mount late)
 
 log() { echo "[watchdog $(date '+%F %T')] $*"; }
@@ -79,16 +84,46 @@ DIR="$FACTORY_REPO/apps/server"
 for (( waited = 0; waited < MOUNT_WAIT; waited += 5 )); do [ -r "$DIR/.env" ] && break; sleep 5; done
 cd "$DIR" || { log "no $DIR"; exit 1; }
 
-# Own process group (job control), so a restart stops pnpm, varlock, mastra dev and the server together.
+if [ "$FACTORY_SERVER_MODE" != dev ] && [ ! -f .mastra/output/index.mjs ]; then
+  log "no production build in $DIR/.mastra/output (deploy again): falling back to dev:local"
+  FACTORY_SERVER_MODE=dev
+fi
+if [ "$FACTORY_SERVER_MODE" = dev ]; then
+  SCRIPT=dev:local
+  HEALTH_FAILS=6       # failures in a row before a restart: 2 minutes, longer than a dev rebuild
+  STARTUP_LIMIT=900    # seconds the first start may take (bundling) before it counts as stuck
+else
+  SCRIPT=start:local
+  HEALTH_FAILS=3       # 1 minute: a production server does not rebuild
+  STARTUP_LIMIT=180    # it is healthy within seconds; minutes mean it is stuck
+fi
+log "starting $SCRIPT"
+
+# Own process group (job control), so a restart stops pnpm, varlock, mastra and the server together.
 set -m
-corepack pnpm dev:local &
+corepack pnpm "$SCRIPT" &
 CHILD=$!
 set +m
 
+# Every process under the child. varlock starts its command in a process group of its own, so the
+# group kill alone would leave mastra and the server running (and holding the port) after a KILL.
+descendants() {
+  local pid
+  for pid in $(pgrep -P "$1"); do echo "$pid"; descendants "$pid"; done
+}
 stop_child() {
+  local tree
+  tree="$(descendants "$CHILD")"
   kill -TERM -- "-$CHILD" 2>/dev/null
-  for _ in {1..20}; do kill -0 "$CHILD" 2>/dev/null || return 0; sleep 1; done
+  for _ in {1..20}; do
+    # shellcheck disable=SC2086
+    kill -0 "$CHILD" $tree 2>/dev/null || break
+    sleep 1
+  done
   kill -KILL -- "-$CHILD" 2>/dev/null
+  # shellcheck disable=SC2086
+  [ -n "$tree" ] && kill -KILL $tree 2>/dev/null
+  return 0
 }
 restart() { log "$1: restarting"; stop_child; exit 1; }
 trap 'log "stopping (signal)"; stop_child; exit 0' TERM INT
@@ -96,7 +131,7 @@ trap 'log "stopping (signal)"; stop_child; exit 0' TERM INT
 healthy() { curl -fs -o /dev/null --max-time 5 "$HEALTH_URL"; }
 child_alive() { kill -0 "$CHILD" 2>/dev/null; }
 
-# Startup: the server builds before it listens.
+# Startup: dev:local bundles before it listens; start:local only boots.
 started=$SECONDS
 until healthy; do
   child_alive || { wait "$CHILD"; log "server exited during start ($?)"; exit 1; }

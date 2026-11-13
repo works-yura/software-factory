@@ -394,7 +394,9 @@
     "deleteFactory": "Failed to delete Factory ({{status}})",
     "loadRepositorySettings": "Failed to load repository settings ({{status}})",
     "updateHarness": "Failed to update the Factory harness",
-    "updateToolPermissions": "Failed to update the Factory’s tool permissions"
+    "updateToolPermissions": "Failed to update the Factory’s tool permissions",
+    "listSandboxes": "Could not load the sandboxes",
+    "sleepSandbox": "Could not save and stop the sandbox"
   },
   "sessions": {
     "newSession": "New session",
@@ -492,6 +494,15 @@
   },
   "wakeSandbox": {
     "notRunning": "The sandbox isn't running.",
+    "starting": "Starting the sandbox: cloning its repositories can take a few minutes.",
+    "errors": {
+      "timeout": "The sandbox start timed out: the git host (e.g. GitHub) answered too slowly. Try again.",
+      "network": "The sandbox could not reach the git host. Check the network and try again.",
+      "no_access": "The git host refused access to a repository: check the connection's permissions.",
+      "clone_failed": "Cloning or checking out a repository failed.",
+      "no_sandbox": "This session has nothing to start yet: send it a message first.",
+      "unknown": "The sandbox could not start."
+    },
     "waking": "Waking sandbox…",
     "wake": "Wake sandbox"
   },

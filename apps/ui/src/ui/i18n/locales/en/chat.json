@@ -402,7 +402,8 @@
       "rateLimited": "Provider rate limit reached",
       "unavailable": "Model provider temporarily unavailable",
       "modelRequestFailed": "Model request failed",
-      "runStopped": "Run stopped"
+      "runStopped": "Run stopped",
+      "undelivered": "Claude didn’t get your message"
     },
     "messages": {
       "quotaNext": "Check the provider account’s billing or usage allowance, or use another credential or model.",
@@ -415,7 +416,8 @@
       "rateLimited": "Wait a moment, then send a message to continue the run.",
       "unavailable": "The provider could not complete the request. Send a message to continue the run.",
       "noReason": "The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.",
-      "unexpected": "An unexpected error stopped the run. Copy the error details to investigate."
+      "unexpected": "An unexpected error stopped the run. Copy the error details to investigate.",
+      "undelivered": "The run was stopped before Claude read it. The message is kept and goes to Claude with the next one you send."
     },
     "reviewAccounts": "Review {{harness}} accounts",
     "openModelSettings": "Open model settings",
@@ -451,6 +453,51 @@
     "waiting": "Waiting for you",
     "done": "Done",
     "error": "Something went wrong"
+  },
+  "sandboxSetup": {
+    "running": "Setting up the sandbox",
+    "done": "Sandbox ready in {{time}}",
+    "failed": "Sandbox setup failed",
+    "position": "({{index}} of {{total}})",
+    "phase": {
+      "clone": "cloning {{repo}}",
+      "checkout": "checking out the session branch of {{repo}}",
+      "env-files": "writing env files for {{repo}}",
+      "setup": "installing dependencies of {{repo}}",
+      "workspaceSetup": "running the workspace setup",
+      "cloneMirror": "cloning {{repo}} from the mirror",
+      "cloneNetwork": "cloning {{repo}} from the network"
+    },
+    "step": {
+      "clone": "clone",
+      "checkout": "branch checkout",
+      "env-files": "env files",
+      "setup": "setup command"
+    },
+    "reason": {
+      "timeout": "timed out: the git host answered too slowly",
+      "network": "could not reach the git host",
+      "no_access": "the git host refused access",
+      "clone_failed": "git could not clone or check out",
+      "setup_failed": "the command failed",
+      "unknown": "unexpected error"
+    },
+    "failure": "{{where}}: {{reason}}",
+    "more": "and {{count}} more",
+    "workspace": "workspace",
+    "seconds": "{{seconds}} s",
+    "minutes": "{{minutes}} min {{seconds}} s",
+    "kilobytes": "{{value}} KB",
+    "megabytes": "{{value}} MB",
+    "gigabytes": "{{value}} GB",
+    "notice": {
+      "restored": "{{repo}}: saved work restored",
+      "diverged": "{{repo}}: the branch went apart from the remote — your saved commits are kept, the remote one is at origin",
+      "wip_conflict": "{{repo}}: saved uncommitted changes no longer apply — they stay saved",
+      "mirror_stale": "{{repo}}: the mirror could not be refreshed, cloned what it had",
+      "network_fallback": "{{repo}}: the mirror could not be used, cloned from the network",
+      "restore_failed": "{{repo}}: saved work could not be restored — it stays saved"
+    }
   },
   "turnGap": {
     "later": "{{amount}} later"

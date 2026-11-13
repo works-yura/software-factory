@@ -16,7 +16,8 @@ describe('LocalFactorySandbox', () => {
     expect(created).toBeInstanceOf(LocalSandbox);
     expect(created.id).toBe('sess-1');
     expect(created.workingDirectory).toBe(join('/tmp/mc-sandboxes', 'sess-1'));
-    expect(created['env']).toEqual({ PATH: '/usr/bin' });
+    // Its processes carry the folder they belong to, so a sleep finds what they leave behind.
+    expect(created['env']).toEqual({ PATH: '/usr/bin', FACTORY_SANDBOX_FOLDER: 'sess-1' });
   });
 
   it("roots every session of a card in the card's folder", () => {

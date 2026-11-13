@@ -428,6 +428,33 @@ const sandboxEnvsListResponseSchema = z.object({
   canManage: z.boolean(),
 });
 const sandboxEnvResponseSchema = z.object({ env: sandboxEnvSchema });
+/** A problem with a sandbox's kept work the person should hear about (ADR-0039). */
+const sandboxProblemSchema = z.object({
+  kind: z.enum(['save-failed', 'superseded', 'public-repository', 'processes-unchecked']),
+  message: z.string(),
+  at: z.string(),
+  occurrence: z.string(),
+});
+/** One local sandbox folder of a Factory: a card's or a session's own. */
+const sandboxViewSchema = z.object({
+  key: z.string(),
+  kind: z.enum(['card', 'session']),
+  sessionIds: z.array(z.string()),
+  repos: z.array(z.string()),
+  sizeBytes: z.number().optional(),
+  lastActivityAt: z.string().optional(),
+  state: z.enum(['active', 'idle', 'asleep']),
+  sleptAt: z.string().optional(),
+  sleepReason: z.enum(['idle', 'limit', 'manual']).optional(),
+  problems: z.array(sandboxProblemSchema),
+});
+const sandboxesListResponseSchema = z.object({
+  sandboxes: z.array(sandboxViewSchema),
+  /** Whether the caller may put a sandbox to sleep (an organization admin). */
+  canManage: z.boolean(),
+});
+export const sandboxSleepBodySchema = z.object({ key: z.string().min(1).max(512) });
+const sandboxSleepResponseSchema = z.object({ outcome: z.literal('slept') });
 export const sandboxStagesBodySchema = z.object({
   stages: z
     .array(sandboxMaterializableStageSchema)
@@ -842,6 +869,7 @@ const attentionKindSchema = z.enum([
   'activity',
   'supervisor-finding',
   'agent-waiting',
+  'sandbox-problem',
 ]);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
 type AttentionStreamPosition = { occurredAt: Date; id: string };
@@ -1070,6 +1098,21 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Delete a sandbox environment variable of a Factory project',
     pathSchema: sandboxEnvPathSchema,
     responseSchema: z.null(),
+  },
+  projectSandboxesList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/sandboxes',
+    description: "List a Factory's local sandboxes: card or session, repositories, size, last activity, awake or asleep",
+    pathSchema: projectPathSchema,
+    responseSchema: sandboxesListResponseSchema,
+  },
+  projectSandboxSleep: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/sandboxes/sleep',
+    description: "Save a Factory sandbox's work and stop it (its next message restores it); refused while an agent works in it",
+    pathSchema: projectPathSchema,
+    bodySchema: sandboxSleepBodySchema,
+    responseSchema: sandboxSleepResponseSchema,
   },
   projectSandboxStagesSet: {
     method: 'PUT',

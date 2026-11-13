@@ -12,6 +12,8 @@ import {
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
+  GIT_TRANSFER_STALL_BYTES_PER_SECOND,
+  GIT_TRANSFER_STALL_SECONDS,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
@@ -434,6 +436,36 @@ describe('checkoutSessionBranch', () => {
     expect(helper).not.toContain('MASTRA_SOURCE_CONTROL_USERNAME');
     expect(helper).not.toContain('MASTRA_SOURCE_CONTROL_TOKEN');
     expect(sandbox.calls.join('\\n')).not.toContain('glpat-secret');
+  });
+
+  it('resumes the session branch the remote already has instead of starting it again from the base', async () => {
+    // A removed checkout set up again: the fresh clone sits on the base, while
+    // the session pushed its branch (an open PR) earlier.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/pr-1\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
+
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin factory/pr-1');
+    expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/pr-1 FETCH_HEAD');
+    expect(sandbox.calls).not.toContain('git -C /workspace/repo fetch origin main');
+  });
+
+  it('starts the session branch from the base when the remote does not have it', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
+
+    expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin main');
+    expect(sandbox.calls).not.toContain('git -C /workspace/repo fetch origin factory/pr-1');
   });
 
   it('keeps the current branch when uncommitted work blocks the switch', async () => {
@@ -1304,6 +1336,40 @@ describe('git transfer retry', () => {
       expect(err).toBeInstanceOf(MaterializeError);
       expect(err.code).toBe('clone-failed');
       expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(3); // initial + 2 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aborts a stalled transfer instead of waiting out the command guard', async () => {
+    const sandbox = new FakeSandbox();
+
+    await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+
+    const clone = sandbox.executions.find(execution => execution.command === 'git' && execution.args.includes('clone'));
+    expect(clone?.options?.env).toMatchObject({
+      GIT_HTTP_LOW_SPEED_LIMIT: String(GIT_TRANSFER_STALL_BYTES_PER_SECOND),
+      GIT_HTTP_LOW_SPEED_TIME: String(GIT_TRANSFER_STALL_SECONDS),
+    });
+  });
+
+  it('retries a clone git aborted as too slow', async () => {
+    vi.useFakeTimers();
+    try {
+      let clones = 0;
+      const STALLED = {
+        exitCode: 128,
+        stdout: '',
+        stderr:
+          'error: RPC failed; curl 28 Operation too slow. Less than 1000 bytes/sec transferred the last 60 seconds\nfatal: early EOF',
+      };
+      const sandbox = new FakeSandbox(script => (script.includes('git clone') ? (++clones === 1 ? STALLED : OK) : OK));
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(clones).toBe(2);
     } finally {
       vi.useRealTimers();
     }

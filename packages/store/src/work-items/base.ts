@@ -150,6 +150,14 @@ export function runBindingOwner(
   return item?.sessions[binding.role]?.startedBy || undefined;
 }
 
+/** Whether the card still names the binding's session as the one working the binding's seat. */
+export function runBindingNamesSession(
+  item: Pick<Card, 'sessions'> | null | undefined,
+  binding: Pick<FactoryRunBindingRecord, 'role' | 'sessionId'>,
+): boolean {
+  return item?.sessions[binding.role]?.sessionId === binding.sessionId;
+}
+
 export interface FactoryRuleIngressRecord {
   id: string;
   orgId: string;
@@ -321,7 +329,8 @@ export type FactoryAttentionKind =
   | 'mention'
   | 'activity'
   | 'supervisor-finding'
-  | 'agent-waiting';
+  | 'agent-waiting'
+  | 'sandbox-problem';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 
 export interface FactorySupervisorFindingRecord {
@@ -431,16 +440,27 @@ export interface RevokeFactoryRunBindingInput {
 }
 
 export interface RevokeStaleFactoryRunBindingsInput {
-  /** Active bindings created before this instant are revoked regardless of item state, unless `keep` exempts them. */
+  /**
+   * Active bindings created before this instant whose card no longer names their session for
+   * their seat are leaked and revoked, unless `keep` exempts them. Age alone never revokes: a
+   * binding the card still points at is the card's agent, however long the card waits on a person.
+   */
   olderThan: Date;
   now: Date;
-  /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
+  /** Exempts an over-age leaked binding (its seat names another session); the item-state checks still apply. */
   keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
   /**
    * Whether the binding's session still exists; `false` revokes the binding whatever its age. A
    * lookup that throws keeps it: only a session known to be gone breaks the invariant.
    */
   sessionExists?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
+}
+
+export interface RestoreRunBindingsResult {
+  /** Bindings active again, as they now stand. */
+  restored: FactoryRunBindingRecord[];
+  /** Revoked bindings the card still names that were left revoked, and why. */
+  skipped: { binding: FactoryRunBindingRecord; reason: string }[];
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -1352,7 +1372,8 @@ function attentionReceiptKind(value: unknown): FactoryAttentionKind {
     value === 'mention' ||
     value === 'activity' ||
     value === 'supervisor-finding' ||
-    value === 'agent-waiting'
+    value === 'agent-waiting' ||
+    value === 'sandbox-problem'
   ) {
     return value;
   }
@@ -3171,6 +3192,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
     // A parked session has no row here; the route checks it against the live registry.
     if (identity.kind === 'agent-waiting') return true;
+    // A sandbox problem lives in the sandbox records, not here; the provider lists only current ones.
+    if (identity.kind === 'sandbox-problem') return true;
     if (identity.kind === 'activity') {
       // Occurrence-exact: a bump since the read makes that receipt stale, and
       // the route answers 409. Scoped to this user or every badge would skew.
@@ -3997,11 +4020,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Revoke leaked/legacy active bindings: older than `olderThan` (unless
-   * `keep` vouches for them), whose work item is gone, malformed, or already
-   * terminal, or whose session is gone (the card names no owner for its seat,
-   * or `sessionExists` says so). Terminal-stage cleanup and session deletion
-   * handle bindings go-forward; this sweep drains anything that slipped past
+   * Revoke leaked/legacy active bindings. A binding stays while its card exists, sits in one
+   * non-terminal phase of the binding's project, names an owner for the binding's seat, and its
+   * session still exists (`sessionExists`); any of those failing revokes it whatever its age. Past
+   * `olderThan` a binding is also revoked when the card's seat names another session (it leaked
+   * past a restart), unless `keep` vouches for it. Age alone never revokes a binding its card
+   * still points at: a card waiting days on a person keeps its agent. Terminal-stage cleanup and
+   * session deletion handle bindings go-forward; this sweep drains anything that slipped past
    * them. Returns the number of bindings revoked.
    */
   async revokeStaleRunBindings(input: RevokeStaleFactoryRunBindingsInput): Promise<number> {
@@ -4009,22 +4034,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const itemCache = new Map<string, Card | null>();
     let revoked = 0;
     for (const binding of bindings) {
-      let stale = binding.createdAt.getTime() < input.olderThan.getTime() && !(await input.keep?.(binding));
-      if (!stale) {
-        const key = `${binding.orgId}:${binding.workItemId}`;
-        let item = itemCache.get(key);
-        if (item === undefined) {
-          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
-          itemCache.set(key, item);
-        }
-        // Terminal-ness comes from the installed board via the host-wired
-        // predicate; an unknown board or phase is never treated as finished.
-        stale =
-          !item ||
-          item.stages.length !== 1 ||
-          this.#isTerminal(item) ||
-          item.factoryProjectId !== binding.factoryProjectId ||
-          runBindingOwner(item, binding) === undefined;
+      const key = `${binding.orgId}:${binding.workItemId}`;
+      let item = itemCache.get(key);
+      if (item === undefined) {
+        item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+        itemCache.set(key, item);
+      }
+      // Terminal-ness comes from the installed board via the host-wired
+      // predicate; an unknown board or phase is never treated as finished.
+      let stale =
+        !item ||
+        item.stages.length !== 1 ||
+        this.#isTerminal(item) ||
+        item.factoryProjectId !== binding.factoryProjectId ||
+        runBindingOwner(item, binding) === undefined;
+      if (!stale && binding.createdAt.getTime() < input.olderThan.getTime()) {
+        stale = !runBindingNamesSession(item, binding) && !(await input.keep?.(binding));
       }
       if (!stale && input.sessionExists) {
         stale = !(await input.sessionExists(binding).catch(() => true));
@@ -4039,6 +4064,120 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (result) revoked += 1;
     }
     return revoked;
+  }
+
+  /**
+   * Re-activates bindings the stale-binding sweep revoked by age alone while their card still names
+   * their session for the seat (the sweep used to revoke any binding older than its TTL, so a card
+   * waiting on a person lost its agent). One binding per seat at most: the newest revoked binding on
+   * the seat, when the card is in one non-terminal phase of the binding's project, names that
+   * binding's session and thread for the seat, the seat has no active binding, the binding lived at
+   * least `minAgeMs` before it was revoked (younger ones were revoked for a reason, not by age), and
+   * its session was neither bound since nor is bound now. Anything doubtful is skipped with a
+   * reason. The binding's tool-result cursor moves to `now`, so nothing the session did while
+   * unbound replays into the card's rules. Idempotent and safe on two replicas: the re-activation
+   * is conditional on the row still being revoked, and a seat or session found with a second active
+   * binding afterwards gets this one revoked again.
+   */
+  async restoreAgeRevokedRunBindings(input: { minAgeMs: number; now: Date }): Promise<RestoreRunBindingsResult> {
+    const all = (await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {})).map(toBinding);
+    const seatOf = (binding: FactoryRunBindingRecord) =>
+      `${binding.orgId}\u0000${binding.factoryProjectId}\u0000${binding.workItemId}\u0000${binding.role}`;
+    const activeSeats = new Set(all.filter(binding => binding.status === 'active').map(seatOf));
+    const revokedBySeat = new Map<string, FactoryRunBindingRecord[]>();
+    for (const binding of all) {
+      if (binding.status !== 'revoked' || activeSeats.has(seatOf(binding))) continue;
+      const seat = revokedBySeat.get(seatOf(binding)) ?? [];
+      seat.push(binding);
+      revokedBySeat.set(seatOf(binding), seat);
+    }
+    const newestFirst = (left: FactoryRunBindingRecord, right: FactoryRunBindingRecord) =>
+      right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id);
+    const result: RestoreRunBindingsResult = { restored: [], skipped: [] };
+    for (const seat of revokedBySeat.values()) {
+      const [newest] = seat.sort(newestFirst);
+      if (!newest) continue;
+      const item = await this.get({ orgId: newest.orgId, id: newest.workItemId });
+      // A card gone, finished, moved, or holding no session for the seat was revoked for a reason.
+      if (
+        !item ||
+        item.stages.length !== 1 ||
+        this.#isTerminal(item) ||
+        item.factoryProjectId !== newest.factoryProjectId ||
+        runBindingOwner(item, newest) === undefined
+      )
+        continue;
+      const candidate = seat.find(binding => runBindingNamesSession(item, binding));
+      if (!candidate) continue;
+      const skip = (reason: string) => result.skipped.push({ binding: candidate, reason });
+      if (candidate.id !== newest.id) {
+        skip(`the seat was bound to session ${newest.sessionId} after it`);
+        continue;
+      }
+      if (item.sessions[candidate.role]?.threadId !== candidate.threadId) {
+        skip('the card names another thread of its session for the seat');
+        continue;
+      }
+      const lived = (candidate.revokedAt?.getTime() ?? 0) - candidate.createdAt.getTime();
+      if (!candidate.revokedAt || lived < input.minAgeMs) {
+        skip('it was revoked before the sweep could revoke it by age');
+        continue;
+      }
+      const onSession = all.filter(binding => binding.sessionId === candidate.sessionId && binding.id !== candidate.id);
+      if (onSession.some(binding => binding.status === 'active')) {
+        skip('its session is bound to another card');
+        continue;
+      }
+      if (onSession.some(binding => binding.createdAt.getTime() > candidate.createdAt.getTime())) {
+        skip('its session was bound again after it');
+        continue;
+      }
+      let reactivated = false;
+      await this.#db.updateAtomic<GovernanceDbRow>(
+        'factory_run_bindings',
+        { id: candidate.id, org_id: candidate.orgId, factory_project_id: candidate.factoryProjectId },
+        current => {
+          if (current.status !== 'revoked') return null;
+          reactivated = true;
+          return { status: 'active', revoked_at: null };
+        },
+      );
+      // Another replica restored it first: it reports the restore.
+      if (!reactivated) continue;
+      const rival = (
+        await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+          org_id: candidate.orgId,
+          factory_project_id: candidate.factoryProjectId,
+          status: 'active',
+        })
+      )
+        .map(toBinding)
+        .find(
+          binding =>
+            binding.id !== candidate.id &&
+            (seatOf(binding) === seatOf(candidate) || binding.sessionId === candidate.sessionId),
+        );
+      if (rival) {
+        await this.revokeRunBinding({
+          orgId: candidate.orgId,
+          factoryProjectId: candidate.factoryProjectId,
+          bindingId: candidate.id,
+          revokedAt: input.now,
+        });
+        skip(`binding ${rival.id} became active for its seat or session meanwhile`);
+        continue;
+      }
+      await this.advanceToolResultCursor({
+        bindingId: candidate.id,
+        orgId: candidate.orgId,
+        factoryProjectId: candidate.factoryProjectId,
+        lastMessageId: '',
+        lastMessageCreatedAt: input.now,
+        updatedAt: input.now,
+      });
+      result.restored.push({ ...candidate, status: 'active', revokedAt: null });
+    }
+    return result;
   }
 
   /** Enumerate active bindings for the server-owned restart reconciler. */

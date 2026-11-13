@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { FactoryTransitionService } from '@factory/testing';
 import type { ParkedRun } from '@factory/session';
@@ -14,6 +14,7 @@ import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
+import type { SandboxProblemEntry } from '@factory/activity';
 import { WorkItemRoutes } from './work-items.ts';
 
 const orgUser = { id: 'u1', organizationId: 'org1' };
@@ -22,6 +23,7 @@ let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
 
 const parkedBySession = new Map<string, ParkedRun>();
+const sandboxProblems: SandboxProblemEntry[] = [];
 
 function buildApp(user: typeof orgUser | null = orgUser) {
   const app = new Hono();
@@ -44,6 +46,7 @@ function buildApp(user: typeof orgUser | null = orgUser) {
         parked: sessionId => parkedBySession.get(sessionId),
         parkedIn: () => [...parkedBySession].map(([sessionId, run]) => ({ sessionId, run })),
       },
+      sandboxProblems: { problemsIn: async () => [...sandboxProblems] },
     }).routes(),
   );
   return app;
@@ -215,6 +218,52 @@ describe('supervisor finding attention items', () => {
     expect(open.items).toMatchObject([
       { evidence: 'decision-1 has retried 3 times.', occurredAt: openedAt.toISOString() },
     ]);
+  });
+});
+
+describe('sandbox problem attention items', () => {
+  beforeEach(() => {
+    sandboxProblems.length = 0;
+  });
+
+  it('lists a sandbox whose work could not be saved, opens the sandboxes, and leaves once it is settled', async () => {
+    onTestFinished(() => {
+      sandboxProblems.length = 0;
+    });
+    sandboxProblems.push({
+      key: 'work-items/f/factory-item-7',
+      sandboxKind: 'card',
+      problem: 'save-failed',
+      message: 'The work in /x could not be saved, so the folder is kept: repo: no credentials',
+      at: '2030-02-01T00:00:00.000Z',
+    });
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open).toMatchObject({
+      items: [
+        {
+          kind: 'sandbox-problem',
+          problem: 'save-failed',
+          sandboxKey: 'work-items/f/factory-item-7',
+          title: 'factory-item-7',
+          detail: expect.stringContaining('could not be saved'),
+          workItemId: null,
+          read: false,
+          target: { kind: 'settings', section: 'environment' },
+        },
+      ],
+      kinds: { 'sandbox-problem': { open: 1, unread: 1 } },
+    });
+    const item = open.items[0] as { sourceId: string; occurrence: number };
+    expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/sandbox-problem/${item.sourceId}/${item.occurrence}/read`)).status).toBe(200);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json()).resolves.toMatchObject({
+      items: [],
+      kinds: { 'sandbox-problem': { open: 1, unread: 0 } },
+    });
+    sandboxProblems.length = 0;
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [],
+      kinds: { 'sandbox-problem': { open: 0, unread: 0 } },
+    });
   });
 });
 

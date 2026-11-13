@@ -68,6 +68,17 @@ import type {
 } from '@factory/sandbox';
 import { repositoryDirectoryName } from '@factory/sandbox';
 import {
+  checkoutServicesOf,
+  createSandboxSetupReporter,
+  queueSessionNote,
+  RESTORED_SANDBOX_NOTE,
+  restoredRepositoryNote,
+  hasLocalBranch,
+  gitAuthenticationEnvironment,
+  silentSandboxSetupReporter,
+} from '@factory/sandbox';
+import type { MaterializeResult, SandboxSetupReporter } from '@factory/sandbox';
+import {
   clearSessionEnvironment,
   recordSessionEnvironment,
   setSessionEnvironmentNote,
@@ -817,6 +828,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error('A sandbox is required to create a Factory session workspace');
     }
     const factorySandbox = sandboxConfig;
+    // The provider's mirror and session-work store, when it keeps them (ADR-0039).
+    const checkoutServices = checkoutServicesOf(factorySandbox);
     const githubProvider = sourceControl.github;
 
     const storage = sourceControl.storage;
@@ -868,10 +881,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
      * and before its setup command, so the setup sees them. A failure is
      * logged: a missing env file never stops a boot.
      */
-    const writeCheckoutEnvFiles = async (target: ExecutableSandbox, projectRepositoryId: string, dir: string) => {
+    const writeCheckoutEnvFiles = async (
+      target: ExecutableSandbox,
+      projectRepositoryId: string,
+      dir: string,
+      progress: { reporter: SandboxSetupReporter; repo: string },
+    ) => {
       envFileTargets.set(projectRepositoryId, dir);
       if (!envScope) return;
       const { files } = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
+      if (files.length) progress.reporter.step('env-files', progress.repo);
       await timedPhase('workspace.env-files', () =>
         writeEnvFilesToCheckouts(target, [{ projectRepositoryId, dir }], files),
       );
@@ -951,6 +970,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // `session.sandboxWorkdir` written under a different provider): local
     // sandboxes derive it at construction, remote sandboxes clone into the
     // VM's own home so it resolves lazily at first start.
+    // The running setup's progress reporter; silent outside a setup.
+    let setupProgress: SandboxSetupReporter = silentSandboxSetupReporter;
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
     const runSetupOn = (target: unknown, workdir: string, gate: SessionSetupGate) =>
@@ -1001,14 +1022,25 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
       let setupError: SetupCommandError | undefined;
+      // The chat shows each step while the first turn waits on it.
+      const progress = (setupProgress = createSandboxSetupReporter(
+        session.sessionId,
+        environment ? environment.repos.map(repo => repo.slug) : [repoFullName],
+      ));
       try {
         // A card's sessions share one checkout: their setups take turns, so a
         // later role finds the clone and markers the first one left instead of
         // cloning beside it.
-        await (folder ? withWorkItemFolderLock(folder.key, async () => guardedSetup(args)) : guardedSetup(args));
+        // A session of its own takes its folder's lock too (its key is the session row id, the
+        // folder's name), so putting the folder to sleep never overlaps a setup (ADR-0039).
+        await withWorkItemFolderLock(folder?.key ?? session.id, async () => guardedSetup(args));
+        progress.finish();
       } catch (error) {
+        progress.finish(error);
         if (!(error instanceof SetupCommandError)) throw error;
         setupError = error;
+      } finally {
+        setupProgress = silentSandboxSetupReporter;
       }
       // Re-check after the (long) setup: a session retired mid-setup must not
       // register credentials for a workspace whose retirement teardown has
@@ -1636,11 +1668,88 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const retiredError = () =>
       new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
 
+    /**
+     * After a materialization: say where the clone came from when that is
+     * news, and put the session's saved work back into a fresh checkout
+     * (ADR-0039). A restore that fails is told, never fatal: the checkout
+     * starts as it would without saved work, which stays saved.
+     */
+    const afterMaterialize = async (
+      target: SessionSandbox,
+      materialized: MaterializeResult | undefined,
+      repo: { slug: string; dir: string; access: RepositoryAccess; token: string },
+      progress: SandboxSetupReporter,
+    ) => {
+      const where = { orgId: session.orgId, sessionId: session.sessionId, repo: repo.slug };
+      if (!materialized) return;
+      if (materialized.stale) {
+        progress.notice({ code: 'mirror_stale', repo: repo.slug, message: redactCredentials(materialized.stale) });
+      }
+      if (materialized.fallbackReason && !['missing', 'empty', 'disabled'].includes(materialized.fallbackReason)) {
+        console.warn('[Factory] Mirror could not serve the checkout; cloned from the network', {
+          ...where,
+          reason: redactCredentials(materialized.fallbackReason),
+        });
+        progress.notice({ code: 'network_fallback', repo: repo.slug, message: redactCredentials(materialized.fallbackReason) });
+      }
+      const sessionWork = checkoutServices?.sessionWork;
+      if (!sessionWork) return;
+      try {
+        // A fresh clone, or a card's checkout another role left that lacks this session's branch
+        // (the folder was rebuilt by an earlier role): the branch's saved work belongs here.
+        if (!materialized.cloned && (await hasLocalBranch(target, repo.dir, session.branch))) return;
+        const restored = await timedPhase(`workspace.restore(${repo.slug})`, () =>
+          sessionWork.restore(
+            {
+              sandbox: target,
+              dir: repo.dir,
+              cloneUrl: repo.access.cloneUrl,
+              authEnv: gitAuthenticationEnvironment(
+                repo.access.cloneUrl,
+                repo.token,
+                repo.access.authorization?.username ?? 'x-access-token',
+                'pull-failed',
+              ),
+            },
+            session.branch,
+          ),
+        );
+        if (restored.outcome === 'none') return;
+        console.info('[Factory] Restored saved session work into a fresh checkout', { ...where, ...restored });
+        progress.notice({ code: 'restored', repo: repo.slug });
+        // The agent hears it on its next turn: what came back, what is gone, what to do about a split branch.
+        queueSessionNote(session.sessionId, RESTORED_SANDBOX_NOTE);
+        const repoNote = restoredRepositoryNote({ slug: repo.slug, branch: session.branch, ...restored });
+        if (repoNote) queueSessionNote(session.sessionId, repoNote);
+        if (restored.diverged) {
+          progress.notice({
+            code: 'diverged',
+            repo: repo.slug,
+            message: `Kept the saved commits (${restored.diverged.saved.slice(0, 12)}); the remote branch is at origin/${session.branch} (${restored.diverged.remote.slice(0, 12)}).`,
+          });
+        }
+        if (restored.tree === 'conflict') {
+          progress.notice({
+            code: 'wip_conflict',
+            repo: repo.slug,
+            ...(restored.conflictRef
+              ? { message: `Kept in the mirror at ${restored.conflictRef} and in the checkout at refs/factory/saved-changes.` }
+              : {}),
+          });
+        }
+      } catch (error) {
+        const message = redactCredentials(error instanceof Error ? error.message : String(error));
+        console.warn('[Factory] Saved session work could not be restored', { ...where, reason: message });
+        progress.notice({ code: 'restore_failed', repo: repo.slug, message });
+      }
+    };
+
     // The session's setup work: materialize the repo (disk-truth idempotent),
     // check out the session branch, run the configured setup command. Minted
     // tokens are fetched inside the run so a replacement VM healed mid-session
     // gets fresh credentials, not ones captured at workspace construction.
     const runSessionSetup = async (target: SessionSandbox, workdir: string, gate: SessionSetupGate): Promise<void> => {
+      const progress = setupProgress;
       const access = await getRepositoryAccess();
       const token = access.authorization?.token;
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
@@ -1655,7 +1764,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const setupGhToken = setupPat ?? (tokenGroups.length > 1 ? await getRepositoryToken() : token);
         installGithubTokens(target, setupGhToken, setupPat !== null, false);
       }
-      await materializeRepo({
+      const materialized = await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
         repoInfo: {
           repoFullName,
@@ -1666,7 +1775,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         sandbox: target,
         token,
         storage: storage.sessions,
+        progress: {
+          cloning: source => progress.step('clone', repoFullName, { source }),
+          transfer: transfer => progress.transfer(repoFullName, transfer),
+        },
+        ...(checkoutServices?.repositoryCache ? { repositoryCache: checkoutServices.repositoryCache } : {}),
+        owner: { orgId: session.orgId, repositoryId: repository.id },
       });
+      progress.step('checkout', repoFullName);
+      await afterMaterialize(target, materialized, { slug: repoFullName, dir: workdir, access, token }, progress);
       await checkoutSessionBranch(target, workdir, {
         identity: gitIdentity,
         branch: session.branch,
@@ -1681,7 +1798,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // checkout is, so the role inherits what the earlier roles left.
         ...(folder ? { inheritCheckout: true } : {}),
       });
-      await writeCheckoutEnvFiles(target, projectRepository.id, workdir);
+      await writeCheckoutEnvFiles(target, projectRepository.id, workdir, { reporter: progress, repo: repoFullName });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
@@ -1697,6 +1814,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           });
           return;
         }
+        progress.step('setup', repoFullName);
         try {
           await timedPhase('workspace.setup', async () =>
             runSetupCommand(target, workdir, projectRepository.setupCommand!, ...(await setupEnv())),
@@ -1740,6 +1858,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // broken link never wedges the whole environment. The workspace setup
     // command runs last, once, and is fatal like the template build.
     const runSessionEnvironmentSetup = async (target: SessionSandbox, gate: SessionEnvironmentGate): Promise<void> => {
+      const progress = setupProgress;
       const repos = environment!.repos;
       const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
       const states: SessionEnvironmentRepositoryState[] = [];
@@ -1802,6 +1921,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             state.branch = session.branch;
             state.setupStatus = 'failed';
             failures.set(repo.slug, error.message);
+            progress.fail(error, { repo: repo.slug, phase: 'setup' });
             primaryError = error;
           }
           inFlight = undefined;
@@ -1816,7 +1936,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             const access = await repositoryAccess(repo.repositoryId);
             const token = access.authorization?.token;
             if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
-            await materializeRepo({
+            const materialized = await materializeRepo({
               row: { id: session.id, sandboxWorkdir: entry.dir, materializedAt: null },
               repoInfo: {
                 repoFullName: repo.slug,
@@ -1828,7 +1948,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               token,
               // `materialized_at` is the session's own repository's.
               storage: { markMaterialized: async () => {} },
+              progress: {
+                cloning: source => progress.step('clone', repo.slug, { source }),
+                transfer: transfer => progress.transfer(repo.slug, transfer),
+              },
+              ...(checkoutServices?.repositoryCache ? { repositoryCache: checkoutServices.repositoryCache } : {}),
+              owner: { orgId: session.orgId, repositoryId: repo.repositoryId },
             });
+            progress.step('checkout', repo.slug);
+            await afterMaterialize(target, materialized, { slug: repo.slug, dir: entry.dir, access, token }, progress);
             const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
               syncEnvironmentRepository(target, entry.dir, {
                 identity: gitIdentity,
@@ -1844,7 +1972,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             );
             state.branch = synced.branch;
             secondary.synced = true;
-            await writeCheckoutEnvFiles(target, repo.projectRepositoryId, entry.dir);
+            await writeCheckoutEnvFiles(target, repo.projectRepositoryId, entry.dir, { reporter: progress, repo: repo.slug });
           } catch (error) {
             console.warn('[Factory] Environment repository could not be synced; continuing the boot', {
               orgId: session.orgId,
@@ -1852,6 +1980,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               projectRepositoryId: repo.projectRepositoryId,
               error: error instanceof Error ? error.message.slice(-2000) : String(error),
             });
+            progress.fail(error, { repo: repo.slug });
             // The checkout may be missing or stale and its setup never ran.
             state.setupStatus = 'failed';
             failures.set(repo.slug, error instanceof Error ? error.message : String(error));
@@ -1865,6 +1994,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             continue;
           }
           inFlight = repo.slug;
+          progress.step('setup', repo.slug);
           try {
             await timedPhase(`workspace.setup(${repo.slug})`, async () =>
               runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
@@ -1875,6 +2005,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
             state.setupStatus = 'failed';
             failures.set(repo.slug, error.message);
+            progress.fail(error, { repo: repo.slug, phase: 'setup' });
             console.warn('[Factory] Environment repository setup command failed; continuing the boot', {
               orgId: session.orgId,
               sessionId: session.sessionId,
@@ -1896,6 +2027,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               sessionId: session.sessionId,
             });
           } else {
+            progress.step('setup');
             try {
               await timedPhase('workspace.setup(workspace)', async () =>
                 runSetupCommand(target, gate.root, workspaceCommand, ...(await setupEnv())),
