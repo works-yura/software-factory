@@ -14,7 +14,7 @@
 │        ▼                                                           │
 │  factory (звичайний користувач, без адмін-прав)                    │
 │   srt: писати лише в теку картки                                   │
-│     /Volumes/dot/factory-sandboxes/<картка>/ — окремий clone       │
+│     /Volumes/dot/Project/factory/sandboxes/<картка>/ — clone    │
 │   /Users/factory: свої node/claude/codex, кеш Xcode, симулятори,   │
 │     Chrome; мережа — лише дозволені адреси (не :9222, не :5874)    │
 │        │ 3. коміти в clone                                         │
@@ -32,17 +32,20 @@
 | 1 | власник | `1-server-files.sh apply` | файли сервера (`~/.mastracode/factory-v4`, `~/.docker/config.json`) — лише власнику | `1-server-files.sh rollback` |
 | 1 | код | коміт з `MASTRA_HOST=127.0.0.1` + `deploy.sh` | сервер слухає лише цей мак; Tailscale (UI, Funnel) далі працює | `deploy.sh --rollback` |
 | 2a | sudo | `sudo 2-system.sh ownership-on` | диск `dot` поважає власників файлів; показує файли, що виявились чужими | `sudo 2-system.sh ownership-off` |
-| 2b | sudo | `sudo 2-system.sh close-dot` | теки верхнього рівня `dot` — 700, сам диск (належить root) — 711; `factory-sandboxes` лишається відкритою | `sudo 2-system.sh open-dot` |
+| 2b | sudo | `sudo 2-system.sh close-dot` | теки верхнього рівня `dot` — 700, сам диск — 711 і власник ти (був root) | `sudo 2-system.sh open-dot` |
 | 2c | sudo | `sudo 2-system.sh add-user` | звичайний користувач `factory` | `sudo 2-system.sh remove-user` (видаляє і `/Users/factory`) |
+| 2d | sudo | `sudo 2-system.sh agent-path` | `factory` проходить `Project` і `Project/factory` до `sandboxes` (ACL, без перегляду вмісту); сусідні теки там — 700; нові теки там закриті для `factory` самі (успадкована заборона) | `sudo 2-system.sh close-agent-path` |
 | 3 | код | — | clone замість worktree, запуск від `factory` у srt, свої CLI для `factory`, git сервера без хуків; потім `chmod 700 ~` | вимикається налаштуванням: без нього все як зараз |
 | 4 | разом | — | перевірка: збірка, симулятор, відео, Chrome агента; спроби дістатися файлів власника й сервера мають падати | — |
 
 Де що лежить на `dot`, важливе для ізоляції:
 
-- **Код сервера, що працює** — релізи `deploy.sh` у `/Volumes/dot/Project/factory` (`FACTORY_RUNTIME`). Лежить у `Project`, тож `close-dot` закриває і його; `.env` релізу — посилання на `v4/apps/server/.env`, теж у `Project`.
-- **`/Volumes/dot/.pnpm-store`** — прихована, `close-dot` її не чіпає. Пакети релізу — жорсткі посилання на її файли: записати в сховище = змінити сервер. Тому їй досить не бути доступною на запис іншим (`755`), що й діє після `ownership-on`; `status` показує приховані теки, відкриті на запис.
-- **Сам `/Volumes/dot`** зараз `775`: група `staff` може перейменувати чи підмінити будь-яку теку верхнього рівня. `close-dot` ставить `711`.
-- **`~/.mastracode/factory-v4`** — `700`. Файли, які сервер чи `deploy.sh` створюють пізніше, отримують типові `644`, але тека однаково не пускає; повторний `apply` закриває і їх.
+- **Теки агентів** — `/Volumes/dot/Project/factory/sandboxes` (`MASTRACODE_LOCAL_SANDBOX_ROOT`), справжня тека, без ярликів. Лежить у закритому `Project`, тому 2d відкриває до неї лише прохід: `factory` може пройти `Project` і `Project/factory`, але не бачить їх вмісту і не заходить у сусідні теки.
+- **Код сервера, що працює** — релізи `deploy.sh` у `/Volumes/dot/Project/factory/releases`. 2d закриває `releases` і `.trash` поруч із `sandboxes`; `.env` релізу — посилання на `v4/apps/server/.env` у `Project`.
+- **Сховища pnpm** (`/Volumes/dot/.pnpm-store`, `/Volumes/dot/Project/.pnpm-store`): пакети релізу — жорсткі посилання на їхні файли, записати в сховище = змінити сервер. Після `ownership-on` вони не доступні іншим на запис; `status` показує приховані теки, відкриті на запис.
+- **Сам `/Volumes/dot`** був `775` root: група `staff` могла перейменувати будь-яку теку верхнього рівня. `close-dot` ставить `711` і робить власником тебе (інакше 711 не пускало б і тебе: ні `ls`, ні Finder).
+- **`~/.mastracode/factory-v4`** — `700`. Файли, які сервер чи `deploy.sh` створюють пізніше, тека однаково не пускає; повторний `apply` закриває і їх.
+- Нова тека в `Project` чи `Project/factory` з'являється з типовими `755`, але `factory` до неї не дістанеться: успадкована заборона з 2d. `status` показує сусідні теки, відкриті іншим.
 
 Що може зламатись:
 
