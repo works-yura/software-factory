@@ -1887,6 +1887,16 @@
       "value": "{{fact}} {{operator}} {{values}}",
       "valueless": "{{fact}}: {{operator}}"
     },
-    "valuesLabel": "Значення"
+    "valuesLabel": "Значення",
+    "placeholders": {
+      "repository": "власник/репозиторій або група/проєкт"
+    },
+    "searchOrType": "Знайдіть або введіть значення",
+    "useTyped": "Узяти «{{value}}»",
+    "typeToUse": "Введіть значення, щоб узяти його.",
+    "repositoryFormats": {
+      "github": "Репозиторій GitHub — це власник/репозиторій, напр. acme/app.",
+      "gitlab": "Проєкт GitLab — це група/проєкт, напр. acme/platform/api."
+    }
   }
 }

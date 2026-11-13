@@ -1,6 +1,6 @@
 import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
 import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem } from '@factory/core/boards/board-events';
-import { intakeSourceAvailable } from '@factory/core/boards/intake-sources';
+import { intakeSourceAvailable, intakeSourceCondition } from '@factory/core/boards/intake-sources';
 import type { IntakeSourceDescriptor } from '@factory/core/boards/intake-sources';
 import { ruleGroupSchema } from '@factory/core/rules/rule-group';
 import type { RuleGroup } from '@factory/core/rules/rule-group';
@@ -58,6 +58,7 @@ import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIco
 import '../intake-triggers/builtinForms';
 import type { IntakeKindFormContext } from '../intake-triggers/formRegistry';
 import { joinWhen, pruneRule, splitWhen } from '../services/intakeRouteConditions';
+import type { Limit } from '../services/rules';
 import { INTAKE_SOURCES } from '../services/intakeSources';
 import { NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
 import { ConditionRows } from './ConditionRows';
@@ -78,6 +79,8 @@ import {
   triggerLabel,
 } from './intakeRoutes';
 import { SettingsSubsection } from './SettingsSubsection';
+import { sourceSuggestions } from './sourceSuggestions';
+import type { SourceOption } from './sourceSuggestions';
 import { useRowDrag } from './useRowDrag';
 
 const tk = translator('settings');
@@ -239,14 +242,18 @@ function draftOf(route: IntakeRouteInfo): IntakeRouteDraft {
   };
 }
 
+/** What a route can name from outside the project, and the project's repositories for `source.repository`. */
+type RouteOrigins = IntakeOrigins & { repositories: SourceOption[] };
+
 /** What a route can name from outside the project: the sources the Factory uses and the ClickUp Lists. */
-function useIntakeOrigins(factoryProjectId: string): IntakeOrigins {
+function useIntakeOrigins(factoryProjectId: string): RouteOrigins {
   const clickUpConnected = useClickUpStatusQuery().data?.connected === true;
   const clickUpLists = useClickUpListsQuery(clickUpConnected).data ?? [];
   // Repository hosts the Factory uses: those its linked repositories come from.
   const factory = (useFactoriesQuery().data ?? []).find(candidate => candidate.id === factoryProjectId);
   const hosts = new Set((factory?.repositories ?? []).map(repository => repository.provider ?? 'github'));
   return {
+    repositories: sourceSuggestions(factory?.repositories),
     lists: clickUpLists.map(list => ({ value: list.id, label: list.path ? `${list.path} / ${list.name}` : list.name })),
     sources: INTAKE_SOURCES,
     available: source =>
@@ -255,8 +262,18 @@ function useIntakeOrigins(factoryProjectId: string): IntakeOrigins {
 }
 
 /** Values to pick from per condition field: a board's phases, the connected workspace's ClickUp Lists. */
-function conditionOptions(board: InstalledBoardInfo | undefined, origins: IntakeOrigins): Record<string, FilterBarOption[]> {
-  return { ...phaseOptions(board), ...(origins.lists.length > 0 ? { 'source.list': origins.lists } : {}) };
+function conditionOptions(board: InstalledBoardInfo | undefined, origins: RouteOrigins): Record<string, FilterBarOption[]> {
+  return {
+    ...phaseOptions(board),
+    'source.repository': origins.repositories,
+    ...(origins.lists.length > 0 ? { 'source.list': origins.lists } : {}),
+  };
+}
+
+/** The source a route names, as a condition every card its rows test also meets. */
+function sourceLimits(source: IntakeSourceDescriptor | undefined): Limit[] {
+  const named = source && intakeSourceCondition(source);
+  return named ? [{ field: named.field, operator: named.operator, value: named.value }] : [];
 }
 
 /** Read-only conditions, as a member sees them. */
@@ -396,7 +413,7 @@ function SourcePicker({
   onChange,
 }: {
   value: IntakeSourceDescriptor;
-  origins: IntakeOrigins;
+  origins: RouteOrigins;
   onChange: (source: IntakeSourceDescriptor) => void;
 }) {
   const sources = origins.sources.list().filter(source => origins.available(source) || source.id === value.id);
@@ -466,7 +483,7 @@ function RouteConditions({
   route: IntakeRouteInfo;
   scope: RouteScope;
   options: Record<string, FilterBarOption[]>;
-  origins: IntakeOrigins;
+  origins: RouteOrigins;
   readOnly: boolean;
   /** A new-card route with no conditions would take every new card, hiding the routes below it. */
   needsOne: boolean;
@@ -539,6 +556,7 @@ function RouteConditions({
         label={tk('intakeRoutes.conditionsOf', { name: route.name })}
         rule={rest}
         facts={factsFor(intakeRouteFacts(route.on), sourceFields(source))}
+        limits={sourceLimits(source)}
         options={options}
         emptyHint={needsOne && (!source || source.id === 'any') ? tk('intakeRoutes.addAtLeastOne') : tk('intakeRoutes.matchesEveryCard')}
         onChange={(next, incomplete) => {
@@ -581,7 +599,7 @@ function RouteCard({
   route: IntakeRouteInfo;
   scope: RouteScope;
   boards: InstalledBoardInfo[];
-  origins: IntakeOrigins;
+  origins: RouteOrigins;
   readOnly: boolean;
   isCatchAll: boolean;
   unreachable: boolean;
@@ -729,7 +747,7 @@ function NewRoute({
 }: {
   scope: RouteScope;
   boards: InstalledBoardInfo[];
-  origins: IntakeOrigins;
+  origins: RouteOrigins;
   initialBoard: InstalledBoardInfo | undefined;
   /** Resolves to whether the route was added. */
   onAdd: (route: NewRouteValue) => Promise<boolean>;
@@ -801,6 +819,7 @@ function NewRoute({
           label={tk('intakeRoutes.newConditions')}
           rule={rest}
           facts={factsFor(intakeRouteFacts(on), sourceFields(source))}
+          limits={sourceLimits(source)}
           options={conditionOptions(board, origins)}
           emptyHint={needsCondition ? tk('intakeRoutes.addAtLeastOne') : tk('intakeRoutes.matchesEveryCard')}
           onChange={(next, unfinished) => {

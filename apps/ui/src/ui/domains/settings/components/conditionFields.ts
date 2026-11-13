@@ -136,6 +136,11 @@ const ARITY: Partial<Record<(typeof OPERATOR_IDS)[number], Pick<FilterBarOperato
   not_exists: { arity: 'none' },
 };
 
+/** What a value typed for a fact looks like, shown until one is typed. */
+export function valuePlaceholder(fieldId: string): string | undefined {
+  return fieldId === 'source.repository' ? tk('conditions.placeholders.repository') : undefined;
+}
+
 /** Rule operators in words. Ids are the rule's own operators, so rows map back to rules unchanged. */
 export function conditionOperators(): FilterBarOperator[] {
   return OPERATOR_IDS.map(id => ({ id, label: tk(`conditions.operators.${id}`), ...ARITY[id] }));
@@ -219,7 +224,8 @@ function fieldShapes(): Record<string, FieldShape> {
     },
     'source.integration': { label: label('source.integration'), options: integrations() },
     'source.provider': { label: label('source.provider'), options: integrations() },
-    'source.repository': { label: label('source.repository') },
+    // Suggested from the project's repositories, but any value can be typed: `strict: false`.
+    'source.repository': { label: label('source.repository'), strict: false },
     'source.list': { label: label('source.list') },
     'pullRequest.closesIssue': { label: label('pullRequest.closesIssue'), options: yesNo(), strict: true },
     'closedIssue.phase': { label: label('closedIssue.phase') },
@@ -266,7 +272,7 @@ export function conditionFields(facts: Facts, options: Record<string, FilterBarO
       return {
         id,
         label,
-        operators: suggestions ? CHOICE_OPERATORS : TEXT_OPERATORS,
+        operators: suggestions && shape.strict !== false ? CHOICE_OPERATORS : TEXT_OPERATORS,
         suggestions,
         strict: shape.strict,
       };

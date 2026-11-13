@@ -1861,6 +1861,16 @@
       "value": "{{fact}} {{operator}} {{values}}",
       "valueless": "{{fact}} {{operator}}"
     },
-    "valuesLabel": "Values"
+    "valuesLabel": "Values",
+    "placeholders": {
+      "repository": "owner/repo or group/project"
+    },
+    "searchOrType": "Search or type a value",
+    "useTyped": "Use “{{value}}”",
+    "typeToUse": "Type a value to use it.",
+    "repositoryFormats": {
+      "github": "GitHub repositories are owner/repo, such as acme/app.",
+      "gitlab": "GitLab projects are group/project, such as acme/platform/api."
+    }
   }
 }

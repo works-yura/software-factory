@@ -323,6 +323,54 @@ describe('IntakeRoutesSection — where new cards go', () => {
     );
   });
 
+  it('picks a GitHub route’s repository from the project’s own, or takes a typed one', async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([outsideAuthors, catchAll], { hosts: ['github', 'gitlab'] });
+    renderSection();
+
+    const first = await waitFor(() => within(routeList()).getAllByRole('listitem')[0]!);
+    await user.click(within(first).getByRole('button', { name: 'Add condition' }));
+    await user.click(within(first).getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+    await user.click(await screen.findByRole('option', { name: 'Repository or project' }));
+    await user.click(within(first).getByRole('combobox', { name: 'Value' }));
+    // The route names GitHub, so the GitLab project isn't offered.
+    expect(screen.queryByRole('option', { name: 'acme/app-gitlab' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('option', { name: 'acme/app-github' }));
+
+    await waitFor(() =>
+      expect(written.patched.at(-1)).toMatchObject({
+        id: outsideAuthors.id,
+        when: {
+          operator: 'AND',
+          conditions: [
+            { field: 'source.integration', operator: 'equals', value: 'github' },
+            { field: 'author.trusted', operator: 'equals', value: false },
+            { field: 'source.repository', operator: 'equals', value: 'acme/app-github' },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('warns that a bare repository name never matches a GitHub route', async () => {
+    useRouteHandlers([
+      route({
+        ...outsideAuthors,
+        when: {
+          operator: 'AND',
+          conditions: [
+            { field: 'source.integration', operator: 'equals', value: 'github' },
+            { field: 'source.repository', operator: 'equals', value: 'app' },
+          ],
+        },
+      }),
+      catchAll,
+    ]);
+    renderSection();
+
+    expect(await screen.findByText('GitHub repositories are owner/repo, such as acme/app.')).toBeInTheDocument();
+  });
+
   it("shows the routes read-only to someone who isn't an organization admin", async () => {
     useRouteHandlers([outsideAuthors, catchAll], { canEdit: false });
     renderSection();
