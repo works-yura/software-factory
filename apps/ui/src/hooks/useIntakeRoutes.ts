@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
@@ -162,4 +163,20 @@ export function useIntakeRouteWrites(factoryProjectId: string) {
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
   });
+}
+
+/** How many untouched cards the routes, as they stand, would now file on another board. */
+export interface RerouteInfo {
+  total: number;
+  moves: { fromBoard: string; toBoard: string; count: number }[];
+}
+
+/** Asks which untouched cards the project's routes now file elsewhere. */
+export function previewReroute(client: ApiClient, factoryProjectId: string): Promise<RerouteInfo> {
+  return client.get<RerouteInfo>(`${base(factoryProjectId)}/reroute`);
+}
+
+/** Moves those cards to the start of the board the routes now file them on. */
+export function applyReroute(client: ApiClient, factoryProjectId: string): Promise<{ moved: number; skipped: number }> {
+  return client.post<{ moved: number; skipped: number }>(`${base(factoryProjectId)}/reroute`);
 }

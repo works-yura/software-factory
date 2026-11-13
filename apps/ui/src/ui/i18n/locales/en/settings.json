@@ -896,7 +896,18 @@
     "movesLoading": "Loading card moves…",
     "boardNotInstalled": "This board isn’t installed.",
     "joinIssueCard": "Join the issue’s card instead",
-    "joinIssueCardHint": "Only trusted authors’ pull requests join; others get their own card."
+    "joinIssueCardHint": "Only trusted authors’ pull requests join; others get their own card.",
+    "reroute": {
+      "move_one": "{{count}} from {{from}} to {{to}}",
+      "move_other": "{{count}} from {{from}} to {{to}}",
+      "found_one": "{{count}} untouched card now matches another board ({{where}}).",
+      "found_other": "{{count}} untouched cards now match another board ({{where}}).",
+      "apply": "Move",
+      "moved_one": "Moved {{count}} card to the start of its new board.",
+      "moved_other": "Moved {{count}} cards to the start of their new board.",
+      "skipped_one": "{{count}} card was skipped because it changed in the meantime.",
+      "skipped_other": "{{count}} cards were skipped because they changed in the meantime."
+    }
   },
   "intakeTriggers": {
     "ifOpen": "If the last one is still open",

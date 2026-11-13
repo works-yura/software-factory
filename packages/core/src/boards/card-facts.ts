@@ -47,7 +47,7 @@ function assignees(metadata: Record<string, unknown> | null | undefined): string
 }
 
 /** The card fields a condition reads; a stored card satisfies it. */
-type FactsCard = {
+export type FactsCard = {
   readonly title: string;
   readonly metadata: Record<string, unknown> | null;
   readonly externalSource: ExternalWorkItemSource | null;

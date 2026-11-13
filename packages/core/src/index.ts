@@ -77,6 +77,8 @@ export type {
 } from './boards/project-board-source.ts';
 export type { BoardRegistry, InstalledBoard } from './boards/registry.ts';
 export { cardLabels, moveCardToBoard } from './boards/relocate.ts';
+export { applyReroute, planReroute, summarizeReroute } from './boards/reroute.ts';
+export type { RerouteMove } from './boards/reroute.ts';
 export {
   awaitsAcceptance,
   boardClassifiesTriage,

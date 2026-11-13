@@ -21,7 +21,7 @@ export const AUDIT_ACTIONS = {
   intake: ['config_updated', 'binding_updated', 'label_route_updated'],
   board: ['created', 'updated', 'deleted', 'reset'],
   skill: ['updated', 'reverted'],
-  intake_route: ['created', 'updated', 'deleted', 'reordered'],
+  intake_route: ['created', 'updated', 'deleted', 'reordered', 'rerouted'],
   // Retired with intake rules (ADR-0021); nothing writes it, but past audit rows still read by it.
   intake_rule: ['created', 'updated', 'deleted'],
   observability: ['connected', 'disconnected', 'mapping_updated'],

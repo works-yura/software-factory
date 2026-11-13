@@ -33,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
 import { ApiRequestError } from '../../../../api/client';
+import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import type {
   InstalledBoardInfo,
@@ -44,6 +45,8 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useClickUpListsQuery, useClickUpStatusQuery } from '../../../../hooks/useClickUp';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import {
+  applyReroute,
+  previewReroute,
   useFireIntakeRouteMutation,
   useIntakeRoutesQuery,
   useIntakeRoutesCanEditQuery,
@@ -51,6 +54,7 @@ import {
   useIntakeTriggerKindsQuery,
 } from '../../../../hooks/useIntakeRoutes';
 import type { IntakeRouteDraft, RouteWrite } from '../../../../hooks/useIntakeRoutes';
+import { boardTitle } from '../../../i18n/boardLabels';
 import { translator } from '../../../i18n/t';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { factoryAttentionTargetPath } from '../../factory/services/attention';
@@ -223,8 +227,10 @@ function JoinIssueCard({ checked, onChange }: { checked: boolean; onChange: (joi
  */
 function useRouteSaves(factoryId: string) {
   const queryClient = useQueryClient();
+  const { client } = useApiConfig();
   const writes = useIntakeRouteWrites(factoryId);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const previews = useRef(0);
   const [failures, setFailures] = useState(0);
   const key = queryKeys.intakeRoutes(factoryId);
 
@@ -247,7 +253,47 @@ function useRouteSaves(factoryId: string) {
         },
       );
     queue.current = done.then(() => undefined);
+    void done.then(saved => {
+      if (saved) void warnOfReroute();
+    });
     return done;
+  };
+  /** The routes now file some untouched cards elsewhere: warn, and offer to move them. */
+  const warnOfReroute = async () => {
+    const asked = ++previews.current;
+    const preview = await previewReroute(client, factoryId).catch(() => undefined);
+    // A later save asked again; only its answer describes the routes as they are now.
+    if (asked !== previews.current || !preview) return;
+    if (preview.total === 0) {
+      toast.dismiss(`reroute-${factoryId}`);
+      return;
+    }
+    const where = preview.moves
+      .map(move =>
+        tk('intakeRoutes.reroute.move', {
+          count: move.count,
+          from: boardTitle(move.fromBoard, move.fromBoard),
+          to: boardTitle(move.toBoard, move.toBoard),
+        }),
+      )
+      .join(', ');
+    toast.warning(tk('intakeRoutes.reroute.found', { count: preview.total, where }), {
+      id: `reroute-${factoryId}`,
+      duration: Infinity,
+      action: {
+        label: tk('intakeRoutes.reroute.apply'),
+        onClick: () =>
+          void applyReroute(client, factoryId).then(
+            ({ moved, skipped }) => {
+              const movedText = tk('intakeRoutes.reroute.moved', { count: moved });
+              if (skipped > 0) toast.warning(`${movedText} ${tk('intakeRoutes.reroute.skipped', { count: skipped })}`);
+              else toast.success(movedText);
+              void queryClient.invalidateQueries();
+            },
+            (error: unknown) => toast.error(saveFailureMessage(error)),
+          ),
+      },
+    });
   };
   return { latest, show, save, failures, pending: writes.isPending };
 }

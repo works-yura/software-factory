@@ -17,7 +17,15 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { z } from 'zod';
 
-import { DEFAULT_ROUTE_EVENTS, INTAKE_TEMPLATE_PLACEHOLDERS, IntakeError, intakeTargetProblem } from '@factory/core';
+import {
+  applyReroute,
+  DEFAULT_ROUTE_EVENTS,
+  INTAKE_TEMPLATE_PLACEHOLDERS,
+  IntakeError,
+  intakeTargetProblem,
+  planReroute,
+  summarizeReroute,
+} from '@factory/core';
 import type { BoardRegistry, IntakeErrorCode, IntakeLocale, StatusEvent } from '@factory/core';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { IntakeRouteFire as IntakeRouteFireView, IntakeRouteTriggeredBody } from '@factory/contracts';
@@ -42,6 +50,8 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   projects: FactoryProjectsStorage;
   storage: StoredBoardsStorage;
+  /** Cards an intake route change may move to another board. */
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'update' | 'supersedeDecisionsForWorkItem'>;
   /** The project's installed boards, to check route targets against. */
   boards: Pick<ProjectBoardCache, 'describe'>;
   /**
@@ -217,6 +227,15 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     return { ...fields, problems, triggered };
   }
 
+  async #planReroute(scope: Resolved) {
+    const [registry, routes, items] = await Promise.all([
+      this.#registry(scope),
+      this.deps.storage.listIntakeRoutes(scope),
+      this.deps.workItems.listShared(scope),
+    ]);
+    return planReroute(routes, items, registry);
+  }
+
   async #list(c: Context, scope: Resolved, routes?: StoredIntakeRouteRecord[]) {
     const registry = await this.#registry(scope);
     routes ??= await this.deps.storage.listIntakeRoutes(scope);
@@ -359,6 +378,34 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
       }),
 
       this.#route(contracts.intakeRouteList, async c => this.#list(c, await this.#resolve(c))),
+
+      this.#route(contracts.intakeRouteReroutePreview, async c => {
+        const scope = await this.#resolve(c);
+        const moves = await this.#planReroute(scope);
+        return c.json({ total: moves.length, moves: summarizeReroute(moves) });
+      }),
+
+      this.#route(contracts.intakeRouteRerouteApply, async c => {
+        const scope = await this.#resolve(c);
+        await this.#requireAdmin(c, scope);
+        const moves = await this.#planReroute(scope);
+        const result = await applyReroute({
+          moves,
+          workItems: this.deps.workItems,
+          registry: await this.#registry(scope),
+          userId: scope.userId,
+        });
+        await this.deps.audit.emit({
+          context: c,
+          input: {
+            action: 'factory.intake_route.rerouted',
+            factoryProjectId: scope.factoryProjectId,
+            targets: [...new Set(moves.map(move => move.routeId))].map(id => ({ type: 'intake_route', id })),
+            metadata: { ...result, moves: summarizeReroute(moves) },
+          },
+        });
+        return c.json(result);
+      }),
 
       this.#route(contracts.intakeRouteReorder, async c => {
         const scope = await this.#resolve(c);

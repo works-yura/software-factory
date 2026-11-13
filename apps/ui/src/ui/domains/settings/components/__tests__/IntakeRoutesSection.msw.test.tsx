@@ -108,6 +108,8 @@ function useRouteHandlers(
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [workBoard] })),
     http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: routes, canEdit })),
+    // Nothing to move after a change unless a test says so.
+    http.get(`${ROUTES_URL}/reroute`, () => HttpResponse.json({ total: 0, moves: [] })),
     // No kinds for a route «За розкладом» unless a test serves them.
     http.get(`${ROUTES_URL}/kinds`, () => HttpResponse.json({ triggers: [], actions: [], policies: [], placeholders: [] })),
     http.post(ROUTES_URL, async ({ request }) => {
@@ -454,6 +456,32 @@ describe('IntakeRoutesSection — where new cards go', () => {
         },
       ]),
     );
+  });
+
+  it('offers to move untouched cards a changed route now files on another board', async () => {
+    const user = userEvent.setup();
+    useRouteHandlers([outsideAuthors, catchAll]);
+    let applied = 0;
+    server.use(
+      http.get(`${ROUTES_URL}/reroute`, () =>
+        HttpResponse.json({ total: 2, moves: [{ fromBoard: 'work', toBoard: 'docs', count: 2 }] }),
+      ),
+      http.post(`${ROUTES_URL}/reroute`, () => {
+        applied += 1;
+        return HttpResponse.json({ moved: 1, skipped: 1 });
+      }),
+    );
+    renderSection();
+
+    await user.click(await screen.findByRole('switch', { name: 'Route "Outside authors wait in Intake" enabled' }));
+    expect(await screen.findByText('2 untouched cards now match another board (2 from Development to docs).')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Move' }));
+    expect(
+      await screen.findByText(
+        'Moved 1 card to the start of its new board. 1 card was skipped because it changed in the meantime.',
+      ),
+    ).toBeInTheDocument();
+    expect(applied).toBe(1);
   });
 
   it("shows the routes read-only to someone who isn't an organization admin", async () => {
