@@ -4,8 +4,9 @@
 #
 #   sudo -u factory bash -s < scripts/mac-mini/isolation/check-as-agent.sh
 #
-# Each line: OK (as intended) or LEAK / BROKEN, then what was tried. Changes nothing; it only
-# reads, lists and, in its own sandboxes check, creates and removes one empty file.
+# Each line: OK (as intended) or LEAK / BROKEN, then what was tried. It changes nothing: reads and
+# listings are tried for real, writes only asked of the kernel (test -w, the access(2) check that a
+# write would face), so a hole is reported, never used. (An earlier version really renamed a folder.)
 set -u
 OWNER_HOME="/Users/yura"
 DOT="/Volumes/dot"
@@ -44,10 +45,12 @@ must_fail "list the projects (Project/eclipt-ai)" ls "$DOT/Project/eclipt-ai"
 must_fail "read the server's secrets (v4 .env)" cat "$DOT/Project/eclipt-ai/lab/factory/v4/apps/server/.env"
 must_fail "list the running server's code (releases)" ls "$DOT/Project/factory/releases"
 must_fail "read the running server through current/" ls "$DOT/Project/factory/current/"
-must_fail "write to the pnpm store under Project" touch "$DOT/Project/.pnpm-store/.agent-probe"
-must_fail "write to the pnpm store at the disk root" touch "$DOT/.pnpm-store/.agent-probe"
+must_fail "write to the pnpm store under Project" test -w "$DOT/Project/.pnpm-store"
+must_fail "write to the pnpm store at the disk root" test -w "$DOT/.pnpm-store"
 must_fail "a folder made in Project later (zz-isolation-probe)" cat "$DOT/Project/zz-isolation-probe/probe.txt"
-must_fail "rename a folder in Project" mv "$DOT/Project/eclipt-ai" "$DOT/Project/eclipt-ai.x"
+must_fail "rename or add a folder in Project" test -w "$DOT/Project"
+must_fail "change the running server's code" test -w "$DOT/Project/factory/releases"
+must_fail "write to the disk root" test -w "$DOT"
 
 echo; echo "== The owner's home ($OWNER_HOME)"
 must_fail "list Documents" ls "$OWNER_HOME/Documents"
@@ -64,8 +67,7 @@ must_fail "list the home itself" ls "$OWNER_HOME"
 echo; echo "== What agents need"
 must_work "reach $SANDBOXES" test -d "$SANDBOXES"
 must_work "use Xcode" xcode-select -p
-if touch "$SANDBOXES/.agent-probe" 2>/dev/null; then
-  rm -f "$SANDBOXES/.agent-probe"
+if test -w "$SANDBOXES"; then
   echo "OK      write in sandboxes: works"
 else
   echo "LATER   write in sandboxes: denied (expected until step 3 gives the agent its card folders)"
