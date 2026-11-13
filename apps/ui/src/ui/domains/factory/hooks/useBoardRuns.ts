@@ -20,8 +20,13 @@ export function useBoardRuns({
   refetchItems,
 }: {
   factoryProjectId: string;
-  /** A fresh read of the cards a click can land on. */
-  refetchItems: () => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
+  /**
+   * A fresh read of the cards a click can land on. It is given the id of the card clicked, and may
+   * send that card alone: the card is taken as deleted when the read succeeds without it.
+   */
+  refetchItems: (
+    itemId: string,
+  ) => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const navigate = useNavigate();
@@ -57,7 +62,7 @@ export function useBoardRuns({
   // Refetch failures here used to be silent: an expired auth cookie made every
   // board click a no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
-    const refreshedItems = await refetchItems();
+    const refreshedItems = await refetchItems(itemId);
     if (!refreshedItems.isSuccess) {
       const cause = refreshedItems.error;
       toast.error(cause instanceof Error ? cause.message : tk('runs.refreshFailed'));
