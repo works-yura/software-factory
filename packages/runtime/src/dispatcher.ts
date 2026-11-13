@@ -120,7 +120,8 @@ const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // path bypassed, or pre-dating terminal-stage revocation) are revoked on a
 // slow cadence so the per-tick reconcile walk stays bounded.
 const STALE_BINDING_SWEEP_INTERVAL_MS = 10 * 60_000;
-const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
+/** How long a binding lives before the sweep checks its card still points at its session. */
+export const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
 // The bound-thread reconcile walk reads a cursor + messages per binding; it
 // exists to catch results missed at run end, so it runs on a slow cadence off
 // the claim path rather than on every 1s tick.
@@ -1009,10 +1010,12 @@ export class FactoryDecisionDispatcher {
     this.#lastStaleBindingSweepAt = now;
     try {
       const revoked = await this.#storage.revokeStaleRunBindings({
+        // Age never revokes a binding its card still points at (a card waits days on a client);
+        // past the TTL, only one whose card's seat names another session is a leak.
         olderThan: new Date(now.getTime() - this.#staleBindingTtlMs),
         now,
-        // A run parked on a person, or resumed after one answered, is alive however
-        // old its binding is. The session must still be on the binding's thread: its
+        // A leaked run still parked on a person, or resumed after one answered, is alive
+        // however old its binding is. The session must still be on the binding's thread: its
         // suspension and run state belong to that thread. Lookup failures revoke.
         keep: async binding => {
           try {

@@ -319,6 +319,158 @@ describe('WorkItemsStorage', () => {
     });
   });
 
+  describe('age never revokes a binding its card still points at', () => {
+    const DAY = 24 * 60 * 60_000;
+
+    async function gateCard(options: { sessionId?: string; externalId?: string; kickoffKey?: string } = {}) {
+      const backend = new LibSQLFactoryStorage({ id: `work-items-age-${randomUUID()}`, url: ':memory:' });
+      const storage = backend.registerDomain(new WorkItemsStorage());
+      await backend.init();
+      return { backend, storage, ...(await startGate(storage, options)) };
+    }
+
+    async function startGate(
+      storage: WorkItemsStorage,
+      { sessionId = 'session-1', externalId = '42', kickoffKey = 'kickoff-1' } = {},
+    ) {
+      // A Product card waiting in Client review on the client: no run, no pending suspension.
+      return storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: {
+          input: {
+            ...input,
+            externalSource: { ...input.externalSource, externalId },
+            board: 'product',
+            stages: ['client-review'],
+          },
+        },
+        role: 'product',
+        session: { sessionId, branch: 'factory/42', threadId: sessionId },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+    }
+
+    /** What the old sweep did: revoke a binding that had lived `livedMs`. */
+    async function ageRevoke(ops: FactoryStorageOps, bindingId: string, livedMs: number) {
+      const revokedAt = new Date(Date.now() - DAY);
+      await ops.updateMany(
+        'factory_run_bindings',
+        { id: bindingId },
+        { created_at: new Date(revokedAt.getTime() - livedMs), status: 'revoked', revoked_at: revokedAt },
+      );
+    }
+
+    const statusOf = async (storage: WorkItemsStorage, workItemId: string, bindingId: string) =>
+      (await storage.listRunBindings('org1', 'project1', workItemId)).find(binding => binding.id === bindingId)?.status;
+
+    it('keeps a 3-day-old binding of a card waiting in a gate phase with nothing pending', async () => {
+      const { backend, storage, item, binding } = await gateCard();
+      await backend.ops.updateMany(
+        'factory_run_bindings',
+        { id: binding.id },
+        { created_at: new Date(Date.now() - 3 * DAY) },
+      );
+
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() - DAY),
+          now: new Date(),
+          keep: async () => false,
+          sessionExists: async () => true,
+        }),
+      ).resolves.toBe(0);
+      expect(await statusOf(storage, item.id, binding.id)).toBe('active');
+    });
+
+    it('restores a binding the old sweep revoked by age while its card still names the session, once', async () => {
+      const { backend, storage, item, binding } = await gateCard();
+      await ageRevoke(backend.ops, binding.id, 2 * DAY);
+      const now = new Date();
+
+      const first = await storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now });
+      expect(first.restored.map(restored => restored.id)).toEqual([binding.id]);
+      expect(first.skipped).toEqual([]);
+      expect(await statusOf(storage, item.id, binding.id)).toBe('active');
+      await expect(
+        storage.findActiveRunBindingForSession({ orgId: 'org1', factoryProjectId: 'project1', sessionId: 'session-1' }),
+      ).resolves.toMatchObject({ id: binding.id });
+      // Nothing the session did while unbound replays into the card's rules.
+      await expect(storage.getToolResultCursor('org1', 'project1', binding.id)).resolves.toMatchObject({
+        lastMessageCreatedAt: now,
+      });
+
+      // A rerun, or a second replica, finds nothing left to do.
+      await expect(storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now })).resolves.toEqual({
+        restored: [],
+        skipped: [],
+      });
+    });
+
+    it('restores one binding when two replicas run the restore at once', async () => {
+      const { backend, storage, item, binding } = await gateCard();
+      await ageRevoke(backend.ops, binding.id, 2 * DAY);
+
+      const results = await Promise.all([
+        storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now: new Date() }),
+        storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now: new Date() }),
+      ]);
+      expect(results.flatMap(result => result.restored).map(restored => restored.id)).toEqual([binding.id]);
+      const active = (await storage.listRunBindings('org1', 'project1', item.id)).filter(
+        current => current.status === 'active',
+      );
+      expect(active).toHaveLength(1);
+    });
+
+    it('leaves alone bindings revoked for a reason', async () => {
+      // Revoked young: not the age sweep.
+      const young = await gateCard();
+      await ageRevoke(young.backend.ops, young.binding.id, 60_000);
+      await expect(young.storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now: new Date() })).resolves.toMatchObject({
+        restored: [],
+        skipped: [{ binding: { id: young.binding.id }, reason: expect.stringContaining('revoked before') }],
+      });
+
+      // The card finished.
+      const finished = await gateCard();
+      await ageRevoke(finished.backend.ops, finished.binding.id, 2 * DAY);
+      await finished.storage.update({ orgId: 'org1', id: finished.item.id, userId: 'user1', patch: { stages: ['done'] } });
+      finished.storage.useTerminalPhasePredicate(card => card.stages[0] === 'done');
+      await expect(finished.storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now: new Date() })).resolves.toEqual({
+        restored: [],
+        skipped: [],
+      });
+
+      // The card's seat moved to another session.
+      const moved = await gateCard();
+      await ageRevoke(moved.backend.ops, moved.binding.id, 2 * DAY);
+      await moved.storage.update({
+        orgId: 'org1',
+        id: moved.item.id,
+        userId: 'user1',
+        patch: { sessions: { product: { sessionId: 'session-2', branch: 'factory/42', threadId: 'session-2' } } },
+      });
+      await expect(moved.storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now: new Date() })).resolves.toEqual({
+        restored: [],
+        skipped: [],
+      });
+      expect(await statusOf(moved.storage, moved.item.id, moved.binding.id)).toBe('revoked');
+
+      // The session went on to work another card.
+      const reused = await gateCard();
+      await ageRevoke(reused.backend.ops, reused.binding.id, 2 * DAY);
+      await startGate(reused.storage, { externalId: '43', kickoffKey: 'kickoff-2' });
+      await expect(reused.storage.restoreAgeRevokedRunBindings({ minAgeMs: DAY, now: new Date() })).resolves.toMatchObject({
+        restored: [],
+        skipped: [{ binding: { id: reused.binding.id }, reason: 'its session is bound to another card' }],
+      });
+      expect(await statusOf(reused.storage, reused.item.id, reused.binding.id)).toBe('revoked');
+    });
+  });
+
   it('lists the cards a session was ever bound to, revoked bindings included', async () => {
     const storage = await makeStorage();
     const start = (kickoffKey: string, sessionId: string, externalId: string) =>

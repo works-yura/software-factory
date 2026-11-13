@@ -162,9 +162,37 @@ describe('Factory run binding authority', () => {
   });
 
   describe('revokeStaleRunBindings', () => {
-    it('revokes bindings older than the cutoff and keeps fresh ones', async () => {
+    /** The card's seat now names another session, while the old binding stays active: a leak. */
+    async function leakSeat(storage: WorkItemsStorage, workItemId: string) {
+      await storage.update({
+        orgId: 'org-1',
+        id: workItemId,
+        userId: 'user-1',
+        patch: { sessions: { work: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-2' } } },
+      });
+    }
+
+    it('keeps an over-age binding its card still points at, however old', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepareBinding(storage);
+
+      // Three days past the cutoff, idle, nothing pending: the card still names the session for its seat.
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+          now: new Date(),
+          keep: async () => false,
+        }),
+      ).resolves.toBe(0);
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, prepared.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'active' }),
+      ]);
+    });
+
+    it('revokes an over-age binding whose seat names another session, and keeps a fresh one', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      await leakSeat(storage, prepared.item.id);
 
       await expect(
         storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
@@ -181,9 +209,10 @@ describe('Factory run binding authority', () => {
       ]);
     });
 
-    it('keeps an over-age binding that keep vouches for, and revokes it when keep declines', async () => {
+    it('keeps an over-age leaked binding that keep vouches for, and revokes it when keep declines', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepareBinding(storage);
+      await leakSeat(storage, prepared.item.id);
       const olderThan = new Date(Date.now() + 60_000);
       const seen: string[] = [];
 
