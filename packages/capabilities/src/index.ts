@@ -4,3 +4,4 @@ export * from './version-control.ts';
 export * from './observability.ts';
 export * from './redact.ts';
 export * from './credentials.ts';
+export * from './repository-access.ts';

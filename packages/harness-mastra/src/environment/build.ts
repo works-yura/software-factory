@@ -10,6 +10,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { FactorySandbox, FactorySandboxContext } from '@mastra/core/workspace';
+import { groupedRepositoryAccess } from '@factory/capabilities';
 import type { VersionControl } from '@factory/capabilities';
 import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
@@ -25,7 +26,7 @@ export type EnvironmentBuildTrigger = (typeof ENVIRONMENT_BUILD_TRIGGERS)[number
 
 export interface EnvironmentBuildSourceControl {
   storage: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>;
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>;
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>;
 }
 
 export interface EnvironmentBuildDeps {
@@ -85,13 +86,18 @@ export function environmentBuildContext(
   project: Pick<FactoryProject, 'id' | 'orgId'>,
   environment: SessionEnvironment,
   heads: EnvironmentHeads,
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
 ): FactorySandboxContext {
+  const repositoryAccess = groupedRepositoryAccess(
+    versionControl,
+    project.orgId,
+    environment.repos.map(repo => repo.repositoryId),
+  );
   return {
     sessionId: environmentBuildSessionId(project.id),
     ...environmentSandboxContext(environment, {
       orgId: project.orgId,
-      getRepositoryAccess: args => versionControl.getRepositoryAccess(args),
+      getRepositoryAccess: args => repositoryAccess(args.repositoryId),
       resolveHead: recordedHeadResolver(heads),
     }),
   };
@@ -106,7 +112,7 @@ export async function environmentBuildContextWithEnv(
   project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
   environment: SessionEnvironment,
   heads: EnvironmentHeads,
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
   sandboxEnvs: Pick<SandboxEnvStore, 'resolve'> | undefined,
 ): Promise<{ ctx: FactorySandboxContext; buildEnvRevision: string | undefined }> {
   const env = sandboxEnvs
