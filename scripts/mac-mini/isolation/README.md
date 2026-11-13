@@ -35,6 +35,7 @@
 | 2b | sudo | `sudo 2-system.sh close-dot` | теки верхнього рівня `dot` — 700, сам диск — 711 і власник ти (був root) | `sudo 2-system.sh open-dot` |
 | 2c | sudo | `sudo 2-system.sh add-user` | звичайний користувач `factory` | `sudo 2-system.sh remove-user` (видаляє і `/Users/factory`) |
 | 2d | sudo | `sudo 2-system.sh agent-path` | `factory` проходить `Project` і `Project/factory` до `sandboxes` (ACL, без перегляду вмісту); сусідні теки там — 700; нові теки там закриті для `factory` самі (успадкована заборона) | `sudo 2-system.sh close-agent-path` |
+| 2e | sudo | `sudo 2-system.sh agent-group`, `agent-profile`, `agent-sudo` | група `factory-agents` (ти + `factory`) і ACL на `sandboxes`; профіль Seatbelt у `/var/factory` (root); правило sudoers: без пароля лише `env` і `kill` від імені `factory`, fd 3 через sudo | `remove-agent-sudo`, `remove-agent-profile`, `remove-agent-group` |
 | 3 | код | — | clone замість worktree, запуск від `factory` у srt, свої CLI для `factory`, git сервера без хуків; потім `chmod 700 ~` | вимикається налаштуванням: без нього все як зараз |
 | 4 | разом | — | перевірка: збірка, симулятор, відео, Chrome агента; спроби дістатися файлів власника й сервера мають падати | — |
 
