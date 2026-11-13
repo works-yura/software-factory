@@ -24,7 +24,7 @@ import {
 import { codexAppServerArgs, resolveCodexLaunchArgs } from '@factory/harness-codex/launchArgs';
 import { FACTORY_SESSION_TOKEN_HEADER } from '@factory/mcp';
 import type { FactorySessionTokenSigner } from '@factory/mcp';
-import { peekSessionEnvironment, renderSessionEnvironment } from '@factory/sandbox';
+import { peekSessionEnvironment, renderSessionEnvironment, renderSessionNotes } from '@factory/sandbox';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 
@@ -416,6 +416,9 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     turnContextFor: async session => {
       const environment = peekSessionEnvironment(session.id);
       const signals = environment ? [`<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>`] : [];
+      // A restored sandbox: what came back and what is gone (ADR-0039).
+      const sandboxNotes = renderSessionNotes(session.id);
+      if (sandboxNotes) signals.push(sandboxNotes);
       if (!session.thread.getId() || claudeSupervisorProjectId(session.id)) return signals.join('\n') || undefined;
       const where = await coordinates(session);
       const sessions = await options.sessionsFor?.(where);

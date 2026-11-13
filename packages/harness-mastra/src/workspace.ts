@@ -69,6 +69,9 @@ import { repositoryDirectoryName } from '@factory/sandbox';
 import {
   checkoutServicesOf,
   createSandboxSetupReporter,
+  queueSessionNote,
+  RESTORED_SANDBOX_NOTE,
+  restoredRepositoryNote,
   hasLocalBranch,
   gitAuthenticationEnvironment,
   silentSandboxSetupReporter,
@@ -1645,6 +1648,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         if (restored.outcome === 'none') return;
         console.info('[Factory] Restored saved session work into a fresh checkout', { ...where, ...restored });
         progress.notice({ code: 'restored', repo: repo.slug });
+        // The agent hears it on its next turn: what came back, what is gone, what to do about a split branch.
+        queueSessionNote(session.sessionId, RESTORED_SANDBOX_NOTE);
+        const repoNote = restoredRepositoryNote({ slug: repo.slug, branch: session.branch, ...restored });
+        if (repoNote) queueSessionNote(session.sessionId, repoNote);
         if (restored.diverged) {
           progress.notice({
             code: 'diverged',
@@ -1652,7 +1659,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             message: `Kept the saved commits (${restored.diverged.saved.slice(0, 12)}); the remote branch is at origin/${session.branch} (${restored.diverged.remote.slice(0, 12)}).`,
           });
         }
-        if (restored.tree === 'conflict') progress.notice({ code: 'wip_conflict', repo: repo.slug });
+        if (restored.tree === 'conflict') {
+          progress.notice({
+            code: 'wip_conflict',
+            repo: repo.slug,
+            ...(restored.conflictRef
+              ? { message: `Kept in the mirror at ${restored.conflictRef} and in the checkout at refs/factory/saved-changes.` }
+              : {}),
+          });
+        }
       } catch (error) {
         const message = redactCredentials(error instanceof Error ? error.message : String(error));
         console.warn('[Factory] Saved session work could not be restored', { ...where, reason: message });

@@ -18,7 +18,7 @@ import type { HarnessRoute, TurnHandoffHook } from '@factory/harness';
 import type { HarnessCommand } from '@factory/harness/executable';
 import { BUNDLED_FACTORY_SKILLS_PATH, resolveLocalFactorySkillsPath } from '@factory/harness-mastra';
 import { FACTORY_SESSION_TOKEN_HEADER, FACTORY_TOOL_ANNOTATIONS } from '@factory/mcp';
-import { peekSessionEnvironment, renderSessionEnvironment } from '@factory/sandbox';
+import { peekSessionEnvironment, renderSessionEnvironment, renderSessionNotes } from '@factory/sandbox';
 import type { FactorySessionTokenSigner } from '@factory/mcp';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
@@ -450,6 +450,9 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       const signals = environment
         ? [`<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>`]
         : [];
+      // A restored sandbox: what came back and what is gone (ADR-0039).
+      const sandboxNotes = renderSessionNotes(session.id);
+      if (sandboxNotes) signals.push(sandboxNotes);
       if (options.sessionsFor && !claudeSupervisorProjectId(session.id) && session.thread.getId()) {
         const tenant = await tenantOf(session);
         const sessions = await options.sessionsFor({

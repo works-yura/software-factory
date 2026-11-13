@@ -209,7 +209,7 @@ import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox, LocalFactorySandbox, workItemFolderKey } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
-import { CachedSandboxEnvs, peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
+import { CachedSandboxEnvs, peekSessionSandbox, SessionRetirementCoordinator, settleSessionNotes } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
@@ -1501,6 +1501,8 @@ export class MastraFactory {
       })().catch(error => console.warn('[factory] Session work could not be saved after a run', { sessionId, error }));
     };
     const reportSessionRunEnd: typeof reportRunEnd = async args => {
+      // Sandbox notes the run showed the agent are done with.
+      settleSessionNotes(args.sessionId);
       saveSessionWorkAfterRun(args.sessionId);
       return reportRunEnd(args);
     };

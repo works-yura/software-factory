@@ -465,6 +465,8 @@ export class SessionWork {
    */
   async #keepConflict(checkout: SessionCheckout, branch: string, tree: string): Promise<string | undefined> {
     if (!this.store.keepConflict) return undefined;
+    // The agent can reach it in its own checkout too (the note names this ref).
+    await runGitIn(checkout.sandbox, checkout.dir, ['update-ref', 'refs/factory/saved-changes', tree]);
     try {
       return await this.store.keepConflict(checkout, branch, tree);
     } catch (error) {

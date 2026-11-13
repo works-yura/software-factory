@@ -14,6 +14,7 @@ export * from './sandbox-env.ts';
 export * from './sandbox-env-cache.ts';
 export * from './sandbox-env-files.ts';
 export * from './setup-progress.ts';
+export * from './session-notes.ts';
 export * from './template/file-lock.ts';
 export * from './template/host-exec.ts';
 export * from './template/repository-cache.ts';

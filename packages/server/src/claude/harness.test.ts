@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { queueSessionNote, RESTORED_SANDBOX_NOTE, settleSessionNotes } from '@factory/sandbox';
 
 import * as claudeCode from '@factory/harness-claude-code';
 import type { ClaudeCodeHarnessConfig, ClaudeCodeSession } from '@factory/harness-claude-code';
@@ -134,6 +135,15 @@ describe('createClaudeFactoryHarness', () => {
       resourceId: 'factory-a',
     });
     expect(await config.turnContextFor!(quiet)).toBe('<factory-phase>\nFactory work phase: Build (build)\n</factory-phase>');
+  });
+
+  it('tells the agent its sandbox was restored, once, in the turn signals', async () => {
+    const { factory, config } = setup();
+    const session = await factory.harness.createSession({ sessionId: 'session-r', threadId: 'thread-r' });
+    queueSessionNote('session-r', RESTORED_SANDBOX_NOTE);
+    expect(await config.turnContextFor!(session)).toBe(`<factory-sandbox>\n${RESTORED_SANDBOX_NOTE}\n</factory-sandbox>`);
+    settleSessionNotes('session-r');
+    expect(await config.turnContextFor!(session)).toBeUndefined();
   });
 
   it('tears a deleted session down in this process, as the controller does a Mastra one', async () => {
