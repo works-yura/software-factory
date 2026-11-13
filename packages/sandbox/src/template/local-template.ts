@@ -425,6 +425,8 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     // The mirror always gets it: local and cheap, and it never trusts what `origin/*` last said.
     const saved = await this.sessionWork.store.save(checkout, snapshot);
     await this.#recordSave(options.sessionId, checkout, snapshot);
+    // Its card closes: work set aside on the branch may age out from now on.
+    if (options.closing) await this.#markClosed(checkout.cloneUrl, snapshot.branch);
     this.#report(saved, dir, snapshot, { sessionId: options.sessionId });
     if (!options.publish || !this.sessionWork.sleepStore) return notices;
     const credentialed = await this.#withCredentials(checkout);
@@ -500,7 +502,36 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   }
 
   /** Work on a branch whose card had closed: the card is open again, its published work must not age out as closed. */
+  #closedFile(cloneUrl: string, branch: string): string {
+    return path.join(this.root, 'closed', `${createHash('sha256').update(`${cloneUrl}\n${branch}`).digest('hex').slice(0, 32)}.json`);
+  }
+
+  /** The branch's card closed (now): its set-aside work starts aging toward the retention. */
+  async #markClosed(cloneUrl: string, branch: string): Promise<void> {
+    const file = this.#closedFile(cloneUrl, branch);
+    try {
+      await mkdir(path.dirname(file), { recursive: true });
+      const temporary = `${file}.${process.pid}.${Date.now()}`;
+      await writeFile(temporary, JSON.stringify({ cloneUrl, branch, closedAt: new Date().toISOString() }));
+      await rename(temporary, file);
+    } catch (error) {
+      this.#logger.warn('could not record that a branch\'s card closed', { cloneUrl, branch, reason: String(error) });
+    }
+  }
+
+  /** When the branch's card closed, if it is closed. */
+  async #closedAt(cloneUrl: string, branch: string): Promise<number | undefined> {
+    try {
+      const record = JSON.parse(await readFile(this.#closedFile(cloneUrl, branch), 'utf8')) as { closedAt?: string };
+      const at = Date.parse(record.closedAt ?? '');
+      return Number.isFinite(at) ? at : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async #reopened(cloneUrl: string, branch: string): Promise<void> {
+    await rm(this.#closedFile(cloneUrl, branch), { force: true }).catch(() => {});
     const file = this.#publishedFile(cloneUrl, branch);
     let current: Partial<PublishedRecord>;
     try {
@@ -598,10 +629,11 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   }
 
   /**
-   * Drop kept refs older than `retentionMs` from a mirror: the trash of
-   * forgotten work, commits set aside as superseded, and uncommitted work that
-   * did not apply. Their time is in their name; younger ones stay, so nothing
-   * goes before the retention passed. Answers the refs dropped.
+   * Drop kept refs past the retention from a mirror: forgotten work in the
+   * trash `retentionMs` after it was forgotten (the time is in its name);
+   * commits set aside as superseded and uncommitted work that did not apply
+   * never while their card is open, and `retentionMs` after it closed.
+   * Answers the refs dropped.
    */
   async pruneKeptRefs(input: { cloneUrl: string; retentionMs: number; now?: number }): Promise<string[]> {
     const host = this.repositoryCache.host;
@@ -619,9 +651,16 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     for (const line of listed.stdout.split('\n').map(text => text.trim()).filter(Boolean)) {
       const [ref, sha] = line.split(' ');
       if (!ref || !sha) continue;
-      // trash/<time>/…, or wip/superseded|conflict/<branch>/<time>.
-      const time = ref.startsWith('refs/factory/trash/') ? Number(ref.split('/')[3]) : Number(ref.split('/').at(-1));
-      if (!Number.isFinite(time) || now - time < input.retentionMs) continue;
+      if (ref.startsWith('refs/factory/trash/')) {
+        // trash/<time>/…: forgotten work, kept the retention from when it was forgotten.
+        const time = Number(ref.split('/')[3]);
+        if (!Number.isFinite(time) || now - time < input.retentionMs) continue;
+      } else {
+        // wip/superseded|conflict/<branch>/<time>: kept while the card is open, then the retention from its close.
+        const branch = ref.split('/').slice(4, -1).join('/');
+        const closedAt = await this.#closedAt(input.cloneUrl, branch);
+        if (closedAt === undefined || now - closedAt < input.retentionMs) continue;
+      }
       if ((await runGitIn(host, mirror, ['update-ref', '-d', ref, sha])).exitCode === 0) dropped.push(ref);
     }
     if (dropped.length) this.#logger.info('dropped kept refs past their retention', { mirror, dropped });

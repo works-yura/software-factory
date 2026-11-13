@@ -112,7 +112,7 @@ describe('session work safety, with real git', () => {
     expect((await template.saveFolder(folder)).saved[0]?.superseded).toBeTruthy();
   });
 
-  it('drops kept refs (trash, superseded, conflict) once past the retention, never before', async () => {
+  it('drops forgotten work after the retention, and set-aside work only the retention after its card closed', async () => {
     const mirror = template.repositoryCache.mirrorPath(fx.origin);
     const main = fx.git(mirror, 'rev-parse', 'refs/heads/main');
     const day = 24 * 60 * 60_000;
@@ -120,22 +120,33 @@ describe('session work safety, with real git', () => {
     const recent = Date.now() - day;
     for (const ref of [
       `refs/factory/trash/${old}/heads/a`,
-      `refs/factory/wip/superseded/b/${old}`,
-      `refs/factory/wip/conflict/c/${old}`,
       `refs/factory/trash/${recent}/heads/d`,
-      `refs/factory/wip/superseded/e/${recent}`,
+      `refs/factory/wip/superseded/factory/item-32/${old}`,
+      `refs/factory/wip/conflict/factory/item-32/${old}`,
     ]) {
       fx.git(mirror, 'update-ref', ref, main);
     }
-    const dropped = await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 30 * day });
-    expect(dropped.sort()).toEqual([`refs/factory/trash/${old}/heads/a`, `refs/factory/wip/conflict/c/${old}`, `refs/factory/wip/superseded/b/${old}`]);
-    expect(fx.git(mirror, 'for-each-ref', '--format=%(refname)', 'refs/factory').split('\n').sort()).toEqual([
+    // The card is open: its set-aside work stays however old; old trash goes.
+    expect(await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 30 * day })).toEqual([`refs/factory/trash/${old}/heads/a`]);
+    // The card closes now: not yet past the retention from the close.
+    const { folder, dir } = await freshCheckout();
+    fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-32');
+    await fx.commit(dir, 'c.txt', 'c\n');
+    await template.removeFolder(folder, { publish: true, closing: true, remove: async () => rm(folder, { recursive: true, force: true }) });
+    expect(await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 30 * day })).toEqual([]);
+    const later = Date.now() + 31 * day;
+    expect((await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later })).sort()).toEqual([
       `refs/factory/trash/${recent}/heads/d`,
-      `refs/factory/wip/superseded/e/${recent}`,
+      `refs/factory/wip/conflict/factory/item-32/${old}`,
+      `refs/factory/wip/superseded/factory/item-32/${old}`,
     ]);
-    // Without session work left, the mirror can be pruned again.
-    await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 0 });
-    expect(await template.repositoryCache.holdsSessionWork(mirror)).toBe(false);
+    // Reopened, a branch's set-aside work is kept again.
+    fx.git(mirror, 'update-ref', `refs/factory/wip/conflict/factory/item-32/${old + 1}`, main);
+    const again = await freshCheckout();
+    fx.git(again.dir, 'checkout', '--quiet', '-b', 'factory/item-32');
+    await fx.commit(again.dir, 'd.txt', 'd\n');
+    await template.saveFolder(again.folder);
+    expect(await template.pruneKeptRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later })).toEqual([]);
   });
 
   it('refuses to remove a checkout whose work cannot be named: detached with commits of its own', async () => {
