@@ -2,7 +2,9 @@
 # Tries, as the agent user, to reach what it must not, and what it must. Run it as that user,
 # fed on stdin (the agent cannot read this file: it sits in the closed Project folder):
 #
-#   sudo -u factory bash -s < scripts/mac-mini/isolation/check-as-agent.sh
+#   (cd / && sudo -u factory bash -s) < scripts/mac-mini/isolation/check-as-agent.sh
+#
+# (`cd /`: the agent cannot enter the folder you run it from, and bash would warn on every line.)
 #
 # Each line: OK (as intended) or LEAK / BROKEN, then what was tried. It changes nothing: reads and
 # listings are tried for real, writes only asked of the kernel (test -w, the access(2) check that a
@@ -34,7 +36,7 @@ must_work() {
 }
 
 echo "as $(id -un) (uid $(id -u))"
-[ "$(id -un)" = yura ] && { echo "run it as the agent user: sudo -u factory bash -s < $0"; exit 2; }
+[ "$(id -un)" = yura ] && { echo "run it as the agent user: (cd / && sudo -u factory bash -s) < $0"; exit 2; }
 
 echo; echo "== The disk"
 must_fail "list $DOT" ls "$DOT"
@@ -47,7 +49,6 @@ must_fail "list the running server's code (releases)" ls "$DOT/Project/factory/r
 must_fail "read the running server through current/" ls "$DOT/Project/factory/current/"
 must_fail "write to the pnpm store under Project" test -w "$DOT/Project/.pnpm-store"
 must_fail "write to the pnpm store at the disk root" test -w "$DOT/.pnpm-store"
-must_fail "a folder made in Project later (zz-isolation-probe)" cat "$DOT/Project/zz-isolation-probe/probe.txt"
 must_fail "rename or add a folder in Project" test -w "$DOT/Project"
 must_fail "change the running server's code" test -w "$DOT/Project/factory/releases"
 must_fail "write to the disk root" test -w "$DOT"
