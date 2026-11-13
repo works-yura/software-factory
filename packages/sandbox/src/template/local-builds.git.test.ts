@@ -36,7 +36,7 @@ describe('local environment builds, with real git', () => {
   beforeEach(async () => {
     fx = await gitFixture('factory-builds-');
     root = path.join(fx.root, 'template');
-    template = new LocalEnvironmentTemplate({ root, env: fx.env, logger: silent, freshnessMs: 0 });
+    template = new LocalEnvironmentTemplate({ root, env: fx.env, logger: silent, freshnessMs: 0, packageStores: true });
   });
 
   afterEach(async () => {

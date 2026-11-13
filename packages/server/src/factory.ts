@@ -1496,7 +1496,8 @@ export class MastraFactory {
         const row = await sourceControlSessions.getBySessionId(sessionId);
         if (!row) return;
         const folder = row.sandboxWorkdir || peekSessionSandbox(row.id)?.workdir;
-        if (folder) await sandbox.saveSessionWork(folder, { sessionId });
+        // Keyed by the row id, as the sandbox and retirement name the session.
+        if (folder) await sandbox.saveSessionWork(folder, { sessionId: row.id });
       })().catch(error => console.warn('[factory] Session work could not be saved after a run', { sessionId, error }));
     };
     const reportSessionRunEnd: typeof reportRunEnd = async args => {

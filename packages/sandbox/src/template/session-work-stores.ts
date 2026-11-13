@@ -17,13 +17,15 @@ import {
   runSandboxCommand,
 } from '../github/sandbox.ts';
 import type { LocalMirrorRepositoryCache } from './local-mirror-cache.ts';
-import {
-  SessionWorkError,
-  runGitIn,
-  restoreRef,
-  updateRefsAtomically,
+import { SessionWorkError, runGitIn, restoreRef, updateRefsAtomically } from './session-work.ts';
+import type {
+  LoadedSessionWork,
+  SessionCheckout,
+  SessionWorkExpected,
+  SessionWorkSaveResult,
+  SessionWorkSnapshot,
+  SessionWorkStore,
 } from './session-work.ts';
-import type { LoadedSessionWork, SessionCheckout, SessionWorkSnapshot, SessionWorkStore } from './session-work.ts';
 
 /** Where the mirror keeps work published to the remote (its fetch maps `refs/factory/wip/*` here). */
 const PUBLISHED_PREFIX = 'refs/factory/origin-wip/';
@@ -46,9 +48,34 @@ async function resolveIn(checkout: Pick<SessionCheckout, 'sandbox'>, repository:
 export class MirrorSessionWorkStore implements SessionWorkStore {
   readonly kind = 'mirror';
   readonly #cache: LocalMirrorRepositoryCache;
+  readonly #now: () => number;
 
-  constructor(cache: LocalMirrorRepositoryCache) {
+  constructor(cache: LocalMirrorRepositoryCache, options: { now?: () => number } = {}) {
     this.#cache = cache;
+    this.#now = options.now ?? Date.now;
+  }
+
+  /** The mirror to keep work in; made (empty, no network) when there is none, owner recorded. */
+  async #mirrorFor(checkout: SessionCheckout): Promise<string> {
+    return this.#cache.ensureExists({ cloneUrl: checkout.cloneUrl, ...(checkout.owner ? { owner: checkout.owner } : {}) });
+  }
+
+  /** Copy commits from the checkout into the mirror under one temporary ref each; answers their names. */
+  async #pushTemporary(checkout: SessionCheckout, mirror: string, commits: string[]): Promise<string[]> {
+    const id = randomUUID();
+    const refs = commits.map((_, index) => `refs/factory/tmp/${id}/${index}`);
+    const pushed = await runGitIn(checkout.sandbox, checkout.dir, [
+      ...NO_HOOKS,
+      'push',
+      '--no-verify',
+      '--quiet',
+      mirror,
+      ...commits.map((commit, index) => `${commit}:${refs[index]}`),
+    ]);
+    if (pushed.exitCode !== 0) {
+      throw new SessionWorkError(`could not copy the work into the mirror: ${(pushed.stderr || pushed.stdout).trim().slice(-1000)}`);
+    }
+    return refs;
   }
 
   /**
@@ -56,32 +83,31 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
    * transaction then moves the work refs (guarded by their old values) and
    * drops the temporary ones, and the result is read back. A crash in between
    * leaves only temporary refs, which maintenance removes.
+   *
+   * Saved commits the new tip does not contain are never replaced: they move
+   * to `refs/factory/wip/superseded/<branch>/<time>` in the same transaction
+   * (a restore that failed or was skipped, then new work from the base).
    */
-  async save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<void> {
-    const mirror = await this.#cache.ensureExists({ cloneUrl: checkout.cloneUrl });
-    const id = randomUUID();
-    const temporaryHead = `refs/factory/tmp/${id}/head`;
-    const temporaryTree = `refs/factory/tmp/${id}/tree`;
-    const pushed = await runGitIn(checkout.sandbox, checkout.dir, [
-      ...NO_HOOKS,
-      'push',
-      '--no-verify',
-      '--quiet',
-      mirror,
-      `${snapshot.head}:${temporaryHead}`,
-      ...(snapshot.tree ? [`${snapshot.tree}:${temporaryTree}`] : []),
-    ]);
-    if (pushed.exitCode !== 0) {
-      throw new SessionWorkError(`could not copy the work into the mirror: ${(pushed.stderr || pushed.stdout).trim().slice(-1000)}`);
-    }
+  async save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<SessionWorkSaveResult> {
+    const mirror = await this.#mirrorFor(checkout);
+    const commits = [snapshot.head, ...(snapshot.tree ? [snapshot.tree] : [])];
+    const temporary = await this.#pushTemporary(checkout, mirror, commits);
     const heads = headRef(snapshot.branch);
     const trees = treeRef(snapshot.branch);
-    let saved = false;
-    for (let attempt = 0; attempt < SAVE_ATTEMPTS && !saved; attempt++) {
+    for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
       const oldHead = await resolveIn(checkout, mirror, heads);
       const oldTree = await resolveIn(checkout, mirror, trees);
+      let superseded: SessionWorkSaveResult['superseded'];
+      if (oldHead && oldHead !== snapshot.head) {
+        const contained = await runGitIn(checkout.sandbox, mirror, ['merge-base', '--is-ancestor', oldHead, snapshot.head]);
+        // Anything but a clear yes keeps the old commits.
+        if (contained.exitCode !== 0) {
+          superseded = { ref: `refs/factory/wip/superseded/${snapshot.branch}/${this.#now()}`, head: oldHead };
+        }
+      }
       const updates = [
         ...(oldHead === snapshot.head ? [] : [{ ref: heads, next: snapshot.head, old: oldHead }]),
+        ...(superseded ? [{ ref: superseded.ref, next: superseded.head, old: null }] : []),
         ...(snapshot.tree
           ? oldTree === snapshot.tree
             ? []
@@ -89,17 +115,18 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
           : oldTree
             ? [{ ref: trees, next: null, old: oldTree }]
             : []),
-        { ref: temporaryHead, next: null, old: snapshot.head },
-        ...(snapshot.tree ? [{ ref: temporaryTree, next: null, old: snapshot.tree }] : []),
+        ...temporary.map((ref, index) => ({ ref, next: null, old: commits[index]! })),
       ];
-      saved = await updateRefsAtomically(checkout.sandbox, mirror, updates);
+      if (await updateRefsAtomically(checkout.sandbox, mirror, updates)) {
+        const head = await resolveIn(checkout, mirror, heads);
+        const tree = await resolveIn(checkout, mirror, trees);
+        if (head !== snapshot.head || tree !== (snapshot.tree ?? null)) {
+          throw new SessionWorkError(`the saved refs read back as ${head}/${tree}, not ${snapshot.head}/${snapshot.tree ?? 'none'}`);
+        }
+        return superseded ? { superseded } : {};
+      }
     }
-    if (!saved) throw new SessionWorkError('the mirror refs changed under every save attempt');
-    const head = await resolveIn(checkout, mirror, heads);
-    const tree = await resolveIn(checkout, mirror, trees);
-    if (head !== snapshot.head || tree !== (snapshot.tree ?? null)) {
-      throw new SessionWorkError(`the saved refs read back as ${head}/${tree}, not ${snapshot.head}/${snapshot.tree ?? 'none'}`);
-    }
+    throw new SessionWorkError('the mirror refs changed under every save attempt');
   }
 
   async load(checkout: SessionCheckout, branch: string): Promise<LoadedSessionWork | undefined> {
@@ -138,7 +165,33 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
     return Boolean(meta?.fetchedAt) && !meta?.lastFetchError;
   }
 
-  async forget(checkout: Parameters<SessionWorkStore['forget']>[0], branch: string): Promise<void> {
+  /**
+   * Set uncommitted work that did not apply aside under
+   * `refs/factory/wip/conflict/<branch>/<time>`, and drop it from the
+   * branch's tree ref (only if that still holds it), so no later save
+   * replaces it. Protected like all of `refs/factory/wip/`.
+   */
+  async keepConflict(checkout: SessionCheckout, branch: string, tree: string): Promise<string> {
+    const mirror = await this.#mirrorFor(checkout);
+    const [temporary] = await this.#pushTemporary(checkout, mirror, [tree]);
+    const ref = `refs/factory/wip/conflict/${branch}/${this.#now()}`;
+    const current = await resolveIn(checkout, mirror, treeRef(branch));
+    const ok = await updateRefsAtomically(checkout.sandbox, mirror, [
+      { ref, next: tree, old: null },
+      ...(current === tree ? [{ ref: treeRef(branch), next: null, old: tree }] : []),
+      { ref: temporary!, next: null, old: tree },
+    ]);
+    if (!ok) throw new SessionWorkError('could not set the conflicting work aside in the mirror');
+    return ref;
+  }
+
+  /**
+   * Move the branch's refs that still hold `expected` to
+   * `refs/factory/trash/<time>/…` (maintenance drops trash after a while):
+   * another session's later save of the same branch is left alone, and a
+   * mistaken forget can be undone.
+   */
+  async forget(checkout: Parameters<SessionWorkStore['forget']>[0], branch: string, expected: SessionWorkExpected): Promise<void> {
     const mirror = this.#cache.mirrorPath(checkout.cloneUrl);
     try {
       await stat(mirror);
@@ -146,9 +199,19 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
       return;
     }
     const sandbox = checkout.sandbox ?? this.#cache.host;
-    for (const ref of [headRef(branch), treeRef(branch)]) {
+    const at = this.#now();
+    const updates: Array<{ ref: string; next: string | null; old: string | null }> = [];
+    for (const [ref, kind, wanted] of [
+      [headRef(branch), 'heads', expected.head],
+      [treeRef(branch), 'tree', expected.tree],
+    ] as const) {
+      if (!wanted) continue;
       const sha = await resolveIn({ sandbox }, mirror, ref);
-      if (sha) await runGitIn(sandbox, mirror, ['update-ref', '-d', ref, sha]);
+      if (sha !== wanted) continue;
+      updates.push({ ref: `refs/factory/trash/${at}/${kind}/${branch}`, next: sha, old: null }, { ref, next: null, old: sha });
+    }
+    if (updates.length && !(await updateRefsAtomically(sandbox, mirror, updates))) {
+      throw new SessionWorkError('the saved refs changed while they were being forgotten');
     }
   }
 }
@@ -186,7 +249,7 @@ export class RemoteHiddenRefSessionWorkStore implements SessionWorkStore {
     return refs;
   }
 
-  async save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<void> {
+  async save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<SessionWorkSaveResult> {
     const before = await this.#remoteRefs(checkout, snapshot.branch);
     const refspecs = [
       `+${snapshot.head}:${headRef(snapshot.branch)}`,
@@ -210,6 +273,7 @@ export class RemoteHiddenRefSessionWorkStore implements SessionWorkStore {
     if (after.get(headRef(snapshot.branch)) !== snapshot.head || (after.get(treeRef(snapshot.branch)) ?? undefined) !== snapshot.tree) {
       throw new SessionWorkError('the remote did not keep the published work');
     }
+    return {};
   }
 
   async load(checkout: SessionCheckout, branch: string): Promise<LoadedSessionWork | undefined> {
@@ -237,13 +301,21 @@ export class RemoteHiddenRefSessionWorkStore implements SessionWorkStore {
     return { from: 'remote', head, ...(tree ? { tree } : {}) };
   }
 
-  async forget(checkout: Parameters<SessionWorkStore['forget']>[0], branch: string): Promise<void> {
+  /** Delete the published refs that still hold `expected`, each guarded by that value (`--force-with-lease`). */
+  async forget(checkout: Parameters<SessionWorkStore['forget']>[0], branch: string, expected: SessionWorkExpected): Promise<void> {
     if (!checkout.sandbox || !checkout.dir) return;
     const full = checkout as SessionCheckout;
     const refs = await this.#remoteRefs(full, branch);
-    const deletes = [headRef(branch), treeRef(branch)].filter(ref => refs.has(ref)).map(ref => `:${ref}`);
-    if (!deletes.length) return;
-    const pushed = await runSandboxCommand(full.sandbox, 'git', ['-C', full.dir, ...NO_HOOKS, 'push', '--no-verify', '--quiet', 'origin', ...deletes], {
+    const doomed = (
+      [
+        [headRef(branch), expected.head],
+        [treeRef(branch), expected.tree],
+      ] as const
+    ).filter(([ref, wanted]) => wanted && refs.get(ref) === wanted);
+    if (!doomed.length) return;
+    const leases = doomed.map(([ref, wanted]) => `--force-with-lease=${ref}:${wanted}`);
+    const deletes = doomed.map(([ref]) => `:${ref}`);
+    const pushed = await runSandboxCommand(full.sandbox, 'git', ['-C', full.dir, ...NO_HOOKS, 'push', '--no-verify', '--quiet', '--atomic', ...leases, 'origin', ...deletes], {
       env: this.#pushEnv(full),
       timeoutMs: TRANSFER_TIMEOUT_MS,
       phase: 'hidden ref delete',

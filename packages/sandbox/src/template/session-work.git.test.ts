@@ -21,12 +21,22 @@ describe('session work kept in the mirror, with real git', () => {
     await mkdir(dir, { recursive: true });
     const result = await template.repositoryCache.checkout(fx.host, { cloneUrl: fx.origin }, { workdir: dir, branch: 'main' });
     expect(result.source).toBe('mirror');
+    // As materialization records it: who the repository belongs to.
+    fx.git(dir, 'config', 'factory.orgId', 'org-1');
+    fx.git(dir, 'config', 'factory.repositoryId', 'repo-1');
     return { folder, dir, checkout: { sandbox: fx.host, dir, cloneUrl: fx.origin } };
   };
 
   beforeEach(async () => {
     fx = await gitFixture('factory-work-');
-    template = new LocalEnvironmentTemplate({ root: path.join(fx.root, 'template'), env: fx.env, logger: silent, freshnessMs: 0 });
+    template = new LocalEnvironmentTemplate({
+      root: path.join(fx.root, 'template'),
+      env: fx.env,
+      logger: silent,
+      freshnessMs: 0,
+      isPublicRepository: async () => false,
+    });
+    template.setRepositoryAccess(async () => ({ cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer', token: 't' } }));
     await template.repositoryCache.refresh({ cloneUrl: fx.origin });
   });
 
@@ -125,10 +135,14 @@ describe('session work kept in the mirror, with real git', () => {
     const second = await freshCheckout();
     const restored = await template.sessionWork.restore(second.checkout, 'factory/item-4');
     expect(restored).toMatchObject({ outcome: 'remote', tree: 'conflict' });
+    expect(restored.conflictRef).toMatch(/^refs\/factory\/wip\/conflict\/factory\/item-4\/\d+$/);
     expect(fx.git(second.dir, 'status', '--porcelain')).toBe('');
-    // The saved work is still there to recover by hand.
+    // The work that did not apply is set aside, and the next save (a clean tree) never drops it.
     const mirror = template.repositoryCache.mirrorPath(fx.origin);
-    expect(fx.tryGit(mirror, 'rev-parse', '--verify', 'refs/factory/wip/tree/factory/item-4').status).toBe(0);
+    const kept = fx.git(mirror, 'rev-parse', restored.conflictRef!);
+    await template.saveFolder(second.folder);
+    expect(fx.git(mirror, 'rev-parse', restored.conflictRef!)).toBe(kept);
+    expect(fx.git(mirror, 'show', `${kept}:src.txt`)).toBe('mine');
   });
 
   it('saves atomically: a concurrent writer is detected by the old value, and a crashed save leaves only temporary refs', async () => {
@@ -152,10 +166,14 @@ describe('session work kept in the mirror, with real git', () => {
     // The next save completes normally beside it.
     await template.saveFolder(first.folder);
     expect(fx.git(mirror, 'rev-parse', 'refs/factory/wip/heads/factory/item-5')).toBe(head);
-    // The reflog keeps a ref's earlier value after a forced update.
+    // Saved commits the new tip does not contain are set aside, never replaced.
     fx.git(first.dir, 'reset', '--quiet', '--hard', 'HEAD~1');
-    await fx.commit(first.dir, 'y.txt', 'y\n');
-    await template.saveFolder(first.folder);
+    const other = await fx.commit(first.dir, 'y.txt', 'y\n');
+    const saved = await template.saveFolder(first.folder);
+    expect(fx.git(mirror, 'rev-parse', 'refs/factory/wip/heads/factory/item-5')).toBe(other);
+    const superseded = saved.saved[0]?.superseded;
+    expect(superseded?.head).toBe(head);
+    expect(fx.git(mirror, 'rev-parse', superseded!.ref)).toBe(head);
     expect(fx.git(mirror, 'reflog', 'show', '--format=%H', 'refs/factory/wip/heads/factory/item-5')).toContain(head);
   });
 
@@ -164,10 +182,6 @@ describe('session work kept in the mirror, with real git', () => {
     fx.git(first.dir, 'checkout', '--quiet', '-b', 'factory/item-6');
     const head = await fx.commit(first.dir, 'six.txt', 'six\n');
     await writeFile(path.join(first.dir, 'wip.txt'), 'wip\n');
-    // The local "remote" needs no credentials; the owner lookup still has to succeed.
-    const meta = path.join(template.repositoryCache.mirrorPath(fx.origin), 'factory-mirror.json');
-    await writeFile(meta, JSON.stringify({ ...JSON.parse(await readFile(meta, 'utf8')), owner: { orgId: 'o', repositoryId: 'r' } }));
-    template.setRepositoryAccess(async () => ({ cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer', token: 't' } }));
     await template.sleepFolder(first.folder, { publish: true });
     expect(fx.git(fx.origin, 'rev-parse', 'refs/factory/wip/heads/factory/item-6')).toBe(head);
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/tree/factory/item-6').status).toBe(0);
@@ -215,12 +229,23 @@ describe('session work kept in the mirror, with real git', () => {
     await template.sleepFolder(first.folder, { publish: true });
     expect(fx.tryGit(mirror, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-8').status).not.toBe(0);
 
+    // A deleted session forgets exactly what it saved, into the trash; another session's later save of the branch stays.
     fx.git(first.dir, 'checkout', '--quiet', '-b', 'user/session-9');
-    await fx.commit(first.dir, 'nine.txt', '9\n');
-    await template.saveFolder(first.folder);
-    expect(fx.tryGit(mirror, 'rev-parse', '--verify', 'refs/factory/wip/heads/user/session-9').status).toBe(0);
-    await template.forgetBranch('user/session-9');
+    const mine = await fx.commit(first.dir, 'nine.txt', '9\n');
+    await template.saveFolder(first.folder, { sessionId: 'row-a' });
+    await template.forgetSession('row-a');
     expect(fx.tryGit(mirror, 'rev-parse', '--verify', 'refs/factory/wip/heads/user/session-9').status).not.toBe(0);
+    expect(fx.git(mirror, 'for-each-ref', '--format=%(objectname)', 'refs/factory/trash')).toContain(mine);
+
+    const theirs = await fx.commit(first.dir, 'ten.txt', '10\n');
+    await template.saveFolder(first.folder, { sessionId: 'row-a' });
+    await template.saveFolder(first.folder, { sessionId: 'row-b' });
+    // row-a's record names `theirs` too now; make another session move the branch on first.
+    const later = await fx.commit(first.dir, 'eleven.txt', '11\n');
+    await template.saveFolder(first.folder, { sessionId: 'row-b' });
+    await template.forgetSession('row-a');
+    expect(fx.git(mirror, 'rev-parse', 'refs/factory/wip/heads/user/session-9')).toBe(later);
+    expect(theirs).not.toBe(later);
   });
 
   it('never restores into a checkout with changes of its own', async () => {
@@ -230,7 +255,7 @@ describe('session work kept in the mirror, with real git', () => {
     await template.saveFolder(first.folder);
     const second = await freshCheckout();
     await writeFile(path.join(second.dir, 'mine.txt'), 'in flight\n');
-    expect(await template.sessionWork.restore(second.checkout, 'factory/item-10')).toEqual({ outcome: 'none' });
+    expect(await template.sessionWork.restore(second.checkout, 'factory/item-10')).toEqual({ outcome: 'none', skipped: 'local-changes' });
     expect(fx.git(second.dir, 'branch', '--show-current')).toBe('main');
     expect(await readFile(path.join(second.dir, 'mine.txt'), 'utf8')).toBe('in flight\n');
   });

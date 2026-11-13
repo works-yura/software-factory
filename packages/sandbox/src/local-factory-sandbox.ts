@@ -80,8 +80,9 @@ class SessionLocalSandbox extends LocalSandbox {
     // Only a session's own directory under the root, never the root itself or anything outside it.
     if (!directory.startsWith(this.#root + sep)) return;
     // Its work goes to the mirror first; when that cannot be verified the folder stays (and this throws).
-    await this.#template?.sleepFolder(directory);
-    await rm(directory, { recursive: true, force: true });
+    const remove = () => rm(directory, { recursive: true, force: true });
+    if (this.#template) await this.#template.removeFolder(directory, { sessionId: this.id, remove });
+    else await remove();
   }
 }
 
@@ -142,8 +143,9 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       entry => entry.isSymbolicLink(),
       () => true,
     );
-    if (!link) await this.#options.template?.sleepFolder(directory);
-    await rm(directory, { recursive: true, force: true });
+    const remove = () => rm(directory, { recursive: true, force: true });
+    if (!link && this.#options.template) await this.#options.template.removeFolder(directory, { sessionId, remove });
+    else await remove();
   }
 
   /**
@@ -158,23 +160,38 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       () => true,
       () => false,
     );
-    if (present) await this.#options.template?.sleepFolder(directory, { publish: true });
-    await rm(directory, { recursive: true, force: true });
+    const remove = () => rm(directory, { recursive: true, force: true });
+    if (present && this.#options.template) await this.#options.template.removeFolder(directory, { publish: true, remove });
+    else await remove();
   }
 
-  /** Drop the saved work of a deleted session's branch (the person discarded it). */
-  async forgetSessionWork(branch: string): Promise<void> {
-    await this.#options.template?.forgetBranch(branch);
+  /** Drop exactly what a deleted session saved (the person discarded it); a later save of the branch by another session stays. */
+  async forgetSessionWork(sessionId: string): Promise<void> {
+    await this.#options.template?.forgetSession(sessionId);
+  }
+
+  /**
+   * The sandbox folder a path lies in: `<root>/work-items/<factory>/<card>`
+   * for a card, `<root>/<session>` for a session of its own. `undefined`
+   * outside the root.
+   */
+  folderRootOf(directory: string): string | undefined {
+    const root = resolve(this.#options.root);
+    const resolved = resolve(directory);
+    if (!resolved.startsWith(root + sep)) return undefined;
+    const segments = resolved.slice(root.length + 1).split(sep);
+    if (segments[0] === WORK_ITEM_FOLDERS_DIR) return segments.length >= 3 ? join(root, ...segments.slice(0, 3)) : undefined;
+    return segments[0] && !segments[0].startsWith('.') ? join(root, segments[0]) : undefined;
   }
 
   /** Keep the work in a session's folder after a run ended; never throws. */
   async saveSessionWork(directory: string, context: Record<string, unknown> = {}): Promise<void> {
     const template = this.#options.template;
     if (!template) return;
-    const resolved = resolve(directory);
-    // Only folders under the sandbox root.
-    if (!resolved.startsWith(resolve(this.#options.root) + sep)) return;
-    await template.saveFolder(resolved, context);
+    // The whole folder, every repository of the environment, not just the one the path names.
+    const folder = this.folderRootOf(directory);
+    if (!folder) return;
+    await template.saveFolder(folder, context);
   }
 
   create(ctx: FactoryWorkspaceSandboxContext): LocalSandbox {

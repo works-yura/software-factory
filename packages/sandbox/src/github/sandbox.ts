@@ -491,6 +491,10 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<Mat
         },
       );
       if (cached.source === 'mirror') {
+        if (options.owner) {
+          await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.orgId', options.owner.orgId]);
+          await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.repositoryId', options.owner.repositoryId]);
+        }
         await storage.markMaterialized({ id: sandboxRow.id });
         return { cloned: true, source: 'mirror', ...(cached.stale ? { stale: cached.stale } : {}) };
       }
@@ -535,6 +539,13 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<Mat
       throw classifyGitFailure(progress ? { ...clone, stderr: withoutGitProgress(clone.stderr) } : clone, 'clone-failed');
     }
     result = { cloned: true, source: 'network', ...(fallbackReason ? { fallbackReason } : {}) };
+  }
+
+  // The owner ids ride in the checkout's own config (not secret), so saving its
+  // work later can name the repository whatever else was lost.
+  if (options.owner) {
+    await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.orgId', options.owner.orgId]);
+    await execute(sandbox, 'git', ['-C', workdir, 'config', 'factory.repositoryId', options.owner.repositoryId]);
   }
 
   // 4. Mark materialized.

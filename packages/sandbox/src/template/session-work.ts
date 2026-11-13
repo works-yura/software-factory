@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutableSandbox, SandboxCommandResult } from '../materialization.ts';
 import { isValidGitRef } from '../git-ref.ts';
 import { gitTransfer, runSandboxCommand } from '../github/sandbox.ts';
+import { ENV_FILES_MANIFEST } from '../sandbox-env-files.ts';
 
 export const SESSION_WORK_HEADS = 'refs/factory/wip/heads/';
 export const SESSION_WORK_TREES = 'refs/factory/wip/tree/';
@@ -43,6 +44,8 @@ export interface SessionCheckout {
   cloneUrl: string;
   /** Process-scoped credentials for talking to `origin`, when a store or restore needs the network. */
   authEnv?: Record<string, string>;
+  /** Who the repository belongs to, recorded beside a cache entry the save creates. */
+  owner?: { orgId: string; repositoryId: string };
 }
 
 /** What a checkout holds right now. */
@@ -52,7 +55,42 @@ export interface SessionWorkSnapshot {
   head: string;
   /** The uncommitted-work commit (parent `head`), absent when the tree is clean. */
   tree?: string;
+  /** Files left out of the uncommitted-work commit: secrets by name, and anything over the size limit. */
+  skipped?: string[];
 }
+
+/** What a store did with a save beyond keeping it. */
+export interface SessionWorkSaveResult {
+  /**
+   * The store held other commits for the branch that the new tip does not
+   * contain (a restore that failed or was skipped, then new work from the
+   * base): they were kept under this ref instead of being replaced.
+   */
+  superseded?: { ref: string; head: string };
+}
+
+/** Which saved values a forget may drop: only refs still at these commits (what this session saved). */
+export interface SessionWorkExpected {
+  head?: string;
+  tree?: string;
+}
+
+/**
+ * Paths never put in an uncommitted-work commit, whatever the repository
+ * ignores: env files and keys. The checkout's own env files (Factory's
+ * manifest) are left out by path besides. They are rewritten by setup after a
+ * restore, and the agent is told they are gone.
+ */
+export const SNAPSHOT_SECRET_PATHSPECS = [
+  ':(glob)**/.env*',
+  ':(glob)**/.secrets/**',
+  ':(glob)**/*.pem',
+  ':(glob)**/*-sa.json',
+  ':(glob)**/*.key',
+] as const;
+
+/** Files over this size stay out of the uncommitted-work commit. */
+export const SNAPSHOT_MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 export interface LoadedSessionWork {
   /** Where it came from, for logs and the chat (`mirror`, `mirror-published`, `remote`). */
@@ -65,11 +103,21 @@ export interface LoadedSessionWork {
 export interface SessionWorkStore {
   readonly kind: string;
   /** Keep the snapshot; resolves only once the stored refs were read back as the snapshot's commits. */
-  save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<void>;
+  save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<SessionWorkSaveResult>;
   /** Bring the branch's saved work into the checkout's object store, if this store has any. */
   load(checkout: SessionCheckout, branch: string): Promise<LoadedSessionWork | undefined>;
-  /** Drop the branch's saved work. */
-  forget(checkout: Pick<SessionCheckout, 'cloneUrl' | 'authEnv'> & Partial<SessionCheckout>, branch: string): Promise<void>;
+  /**
+   * Drop the branch's saved work, only the refs still at `expected` (what the
+   * caller saved itself; another session's later save stays). Recoverable for
+   * a while where the store can (the mirror moves it to `refs/factory/trash/`).
+   */
+  forget(
+    checkout: Pick<SessionCheckout, 'cloneUrl' | 'authEnv'> & Partial<SessionCheckout>,
+    branch: string,
+    expected: SessionWorkExpected,
+  ): Promise<void>;
+  /** Keep uncommitted work that no longer applies where no later save replaces it; answers its ref. */
+  keepConflict?(checkout: SessionCheckout, branch: string, tree: string): Promise<string>;
   /** True when this store already sees what the sleep store published, so restore need not ask it. */
   coversPublished?(checkout: Pick<SessionCheckout, 'cloneUrl'>): Promise<boolean>;
 }
@@ -84,8 +132,13 @@ export class CompositeSessionWorkStore implements SessionWorkStore {
     this.kind = stores.map(store => store.kind).join('+') || 'none';
   }
 
-  async save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<void> {
-    for (const store of this.#stores) await store.save(checkout, snapshot);
+  async save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<SessionWorkSaveResult> {
+    let result: SessionWorkSaveResult = {};
+    for (const store of this.#stores) {
+      const saved = await store.save(checkout, snapshot);
+      if (saved.superseded && !result.superseded) result = saved;
+    }
+    return result;
   }
 
   async load(checkout: SessionCheckout, branch: string): Promise<LoadedSessionWork | undefined> {
@@ -96,8 +149,8 @@ export class CompositeSessionWorkStore implements SessionWorkStore {
     return undefined;
   }
 
-  async forget(checkout: Parameters<SessionWorkStore['forget']>[0], branch: string): Promise<void> {
-    for (const store of this.#stores) await store.forget(checkout, branch);
+  async forget(checkout: Parameters<SessionWorkStore['forget']>[0], branch: string, expected: SessionWorkExpected): Promise<void> {
+    for (const store of this.#stores) await store.forget(checkout, branch, expected);
   }
 }
 
@@ -165,8 +218,14 @@ export interface SessionWorkRestore {
   from?: string;
   /** The saved commits and the remote branch went apart: the branch keeps the saved ones, the remote stays at `origin/<branch>`. */
   diverged?: { saved: string; remote: string };
+  /** The checkout's history is too shallow to tell whether the remote contains the saved commits; they were kept. */
+  unverified?: boolean;
   /** What became of the uncommitted work. */
   tree?: 'restored' | 'conflict';
+  /** Where uncommitted work that no longer applies was kept. */
+  conflictRef?: string;
+  /** Restoring was skipped: the checkout has changes of its own. */
+  skipped?: 'local-changes';
 }
 
 export interface SessionWorkLogger {
@@ -214,20 +273,57 @@ export class SessionWork {
       const seeded = await runSandboxCommand(sandbox, 'sh', ['-c', 'if [ -f "$1" ]; then cp "$1" "$2"; fi', 'sh', indexPath, scratch]);
       if (seeded.exitCode !== 0) throw new SessionWorkError(`could not copy the index: ${output(seeded)}`);
       const env = { GIT_INDEX_FILE: scratch };
-      await gitOk(sandbox, dir, ['add', '--all', '--', '.'], env);
+      const envFiles = await this.#envFilePaths(checkout);
+      const large = await this.#largeFiles(checkout);
+      const excluded = [
+        ...SNAPSHOT_SECRET_PATHSPECS,
+        ...envFiles.map(file => `:(literal)${file}`),
+        ...large.map(file => `:(literal)${file}`),
+      ];
+      await gitOk(sandbox, dir, ['add', '--all', '--', '.', ...excluded.map(spec => spec.replace(/^:\(/, ':(exclude,'))], env);
+      // Staged by hand into the real index: put back to the tip, so a secret never rides along.
+      await runGitIn(sandbox, dir, ['reset', '--quiet', head, '--', ...excluded], env);
       const tree = await gitOk(sandbox, dir, ['write-tree'], env);
       const headTree = await gitOk(sandbox, dir, ['rev-parse', `${head}^{tree}`]);
-      if (tree === headTree) return { branch, head };
+      const skipped = large.length ? { skipped: large } : {};
+      if (tree === headTree) return { branch, head, ...skipped };
       const commit = await gitOk(
         sandbox,
         dir,
         ['commit-tree', tree, '-p', head, '-m', `factory: uncommitted work on ${branch}`],
         SNAPSHOT_IDENTITY,
       );
-      return { branch, head, tree: commit };
+      return { branch, head, tree: commit, ...skipped };
     } finally {
       await runSandboxCommand(sandbox, 'rm', ['-f', '--', scratch]).catch(() => {});
     }
+  }
+
+  /** The env files Factory wrote into the checkout (its manifest), relative paths. */
+  async #envFilePaths(checkout: Pick<SessionCheckout, 'sandbox' | 'dir'>): Promise<string[]> {
+    const manifest = await runGitIn(checkout.sandbox, checkout.dir, ['rev-parse', '--path-format=absolute', '--git-path', ENV_FILES_MANIFEST]);
+    if (manifest.exitCode !== 0) return [];
+    const read = await runSandboxCommand(checkout.sandbox, 'sh', ['-c', 'cat "$1" 2>/dev/null || true', 'sh', manifest.stdout.trim()]);
+    return read.stdout
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+  }
+
+  /** Files over the size limit outside `.git` and `node_modules`, relative paths. */
+  async #largeFiles(checkout: Pick<SessionCheckout, 'sandbox' | 'dir'>): Promise<string[]> {
+    const blocks = Math.ceil(SNAPSHOT_MAX_FILE_BYTES / 512);
+    const found = await runSandboxCommand(checkout.sandbox, 'sh', [
+      '-c',
+      'cd "$1" && find . \\( -name .git -o -name node_modules \\) -prune -o -type f -size +"$2" -print',
+      'sh',
+      checkout.dir,
+      String(blocks),
+    ]);
+    return found.stdout
+      .split('\n')
+      .map(line => line.trim().replace(/^\.\//, ''))
+      .filter(Boolean);
   }
 
   /**
@@ -258,7 +354,7 @@ export class SessionWork {
     if (status.exitCode !== 0 || status.stdout.trim()) {
       const local = await resolveRef(sandbox, dir, `refs/heads/${branch}`);
       if (!local) this.#logger.warn('saved session work not restored: the checkout has changes of its own', { dir, branch });
-      return { outcome: 'none' };
+      return { outcome: 'none', ...(local ? {} : { skipped: 'local-changes' as const }) };
     }
     let loaded = await this.store.load(checkout, branch);
     if (!loaded && this.sleepStore && !(await this.store.coversPublished?.(checkout))) {
@@ -277,11 +373,13 @@ export class SessionWork {
       const remote = await this.#remoteHead(checkout, branch);
       let chosen = loaded.head;
       let diverged: SessionWorkRestore['diverged'];
+      let unverified = false;
       if (remote && remote !== loaded.head) {
         const remoteContainsSaved = await isAncestor(sandbox, dir, loaded.head, remote);
+        const savedContainsRemote = remoteContainsSaved ? undefined : await isAncestor(sandbox, dir, remote, loaded.head);
         if (remoteContainsSaved) {
           chosen = remote;
-        } else if (!(await isAncestor(sandbox, dir, remote, loaded.head))) {
+        } else if (remoteContainsSaved === false && savedContainsRemote === false) {
           diverged = { saved: loaded.head, remote };
           this.#logger.warn('saved session work and the remote branch diverged; keeping the saved commits', {
             dir,
@@ -289,6 +387,9 @@ export class SessionWork {
             saved: loaded.head,
             remote,
           });
+        } else if (remoteContainsSaved === undefined || savedContainsRemote === undefined) {
+          // A shallow checkout cannot tell; the saved commits are kept, never claimed diverged.
+          unverified = true;
         }
       }
       const current = await runGitIn(sandbox, dir, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
@@ -300,9 +401,20 @@ export class SessionWork {
       // Track the remote branch when there is one, as a resumed branch does.
       if (remote) await runGitIn(sandbox, dir, ['branch', '--quiet', `--set-upstream-to=origin/${branch}`, branch]);
       let tree: SessionWorkRestore['tree'];
-      if (loaded.tree) tree = await this.#applyTree(checkout, loaded.tree, branch);
+      let conflictRef: string | undefined;
+      if (loaded.tree) {
+        tree = await this.#applyTree(checkout, loaded.tree, branch);
+        if (tree === 'conflict') conflictRef = await this.#keepConflict(checkout, branch, loaded.tree);
+      }
       const outcome: SessionWorkRestore['outcome'] = chosen === loaded.head ? 'restored' : 'remote';
-      return { outcome, from: loaded.from, ...(diverged ? { diverged } : {}), ...(tree ? { tree } : {}) };
+      return {
+        outcome,
+        from: loaded.from,
+        ...(diverged ? { diverged } : {}),
+        ...(unverified ? { unverified } : {}),
+        ...(tree ? { tree } : {}),
+        ...(conflictRef ? { conflictRef } : {}),
+      };
     } finally {
       await this.#dropRestoreRefs(checkout);
     }
@@ -347,6 +459,25 @@ export class SessionWork {
     return 'restored';
   }
 
+  /**
+   * Move uncommitted work that did not apply out of the branch's work refs,
+   * so the next save (which replaces the tree ref) can never drop it.
+   */
+  async #keepConflict(checkout: SessionCheckout, branch: string, tree: string): Promise<string | undefined> {
+    if (!this.store.keepConflict) return undefined;
+    try {
+      return await this.store.keepConflict(checkout, branch, tree);
+    } catch (error) {
+      this.#logger.warn('could not set aside uncommitted work that does not apply', {
+        dir: checkout.dir,
+        branch,
+        tree,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
   async #dropRestoreRefs(checkout: SessionCheckout): Promise<void> {
     const listed = await runGitIn(checkout.sandbox, checkout.dir, ['for-each-ref', '--format=%(refname)', RESTORE_REFS]);
     for (const ref of listed.stdout.split('\n').map(line => line.trim()).filter(Boolean)) {
@@ -354,9 +485,14 @@ export class SessionWork {
     }
   }
 
-  async forget(checkout: Parameters<SessionWorkStore['forget']>[0], branch: string, options: { sleep?: boolean } = {}): Promise<void> {
-    await this.store.forget(checkout, branch);
-    if (options.sleep && this.sleepStore) await this.sleepStore.forget(checkout, branch);
+  async forget(
+    checkout: Parameters<SessionWorkStore['forget']>[0],
+    branch: string,
+    expected: SessionWorkExpected,
+    options: { sleep?: boolean } = {},
+  ): Promise<void> {
+    await this.store.forget(checkout, branch, expected);
+    if (options.sleep && this.sleepStore) await this.sleepStore.forget(checkout, branch, expected);
   }
 }
 

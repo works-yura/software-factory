@@ -370,6 +370,8 @@ const sandbox = new LocalFactorySandbox({
         template: new LocalEnvironmentTemplate({
           root: process.env.FACTORY_LOCAL_TEMPLATE_ROOT?.trim() || join(sandboxRoot, '.factory-template'),
           env: localSandboxEnv(),
+          // Shared package stores move pnpm off the store existing checkouts were installed from: opt-in.
+          packageStores: process.env.FACTORY_LOCAL_PACKAGE_STORES?.trim().toLowerCase() === 'on',
         }),
       }
     : {}),

@@ -52,6 +52,8 @@ const DISABLED_PUSH_URL = 'factory-mirror-never-pushes:';
 
 /** A mirror fetched this recently is not fetched again for a session. */
 export const DEFAULT_MIRROR_FRESHNESS_MS = 15_000;
+/** A session waits this long for a mirror another process holds (a build creating it), then goes without. */
+export const DEFAULT_SESSION_LOCK_WAIT_MS = 30_000;
 /** Mirrors no project names and nothing used for this long are removed. */
 export const DEFAULT_MIRROR_IDLE_MS = 7 * 24 * 60 * 60_000;
 /** Leftover temporary refs and directories older than this are removed by maintenance. */
@@ -94,6 +96,8 @@ export interface LocalMirrorRepositoryCacheOptions {
   lock?: FileLockOptions;
   logger?: LocalMirrorLogger;
   now?: () => number;
+  /** How long a session's checkout or save waits for a busy mirror (30 s by default). */
+  sessionLockWaitMs?: number;
   /** Test seam: called before each mirror fetch. */
   beforeFetch?: (mirrorPath: string) => Promise<void> | void;
 }
@@ -147,6 +151,8 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
   readonly #now: () => number;
   readonly #beforeFetch: LocalMirrorRepositoryCacheOptions['beforeFetch'];
   readonly #repairs = new Map<string, Promise<void>>();
+  /** How long a session's checkout or save waits for a busy mirror before going without it. */
+  readonly #sessionLockWaitMs: number;
   /** When this process last found each mirror sound and fetched. */
   readonly #verifiedAt = new Map<string, number>();
 
@@ -158,6 +164,7 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
     this.#logger = options.logger ?? consoleLogger;
     this.#now = options.now ?? Date.now;
     this.#beforeFetch = options.beforeFetch;
+    this.#sessionLockWaitMs = options.sessionLockWaitMs ?? DEFAULT_SESSION_LOCK_WAIT_MS;
   }
 
   /** The executor mirror git runs on (the server host). */
@@ -183,9 +190,10 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
     });
   }
 
-  #withLock<T>(mirror: string, fn: () => Promise<T>) {
+  #withLock<T>(mirror: string, fn: () => Promise<T>, waitMs?: number) {
     return withFileLock(`${mirror}.lock`, fn, {
       ...this.#lock,
+      ...(waitMs !== undefined && (this.#lock.waitMs === undefined || waitMs < this.#lock.waitMs) ? { waitMs } : {}),
       onStale: owner => {
         this.#logger.warn('took over a stale mirror lock', { mirror, owner });
         this.#lock.onStale?.(owner);
@@ -364,6 +372,16 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
   ): Promise<RepositoryCheckoutResult> {
     const mirror = this.mirrorPath(repo.cloneUrl);
     let result: RepositoryCheckoutResult;
+    // No mirror yet (or one being made under the lock for minutes): the session never waits for it.
+    const exists = await stat(mirror).then(
+      () => true,
+      () => false,
+    );
+    if (!exists) {
+      this.#logger.warn('session checkout falls back to a network clone', { mirror, reason: 'missing' });
+      this.#repairInBackground(repo);
+      return { source: 'network', reason: 'missing' };
+    }
     try {
       const locked = await this.#withLock(
         mirror,
@@ -398,6 +416,7 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
           const reader = await this.#addReader(mirror);
           return { reader, ...(stale ? { stale } : {}) };
         },
+        this.#sessionLockWaitMs,
       );
       const prepared = locked.value;
       if ('network' in prepared) {
@@ -451,6 +470,17 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
       ...(repo.owner ? { owner: repo.owner } : {}),
     });
     return { source: 'mirror', ...(stale ? { stale } : {}), lockWaitMs };
+  }
+
+  /** Run `fn` as a reader of the mirror (a build's template copy cloning from it), so maintenance never packs under it. */
+  async withReader<T>(cloneUrl: string, fn: () => Promise<T>): Promise<T> {
+    const mirror = this.mirrorPath(cloneUrl);
+    const { value: reader } = await this.#withLock(mirror, () => this.#addReader(mirror));
+    try {
+      return await fn();
+    } finally {
+      await rm(reader, { force: true }).catch(() => {});
+    }
   }
 
   /** Register a checkout reading the mirror's objects; registered under the lock, so never during maintenance. */
@@ -556,7 +586,9 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
     } catch {
       // Create it below.
     }
-    await this.#withLock(mirror, async () => {
+    await this.#withLock(
+      mirror,
+      async () => {
       try {
         await stat(mirror);
         return;
@@ -579,7 +611,9 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
         await rm(temporary, { recursive: true, force: true }).catch(() => {});
         throw error;
       }
-    });
+      },
+      this.#sessionLockWaitMs,
+    );
     return mirror;
   }
 

@@ -7,19 +7,20 @@
  * materialization through {@link FactorySandboxCheckoutServices}.
  */
 
-import { readdir, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { FactoryRepositoryAccess } from '@mastra/core/workspace';
 
-import { gitAuthenticationEnvironment } from '../github/sandbox.ts';
+import { gitAuthenticationEnvironment, gitTransfer } from '../github/sandbox.ts';
+import { sanitizeSegment } from '../workdir.ts';
 import { hostExecutor } from './host-exec.ts';
 import { LocalEnvironmentBuilds } from './local-builds.ts';
 import { LocalMirrorRepositoryCache } from './local-mirror-cache.ts';
 import type { LocalMirrorLogger } from './local-mirror-cache.ts';
 import type { RepositoryCache } from './repository-cache.ts';
 import { SessionWork, runGitIn } from './session-work.ts';
-import type { SessionCheckout, SessionWorkSnapshot } from './session-work.ts';
+import type { SessionCheckout, SessionWorkSaveResult, SessionWorkSnapshot } from './session-work.ts';
 import { MirrorSessionWorkStore, RemoteHiddenRefSessionWorkStore } from './session-work-stores.ts';
 
 /**
@@ -46,13 +47,19 @@ export interface LocalEnvironmentTemplateOptions {
   root: string;
   /** The sandbox's base environment (allow-list); builds run setup commands with it. */
   env?: Record<string, string>;
-  /** Point package managers at shared stores under the root (default true). */
+  /**
+   * Point package managers at shared stores under the root. Off by default:
+   * it moves pnpm off the store existing checkouts were installed from, and on
+   * HFS+ `clone-or-copy` copies every file (ADR-0039).
+   */
   packageStores?: boolean;
   logger?: LocalMirrorLogger;
   /** Mirrors no project names are removed after this long unused. */
   pruneIdleMs?: number;
   /** A mirror fetched this recently is not fetched again for a session. */
   freshnessMs?: number;
+  /** Whether a repository is public (then uncommitted work is never published); probes it anonymously by default. */
+  isPublicRepository?: (checkout: SessionCheckout) => Promise<boolean>;
 }
 
 const consoleLogger: LocalMirrorLogger = {
@@ -63,8 +70,16 @@ const consoleLogger: LocalMirrorLogger = {
 /** Directories inside a session folder that are never checkouts. */
 const NOT_CHECKOUTS = new Set(['.mastra-sandbox', 'node_modules', '.git']);
 
+/** Something the person should hear about kept work: saved commits set aside, a public repository kept local. */
+export interface SessionWorkNotice {
+  kind: 'superseded';
+  dir: string;
+  branch: string;
+  ref: string;
+}
+
 export interface FolderSaveResult {
-  saved: Array<{ dir: string; snapshot: SessionWorkSnapshot | undefined }>;
+  saved: Array<{ dir: string; snapshot: SessionWorkSnapshot | undefined; superseded?: SessionWorkSaveResult['superseded'] }>;
   failures: Array<{ dir: string; error: string }>;
 }
 
@@ -87,13 +102,19 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   readonly builds: LocalEnvironmentBuilds;
   readonly #packageStores: boolean;
   readonly #logger: LocalMirrorLogger;
-  readonly #folderQueues = new Map<string, Promise<unknown>>();
+  readonly #queues = new Map<string, Promise<unknown>>();
+  /** Folders (real paths) being put to sleep and removed right now. */
+  readonly #removing = new Set<string>();
   #repositoryAccess: RepositoryAccessResolver | undefined;
+  readonly #isPublicRepository: LocalEnvironmentTemplateOptions['isPublicRepository'];
+  /** Told about kept work the person should know of; the host routes it to them. */
+  onNotice: ((notice: SessionWorkNotice) => void) | undefined;
 
   constructor(options: LocalEnvironmentTemplateOptions) {
     this.root = path.resolve(options.root);
-    this.#packageStores = options.packageStores ?? true;
+    this.#packageStores = options.packageStores ?? false;
     this.#logger = options.logger ?? consoleLogger;
+    this.#isPublicRepository = options.isPublicRepository;
     this.repositoryCache = new LocalMirrorRepositoryCache({
       root: this.root,
       logger: this.#logger,
@@ -134,7 +155,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     };
   }
 
-  /** Lets card-close publishing mint credentials for a repository by its owner ids. */
+  /** Lets publishing mint credentials for a repository by its owner ids. */
   setRepositoryAccess(resolver: RepositoryAccessResolver | undefined): void {
     this.#repositoryAccess = resolver;
   }
@@ -162,66 +183,161 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     return found;
   }
 
-  async #checkout(dir: string, withCredentials: boolean): Promise<SessionCheckout | undefined> {
+  /** The checkout as a {@link SessionCheckout}; `undefined` when its origin is missing or carries credentials. */
+  async #checkout(dir: string): Promise<SessionCheckout | undefined> {
     const host = this.repositoryCache.host;
     // The configured URL, not `remote get-url`, which applies `insteadOf` rewrites.
     const origin = await runGitIn(host, dir, ['config', '--get', 'remote.origin.url']);
     const cloneUrl = origin.exitCode === 0 ? origin.stdout.trim() : '';
     if (!cloneUrl || /\/\/[^/]*@/.test(cloneUrl)) return undefined;
-    const checkout: SessionCheckout = { sandbox: host, dir, cloneUrl };
-    if (withCredentials) {
-      const owner = (await this.repositoryCache.readMeta(this.repositoryCache.mirrorPath(cloneUrl)))?.owner;
-      if (!owner || !this.#repositoryAccess) throw new Error(`no credentials to publish ${cloneUrl}: the repository's owner is unknown`);
-      const access = await this.#repositoryAccess(owner);
-      const token = access.authorization?.token;
-      if (!token) throw new Error(`no token to publish ${cloneUrl}`);
-      checkout.authEnv = gitAuthenticationEnvironment(access.cloneUrl, token, access.authorization?.username ?? 'x-access-token');
-    }
-    return checkout;
+    const owner = await readCheckoutOwner(host, dir);
+    return { sandbox: host, dir, cloneUrl, ...(owner ? { owner } : {}) };
   }
 
-  /** True when the remote-tracking refs already hold the tip (pushed or merged somewhere). */
-  async #onRemote(checkout: SessionCheckout, head: string): Promise<boolean> {
-    const contains = await runGitIn(checkout.sandbox, checkout.dir, ['for-each-ref', '--count=1', '--format=%(refname)', '--contains', head, 'refs/remotes/origin']);
+  /** Credentials to publish with: the owner recorded on the checkout, else on its mirror. */
+  async #withCredentials(checkout: SessionCheckout): Promise<SessionCheckout> {
+    const owner =
+      checkout.owner ?? (await this.repositoryCache.readMeta(this.repositoryCache.mirrorPath(checkout.cloneUrl)))?.owner;
+    if (!owner || !this.#repositoryAccess) throw new Error(`no credentials to publish ${checkout.cloneUrl}: the repository's owner is unknown`);
+    const access = await this.#repositoryAccess(owner);
+    const token = access.authorization?.token;
+    if (!token) throw new Error(`no token to publish ${checkout.cloneUrl}`);
+    return {
+      ...checkout,
+      authEnv: gitAuthenticationEnvironment(access.cloneUrl, token, access.authorization?.username ?? 'x-access-token'),
+    };
+  }
+
+  /** True when a remote-tracking ref already holds `head` (pushed or merged somewhere). */
+  async #onRemote(checkout: Pick<SessionCheckout, 'sandbox' | 'dir'>, head: string): Promise<boolean> {
+    const contains = await runGitIn(checkout.sandbox, checkout.dir, [
+      'for-each-ref',
+      '--count=1',
+      '--format=%(refname)',
+      '--contains',
+      head,
+      'refs/remotes/origin',
+    ]);
     return contains.exitCode === 0 && contains.stdout.trim() !== '';
   }
 
-  /** One save of a folder at a time; a later one waits for the earlier. */
-  #serial<T>(folder: string, fn: () => Promise<T>): Promise<T> {
-    const previous = this.#folderQueues.get(folder) ?? Promise.resolve();
+  /** Bring `origin/*` up to date before trusting it to say what the remote holds. */
+  async #refreshRemote(checkout: SessionCheckout): Promise<void> {
+    const fetched = await gitTransfer(checkout.sandbox, ['-C', checkout.dir, 'fetch', '--quiet', '--prune', '--no-tags', 'origin'], {
+      ...(checkout.authEnv ? { env: checkout.authEnv } : {}),
+      phase: 'sleep remote refresh',
+      timeoutMs: 5 * 60_000,
+    });
+    if (fetched.exitCode !== 0) throw new Error(`could not refresh what the remote holds: ${(fetched.stderr || fetched.stdout).trim().slice(-500)}`);
+  }
+
+  /**
+   * Whether the repository is readable without credentials: then it is
+   * public, and uncommitted work (which can hold anything) is never
+   * published to it.
+   */
+  async #isPublic(checkout: SessionCheckout): Promise<boolean> {
+    if (this.#isPublicRepository) return this.#isPublicRepository(checkout);
+    const probe = await gitTransfer(checkout.sandbox, ['ls-remote', '--heads', '--', checkout.cloneUrl, 'refs/heads/__factory_probe__'], {
+      env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'false', SSH_ASKPASS: 'false', GIT_CONFIG_NOSYSTEM: '1' },
+      phase: 'visibility probe',
+      timeoutMs: 60_000,
+    });
+    return probe.exitCode === 0;
+  }
+
+  /** The real path, so one checkout reached through a link or another spelling queues once. */
+  async #real(dir: string): Promise<string> {
+    return realpath(dir).catch(() => path.resolve(dir));
+  }
+
+  /** One save or sleep of a checkout at a time, whoever asks. */
+  #serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.#queues.get(key) ?? Promise.resolve();
     const next = previous.catch(() => {}).then(fn);
-    this.#folderQueues.set(folder, next);
-    void next.finally(() => {
-      if (this.#folderQueues.get(folder) === next) this.#folderQueues.delete(folder);
-    }).catch(() => {});
+    this.#queues.set(key, next);
+    void next
+      .finally(() => {
+        if (this.#queues.get(key) === next) this.#queues.delete(key);
+      })
+      .catch(() => {});
     return next;
+  }
+
+  /** True while the folder holding `dir` is being put to sleep and removed: a run-end save then does nothing. */
+  #beingRemoved(real: string): boolean {
+    for (const folder of this.#removing) if (real === folder || real.startsWith(folder + path.sep)) return true;
+    return false;
+  }
+
+  /** Remember what this session saved, so forgetting it later drops exactly that and nothing another session saved. */
+  async #recordSave(sessionId: string | undefined, checkout: SessionCheckout, snapshot: SessionWorkSnapshot): Promise<void> {
+    if (!sessionId) return;
+    const file = path.join(this.root, 'session-saves', `${sanitizeSegment(sessionId)}.json`);
+    try {
+      const current = JSON.parse(await readFile(file, 'utf8').catch(() => '{}')) as Record<string, SavedBySession>;
+      current[`${checkout.cloneUrl}\n${snapshot.branch}`] = {
+        cloneUrl: checkout.cloneUrl,
+        branch: snapshot.branch,
+        head: snapshot.head,
+        ...(snapshot.tree ? { tree: snapshot.tree } : {}),
+      };
+      await mkdir(path.dirname(file), { recursive: true });
+      const temporary = `${file}.${process.pid}.${Date.now()}`;
+      await writeFile(temporary, JSON.stringify(current));
+      await rename(temporary, file);
+    } catch (error) {
+      this.#logger.warn('could not record what a session saved', { sessionId, reason: String(error) });
+    }
   }
 
   /**
    * Keep every checkout's work in its mirror (a run ended). Never throws: a
-   * failure is logged with the folder and repository and returned.
+   * failure is logged with the folder and repository and returned. Does
+   * nothing for a folder being put to sleep, whose own save is the last word.
    */
-  saveFolder(folder: string, context: Record<string, unknown> = {}): Promise<FolderSaveResult> {
-    return this.#serial(folder, async () => {
-      const result: FolderSaveResult = { saved: [], failures: [] };
-      for (const dir of await this.checkoutsIn(folder)) {
+  async saveFolder(folder: string, context: { sessionId?: string } & Record<string, unknown> = {}): Promise<FolderSaveResult> {
+    const result: FolderSaveResult = { saved: [], failures: [] };
+    for (const dir of await this.checkoutsIn(folder)) {
+      const real = await this.#real(dir);
+      await this.#serial(real, async () => {
+        if (this.#beingRemoved(real)) return;
         try {
-          const checkout = await this.#checkout(dir, false);
-          if (!checkout) continue;
+          const checkout = await this.#checkout(dir);
+          if (!checkout) return;
           const snapshot = await this.sessionWork.snapshot(checkout);
           // An untouched default-branch checkout has nothing to keep.
           if (snapshot && (snapshot.tree || !(await this.#onRemote(checkout, snapshot.head)) || (await this.#hasSaved(checkout, snapshot.branch)))) {
-            await this.sessionWork.store.save(checkout, snapshot);
+            const saved = await this.sessionWork.store.save(checkout, snapshot);
+            await this.#recordSave(context.sessionId, checkout, snapshot);
+            this.#report(saved, dir, snapshot, context);
+            result.saved.push({ dir, snapshot, ...(saved.superseded ? { superseded: saved.superseded } : {}) });
+          } else {
+            result.saved.push({ dir, snapshot });
           }
-          result.saved.push({ dir, snapshot });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           result.failures.push({ dir, error: message });
           this.#logger.warn('session work could not be saved', { ...context, dir, reason: message });
         }
-      }
-      return result;
-    });
+      });
+    }
+    return result;
+  }
+
+  #report(saved: SessionWorkSaveResult, dir: string, snapshot: SessionWorkSnapshot, context: Record<string, unknown>): void {
+    if (saved.superseded) {
+      this.#logger.warn('saved commits the new tip does not contain were kept aside', {
+        ...context,
+        dir,
+        branch: snapshot.branch,
+        kept: saved.superseded,
+      });
+      this.onNotice?.({ kind: 'superseded', dir, branch: snapshot.branch, ref: saved.superseded.ref });
+    }
+    if (snapshot.skipped?.length) {
+      this.#logger.warn('files over the size limit were left out of the saved work', { ...context, dir, files: snapshot.skipped });
+    }
   }
 
   async #hasSaved(checkout: SessionCheckout, branch: string): Promise<boolean> {
@@ -231,53 +347,130 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   }
 
   /**
-   * Put a folder to sleep before it is deleted: every checkout's work saved
-   * and read back from the mirror; with `publish` (card closed) work the
-   * remote does not have yet also goes to its hidden refs, and saved refs of
-   * work the remote already has are dropped from the mirror. Throws
-   * {@link SessionWorkNotSavedError} when anything could not be kept: the
-   * caller must keep the folder then.
+   * Put one checkout to sleep: work saved to the mirror and read back;
+   * with `publish`, the remote is refreshed first, and work it does not hold
+   * goes to its hidden refs (never on a public repository: mirror only, and
+   * a notice), while saved refs of work it already holds are dropped from the
+   * mirror. A checkout whose work cannot be named (detached or unborn HEAD,
+   * no usable origin) only passes when it is clean and holds nothing the
+   * remote lacks.
    */
-  sleepFolder(folder: string, options: { publish?: boolean } = {}): Promise<void> {
-    return this.#serial(folder, async () => {
-      const failures: FolderSaveResult['failures'] = [];
-      for (const dir of await this.checkoutsIn(folder)) {
+  async #sleepCheckout(dir: string, options: { publish?: boolean; sessionId?: string }): Promise<string[]> {
+    const notices: string[] = [];
+    const checkout = await this.#checkout(dir);
+    if (!checkout) throw new Error('its origin is missing or carries credentials, so its work cannot be saved');
+    const snapshot = await this.sessionWork.snapshot(checkout);
+    if (!snapshot) {
+      const status = await runGitIn(checkout.sandbox, dir, ['status', '--porcelain']);
+      if (status.exitCode !== 0 || status.stdout.trim()) throw new Error('it is not on a branch and has uncommitted changes');
+      const head = await runGitIn(checkout.sandbox, dir, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+      // An unborn branch with a clean tree holds nothing.
+      if (head.exitCode !== 0) return notices;
+      const credentialed = options.publish ? await this.#withCredentials(checkout) : checkout;
+      if (options.publish) await this.#refreshRemote(credentialed);
+      if (!(await this.#onRemote(checkout, head.stdout.trim()))) throw new Error('it is not on a branch and holds commits the remote does not');
+      return notices;
+    }
+    // The mirror always gets it: local and cheap, and it never trusts what `origin/*` last said.
+    const saved = await this.sessionWork.store.save(checkout, snapshot);
+    await this.#recordSave(options.sessionId, checkout, snapshot);
+    this.#report(saved, dir, snapshot, { sessionId: options.sessionId });
+    if (!options.publish || !this.sessionWork.sleepStore) return notices;
+    const credentialed = await this.#withCredentials(checkout);
+    await this.#refreshRemote(credentialed);
+    if (!snapshot.tree && (await this.#onRemote(checkout, snapshot.head))) {
+      // The remote holds it all: the card closes with nothing to keep.
+      await this.sessionWork.store.forget(checkout, snapshot.branch, { head: snapshot.head });
+      return notices;
+    }
+    if (await this.#isPublic(checkout)) {
+      notices.push(`${checkout.cloneUrl}: public repository, work kept in the mirror only`);
+      this.#logger.warn('public repository: session work is kept in the mirror only, never published', { dir, branch: snapshot.branch });
+      return notices;
+    }
+    await this.sessionWork.sleepStore.save(credentialed, snapshot);
+    return notices;
+  }
+
+  /**
+   * Put a folder to sleep before it is deleted and delete it (`remove`).
+   * Every checkout's save is verified first; while this runs, run-end saves
+   * of the folder do nothing, so none can record the deletion. Throws
+   * {@link SessionWorkNotSavedError} when anything could not be kept, and
+   * then the folder stays.
+   */
+  async removeFolder(folder: string, options: { publish?: boolean; sessionId?: string; remove: () => Promise<void> }): Promise<string[]> {
+    const real = await this.#real(folder);
+    const notices: string[] = [];
+    const failures: FolderSaveResult['failures'] = [];
+    const dirs = await this.checkoutsIn(folder);
+    const reals = await Promise.all(dirs.map(dir => this.#real(dir)));
+    // Wait for saves already running on each checkout, then hold them all off.
+    await Promise.all(reals.map(key => this.#serial(key, async () => {})));
+    this.#removing.add(real);
+    try {
+      for (const dir of dirs) {
         try {
-          const plain = await this.#checkout(dir, false);
-          if (!plain) continue;
-          const snapshot = await this.sessionWork.snapshot(plain);
-          if (!snapshot) continue;
-          const onRemote = await this.#onRemote(plain, snapshot.head);
-          if (onRemote && !snapshot.tree) {
-            // Already on the remote: nothing to keep; a card that closes drops what the mirror held for it.
-            if (options.publish) await this.sessionWork.store.forget(plain, snapshot.branch);
-            continue;
-          }
-          await this.sessionWork.store.save(plain, snapshot);
-          if (options.publish && this.sessionWork.sleepStore) {
-            const withCredentials = await this.#checkout(dir, true);
-            await this.sessionWork.sleepStore.save(withCredentials!, snapshot);
-          }
+          notices.push(...(await this.#sleepCheckout(dir, options)));
         } catch (error) {
           failures.push({ dir, error: error instanceof Error ? error.message : String(error) });
         }
       }
       if (failures.length) {
-        const error = new SessionWorkNotSavedError(folder, failures);
         this.#logger.warn('folder not put to sleep; keeping it', { folder, failures });
-        throw error;
+        throw new SessionWorkNotSavedError(folder, failures);
       }
-    });
-  }
-
-  /** A deleted session's saved work is dropped from every mirror (the person discarded it). */
-  async forgetBranch(branch: string): Promise<void> {
-    for (const mirror of await this.repositoryCache.listMirrors()) {
-      const meta = await this.repositoryCache.readMeta(mirror);
-      if (!meta?.cloneUrl) continue;
-      await this.sessionWork.store.forget({ cloneUrl: meta.cloneUrl }, branch).catch((error: unknown) =>
-        this.#logger.warn('could not drop saved session work', { mirror, branch, reason: String(error) }),
-      );
+      await options.remove();
+      return notices;
+    } finally {
+      this.#removing.delete(real);
     }
   }
+
+  /** Verified save of a folder without removing it (tests, a manual save). */
+  async sleepFolder(folder: string, options: { publish?: boolean; sessionId?: string } = {}): Promise<string[]> {
+    return this.removeFolder(folder, { ...options, remove: async () => {} });
+  }
+
+  /**
+   * A deleted session's saved work goes to the mirror's trash: exactly the
+   * refs this session saved and nothing a later save of the same branch
+   * (another session's) put there.
+   */
+  async forgetSession(sessionId: string): Promise<void> {
+    const file = path.join(this.root, 'session-saves', `${sanitizeSegment(sessionId)}.json`);
+    let saves: Record<string, SavedBySession>;
+    try {
+      saves = JSON.parse(await readFile(file, 'utf8')) as Record<string, SavedBySession>;
+    } catch {
+      return;
+    }
+    for (const save of Object.values(saves)) {
+      await this.sessionWork.store
+        .forget({ cloneUrl: save.cloneUrl }, save.branch, { head: save.head, ...(save.tree ? { tree: save.tree } : {}) })
+        .catch((error: unknown) =>
+          this.#logger.warn('could not drop saved session work', { sessionId, branch: save.branch, reason: String(error) }),
+        );
+    }
+    await rm(file, { force: true });
+  }
+}
+
+interface SavedBySession {
+  cloneUrl: string;
+  branch: string;
+  head: string;
+  tree?: string;
+}
+
+/** The checkout's repository owner, recorded in its git config by materialization (`factory.orgId`, `factory.repositoryId`). */
+export async function readCheckoutOwner(
+  sandbox: SessionCheckout['sandbox'],
+  dir: string,
+): Promise<{ orgId: string; repositoryId: string } | undefined> {
+  const org = await runGitIn(sandbox, dir, ['config', '--get', 'factory.orgId']);
+  const repository = await runGitIn(sandbox, dir, ['config', '--get', 'factory.repositoryId']);
+  const orgId = org.exitCode === 0 ? org.stdout.trim() : '';
+  const repositoryId = repository.exitCode === 0 ? repository.stdout.trim() : '';
+  return orgId && repositoryId ? { orgId, repositoryId } : undefined;
 }

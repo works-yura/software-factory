@@ -216,7 +216,7 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
             continue;
           }
           const dir = path.join(templateRoot, repositoryDirectoryName(slug));
-          await this.#checkoutTemplate(cache.mirrorPath(cloneUrl), dir, head);
+          await cache.withReader(cloneUrl, () => this.#checkoutTemplate(cache.mirrorPath(cloneUrl), dir, head));
           const commands = repo.setupCommand === undefined ? [] : Array.isArray(repo.setupCommand) ? repo.setupCommand : [repo.setupCommand];
           for (const command of commands.filter(command => command.trim())) {
             const setupStarted = this.#now();

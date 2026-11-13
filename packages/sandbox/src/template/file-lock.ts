@@ -28,6 +28,8 @@ export interface FileLockOptions {
   pollMs?: number;
   /** How often the holder renews its owner file; a third of `staleMs` by default. */
   renewMs?: number;
+  /** Queue holders in this process before they reach the file lock (default true); tests turn it off to act as separate processes. */
+  inProcessQueue?: boolean;
   /** Told when a stale lock is taken over, with the dead holder. */
   onStale?: (owner: LockOwner | undefined) => void;
   now?: () => number;
@@ -115,11 +117,25 @@ async function acquire(lockDir: string, options: Required<Pick<FileLockOptions, 
       const away = `${lockDir}.stale-${randomUUID()}`;
       try {
         await rename(lockDir, away);
-        options.onStale?.(owner);
-        await rm(away, { recursive: true, force: true });
       } catch {
         // Another process took it over first; go round again.
+        continue;
       }
+      // Between judging it stale and moving it, another process may have taken
+      // over the stale lock and made a fresh one: that is what moved. Put it back.
+      const moved = await readOwner(away);
+      if (moved?.token !== owner?.token) {
+        try {
+          await rename(away, lockDir);
+        } catch {
+          // A third process already holds the name; the moved holder's release finds its token gone and leaves it.
+          await rm(away, { recursive: true, force: true }).catch(() => {});
+        }
+        await new Promise(resolve => setTimeout(resolve, options.pollMs));
+        continue;
+      }
+      options.onStale?.(owner);
+      await rm(away, { recursive: true, force: true });
       continue;
     }
     const waited = now() - started;
@@ -149,13 +165,14 @@ export async function withFileLock<T>(
   const pollMs = options.pollMs ?? 250;
   const now = options.now ?? Date.now;
   const queuedAt = now();
-  const previous = inProcess.get(lockDir) ?? Promise.resolve();
+  const queued = options.inProcessQueue ?? true;
+  const previous = (queued ? inProcess.get(lockDir) : undefined) ?? Promise.resolve();
   let done!: () => void;
   const turn = new Promise<void>(resolve => {
     done = resolve;
   });
   const chain = previous.then(() => turn);
-  inProcess.set(lockDir, chain);
+  if (queued) inProcess.set(lockDir, chain);
   try {
     // Waiting behind a holder in this process counts against the same budget.
     let timer: ReturnType<typeof setTimeout> | undefined;
