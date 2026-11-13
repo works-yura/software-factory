@@ -894,7 +894,9 @@
     "noMoves": "No card moves on this board.",
     "reorder": "Reorder {{name}}",
     "movesLoading": "Loading card moves…",
-    "boardNotInstalled": "This board isn’t installed."
+    "boardNotInstalled": "This board isn’t installed.",
+    "joinIssueCard": "Join the issue’s card instead",
+    "joinIssueCardHint": "Only trusted authors’ pull requests join; others get their own card."
   },
   "intakeTriggers": {
     "ifOpen": "If the last one is still open",

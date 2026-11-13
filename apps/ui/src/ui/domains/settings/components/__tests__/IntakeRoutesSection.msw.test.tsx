@@ -172,6 +172,19 @@ const closedToDone = route({
   target: { boardKey: 'work', phaseKey: 'done', joinClosedIssue: false },
 });
 
+/** Adds one more condition to `group`, picking its value from the ones the field offers. */
+async function addChoice(user: ReturnType<typeof userEvent.setup>, group: HTMLElement, field: string, value: string) {
+  await user.click(within(group).getByRole('button', { name: 'Add condition' }));
+  await user.click(within(group).getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+  await user.click(await screen.findByRole('option', { name: field }));
+  // A yes-or-no fact is answered in place; any other offers its values in a list.
+  if (value === 'Yes' || value === 'No') return user.click(within(group).getByRole('radio', { name: value }));
+  await user.click(within(group).getAllByRole('combobox', { name: 'Value' }).at(-1)!);
+  await user.click(await screen.findByRole('option', { name: value }));
+}
+
+const JOIN_SWITCH = 'Join the issue’s card instead';
+
 const routeList = () => screen.getByRole('list', { name: 'Intake routes, in the order they are tried' });
 
 describe('IntakeRoutesSection — where new cards go', () => {
@@ -369,6 +382,78 @@ describe('IntakeRoutesSection — where new cards go', () => {
     renderSection();
 
     expect(await screen.findByText('GitHub repositories are owner/repo, such as acme/app.')).toBeInTheDocument();
+  });
+
+  it("adds a route that joins a pull request to its issue's card, in any unfinished phase", async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([catchAll]);
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    const draft = screen.getByRole('group', { name: 'New route' });
+    await user.type(within(draft).getByRole('textbox', { name: 'New route name' }), 'Fixes join their issue');
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+    await addChoice(user, draft, 'Source kind', 'Pull request');
+    await addChoice(user, draft, 'Pull request closes an issue', 'Yes');
+    expect(within(draft).getByText('Send to')).toBeInTheDocument();
+    await user.click(within(draft).getByRole('switch', { name: JOIN_SWITCH }));
+    expect(within(draft).getByText('Join the issue’s card, move to')).toBeInTheDocument();
+
+    await user.click(within(draft).getByRole('combobox', { name: 'Route phase' }));
+    const phases = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(phases).toEqual(['Intake', 'Triage']);
+    await user.click(screen.getByRole('option', { name: 'Triage' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() =>
+      expect(written.created).toEqual([
+        {
+          name: 'Fixes join their issue',
+          enabled: true,
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+              { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+            ],
+          },
+          target: { boardKey: 'work', phaseKey: 'triage', joinClosedIssue: true },
+        },
+      ]),
+    );
+  });
+
+  it('turns joining off for a saved route, moving it to a phase new cards can land in', async () => {
+    const user = userEvent.setup();
+    const joins = route({
+      id: '00000000-0000-4000-8000-000000000005',
+      name: 'Fixes join their issue',
+      when: {
+        operator: 'AND',
+        conditions: [
+          { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+          { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+        ],
+      },
+      target: { boardKey: 'work', phaseKey: 'triage', joinClosedIssue: true },
+    });
+    const written = useRouteHandlers([joins, catchAll]);
+    renderSection();
+
+    const toggle = await screen.findByRole('switch', { name: JOIN_SWITCH });
+    expect(toggle).toBeChecked();
+    expect(screen.getByText('Join the issue’s card, move to')).toBeInTheDocument();
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(written.patched).toEqual([
+        {
+          id: joins.id,
+          // Triage holds joined cards; a new card only lands in Intake, which leads nowhere on this board.
+          target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
+          expectedRevision: 1,
+        },
+      ]),
+    );
   });
 
   it("shows the routes read-only to someone who isn't an organization admin", async () => {
