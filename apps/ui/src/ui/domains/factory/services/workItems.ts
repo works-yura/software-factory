@@ -9,7 +9,7 @@
 import type { FactoryRuleStage, FactoryTriageType } from '@factory/core/rules/types';
 import type { ProviderWorkItem } from '@factory/core/card';
 
-import type { WorkItemListResponse } from '../../../../api/types';
+import type { WorkItemActivity, WorkItemListResponse, WorkItemStarters } from '../../../../api/types';
 import { requestJson } from './request';
 import { translator } from '../../../i18n/t';
 
@@ -322,6 +322,31 @@ export async function listWorkItems(
     runningSessionIds: runningSessionIds ?? [],
     parkedSessionIds: parkedSessionIds ?? [],
   };
+}
+
+/** What the draft page's starter buttons count on the project's default board. */
+export function fetchWorkItemStarters(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal?: AbortSignal,
+): Promise<WorkItemStarters> {
+  return requestJson(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/starters`, {
+    signal,
+  });
+}
+
+/** When the project's cards were created and completed since `since`, and how many cards it has in all. */
+export function fetchWorkItemActivity(
+  baseUrl: string,
+  factoryProjectId: string,
+  since: number,
+  signal?: AbortSignal,
+): Promise<WorkItemActivity> {
+  const query = new URLSearchParams({ since: new Date(since).toISOString() });
+  return requestJson(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/activity?${query}`,
+    { signal },
+  );
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

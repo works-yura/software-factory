@@ -1,7 +1,7 @@
 import { useParams } from 'react-router';
 
 import { useUploadAttachment } from '../../../../hooks/useAttachments';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { attachmentMessageLines, base64ToBytes } from '../../factory/services/attachments';
 import type { Attachment, AttachmentTarget } from '../../factory/services/attachments';
 import type { PendingImage } from '../context/ComposerImagesContext';
@@ -15,8 +15,9 @@ const tk = translator('chat');
  * (its own files, listed by `factory_list_attachments` the same way).
  */
 export function useComposerAttachmentTarget(sessionId: string | undefined): AttachmentTarget | undefined {
-  const { factoryId } = useParams<{ factoryId?: string }>();
-  const workItems = useWorkItemsQuery(factoryId);
+  const { factoryId, draftSessionId } = useParams<{ factoryId?: string; draftSessionId?: string }>();
+  // Only the cards holding this session, never the whole board; a draft holds none yet.
+  const workItems = useSessionWorkItemsQuery(factoryId, sessionId === draftSessionId ? undefined : sessionId);
   if (!sessionId) return undefined;
   const card = workItems.data?.find(item => Object.values(item.sessions).some(session => session.sessionId === sessionId));
   return card ? { workItemId: card.id } : { sessionId };

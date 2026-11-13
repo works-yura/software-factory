@@ -54,11 +54,19 @@ import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
 import { buildSupervisorRoutes } from '@factory/supervisor';
-import { boardSnapshot, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.ts';
+import { boardSnapshot, hashedBody, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.ts';
 import type { BoardSnapshot } from './board-snapshot.ts';
 import { relatedCardIndex } from '@factory/core/related-cards';
 import type { PullRequestFacts } from '@factory/core/related-cards';
+import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
+import { workItemActivity } from './work-item-activity.ts';
 import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.ts';
+import {
+  CARD_DECISION_PAGE_SIZE,
+  CARD_DECISION_STATUSES,
+  cardsWithFailedRun,
+  workItemStarters,
+} from './work-item-starters.ts';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -557,6 +565,58 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           return c.json({
             metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
           });
+        },
+      }),
+
+      // ── What the draft page's starter buttons count on the default board ────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemStarters.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemStarters.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [cards, boards, { decisions }] = await Promise.all([
+            workItems.listShared(project),
+            this.#boards.load(project),
+            workItems.listDeferredDecisionPage({
+              ...project,
+              statuses: [...CARD_DECISION_STATUSES],
+              limit: CARD_DECISION_PAGE_SIZE,
+            }),
+          ]);
+          return c.json(
+            workItemStarters({
+              board: boards.get(DEFAULT_BOARD_ID),
+              cards,
+              failedCardIds: cardsWithFailedRun(decisions),
+              now: Date.now(),
+            }),
+          );
+        },
+      }),
+
+      // ── When cards were created and completed, for the draft page's band ────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemActivity.querySchema.safeParse({
+            since: context.req.query('since'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_activity_since' }, 400);
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [cards, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
+          const answer = hashedBody(workItemActivity(cards, boards, query.data.since));
+          // A draft tab asks again on each feed frame; most frames change no card of the period.
+          const headers = { ETag: answer.etag, 'Cache-Control': 'private, no-cache' };
+          if (matchesEtag(c.req.header('if-none-match'), answer.etag)) return c.body(null, 304, headers);
+          return c.body(answer.json, 200, { ...headers, 'Content-Type': 'application/json; charset=UTF-8' });
         },
       }),
 
