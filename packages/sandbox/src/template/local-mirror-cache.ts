@@ -15,6 +15,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { hostname } from 'node:os';
 import path from 'node:path';
 
 import type { ExecutableSandbox, SandboxCommandResult } from '../materialization.ts';
@@ -56,6 +57,19 @@ export const DEFAULT_MIRROR_IDLE_MS = 7 * 24 * 60 * 60_000;
 /** Leftover temporary refs and directories older than this are removed by maintenance. */
 const TEMPORARY_MAX_AGE_MS = 24 * 60 * 60_000;
 const META_FILE = 'factory-mirror.json';
+/** A registered reader older than this is a crashed checkout. */
+const READER_MAX_AGE_MS = 30 * 60_000;
+/** How long maintenance waits for checkouts to finish reading before it skips gc. */
+const READER_WAIT_MS = 10 * 60_000;
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
 
 export interface MirrorMeta {
   cloneUrl: string;
@@ -133,6 +147,8 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
   readonly #now: () => number;
   readonly #beforeFetch: LocalMirrorRepositoryCacheOptions['beforeFetch'];
   readonly #repairs = new Map<string, Promise<void>>();
+  /** When this process last found each mirror sound and fetched. */
+  readonly #verifiedAt = new Map<string, number>();
 
   constructor(options: LocalMirrorRepositoryCacheOptions) {
     this.root = path.resolve(options.root);
@@ -299,11 +315,27 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
         ...(repo.owner ? { owner: repo.owner } : {}),
       });
       await this.#fetch(temporary, repo, onTransfer);
+      await this.#pointHeadAtDefault(temporary, repo);
       await rename(temporary, mirror);
     } catch (error) {
       await rm(temporary, { recursive: true, force: true }).catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * A bare `init` leaves HEAD on an unborn `master`; point it at the remote's
+   * default branch so the mirror reads like the repository. Best-effort: a
+   * clone always names its branch anyway.
+   */
+  async #pointHeadAtDefault(mirror: string, repo: CachedRepository): Promise<void> {
+    const probe = await gitTransfer(this.#host, ['-C', mirror, 'ls-remote', '--symref', 'origin', 'HEAD'], {
+      ...(repo.authEnv ? { env: repo.authEnv } : {}),
+      phase: 'mirror default branch',
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    });
+    const head = /^ref: (refs\/heads\/\S+)\s+HEAD/m.exec(probe.stdout)?.[1];
+    if (probe.exitCode === 0 && head) await this.#git(['-C', mirror, 'symbolic-ref', 'HEAD', head]);
   }
 
   /** Move a broken mirror out of the way, unless it holds session work, which is never deleted. */
@@ -319,7 +351,12 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
     return true;
   }
 
-  /** Session path: see {@link RepositoryCache.checkout}. */
+  /**
+   * Session path: see {@link RepositoryCache.checkout}. The lock is held only
+   * to check the mirror, refresh it and register this checkout as a reader;
+   * the clone itself runs beside other sessions' clones. Only maintenance
+   * (which deletes pack files) waits for readers to finish.
+   */
   async checkout(
     sandbox: ExecutableSandbox,
     repo: CachedRepository,
@@ -328,56 +365,50 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
     const mirror = this.mirrorPath(repo.cloneUrl);
     let result: RepositoryCheckoutResult;
     try {
-      const locked = await this.#withLock(mirror, async (): Promise<RepositoryCheckoutResult> => {
-        const state = await this.#state(mirror, repo.cloneUrl);
-        if (state.state === 'missing') return { source: 'network', reason: 'missing' };
-        if (state.state === 'empty') return { source: 'network', reason: 'empty' };
-        if (state.state === 'corrupt') {
-          await this.#quarantine(mirror, state.reason);
-          return { source: 'network', reason: `corrupt: ${state.reason}` };
-        }
-        let stale: string | undefined;
-        const meta = await this.readMeta(mirror);
-        const fetchedAt = meta?.fetchedAt ? Date.parse(meta.fetchedAt) : 0;
-        if (!(this.#now() - fetchedAt < this.#freshnessMs)) {
-          try {
-            await this.#fetch(mirror, repo, options.onTransfer);
-          } catch (error) {
-            stale = error instanceof Error ? error.message : String(error);
-            this.#logger.warn('mirror fetch failed; cloning from the mirror as it is', { mirror, reason: stale });
-            await this.#writeMeta(mirror, { cloneUrl: repo.cloneUrl, lastFetchError: stale });
+      const locked = await this.#withLock(
+        mirror,
+        async (): Promise<{ network: string } | { stale?: string; reader: string }> => {
+          // A mirror this process checked and fetched moments ago is not checked again: parallel
+          // sessions then hold the lock for a few file operations each.
+          const recent = this.#now() - (this.#verifiedAt.get(mirror) ?? 0) < this.#freshnessMs;
+          if (!recent) {
+            const state = await this.#state(mirror, repo.cloneUrl);
+            if (state.state === 'missing') return { network: 'missing' };
+            if (state.state === 'empty') return { network: 'empty' };
+            if (state.state === 'corrupt') {
+              this.#verifiedAt.delete(mirror);
+              await this.#quarantine(mirror, state.reason);
+              return { network: `corrupt: ${state.reason}` };
+            }
+            this.#verifiedAt.set(mirror, this.#now());
           }
+          let stale: string | undefined;
+          const meta = await this.readMeta(mirror);
+          const fetchedAt = meta?.fetchedAt ? Date.parse(meta.fetchedAt) : 0;
+          if (!(this.#now() - fetchedAt < this.#freshnessMs)) {
+            try {
+              await this.#fetch(mirror, repo, options.onTransfer);
+              this.#verifiedAt.set(mirror, this.#now());
+            } catch (error) {
+              stale = error instanceof Error ? error.message : String(error);
+              this.#logger.warn('mirror fetch failed; cloning from the mirror as it is', { mirror, reason: stale });
+              await this.#writeMeta(mirror, { cloneUrl: repo.cloneUrl, lastFetchError: stale });
+            }
+          }
+          const reader = await this.#addReader(mirror);
+          return { reader, ...(stale ? { stale } : {}) };
+        },
+      );
+      const prepared = locked.value;
+      if ('network' in prepared) {
+        result = { source: 'network', reason: prepared.network };
+      } else {
+        try {
+          result = await this.#cloneFrom(sandbox, mirror, repo, options, prepared.stale, locked.waitedMs);
+        } finally {
+          await rm(prepared.reader, { force: true }).catch(() => {});
         }
-        const clone = await runSandboxCommand(
-          sandbox,
-          'git',
-          ['clone', '--local', '--quiet', '--branch', options.branch, '--', mirror, options.workdir],
-          { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'mirror clone' },
-        );
-        if (clone.exitCode !== 0) {
-          await clearWorkdir(sandbox, options.workdir).catch(() => {});
-          return { source: 'network', reason: `clone failed: ${failure(clone)}` };
-        }
-        const origin = await runSandboxCommand(sandbox, 'git', [
-          '-C',
-          options.workdir,
-          'remote',
-          'set-url',
-          'origin',
-          repo.cloneUrl,
-        ]);
-        if (origin.exitCode !== 0) {
-          await clearWorkdir(sandbox, options.workdir).catch(() => {});
-          return { source: 'network', reason: `origin could not be set: ${failure(origin)}` };
-        }
-        await this.#writeMeta(mirror, {
-          cloneUrl: repo.cloneUrl,
-          usedAt: new Date(this.#now()).toISOString(),
-          ...(repo.owner ? { owner: repo.owner } : {}),
-        });
-        return { source: 'mirror', ...(stale ? { stale } : {}), lockWaitMs: 0 };
-      });
-      result = locked.value.source === 'mirror' ? { ...locked.value, lockWaitMs: locked.waitedMs } : locked.value;
+      }
     } catch (error) {
       await clearWorkdir(sandbox, options.workdir).catch(() => {});
       result = { source: 'network', reason: error instanceof Error ? error.message : String(error) };
@@ -387,6 +418,78 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
       this.#repairInBackground(repo);
     }
     return result;
+  }
+
+  async #cloneFrom(
+    sandbox: ExecutableSandbox,
+    mirror: string,
+    repo: CachedRepository,
+    options: RepositoryCheckoutOptions,
+    stale: string | undefined,
+    lockWaitMs: number,
+  ): Promise<RepositoryCheckoutResult> {
+    const clone = await runSandboxCommand(
+      sandbox,
+      'git',
+      ['clone', '--local', '--quiet', '--branch', options.branch, '--', mirror, options.workdir],
+      { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'mirror clone' },
+    );
+    if (clone.exitCode !== 0) {
+      // Check it in full next time.
+      this.#verifiedAt.delete(mirror);
+      await clearWorkdir(sandbox, options.workdir).catch(() => {});
+      return { source: 'network', reason: `clone failed: ${failure(clone)}` };
+    }
+    const origin = await runSandboxCommand(sandbox, 'git', ['-C', options.workdir, 'remote', 'set-url', 'origin', repo.cloneUrl]);
+    if (origin.exitCode !== 0) {
+      await clearWorkdir(sandbox, options.workdir).catch(() => {});
+      return { source: 'network', reason: `origin could not be set: ${failure(origin)}` };
+    }
+    await this.#writeMeta(mirror, {
+      cloneUrl: repo.cloneUrl,
+      usedAt: new Date(this.#now()).toISOString(),
+      ...(repo.owner ? { owner: repo.owner } : {}),
+    });
+    return { source: 'mirror', ...(stale ? { stale } : {}), lockWaitMs };
+  }
+
+  /** Register a checkout reading the mirror's objects; registered under the lock, so never during maintenance. */
+  async #addReader(mirror: string): Promise<string> {
+    const dir = `${mirror}.readers`;
+    await mkdir(dir, { recursive: true });
+    const file = path.join(dir, `${randomUUID()}.json`);
+    await writeFile(file, JSON.stringify({ host: hostname(), pid: process.pid, at: new Date(this.#now()).toISOString() }));
+    return file;
+  }
+
+  /** Wait until no live checkout reads the mirror; readers of dead processes or older than the limit are dropped. */
+  async #waitForReaders(mirror: string, limitMs: number): Promise<boolean> {
+    const dir = `${mirror}.readers`;
+    const started = Date.now();
+    for (;;) {
+      let names: string[] = [];
+      try {
+        names = await readdir(dir);
+      } catch {
+        return true;
+      }
+      let live = 0;
+      for (const name of names) {
+        const file = path.join(dir, name);
+        try {
+          const reader = JSON.parse(await readFile(file, 'utf8')) as { host?: string; pid?: number; at?: string };
+          const dead = reader.host === hostname() && typeof reader.pid === 'number' && !pidAlive(reader.pid);
+          const old = this.#now() - Date.parse(reader.at ?? '0') > READER_MAX_AGE_MS;
+          if (dead || old) await rm(file, { force: true });
+          else live++;
+        } catch {
+          await rm(file, { force: true }).catch(() => {});
+        }
+      }
+      if (live === 0) return true;
+      if (Date.now() - started > limitMs) return false;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
   }
 
   /** Create or refresh a mirror the session path could not use, once at a time per mirror. */
@@ -485,6 +588,11 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
     try {
       await this.#withLock(mirror, async () => {
         await stat(mirror);
+        // gc deletes pack files a clone in progress may be linking: wait for the readers, else skip this time.
+        if (!(await this.#waitForReaders(mirror, READER_WAIT_MS))) {
+          this.#logger.warn('mirror gc skipped: checkouts are still reading it', { mirror });
+          return;
+        }
         const gc = await this.#git(
           ['-C', mirror, '-c', 'gc.auto=6700', '-c', 'gc.autoPackLimit=50', 'gc', '--auto', '--quiet'],
           { timeoutMs: 30 * 60_000 },
@@ -523,7 +631,7 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
         if (!entry.isDirectory()) continue;
         const full = path.join(dir, entry.name);
         if (entry.name.endsWith('.git')) found.push(full);
-        else if (depth < 4 && !/\.(lock|tmp-|corrupt-|stale-)/.test(entry.name)) await walk(full, depth + 1);
+        else if (depth < 4 && !/\.(lock|tmp-|corrupt-|stale-|readers)/.test(entry.name)) await walk(full, depth + 1);
       }
     };
     await walk(path.join(this.root, 'mirrors'), 0);
@@ -547,9 +655,11 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
       try {
         await this.#withLock(mirror, async () => {
           if (await this.holdsSessionWork(mirror)) return;
+          if (!(await this.#waitForReaders(mirror, 0))) return;
           const away = `${mirror}.corrupt-${this.#now()}`;
           await rename(mirror, away);
           await rm(away, { recursive: true, force: true });
+          await rm(`${mirror}.readers`, { recursive: true, force: true });
           removed.push(mirror);
         });
       } catch (error) {
@@ -574,7 +684,7 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
       if (/\.git\.(tmp-|corrupt-)/.test(entry.name) || /\.lock\.stale-/.test(entry.name)) {
         const age = this.#now() - (await stat(full).then(s => s.mtimeMs, () => this.#now()));
         if (age > TEMPORARY_MAX_AGE_MS) await rm(full, { recursive: true, force: true }).catch(() => {});
-      } else if (depth < 4 && !entry.name.endsWith('.git')) {
+      } else if (depth < 4 && !entry.name.endsWith('.git') && !entry.name.endsWith('.readers') && !entry.name.endsWith('.lock')) {
         await this.#removeLeftovers(full, depth + 1);
       }
     }

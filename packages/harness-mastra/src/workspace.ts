@@ -69,6 +69,7 @@ import { repositoryDirectoryName } from '@factory/sandbox';
 import {
   checkoutServicesOf,
   createSandboxSetupReporter,
+  hasLocalBranch,
   gitAuthenticationEnvironment,
   silentSandboxSetupReporter,
 } from '@factory/sandbox';
@@ -1620,7 +1621,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         progress.notice({ code: 'network_fallback', repo: repo.slug, message: redactCredentials(materialized.fallbackReason) });
       }
       const sessionWork = checkoutServices?.sessionWork;
-      if (!materialized.cloned || !sessionWork) return;
+      if (!sessionWork) return;
+      // A fresh clone, or a card's checkout another role left that lacks this session's branch
+      // (the folder was rebuilt by an earlier role): the branch's saved work belongs here.
+      if (!materialized.cloned && (await hasLocalBranch(target, repo.dir, session.branch))) return;
       try {
         const restored = await timedPhase(`workspace.restore(${repo.slug})`, () =>
           sessionWork.restore(

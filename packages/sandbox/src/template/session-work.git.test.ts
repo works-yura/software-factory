@@ -223,6 +223,18 @@ describe('session work kept in the mirror, with real git', () => {
     expect(fx.tryGit(mirror, 'rev-parse', '--verify', 'refs/factory/wip/heads/user/session-9').status).not.toBe(0);
   });
 
+  it('never restores into a checkout with changes of its own', async () => {
+    const first = await freshCheckout();
+    fx.git(first.dir, 'checkout', '--quiet', '-b', 'factory/item-10');
+    await fx.commit(first.dir, 'ten.txt', '10\n');
+    await template.saveFolder(first.folder);
+    const second = await freshCheckout();
+    await writeFile(path.join(second.dir, 'mine.txt'), 'in flight\n');
+    expect(await template.sessionWork.restore(second.checkout, 'factory/item-10')).toEqual({ outcome: 'none' });
+    expect(fx.git(second.dir, 'branch', '--show-current')).toBe('main');
+    expect(await readFile(path.join(second.dir, 'mine.txt'), 'utf8')).toBe('in flight\n');
+  });
+
   it('keeps nothing for an untouched default-branch checkout', async () => {
     const first = await freshCheckout();
     await template.saveFolder(first.folder);

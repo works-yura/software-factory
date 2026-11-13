@@ -194,6 +194,30 @@ describe('LocalMirrorRepositoryCache with real git', () => {
     expect(await cache.prune([])).toEqual([]);
   });
 
+  it('never packs a mirror while a checkout is reading it; a crashed reader does not block it', async () => {
+    await cache.refresh({ cloneUrl: fx.origin });
+    const mirror = cache.mirrorPath(fx.origin);
+    const readers = `${mirror}.readers`;
+    await mkdir(readers, { recursive: true });
+    const { hostname } = await import('node:os');
+    // A reader of a dead process (a crash mid-clone) is dropped.
+    await writeFile(path.join(readers, 'dead.json'), JSON.stringify({ host: hostname(), pid: 999_999, at: new Date().toISOString() }));
+    await cache.maintain(fx.origin);
+    expect(await readdir(readers)).toEqual([]);
+    // A live reader holds gc off until it finishes, and the HEAD points at the default branch.
+    expect(fx.git(mirror, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main');
+    await writeFile(path.join(readers, 'live.json'), JSON.stringify({ host: hostname(), pid: process.pid, at: new Date().toISOString() }));
+    let finished = false;
+    const maintained = cache.maintain(fx.origin).then(() => {
+      finished = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(finished).toBe(false);
+    await rm(path.join(readers, 'live.json'));
+    await maintained;
+    expect(finished).toBe(true);
+  });
+
   it('drops temporary refs a crashed save left behind, once they are old', async () => {
     await cache.refresh({ cloneUrl: fx.origin });
     const mirror = cache.mirrorPath(fx.origin);

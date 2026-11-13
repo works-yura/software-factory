@@ -253,6 +253,13 @@ export class SessionWork {
   async restore(checkout: SessionCheckout, branch: string): Promise<SessionWorkRestore> {
     const { sandbox, dir } = checkout;
     if (!isValidGitRef(branch)) return { outcome: 'none' };
+    // Restoring switches branches and applies changes: only into a checkout with nothing of its own in flight.
+    const status = await runGitIn(sandbox, dir, ['status', '--porcelain']);
+    if (status.exitCode !== 0 || status.stdout.trim()) {
+      const local = await resolveRef(sandbox, dir, `refs/heads/${branch}`);
+      if (!local) this.#logger.warn('saved session work not restored: the checkout has changes of its own', { dir, branch });
+      return { outcome: 'none' };
+    }
     let loaded = await this.store.load(checkout, branch);
     if (!loaded && this.sleepStore && !(await this.store.coversPublished?.(checkout))) {
       loaded = await this.sleepStore.load(checkout, branch).catch((error: unknown) => {
