@@ -20,7 +20,8 @@ export function useBoardRuns({
   refetchItems,
 }: {
   factoryProjectId: string;
-  refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
+  /** A fresh read of the cards a click can land on. */
+  refetchItems: () => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const navigate = useNavigate();

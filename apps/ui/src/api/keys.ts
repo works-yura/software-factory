@@ -117,6 +117,10 @@ export const queryKeys = {
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   workItemsWithSessions: (factoryProjectId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
+  unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
+  workItemsFiledFrom: (factoryProjectId: string | undefined, sources: readonly string[]) =>
+    [...queryKeys.workItems(factoryProjectId), 'sources', sources] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
