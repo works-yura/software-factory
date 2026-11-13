@@ -387,6 +387,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                 sourceId,
                 title: pullRequest.title,
                 status: pullRequest.state,
+                labels: pullRequest.labels,
                 createdAt: pullRequest.createdAt,
                 updatedAt: pullRequest.updatedAt,
                 metadata: {
