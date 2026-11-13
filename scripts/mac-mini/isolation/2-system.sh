@@ -21,7 +21,11 @@
 # b. Owners alone do not close anything: most folders are 755 (anyone may read). close-dot makes
 #    each top-level folder 700 except factory-sandboxes (where agents will work), and the disk
 #    root 711 (others may pass through to factory-sandboxes but not list the disk). Hidden system
-#    folders (.Spotlight-V100, .Trashes, ...) are left alone. Needs sudo: the disk root is root's.
+#    folders (.Spotlight-V100, .Trashes, ...) are left alone. Needs sudo: the disk root is root's;
+#    close-dot makes it the owner's (else 711 would lock the owner out of listing it too) and
+#    open-dot gives it back.
+#    Agents' folders must stay outside the closed folders: Project/factory/sandboxes may be a
+#    symlink to $DOT/factory-sandboxes, but agents get the real path.
 # c. A standard (not admin) user, so it cannot sudo. You set its password; it is not used for
 #    anything else in this step.
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -44,7 +48,9 @@ dot_entries() {
 status() {
   step "a. File owners on $DOT"
   say "  Owners: $(ownership_state)   (Disabled = any local user can read and write everything there)"
-  if [ "$(ownership_state)" = Enabled ]; then
+  if [ "$(id -u)" = 0 ]; then
+    say "  (owners are checked only without sudo: root still sees an old view; run $0 status)"
+  elif [ "$(ownership_state)" = Enabled ]; then
     # Three levels deep: the whole disk (node_modules, pnpm store, builds) takes far too long.
     local foreign
     foreign="$(find "$DOT" -xdev -mindepth 1 -maxdepth 3 ! -user "$OWNER" -not -path "$DOT/.*" 2>/dev/null | head -30 || true)"
@@ -108,7 +114,11 @@ close_dot() {
   [ "$(ownership_state)" = Enabled ] || die "owners are disabled on $DOT; run sudo $0 ownership-on first (without it these modes protect nothing)"
   step "Saving the current modes"
   { echo "$DOT"; dot_entries; } | save_modes 2-dot
+  # The disk root belongs to root; 711 would keep its owner out too (no listing, no Finder).
+  # Make it the owner's, and remember who had it so open-dot can give it back.
+  [ -f "$STATE/2-dot.owner" ] || { stat -f '%u:%g' "$DOT" > "$STATE/2-dot.owner"; chown "$OWNER" "$STATE/2-dot.owner"; }
   step "Closing"
+  chown "$OWNER" "$DOT"
   chmod 711 "$DOT"
   local entry
   while IFS= read -r entry; do
@@ -122,6 +132,11 @@ open_dot() {
   need_root open-dot
   step "Restoring the modes from before close-dot"
   restore_modes 2-dot
+  if [ -f "$STATE/2-dot.owner" ]; then
+    chown "$(cat "$STATE/2-dot.owner")" "$DOT"
+    mv "$STATE/2-dot.owner" "$STATE/2-dot.owner.rolled-back-$(date +%Y%m%d-%H%M%S)"
+    say "  disk root owner restored"
+  fi
   status
 }
 
