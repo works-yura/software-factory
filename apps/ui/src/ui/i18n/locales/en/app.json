@@ -78,5 +78,10 @@
     "getCode": "Get a connect code",
     "instructions": "Reply in the {{platform}} thread where you mentioned Factory with this line, from your own account:",
     "expires": "The code works once and expires at {{time}}."
+  },
+  "buildFreshness": {
+    "stale": "Factory was updated",
+    "detail": "This page still runs the previous version, and some actions may fail. Reload it.",
+    "reload": "Reload"
   }
 }

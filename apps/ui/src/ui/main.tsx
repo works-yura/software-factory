@@ -12,6 +12,7 @@ import { ApiConfigProvider } from '../api/config';
 import { LanguageBoundary } from './i18n/LanguageBoundary';
 import { createQueryClient } from '../query-client';
 import { captureInstallPrompt } from './lib/pwa';
+import { installBuildFreshness } from './lib/buildFreshness';
 import { installServerReachability } from './lib/serverReachability';
 import { createAppRouter } from './router';
 import './tailwind.css';
@@ -22,7 +23,11 @@ captureInstallPrompt();
 
 // Watch the page's own requests from the first one, so a server restart shows a banner
 // (`ServerReachabilityBanner`) instead of requests failing silently.
-installServerReachability();
+const reachability = installServerReachability();
+
+// A page left open across a deploy runs the old build against the new server: say so
+// (`BuildFreshnessBanner`) before its stale calls fail.
+installBuildFreshness(reachability);
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
 // the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
