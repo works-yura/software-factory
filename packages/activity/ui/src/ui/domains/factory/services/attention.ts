@@ -10,7 +10,8 @@ export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 export type FactoryAttentionTarget =
   | { kind: 'thread'; sessionId: string; threadId: string }
   | { kind: 'work-item'; workItemId: string; board: string; commentId?: string }
-  | { kind: 'rules' };
+  | { kind: 'rules' }
+  | { kind: 'settings'; section: 'environment' };
 
 interface FactoryAttentionItemBase {
   key: string;
@@ -74,8 +75,17 @@ export interface FactoryAgentWaitingAttentionItem extends FactoryAttentionItemBa
   toolName: string;
 }
 
+/** A sandbox's kept work needs the person: a save that failed (its folder kept), commits set aside (ADR-0039). */
+export interface FactorySandboxProblemAttentionItem extends FactoryAttentionItemBase {
+  kind: 'sandbox-problem';
+  sourceId: string;
+  sandboxKey: string;
+  problem: 'save-failed' | 'superseded' | 'public-repository';
+}
+
 export type FactoryAttentionItem =
   | FactoryAgentWaitingAttentionItem
+  | FactorySandboxProblemAttentionItem
   | FactoryAutomationFailedAttentionItem
   | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
@@ -119,6 +129,8 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
       return item.findingKey;
     case 'agent-waiting':
       return item.sessionId;
+    case 'sandbox-problem':
+      return item.sourceId;
   }
 }
 
@@ -131,6 +143,7 @@ const ATTENTION_GROUP_OF_KIND: Record<FactoryAttentionKind, FactoryAttentionGrou
   'automation-failed': 'attention',
   'supervisor-finding': 'attention',
   'agent-waiting': 'attention',
+  'sandbox-problem': 'attention',
   mention: 'attention',
   'automation-proposed': 'queue',
   activity: 'activity',
@@ -207,6 +220,7 @@ export function factoryAttentionTargetPath(factoryId: string, target: FactoryAtt
     const comment = target.commentId ? `&comment=${encodeURIComponent(target.commentId)}` : '';
     return `${boardPath(factoryId, target.board)}?item=${encodeURIComponent(target.workItemId)}${comment}`;
   }
+  if (target.kind === 'settings') return `/factories/${factoryId}/settings/${target.section}#sandboxes`;
   return `/factories/${factoryId}/rules`;
 }
 

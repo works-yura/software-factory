@@ -29,6 +29,7 @@ import {
 import { IntakeRouteRoutes } from './intake-routes.ts';
 import { ProjectRoutes } from './projects.ts';
 import { SandboxEnvRoutes } from './sandbox-envs.ts';
+import { SandboxRoutes } from './sandboxes.ts';
 import { SkillRoutes } from './skills.ts';
 import { buildSupervisorRoutes } from '@factory/supervisor';
 import { WorkItemRoutes } from './work-items.ts';
@@ -95,8 +96,10 @@ function registeredFactoryRoutes() {
     sandboxEnvs: {},
     writable: true,
   } as never).routes();
+  const sandboxes = new SandboxRoutes({ auth: {}, projects: {} } as never).routes();
   return [
     ...projects,
+    ...sandboxes,
     ...work,
     ...attention,
     ...supervisor,
@@ -283,6 +286,7 @@ describe('Factory route contracts', () => {
       'activity',
       'supervisor-finding',
       'agent-waiting',
+      'sandbox-problem',
     ];
     expect(
       FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId, repositories: [] }] })

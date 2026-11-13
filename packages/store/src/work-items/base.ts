@@ -328,7 +328,8 @@ export type FactoryAttentionKind =
   | 'mention'
   | 'activity'
   | 'supervisor-finding'
-  | 'agent-waiting';
+  | 'agent-waiting'
+  | 'sandbox-problem';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 
 export interface FactorySupervisorFindingRecord {
@@ -1366,7 +1367,8 @@ function attentionReceiptKind(value: unknown): FactoryAttentionKind {
     value === 'mention' ||
     value === 'activity' ||
     value === 'supervisor-finding' ||
-    value === 'agent-waiting'
+    value === 'agent-waiting' ||
+    value === 'sandbox-problem'
   ) {
     return value;
   }
@@ -3124,6 +3126,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
     // A parked session has no row here; the route checks it against the live registry.
     if (identity.kind === 'agent-waiting') return true;
+    // A sandbox problem lives in the sandbox records, not here; the provider lists only current ones.
+    if (identity.kind === 'sandbox-problem') return true;
     if (identity.kind === 'activity') {
       // Occurrence-exact: a bump since the read makes that receipt stale, and
       // the route answers 409. Scoped to this user or every badge would skew.

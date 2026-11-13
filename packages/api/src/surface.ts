@@ -135,6 +135,9 @@ export interface FactoryApiRoutesDeps {
   controller: AgentController<MastraCodeState>;
   /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
   liveSessions: LiveSessions;
+  /** Problems with local sandboxes' kept work, listed in «Потребує вас» (ADR-0039). */
+  sandboxProblems?: import('@factory/activity').SandboxProblemSource;
+
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
   /** Optional user directory for resolving persisted owners to display profiles. */
@@ -1081,6 +1084,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+          ...(deps.sandboxProblems ? { sandboxProblems: deps.sandboxProblems } : {}),
           ...(deps.releaseWorkItemSandboxes ? { releaseWorkItemSandboxes: deps.releaseWorkItemSandboxes } : {}),
         }).routes()
       : []),

@@ -138,7 +138,9 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     if (!template) return remove();
     const key = this.folderKeyOf(directory);
     try {
-      const notices = await template.removeFolder(directory, { ...options, remove });
+      // Published while no sleeper holds it: the card is closing (its refs may go sooner, ADR-0039).
+      const closing = options.publish && Boolean(key) && !this.#sleeping.has(key!);
+      const notices = await template.removeFolder(directory, { ...options, closing, remove });
       if (key && notices.length) {
         await template.sandboxes
           .addProblem(key, { kind: 'public-repository', message: notices.join('\n') }, this.#recordDefaults(key))

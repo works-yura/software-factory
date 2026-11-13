@@ -12,7 +12,9 @@ import path from 'node:path';
 
 import type { FactoryRepositoryAccess } from '@mastra/core/workspace';
 
-import { gitAuthenticationEnvironment, gitTransfer } from '../github/sandbox.ts';
+import { createHash } from 'node:crypto';
+
+import { gitAuthenticationEnvironment, gitTransfer, runSandboxCommand } from '../github/sandbox.ts';
 import { sanitizeSegment } from '../workdir.ts';
 import { hostExecutor } from './host-exec.ts';
 import { LocalEnvironmentBuilds } from './local-builds.ts';
@@ -136,6 +138,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
       host: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() } }),
       logger: this.#logger,
       ...(options.pruneIdleMs !== undefined ? { pruneIdleMs: options.pruneIdleMs } : {}),
+      pruneHiddenRefs: input => this.pruneHiddenRefs(input),
     });
   }
 
@@ -359,7 +362,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
    * no usable origin) only passes when it is clean and holds nothing the
    * remote lacks.
    */
-  async #sleepCheckout(dir: string, options: { publish?: boolean; sessionId?: string }): Promise<string[]> {
+  async #sleepCheckout(dir: string, options: { publish?: boolean; closing?: boolean; sessionId?: string }): Promise<string[]> {
     const notices: string[] = [];
     const checkout = await this.#checkout(dir);
     if (!checkout) throw new Error('its origin is missing or carries credentials, so its work cannot be saved');
@@ -393,6 +396,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
       return notices;
     }
     await this.sessionWork.sleepStore.save(credentialed, snapshot);
+    await this.#recordPublished(checkout.cloneUrl, snapshot.branch, Boolean(options.closing));
     return notices;
   }
 
@@ -403,7 +407,10 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
    * {@link SessionWorkNotSavedError} when anything could not be kept, and
    * then the folder stays.
    */
-  async removeFolder(folder: string, options: { publish?: boolean; sessionId?: string; remove: () => Promise<void> }): Promise<string[]> {
+  async removeFolder(
+    folder: string,
+    options: { publish?: boolean; closing?: boolean; sessionId?: string; remove: () => Promise<void> },
+  ): Promise<string[]> {
     const real = await this.#real(folder);
     const notices: string[] = [];
     const failures: FolderSaveResult['failures'] = [];
@@ -436,6 +443,89 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     return this.removeFolder(folder, { ...options, remove: async () => {} });
   }
 
+  #publishedFile(cloneUrl: string, branch: string): string {
+    return path.join(this.root, 'published', `${createHash('sha256').update(`${cloneUrl}\n${branch}`).digest('hex').slice(0, 32)}.json`);
+  }
+
+  /** When work went to the remote's hidden refs, and whether its card closed then (it may be pruned sooner). */
+  async #recordPublished(cloneUrl: string, branch: string, closing: boolean): Promise<void> {
+    const file = this.#publishedFile(cloneUrl, branch);
+    const at = new Date().toISOString();
+    try {
+      const current = JSON.parse(await readFile(file, 'utf8').catch(() => '{}')) as Partial<PublishedRecord>;
+      const next: PublishedRecord = { cloneUrl, branch, publishedAt: at, ...(closing ? { closedAt: at } : current.closedAt ? { closedAt: current.closedAt } : {}) };
+      await mkdir(path.dirname(file), { recursive: true });
+      const temporary = `${file}.${process.pid}.${Date.now()}`;
+      await writeFile(temporary, JSON.stringify(next));
+      await rename(temporary, file);
+    } catch (error) {
+      this.#logger.warn('could not record published work', { cloneUrl, branch, reason: String(error) });
+    }
+  }
+
+  /**
+   * Drop work published to the remote's hidden refs once it is no longer
+   * needed: right away when its card closed and the remote's branches hold it
+   * (no uncommitted work), after `retentionMs` when the branches hold it but
+   * the card is open (asleep), and after `retentionMs` from its card closing
+   * otherwise. Never work only the hidden refs hold while its card is open.
+   * Reads the mirror (fetched just before), deletes on the remote with each
+   * ref guarded by the value it judged; answers the branches it dropped.
+   */
+  async pruneHiddenRefs(input: { cloneUrl: string; authEnv?: Record<string, string>; retentionMs: number; now?: number }): Promise<string[]> {
+    const host = this.repositoryCache.host;
+    const mirror = this.repositoryCache.mirrorPath(input.cloneUrl);
+    const now = input.now ?? Date.now();
+    const listed = await runGitIn(host, mirror, ['for-each-ref', '--format=%(refname) %(objectname) %(committerdate:unix)', 'refs/factory/origin-wip/heads']);
+    if (listed.exitCode !== 0) return [];
+    const pruned: string[] = [];
+    for (const line of listed.stdout.split('\n').map(text => text.trim()).filter(Boolean)) {
+      const [ref, head, committed] = line.split(' ');
+      if (!ref || !head) continue;
+      const branch = ref.slice('refs/factory/origin-wip/heads/'.length);
+      const treeRef = `refs/factory/origin-wip/tree/${branch}`;
+      const tree = await runGitIn(host, mirror, ['rev-parse', '--verify', '--quiet', treeRef]);
+      const treeSha = tree.exitCode === 0 ? tree.stdout.trim() : undefined;
+      const onBranch = await runGitIn(host, mirror, ['for-each-ref', '--count=1', '--format=%(refname)', '--contains', head, 'refs/heads']);
+      const contained = !treeSha && onBranch.exitCode === 0 && onBranch.stdout.trim() !== '';
+      const record = JSON.parse(await readFile(this.#publishedFile(input.cloneUrl, branch), 'utf8').catch(() => '{}')) as Partial<PublishedRecord>;
+      const closedAt = record.closedAt ? Date.parse(record.closedAt) : undefined;
+      const since = Date.parse(record.publishedAt ?? '') || Number(committed) * 1000 || now;
+      const due = contained
+        ? closedAt !== undefined || now - since >= input.retentionMs
+        : closedAt !== undefined && now - closedAt >= input.retentionMs;
+      if (!due) continue;
+      const doomed: Array<[string, string]> = [[`refs/factory/wip/heads/${branch}`, head], ...(treeSha ? [[`refs/factory/wip/tree/${branch}`, treeSha] as [string, string]] : [])];
+      const pushed = await runSandboxCommand(
+        host,
+        'git',
+        [
+          '-C',
+          mirror,
+          '-c',
+          'core.hooksPath=/dev/null',
+          'push',
+          '--quiet',
+          '--atomic',
+          ...doomed.map(([remoteRef, sha]) => `--force-with-lease=${remoteRef}:${sha}`),
+          input.cloneUrl,
+          ...doomed.map(([remoteRef]) => `:${remoteRef}`),
+        ],
+        { ...(input.authEnv ? { env: input.authEnv } : {}), timeoutMs: 5 * 60_000, phase: 'hidden ref prune' },
+      );
+      if (pushed.exitCode !== 0) {
+        this.#logger.warn('published work could not be pruned', { cloneUrl: input.cloneUrl, branch, reason: (pushed.stderr || pushed.stdout).trim().slice(-500) });
+        continue;
+      }
+      await runGitIn(host, mirror, ['update-ref', '-d', ref, head]);
+      if (treeSha) await runGitIn(host, mirror, ['update-ref', '-d', treeRef, treeSha]);
+      await rm(this.#publishedFile(input.cloneUrl, branch), { force: true });
+      pruned.push(branch);
+    }
+    if (pruned.length) this.#logger.info('pruned published work the remote no longer needs', { cloneUrl: input.cloneUrl, branches: pruned });
+    return pruned;
+  }
+
   /**
    * A deleted session's saved work goes to the mirror's trash: exactly the
    * refs this session saved and nothing a later save of the same branch
@@ -458,6 +548,14 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     }
     await rm(file, { force: true });
   }
+}
+
+interface PublishedRecord {
+  cloneUrl: string;
+  branch: string;
+  publishedAt: string;
+  /** Published as its card closed. */
+  closedAt?: string;
 }
 
 interface SavedBySession {

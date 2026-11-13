@@ -9,6 +9,7 @@ import {
   ArchiveRestore,
   Brain,
   Check,
+  HardDrive,
   Hourglass,
   MailOpen,
   MessageSquare,
@@ -42,6 +43,7 @@ const KIND = {
   'automation-proposed': { glyph: Sparkles, badge: 'orange' },
   'supervisor-finding': { glyph: Brain, badge: 'blue' },
   'agent-waiting': { glyph: Hourglass, badge: 'orange' },
+  'sandbox-problem': { glyph: HardDrive, badge: 'destructive' },
 } satisfies Record<FactoryAttentionItem['kind'], { glyph: typeof MessageSquare; badge: BadgeVariant }>;
 
 const KIND_LABEL = lazyLabels(
@@ -62,6 +64,7 @@ const SHOWN_ON_REVEAL =
 function destinationLabel(item: FactoryAttentionItem): string {
   if (item.target.kind === 'thread') return ta('attention.openThreadFor', { title: item.title });
   if (item.target.kind === 'work-item') return ta('attention.viewCardFor', { title: item.title });
+  if (item.target.kind === 'settings') return ta('attention.openSandboxesFor', { title: item.title });
   return ta('attention.viewRulesFor', { title: item.title });
 }
 

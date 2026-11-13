@@ -218,6 +218,34 @@ describe('putting sandboxes to sleep, with real git', () => {
     expect((await template.sandboxes.get('work-items/f/card-9'))?.problems?.[0]?.kind).toBe('save-failed');
   });
 
+  it('prunes published work the remote no longer needs, never work only the hidden refs hold while the card is open', async () => {
+    const day = 24 * HOUR;
+    // A closed card whose branch was merged: dropped at once.
+    const merged = await folder('work-items/f/card-10', 'agent-10', 'factory/item-10');
+    await rm(path.join(merged.dir, 'draft.txt'));
+    await sandbox.removeWorkItemFolder('work-items/f/card-10');
+    fx.git(fx.seed, 'fetch', '--quiet', fx.origin, 'refs/factory/wip/heads/factory/item-10');
+    fx.git(fx.seed, 'checkout', '--quiet', 'main');
+    fx.git(fx.seed, 'merge', '--quiet', '--ff-only', 'FETCH_HEAD');
+    fx.git(fx.seed, 'push', '--quiet', 'origin', 'main');
+    // An asleep card's work only the hidden refs hold: kept, however old.
+    await folder('work-items/f/card-11', 'agent-11', 'factory/item-11');
+    expect(await sleeper().sleep('work-items/f/card-11', 'manual')).toEqual({ outcome: 'slept' });
+    // A closed card's unmerged work: kept until the retention runs out after it closed.
+    await folder('work-items/f/card-12', 'agent-12', 'factory/item-12');
+    await sandbox.removeWorkItemFolder('work-items/f/card-12');
+
+    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day })).toEqual(['factory/item-10']);
+    expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-10').status).not.toBe(0);
+    expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-11').status).toBe(0);
+    expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-12').status).toBe(0);
+
+    const later = Date.now() + 31 * day;
+    expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later })).toEqual(['factory/item-12']);
+    expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-11').status).toBe(0);
+  });
+
   it('offers the limits as Factory settings with their defaults', () => {
     const schema = describeFactorySandbox(sandbox).settingsSchema as { properties: Record<string, { default?: unknown }> };
     expect(schema.properties.maxActiveSandboxes?.default).toBe(5);

@@ -29,6 +29,7 @@ import type { ExecutableSandbox } from '../materialization.ts';
 import { gitAuthenticationEnvironment, normalizedRemoteUrl, runSandboxCommand, runSetupCommand } from '../github/sandbox.ts';
 import { buildEnvOf, maskSandboxEnvValues } from '../sandbox-env.ts';
 import { repositoryDirectoryName, sanitizeSegment } from '../workdir.ts';
+import { hiddenRefRetentionMsOf } from './local-sandbox-settings.ts';
 import type { LocalMirrorLogger, LocalMirrorRepositoryCache } from './local-mirror-cache.ts';
 
 const BUILD_SESSION_PREFIX = 'environment-build:';
@@ -53,6 +54,8 @@ export interface LocalEnvironmentBuildsOptions {
   staleMs?: number;
   /** Mirrors no project names are removed after this long unused. */
   pruneIdleMs?: number;
+  /** Drops published session work the remote no longer needs (ADR-0039). */
+  pruneHiddenRefs?: (input: { cloneUrl: string; authEnv?: Record<string, string>; retentionMs: number }) => Promise<string[]>;
 }
 
 /** `owner/repo` of a clone URL, for logs and directory names. */
@@ -126,14 +129,14 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
     return build;
   }
 
-  async start(ctx: FactorySandboxContext): Promise<FactorySandboxBuildStart> {
+  async start(ctx: FactorySandboxContext, settings: Record<string, never> = {}): Promise<FactorySandboxBuildStart> {
     const project = this.#projectKey(ctx);
     const buildId = `local-${this.#now().toString(36)}-${randomBytes(4).toString('hex')}`;
     const templateId = `local:${project}`;
     const startedAt = new Date(this.#now()).toISOString();
     const record: BuildRecord = { buildId, status: 'building', templateId, startedAt, heartbeatAt: startedAt, logs: [] };
     await this.#write(project, record);
-    const run = this.#run(ctx, project, record).finally(() => this.#running.delete(buildId));
+    const run = this.#run(ctx, project, record, hiddenRefRetentionMsOf(settings)).finally(() => this.#running.delete(buildId));
     this.#running.set(buildId, run);
     return { buildId, status: 'building', templateId };
   }
@@ -166,7 +169,7 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
       .map(record => this.#view(record));
   }
 
-  async #run(ctx: FactorySandboxContext, project: string, record: BuildRecord): Promise<void> {
+  async #run(ctx: FactorySandboxContext, project: string, record: BuildRecord, retentionMs: number): Promise<void> {
     const { cache, host, logger } = this.#options;
     const logs: string[] = [];
     const mask = (text: string) => maskSandboxEnvValues(text, buildEnvOf(ctx));
@@ -202,6 +205,9 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
               ? gitAuthenticationEnvironment(cloneUrl, token, access.authorization?.username ?? 'x-access-token')
               : undefined;
           const refreshed = await cache.refresh({ cloneUrl, ...(authEnv ? { authEnv } : {}) });
+          // Published session work the remote no longer needs goes (the fetch just brought its state).
+          const pruned = await this.#options.pruneHiddenRefs?.({ cloneUrl, ...(authEnv ? { authEnv } : {}), retentionMs }).catch(() => []);
+          if (pruned?.length) log(`${slug}: dropped published work of ${pruned.join(', ')}`);
           const head = await ctx.resolveHead?.(cloneUrl, token);
           if (head && !(await cache.hasCommit(cloneUrl, head))) {
             throw new Error(`the pinned commit ${head} is not in the mirror after the fetch`);

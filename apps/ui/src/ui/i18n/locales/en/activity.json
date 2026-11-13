@@ -10,7 +10,8 @@
       "automation-failed": "failed",
       "automation-proposed": "suggested",
       "supervisor-finding": "finding",
-      "agent-waiting": "waiting"
+      "agent-waiting": "waiting",
+      "sandbox-problem": "sandbox"
     },
     "openThreadFor": "Open thread for {{title}}",
     "viewCardFor": "View card for {{title}}",
@@ -42,7 +43,8 @@
       "read": "Unable to mark attention item as read",
       "archive": "Unable to archive attention item",
       "restore": "Unable to restore attention item"
-    }
+    },
+    "openSandboxesFor": "Open the sandboxes of {{title}}"
   },
   "workItem": {
     "actions": {
