@@ -183,7 +183,8 @@ fix_owners() {
   local entry
   while IFS= read -r entry; do
     say "  $entry"
-    chown -R -h "$OWNER" "$entry"
+    # A locked file (uchg) refuses chown; report it and go on with the rest.
+    chown -R -h "$OWNER" "$entry" || say "  (some files in $entry kept their owner: see the errors above; locked ones: chflags nouchg <file>, then rerun)"
   done < <(owner_targets)
   say "  done. Check as the agent: sudo -u $AGENT_USER bash -s < $HERE/check-as-agent.sh"
 }
