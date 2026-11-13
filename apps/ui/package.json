@@ -28,6 +28,7 @@
     "@factory/pipelines": "workspace:*",
     "@factory/store": "workspace:*",
     "@factory/supervisor": "workspace:*",
+    "@factory/work-items": "workspace:*",
     "@mastra/client-js": "1.60.0",
     "@mastra/code-sdk": "1.19.0",
     "@mastra/core": "1.83.0",

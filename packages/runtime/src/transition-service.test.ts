@@ -931,6 +931,36 @@ describe('FactoryTransitionService', () => {
     });
   });
 
+  // Upstream #29981: the hook tells the listener a card left the last phase of a context.
+  it('invokes onContextLeft when a move leaves a context, not between phases of one context', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['planning'] });
+    const onContextLeft = vi.fn();
+    const onTerminalStage = vi.fn();
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, onContextLeft, onTerminalStage });
+
+    expect((await service.transition(request(item, { stage: 'execute' }))).status).toBe('accepted');
+    expect(onContextLeft).not.toHaveBeenCalled();
+
+    const triaged = await createItem(storage, { stages: ['triage'], metadata: { authorTrusted: true } });
+    const moved = await service.transition({
+      ...request(triaged, { stage: 'intake', identity: 'triage-feature' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-feature' },
+    });
+    expect(moved.status).toBe('accepted');
+    expect(onContextLeft).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: triaged.id,
+      context: 'triage',
+      toContext: undefined,
+      revision: expect.any(Number),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+    });
+    expect(onTerminalStage).not.toHaveBeenCalled();
+  });
+
   it('never fails a committed terminal transition when onTerminalStage throws', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);

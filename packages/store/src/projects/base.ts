@@ -28,6 +28,7 @@ import type { ModelSelection } from '@factory/harness/models/contracts';
 import { parseHarnessModelDefaults } from '@factory/harness/models/defaults';
 import type { HarnessModelDefaults } from '@factory/harness/models/defaults';
 import { EFFORT_OPTION_ID } from '@factory/harness/models/selection';
+import { factoryMemorySettingsUserId } from '../memory-settings/base.ts';
 
 /** Mastra's `ModelSelection.instanceId` (`MASTRA_INSTANCE_ID` in @factory/credentials, which reads this package). */
 const MASTRA_INSTANCE_ID = 'mastra';
@@ -68,6 +69,20 @@ export function parseFactoryToolPermissions(value: unknown): FactoryToolPermissi
     }
   }
   return { categories, yolo: raw.yolo === true };
+}
+
+/**
+ * The Factory as the owner of the work its cards run: the `user_id` of every phase session
+ * and the user its runs authenticate as. It is the Factory's settings sentinel
+ * (`factoryMemorySettingsUserId`), so such a run reads the Factory's own settings rows and,
+ * having no personal rows, only ever resolves the organization's model keys.
+ */
+export function factoryPrincipalId(factoryProjectId: string): string {
+  return factoryMemorySettingsUserId(factoryProjectId);
+}
+
+export function isFactoryPrincipalId(userId: string | null | undefined): boolean {
+  return userId?.startsWith('factory-project:') === true;
 }
 
 export interface FactoryProject {

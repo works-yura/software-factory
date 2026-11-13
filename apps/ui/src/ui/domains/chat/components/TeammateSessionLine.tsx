@@ -5,6 +5,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
 
 export function TeammateSessionLine() {
   const { t } = useTranslation('chat');
@@ -22,7 +23,11 @@ export function TeammateSessionLine() {
         </div>
       )}
       <Txt as="p" variant="caption" tone="muted" className="truncate">
-        {owner ? t('session.teammateNamed', { name: owner.name }) : t('session.teammate')}
+        {isFactoryOwnedSession(session)
+          ? t('session.factoryOwned')
+          : owner
+            ? t('session.teammateNamed', { name: owner.name })
+            : t('session.teammate')}
       </Txt>
     </div>
   );

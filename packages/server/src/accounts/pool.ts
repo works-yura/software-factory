@@ -1,4 +1,5 @@
 import { getTenantCredentialsStorage, pickCredentialAccount } from '@factory/credentials';
+import { isFactoryPrincipalId } from '@factory/store';
 import type { CredentialAccount, ModelCredentialsStorage, SignInCredentialKind, SignInOAuth } from '@factory/store';
 
 /** Who a turn runs for: the organization whose sign-in pays, and the session's owner. */
@@ -26,6 +27,11 @@ export interface PickedSignIn {
 export interface AccountFailure {
   accountId: string;
   error: { kind: string; message: string; resetsAt?: Date };
+}
+
+/** Why a card's run, which belongs to the Factory, cannot start: no sign-in is shared with the Factory's runs. */
+export function factoryRunsNeedSharedSignIn(name: string): string {
+  return `This Factory runs its cards as the Factory, and no ${name} sign-in is shared with its card runs. Under Settings → Connections, open a ${name} account and turn on "Runs Factory cards", then retry.`;
 }
 
 /** How long an account sits out when the provider gave no reset time. */
@@ -127,6 +133,8 @@ export function createSignInAccountPool(options: SignInAccountPoolOptions): Sign
         if (!picked.account) {
           if (picked.resetsAt) throw options.errors.limited(picked.resetsAt, at);
           if (request.exclude.length > 0 || refused.length > 0) throw options.errors.noOther();
+          // A card's run belongs to the Factory: it runs only on sign-ins their owners shared with it.
+          if (isFactoryPrincipalId(tenant.userId)) throw new Error(factoryRunsNeedSharedSignIn(options.name));
           throw options.errors.missing(tenant.orgId);
         }
         const { account } = picked;

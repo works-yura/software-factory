@@ -9,9 +9,11 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
     "@factory/feed": "workspace:*",
     "@factory/runtime": "workspace:*",
@@ -19,6 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "22.20.1",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

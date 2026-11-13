@@ -47,6 +47,8 @@ export interface FactoryUserSession {
   capabilities?: { recreateSandbox: boolean; switchModel?: boolean };
   /** Set when the session runs on Claude Code or Codex (its Factory's model for that harness); absent for Mastra sessions. */
   harness?: 'claude-code' | 'codex';
+  /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
+  followedWorkItemIds?: readonly string[];
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
@@ -197,6 +199,24 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
   const body: { title?: string; error?: string } = await res.json().catch(() => ({}));
   if (!res.ok || !body.title) throw new Error(body.error ?? tk('errors.renameSession', { status: res.status }));
   return body.title;
+}
+
+/** Approve or decline the tool call a card's phase session waits on. Its owner, an admin, or anyone following the card may. */
+export async function answerParkedApproval(
+  baseUrl: string,
+  sessionId: string,
+  decision: 'approve' | 'decline',
+  toolCallId?: string,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/parked-approval`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ decision, ...(toolCallId ? { toolCallId } : {}) }),
+  });
+  if (res.ok) return;
+  const body: { error?: string } = await res.json().catch(() => ({}));
+  throw new Error(body.error ?? `Failed to answer the approval (${res.status})`);
 }
 
 export type UserSessionVisibility = FactoryUserSession['visibility'];

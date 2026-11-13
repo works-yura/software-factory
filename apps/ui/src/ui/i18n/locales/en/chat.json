@@ -70,7 +70,8 @@
     "currentTasks": "Current tasks",
     "teammateNamed": "You’re steering {{name}}’s session",
     "teammate": "You’re steering a teammate’s session",
-    "conversation": "Conversation"
+    "conversation": "Conversation",
+    "factoryOwned": "You’re steering the Factory’s session"
   },
   "emptyThread": {
     "title": "What can I help you build?",
@@ -363,7 +364,16 @@
     "openOnGitHub": "Open on GitHub",
     "openTarget": "Open notification target",
     "notification": "notification",
-    "summary": "Notification summary"
+    "summary": "Notification summary",
+    "waiting": {
+      "label": "Waiting session",
+      "approve": "Approve",
+      "decline": "Decline",
+      "approved": "Approved",
+      "declined": "Declined",
+      "answered": "Answered",
+      "open": "Open session"
+    }
   },
   "changeRequest": {
     "open": "Open {{status}} {{repo}} {{noun}} {{number}}",

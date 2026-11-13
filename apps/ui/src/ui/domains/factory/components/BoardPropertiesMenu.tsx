@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { boardFiltersActive, withBoardFilterValues } from '../boardFilters';
 import { BOARD_SORT_LABELS, boardSortOptions, DEFAULT_BOARD_SORT } from '../boardSort';
+import type { BoardSort } from '../boardSort';
 import type { BoardView } from '../hooks/useBoardView';
 import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import { boardFilterSummary } from './boardFilterFields';

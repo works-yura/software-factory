@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router';
 
+import { useAnswerParkedApproval } from '../hooks/useAnswerParkedApproval';
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
 import { useSessionVisibility } from '../hooks/useSessionVisibility';
@@ -40,6 +41,7 @@ export function SessionListItem({
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
   const { changeVisibility, changing } = useSessionVisibility(factoryId, row.session.sessionId);
+  const { answer, answering } = useAnswerParkedApproval(factoryId, row.waitingSessionId);
   const ownUserSession = row.origin === 'user' && row.ownedByViewer;
 
   async function handleVisibilityChange(visibility: UserSessionVisibility) {
@@ -55,6 +57,7 @@ export function SessionListItem({
     <SessionNavRow
       name={row.name}
       label={row.phaseLabel}
+      runByFactory={row.runByFactory}
       level={level}
       url={row.url}
       source={row.source}
@@ -70,6 +73,8 @@ export function SessionListItem({
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
+      onAnswerApproval={answer}
+      answeringApproval={answering}
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
       // Slack threads keep the visibility they were created with; the server refuses a change.
       onVisibilityChange={

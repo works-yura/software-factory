@@ -350,7 +350,10 @@
   "page": {
     "loadFailed": "Failed to load the board",
     "actionFailed": "Board action failed",
-    "columns": "Board columns"
+    "columns": "Board columns",
+    "retry": "Retry",
+    "loadMoreCards": "Load more cards",
+    "loadingMoreCards": "Loading more cards"
   },
   "sessionContext": {
     "triage": "Triage",

@@ -4,7 +4,7 @@
  * offers feeds, and a GitLab feed only once a route of the Factory project being
  * viewed names one of its linked GitLab projects.
  */
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
@@ -92,21 +92,41 @@ function stubIntake(
   );
 }
 
-const renderIntake = (
-  factoryProjectId: string,
-  definition: InstalledBoardInfo = workBoard,
-  knownSourceKeys = new Set<string>(),
-  elsewhereSourceKeys?: Set<string>,
-) =>
+const renderIntake = (factoryProjectId: string, definition: InstalledBoardInfo = workBoard) =>
   renderHookWithProviders(() =>
-    useBoardIntake({
-      factoryProjectId,
-      repositories: [repository, gitlabRepository],
-      definition,
-      knownSourceKeys,
-      elsewhereSourceKeys,
-    }),
+    useBoardIntake({ factoryProjectId, repositories: [repository, gitlabRepository], definition }),
   );
+
+/** A card the project already holds for a feed item, as the server lists it. */
+const filedCard = (integrationId: string, externalId: string, board: string) => ({
+  id: `card-${externalId}`,
+  orgId: 'org-1',
+  createdBy: 'user-1',
+  factoryProjectId: 'factory-1',
+  board,
+  externalSource: { integrationId, type: 'issue', externalId },
+  parentWorkItemId: null,
+  title: externalId,
+  stages: ['intake'],
+  stageHistory: [],
+  sessions: {},
+  metadata: {},
+  triageType: null,
+  acceptedAt: null,
+  description: null,
+  revision: 1,
+  createdAt: '2026-07-01T00:00:00Z',
+  updatedAt: '2026-07-01T00:00:00Z',
+});
+
+/** Answers the lookup of which feed items are already filed with `cards`. */
+function stubFiledCards(factoryProjectId: string, cards: ReturnType<typeof filedCard>[]) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
+      HttpResponse.json({ workItems: cards }),
+    ),
+  );
+}
 
 describe('useBoardIntake GitLab gating', () => {
   it('given a route of the viewed project naming a linked GitLab project, then the GitLab feed is offered', async () => {
@@ -199,18 +219,129 @@ describe('useBoardIntake sources routed to the project', () => {
 
   it('counts feed items held back only when their card sits on another board', async () => {
     stubIntake(routed, ['factory-1'], issues);
-    const known = new Set(['gitlab-issue:REL-1']);
+    stubFiledCards('factory-1', [filedCard('gitlab', 'gitlab-issue:REL-1', 'release')]);
 
-    const elsewhere = renderIntake('factory-1', workBoard, known, known);
+    const elsewhere = renderIntake('factory-1');
     await waitFor(() => expect(elsewhere.result.current.isPending).toBe(false));
     await waitFor(() => expect(elsewhere.result.current.candidates).toHaveLength(1));
     expect(elsewhere.result.current.alreadyMaterialized).toBe(1);
 
     // The same card on this board is already visible in a column; nothing to explain.
-    const here = renderIntake('factory-1', workBoard, known, new Set());
+    stubFiledCards('factory-1', [filedCard('gitlab', 'gitlab-issue:REL-1', 'work')]);
+    const here = renderIntake('factory-1');
     await waitFor(() => expect(here.result.current.isPending).toBe(false));
     await waitFor(() => expect(here.result.current.candidates).toHaveLength(1));
     expect(here.result.current.alreadyMaterialized).toBe(0);
+  });
+
+  /** Answers each filed lookup only once released, with no card filed. */
+  function holdFiledLookups() {
+    const releases: (() => void)[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, async () => {
+        await new Promise<void>(resolve => releases.push(resolve));
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+    return {
+      held: () => releases.length,
+      answer: () => releases.splice(0).forEach(release => release()),
+    };
+  }
+
+  describe('while the server has not said which feed items are already filed', () => {
+    it('offers the next page of a feed only once the items of its first page are shown', async () => {
+      stubIntake(routed, ['factory-1'], issues);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues, nextCursor: 'page-2' })),
+      );
+      const filed = holdFiledLookups();
+
+      const { result } = renderIntake('factory-1');
+
+      // The feed answered, and its items are held back: the column has nothing to scroll past yet.
+      await waitFor(() => expect(filed.held()).toBe(1));
+      expect(result.current.candidates).toEqual([]);
+      expect(result.current.isPending).toBe(true);
+      expect(result.current.feedByColumn.intake?.hasNextPage).toBe(false);
+
+      filed.answer();
+      await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+      expect(result.current.isPending).toBe(false);
+      expect(result.current.feedByColumn.intake?.hasNextPage).toBe(true);
+    });
+
+    it('keeps a later page loading until its items are known, with the earlier ones still listed', async () => {
+      stubIntake(routed, ['factory-1'], issues);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/gitlab/issues`, ({ request }) =>
+          new URL(request.url).searchParams.has('after')
+            ? HttpResponse.json({ issues: [gitlabIssue('ENG-2', 'proj-1')], nextCursor: null })
+            : HttpResponse.json({ issues, nextCursor: 'page-2' }),
+        ),
+      );
+      const { result } = renderIntake('factory-1');
+      await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+
+      const filed = holdFiledLookups();
+      await act(async () => {
+        await result.current.feedByColumn.intake?.fetchNextPage();
+      });
+      await waitFor(() => expect(filed.held()).toBe(1));
+      expect(result.current.candidates).toHaveLength(2);
+      expect(result.current.isPending).toBe(false);
+      expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(true);
+
+      filed.answer();
+      await waitFor(() => expect(result.current.candidates).toHaveLength(3));
+      expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(false);
+    });
+  });
+
+  it('leaves a feed as it is shown while a board refresh asks again which of its items are filed', async () => {
+    stubIntake(routed, ['factory-1'], issues);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues, nextCursor: 'page-2' })),
+    );
+    const { result, client } = renderIntake('factory-1');
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+
+    const filed = holdFiledLookups();
+    // What a feed frame does to every read of the project's cards.
+    act(() => void client.invalidateQueries({ queryKey: queryKeys.workItems('factory-1') }));
+    await waitFor(() => expect(filed.held()).toBe(1));
+
+    // The items are known already: no row leaves, no page reads as loading, the next one stays on offer.
+    expect(result.current.candidates).toHaveLength(2);
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(false);
+    expect(result.current.feedByColumn.intake?.hasNextPage).toBe(true);
+
+    filed.answer();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.candidates).toHaveLength(2);
+  });
+
+  it('reports a failed filed lookup as a failed feed, not an empty column, and asks again on retry', async () => {
+    stubIntake(routed, ['factory-1'], issues);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, () =>
+        HttpResponse.json({ error: 'nope' }, { status: 500 }),
+      ),
+    );
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.feedByColumn.intake?.error).toBeInstanceOf(Error));
+    expect(result.current.candidates).toEqual([]);
+    expect(result.current.isPending).toBe(false);
+
+    stubFiledCards('factory-1', []);
+    await act(async () => {
+      await result.current.feedByColumn.intake?.refetch();
+    });
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+    expect(result.current.feedByColumn.intake?.error).toBeNull();
   });
 
   it('offers a custom board no provider feed: new cards reach it through intake routes', async () => {
@@ -305,7 +436,6 @@ describe('useBoardIntake GitLab routing', () => {
         factoryProjectId: 'factory-1',
         repositories: [{ ...repository, provider: 'gitlab' }],
         definition: workBoard,
-        knownSourceKeys: new Set(),
       }),
     );
 
@@ -351,7 +481,6 @@ describe('useBoardIntake GitLab routing', () => {
         factoryProjectId: 'factory-1',
         repositories: [{ ...repository, provider: 'gitlab' }],
         definition: workBoard,
-        knownSourceKeys: new Set(),
       }),
     );
 
@@ -529,7 +658,6 @@ describe('useBoardIntake across linked repositories', () => {
         factoryProjectId: 'factory-1',
         repositories,
         definition: workBoard,
-        knownSourceKeys: new Set(),
       }),
     );
 
@@ -548,7 +676,6 @@ describe('useBoardIntake across linked repositories', () => {
         factoryProjectId: 'factory-1',
         repositories,
         definition: workBoard,
-        knownSourceKeys: new Set(),
       }),
     );
 
@@ -566,13 +693,13 @@ describe('useBoardIntake across linked repositories', () => {
 
   it('drops a second repository candidate that is already a card without hiding the first repository one', async () => {
     stubRepositories([]);
+    stubFiledCards('factory-1', [filedCard('github', 'github:2:issue:5', 'work')]);
 
     const { result } = renderHookWithProviders(() =>
       useBoardIntake({
         factoryProjectId: 'factory-1',
         repositories,
         definition: workBoard,
-        knownSourceKeys: new Set(['github:2:issue:5']),
       }),
     );
 

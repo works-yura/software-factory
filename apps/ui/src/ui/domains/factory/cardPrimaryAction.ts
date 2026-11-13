@@ -1,9 +1,10 @@
 import { needsApproval } from '@factory/core/rules/types';
+import { metadataLabels } from '@factory/work-items/card-labels';
 
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { allowsMove, boardLoop, phaseKindOf } from './boardFlow';
 import type { BoardInfo, BoardLoop } from './boardFlow';
-import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
+import { itemSessionSpec, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
 import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import type { BoardStageId } from './stages';

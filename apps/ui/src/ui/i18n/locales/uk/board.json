@@ -356,7 +356,10 @@
   "page": {
     "loadFailed": "Не вдалося завантажити дошку",
     "actionFailed": "Не вдалося виконати дію на дошці",
-    "columns": "Стовпці дошки"
+    "columns": "Стовпці дошки",
+    "retry": "Повторити",
+    "loadMoreCards": "Завантажити ще картки",
+    "loadingMoreCards": "Завантаження ще карток"
   },
   "sessionContext": {
     "triage": "Розбір",

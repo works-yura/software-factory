@@ -468,6 +468,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       secret_hint: accountSecretHint(input.kind, input.secret),
       priority: input.priority ?? 0,
       disabled: false,
+      factory_runs: false,
       limited_until: null,
       last_error: null,
       last_used_at: null,
@@ -486,6 +487,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     const set: Record<string, unknown> = { updated_at: new Date() };
     if (patch.label !== undefined) set.label = patch.label;
     if (patch.priority !== undefined) set.priority = patch.priority;
+    if (patch.factoryRuns !== undefined) set.factory_runs = patch.factoryRuns;
     if (patch.disabled !== undefined) {
       set.disabled = patch.disabled;
       // Turning an account back on is a person saying it works again.

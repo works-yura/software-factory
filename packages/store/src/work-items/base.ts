@@ -249,6 +249,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'run_user_unauthenticated',
   'harness_not_configured',
   'run_usage_limited',
+  'factory_org_key_missing',
   'run_failed',
   'unknown',
 ] as const;
@@ -710,8 +711,8 @@ export const FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/** Why a session follows a work item: it filed it, started a role on it, or asked to. */
-export type WorkItemSubscriptionReason = 'created' | 'started' | 'subscribed';
+/** Why a session follows a work item: it filed it, moved it, started a role on it, or asked to. */
+export type WorkItemSubscriptionReason = 'created' | 'moved' | 'started' | 'subscribed';
 
 /** A session following a work item, so it hears what happens to it. */
 export interface WorkItemSubscription {
@@ -3855,6 +3856,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
   }
 
+  /** The binding an `agent:<bindingId>` actor names, active or revoked. Identifies; never authorizes. */
+  async findRunBindingById(input: {
+    orgId: string;
+    factoryProjectId: string;
+    id: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    // Actor ids are free text and the id column is a uuid on Postgres.
+    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(input.id)) return null;
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.id,
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+    });
+    return row ? toBinding(row) : null;
+  }
+
   /** Resolve exact active agent authority; partial session matches never authorize. */
   async findActiveRunBinding(address: FactoryRunBindingAddress): Promise<FactoryRunBindingRecord | null> {
     const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
@@ -4807,6 +4824,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
       FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
       { org_id: orgId, work_item_id: workItemId },
+      {
+        orderBy: [
+          ['created_at', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    );
+    return rows.map(toWorkItemSubscription);
+  }
+
+  /** Every follow link in a Factory, earliest first: which session follows which work item. */
+  async listProjectSubscriptions({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<WorkItemSubscription[]> {
+    const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
+      FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
+      { org_id: orgId, factory_project_id: factoryProjectId },
       {
         orderBy: [
           ['created_at', 'asc'],

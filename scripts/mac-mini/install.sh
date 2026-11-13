@@ -17,7 +17,7 @@ LABEL="ai.eclipt.factory"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 mkdir -p "$STATE" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
-install -m 0755 "$HERE/start-server.sh" "$STATE/start-server.sh"
+install -m 0700 "$HERE/start-server.sh" "$STATE/start-server.sh"
 
 if [ -n "$PUBLIC_URL" ] || [ ! -f "$STATE/server.env" ]; then
   : "${PUBLIC_URL:?usage: $0 <public url, e.g. https://factory.tail5c61c7.ts.net>}"
@@ -34,6 +34,9 @@ fi
 add_default() { grep -q "^$1=" "$STATE/server.env" || printf '%s=%s\n' "$1" "$2" >> "$STATE/server.env"; }
 add_default TS_SERVICE '"svc:factory"'
 add_default FUNNEL_ROUTES '"/factory/gitlab=/web/gitlab/webhook /factory/github=/web/github/webhook"'
+
+# Owner-only, like the rest of the state folder (scripts/mac-mini/isolation).
+chmod 600 "$STATE/server.env"
 
 sed "s|__HOME__|$HOME|g" "$HERE/$LABEL.plist" > "$PLIST"
 plutil -lint "$PLIST" >/dev/null

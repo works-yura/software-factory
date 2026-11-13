@@ -903,25 +903,26 @@ describe('factory_start_session in work-item mode', () => {
     return { ...env, item, subscriptions, sessionRows, bindings, bindOther };
   }
 
-  it("binds the role to a new session owned by the caller, kicks it off with the prompt, and doesn't move the card", async () => {
+  it("binds the role to a new session the Factory owns, kicks it off with the prompt, and doesn't move the card", async () => {
     const { start, item, seed, sessions, created, transition, bindings, scope } = await withItem();
 
     const result = (await start({ prompt: 'Profile the build.', workItem: item.id, role: 'work' })) as Started;
+    const factory = `factory-project:${scope.factoryProjectId}`;
 
     expect(result).toMatchObject({ mode: 'work-item', workItem: { id: item.id }, role: 'work' });
     await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({
-      userId: 'user-1',
+      userId: factory,
       visibility: 'org',
       originSessionId: null,
       factoryProjectId: scope.factoryProjectId,
     });
     const session = created.find(entry => entry.options.id === result.sessionId)!.session;
-    expect(session.state.get()).toMatchObject({ factoryOwnerUserId: 'user-1' });
+    expect(session.state.get()).toMatchObject({ factoryOwnerUserId: factory });
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ type: 'user', contents: 'Profile the build.' });
     const kickoff = session.sendSignal.mock.calls[0]![1].requestContext;
     expect([...kickoff.keys()]).toEqual(['user']);
-    expect(kickoff.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(kickoff.get('user')).toEqual({ id: factory, organizationId: 'org-1' });
 
     expect(await bindings()).toEqual([
       expect.objectContaining({ id: result.bindingId, role: 'work', sessionId: result.sessionId, status: 'active' }),
@@ -967,7 +968,8 @@ describe('factory_start_session in work-item mode', () => {
     const request = prepare.mock.calls[0]![0];
     expect(request).toMatchObject({
       orgId: 'org-1',
-      userId: 'user-1',
+      userId: `factory-project:${scope.factoryProjectId}`,
+      startedBy: { type: 'human', id: 'user-1' },
       factoryProjectId: scope.factoryProjectId,
       sessionId: result.sessionId,
       threadTitle: '"Speed up the nightly build" work',
@@ -989,8 +991,79 @@ describe('factory_start_session in work-item mode', () => {
     expect(env.prepare.mock.calls[0]![0]).toMatchObject({ defaultModelId: 'deepseek/deepseek-flash' });
   });
 
-  it("bills the work-item session to the caller's credential tenant", async () => {
-    const { start, item, seed, sessions } = await withItem();
+  // The person asked for the run, but the card's session is the Factory's: it runs on the
+  // organization's keys, and the person follows it from the session they asked in.
+  it('starts a work-item role as the Factory, followed by the session that asked', async () => {
+      const env = await withItem();
+      const factory = `factory-project:${env.scope.factoryProjectId}`;
+
+      const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
+
+      expect(env.prepare.mock.calls[0]![0]).toMatchObject({
+        userId: factory,
+        startedBy: { type: 'human', id: 'user-1' },
+      });
+      await expect(env.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ userId: factory });
+      const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
+      expect(session.state.get()).toMatchObject({ factoryOwnerUserId: factory, factoryModelScope: 'factory' });
+      expect(session.sendSignal.mock.calls[0]![1].requestContext.get('user')).toEqual({
+        id: factory,
+        organizationId: 'org-1',
+      });
+      const after = (await env.seed.workItems.get({ orgId: 'org-1', id: env.item.id }))!;
+      expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId, startedBy: factory });
+      expect(await env.subscriptions()).toEqual([
+        expect.objectContaining({ workItemId: env.item.id, userId: 'user-1', reason: 'started' }),
+      ]);
+  });
+
+  it('refuses to start a Factory-run role while the organization has no model key, and says what to add', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    // The caller's own key is not the Factory's to spend.
+    await env.seed.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'openai', {
+      type: 'api_key',
+      key: 'sk-personal',
+    });
+    const before = await env.sessionRows();
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
+      'Add an organization key or provider under Settings → Models',
+    );
+
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect(await env.sessionRows()).toEqual(before);
+    expect(await env.subscriptions()).toEqual([]);
+
+    await env.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+  });
+
+  it('starts a Factory-run role for an organization that runs on its own provider and stores no key', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    await env.seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: {
+        providerId: 'acme',
+        name: 'Acme',
+        url: 'https://llm.acme.dev/v1',
+        apiKey: 'sk-acme',
+        models: ['fast-1'],
+      },
+    });
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+    expect(env.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: `factory-project:${env.scope.factoryProjectId}` }),
+    );
+  });
+
+  it("bills the work-item session to the organization, as the Factory that owns it", async () => {
+    const { start, item, seed, sessions, scope } = await withItem();
     const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
 
     const tenantFor = (resourceId: string, threadId: string) => {
@@ -1005,7 +1078,11 @@ describe('factory_start_session in work-item mode', () => {
     };
     const parent = await tenantFor('parent-session', 'parent-thread');
     expect(parent).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' });
-    await expect(tenantFor(result.sessionId, result.threadId)).resolves.toEqual(parent);
+    await expect(tenantFor(result.sessionId, result.threadId)).resolves.toEqual({
+      orgId: 'org-1',
+      userId: `factory-project:${scope.factoryProjectId}`,
+      credentialScope: 'factory',
+    });
   });
 
   it('follows the item with reason "started" before the coordinator runs', async () => {

@@ -128,6 +128,14 @@ type Copy = {
     needsSignInReason: string;
     saved: (on: boolean) => string;
   };
+  factoryRuns: {
+    title: string;
+    description: string;
+    enabled: string;
+    enabledDescription: string;
+    ownerOnlyReason: string;
+    saved: (on: boolean) => string;
+  };
   impact: {
     title: (label: string) => string;
     lastBody: (harness: string, owner: string) => string;
@@ -205,6 +213,15 @@ const COPY: ConnectionCopy<Copy> = {
       needsSignInReason: 'Sign in again to put it back in rotation.',
       saved: on => (on ? 'The account is back in rotation.' : 'The account is out of rotation.'),
     },
+    factoryRuns: {
+      title: 'Factory cards',
+      description:
+        "A card's phases run as the Factory, not as the person who moved it, so they use only the sign-ins their owners share here.",
+      enabled: 'Runs Factory cards',
+      enabledDescription: "On: the organization's card runs may use this sign-in and its usage.",
+      ownerOnlyReason: 'Only the person who signed in can share their sign-in with Factory cards.',
+      saved: on => (on ? 'Factory cards may run on this account.' : 'Factory cards no longer run on this account.'),
+    },
     impact: {
       title: label => `Remove ${label}?`,
       lastBody: (harness, owner) => `This is ${owner} only ${harness} account: their sessions on these Factories stop until they sign in again.`,
@@ -279,6 +296,15 @@ const COPY: ConnectionCopy<Copy> = {
       legacyReason: 'Вставлений токен нічого не запускає; видаліть його.',
       needsSignInReason: 'Увійдіть знову, щоб повернути його в ротацію.',
       saved: on => (on ? 'Акаунт знову в ротації.' : 'Акаунт вийшов з ротації.'),
+    },
+    factoryRuns: {
+      title: 'Картки Factory',
+      description:
+        'Фази картки працюють від імені Factory, а не людини, яка її перемістила, тож беруть лише ті входи, якими власники поділились тут.',
+      enabled: 'Запускає картки Factory',
+      enabledDescription: 'Увімкнено: запуски карток організації можуть брати цей вхід і його ліміти.',
+      ownerOnlyReason: 'Поділитися входом з картками Factory може лише той, хто ввійшов.',
+      saved: on => (on ? 'Картки Factory можуть працювати на цьому акаунті.' : 'Картки Factory більше не працюють на цьому акаунті.'),
     },
     impact: {
       title: label => `Видалити ${label}?`,
@@ -579,6 +605,15 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
       const found = await find(request, id);
       if (!found) return notFound(request.language);
       const copy = localize(COPY, request.language);
+      if (section === 'factoryRuns' && typeof values.enabled === 'boolean') {
+        if (found.account.kind !== kind) return connectionRefused(409, { error: 'legacy', message: copy.rotation.legacyReason });
+        // Sharing spends a person's own subscription on the organization's cards: only they decide to.
+        if (values.enabled && found.account.ownerUserId !== request.userId) {
+          return connectionRefused(403, { error: 'owner_only', message: copy.factoryRuns.ownerOnlyReason });
+        }
+        await found.store.updateAccount(request.orgId, id, { factoryRuns: values.enabled });
+        return connectionOk({ message: copy.factoryRuns.saved(values.enabled) });
+      }
       if (section !== 'rotation' || typeof values.enabled !== 'boolean') {
         return connectionRefused(400, { error: 'invalid_settings', message: copy.notFound });
       }
@@ -640,8 +675,29 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
           },
         ],
       };
+      const factoryRuns: ConnectionDetailSection = {
+        type: 'settings',
+        id: 'factoryRuns',
+        title: copy.factoryRuns.title,
+        description: copy.factoryRuns.description,
+        fields: [
+          {
+            name: 'enabled',
+            displayName: copy.factoryRuns.enabled,
+            description: copy.factoryRuns.enabledDescription,
+            type: 'boolean',
+            required: false,
+            value: account.factoryRuns,
+            ...(condition === 'legacy'
+              ? { disabled: { reason: copy.rotation.legacyReason } }
+              : !account.factoryRuns && account.ownerUserId !== request.userId
+                ? { disabled: { reason: copy.factoryRuns.ownerOnlyReason } }
+                : {}),
+          },
+        ],
+      };
       const [limits, recent] = await Promise.all([limitsSection(account, request), recentSection(account, request)]);
-      return [facts, ...(limits ? [limits] : []), rotation, ...(recent ? [recent] : [])];
+      return [facts, ...(limits ? [limits] : []), rotation, factoryRuns, ...(recent ? [recent] : [])];
     },
   };
 }

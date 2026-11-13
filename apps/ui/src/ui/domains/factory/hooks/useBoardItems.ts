@@ -1,5 +1,5 @@
 import { boardLoop, boardOf } from '../boardFlow';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -8,11 +8,9 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-  useWorkItemsQuery,
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
-import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard, itemBoard, pullRequestMayEnter } from '../boardStages';
+import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
 import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
@@ -27,24 +25,26 @@ interface MoveOptions {
   cause?: string;
 }
 
-/** The board's persisted cards: the query behind them and the moves that rewrite them. */
+/** The moves that rewrite a board's persisted cards, for a caller that holds the cards it acts on. */
 export function useBoardItems({
   factoryProjectId,
   kind,
   currentUserId,
   onFailure,
-  items: given,
+  items: all,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
-  /** The cards to act on, from a caller that holds a few of them and must not download the board, e.g. search. */
-  items?: readonly WorkItem[];
+  /**
+   * The cards to act on: the ones the caller shows, and the ones holding a session, which a
+   * dropped pull request finds its issue among.
+   */
+  items: readonly WorkItem[];
   currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
   const { baseUrl } = useApiConfig();
-  const items = useWorkItemsQuery(given ? undefined : factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -53,12 +53,6 @@ export function useBoardItems({
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const [dropError, setDropError] = useState<Error>();
   const movingRef = useRef<Set<string>>(new Set());
-
-  const all = useMemo(() => given ?? items.data ?? [], [given, items.data]);
-  const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
-  // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
-  const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
@@ -108,7 +102,7 @@ export function useBoardItems({
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
     if (payload.kind === 'work-item') {
       const item = all.find(candidate => candidate.id === payload.id);
-      if (!item || !belongsToBoard(item, kind) || payload.fromStage === toStage) return;
+      if (!item || itemBoard(item) !== kind || payload.fromStage === toStage) return;
       move(payload.id, toStage, { cause });
       return;
     }
@@ -146,16 +140,9 @@ export function useBoardItems({
   };
 
   return {
-    all,
-    visible,
-    knownSourceKeys,
-    elsewhereSourceKeys,
-    isPending: items.isPending,
-    error: items.isError ? items.error : undefined,
     mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
-    refetch: items.refetch,
     move,
     remove: (id: string) => remove.mutate(id),
     /** Files the card under a linked repository, so a run on it knows where to work. */

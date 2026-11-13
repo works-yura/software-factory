@@ -36,7 +36,7 @@ describe('Factory work item service boundary', () => {
   it('maps provider-neutral server work items to the board source model', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItems('', 'project-1', undefined, { workItemId: ['item-1'] })).workItems;
 
     expect(item).toMatchObject({
       githubProjectId: 'project-1',
@@ -67,7 +67,7 @@ describe('Factory work item service boundary', () => {
       ),
     );
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItems('', 'project-1', undefined, { workItemId: ['item-1'] })).workItems;
 
     expect(item).toMatchObject({
       source: 'clickup-task',
@@ -85,7 +85,7 @@ describe('Factory work item service boundary', () => {
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItems('', 'project-1', undefined, { workItemId: ['item-1'] })).workItems;
     expect(item).toMatchObject({ source: 'gitlab-pr', sourceKey: externalSource.externalId, url: externalSource.url });
   });
 
@@ -93,9 +93,20 @@ describe('Factory work item service boundary', () => {
     const externalSource = { integrationId: 'linear', type: 'issue', externalId: 'linear-issue:ENG-1' };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItems('', 'project-1', undefined, { workItemId: ['item-1'] })).workItems;
     expect(item).toMatchObject({ source: 'manual', title: 'Fix Factory board' });
   });
+
+  it.each([{ workItemId: [] }, { source: [] }])(
+    'answers %o with no card and no request, since sent bare it would read the whole project',
+    async none => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      expect((await listWorkItems('', 'project-1', undefined, none)).workItems).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('sends provider-neutral external source data when creating a board item', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItem: wireItem }));

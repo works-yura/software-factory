@@ -10,12 +10,13 @@ import {
   UsersRound,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { factoryParticipantId } from '@factory/work-items/card-people';
+import { PULL_REQUEST_SOURCE_FILTER } from '@factory/work-items/card-source-filters';
 
 import { boardFilterFieldIds } from '../boardFilters';
 import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
-import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
-import { BOARD_SOURCE_OPTIONS, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
+import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import { translator } from '../../../i18n/t';
 
 const tk = translator('board');

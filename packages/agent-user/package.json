@@ -1,0 +1,22 @@
+{
+  "name": "@factory/agent-user",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs agent processes as a separate macOS user under a Seatbelt profile (sudo, env -i, sandbox-exec): the command, the profile, stopping them. Parts derived from SandVault.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "coverage": "vitest run --coverage --coverage.include=src --coverage.exclude=src/testing --coverage.exclude=src/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@vitest/coverage-v8": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
