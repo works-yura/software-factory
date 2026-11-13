@@ -647,6 +647,51 @@ describe('WorkItemsStorage', () => {
     );
   });
 
+  describe('a list cached before a write that leaves the card row untouched', () => {
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+
+    /** Lists the board, lets `write` land well after it, and returns the next list beside a full read. */
+    async function listAfter(storage: WorkItemsStorage, write: () => Promise<unknown>) {
+      // Step past the window a delta rereads to tolerate clock skew between writers.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      onTestFinished(() => void vi.useRealTimers());
+      vi.setSystemTime(Date.now() + 10_000);
+      await storage.list(scope);
+      vi.setSystemTime(Date.now() + 10_000);
+      await write();
+      return { listed: await storage.list(scope), stored: await storage.listWith((storage as unknown as { ops: FactoryStorageOps }).ops, scope) };
+    }
+
+    it('shows labels a provider sync wrote to the source alone', async () => {
+      const storage = await makeStorage();
+      const { item } = await storage.upsert({ ...scope, userId: 'u', input });
+
+      const { listed, stored } = await listAfter(storage, () =>
+        storage.syncWorkItemSource({
+          ...scope,
+          provider: item.workItem.provider,
+          externalId: item.workItem.externalId,
+          patch: { labels: ['urgent'] },
+        }),
+      );
+
+      expect(listed[0]?.workItem.labels).toEqual(['urgent']);
+      expect(listed).toEqual(stored);
+    });
+
+    it('shows a new title on a card that has a source', async () => {
+      const storage = await makeStorage();
+      const { item } = await storage.upsert({ ...scope, userId: 'u', input });
+
+      const { listed, stored } = await listAfter(storage, () =>
+        storage.update({ orgId: 'org1', id: item.id, userId: 'u', patch: { title: 'Fix login on Safari' } }),
+      );
+
+      expect(listed[0]?.title).toBe('Fix login on Safari');
+      expect(listed).toEqual(stored);
+    });
+  });
+
   it('holds list order when a later write touches an older card', async () => {
     const storage = await makeStorage();
     vi.useFakeTimers({ shouldAdvanceTime: true });

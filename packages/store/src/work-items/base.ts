@@ -1692,6 +1692,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       expectedRevision,
     }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
   ): Promise<void> {
+    const where = { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId };
+    const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, where);
+    const card = source && { work_item_id: source.work_item_id };
+    // Lock the card's row before its source, the order every card write takes them in.
+    if (card) await ops.updateAtomic(FACTORY_BOARD_ITEMS_SCHEMA.name, card, () => null);
+    let synced = false;
     await ops.updateAtomic<WorkItemSourceDbRecord>(
       FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
       { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
@@ -1701,6 +1707,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         const next = typeof patch === 'function' ? patch(current) : patch;
         if (!next) return null;
+        synced = true;
         const { metadata, ...facts } = next;
         // Raw provider state can be 'closed' while normalized state is 'merged'.
         const nextMetadata =
@@ -1729,6 +1736,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
+    // The card shows these facts but its own row did not move: stamp it so a board reload rereads it.
+    if (card && synced) await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, card, { changed_at: new Date() });
   }
 
   /**
@@ -2321,8 +2330,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const startedAt = Date.now();
     // Within the TTL a version change only needs the cards changed since the last read; the TTL
     // still forces a full read as a backstop for anything a delta could miss.
+    const delta = hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS;
     const read = (
-      hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS
+      delta
         ? this.#listDelta(orgId, factoryProjectId, hit.items, hit.readFrom)
         : this.#listWithOps(super.ops, orgId, factoryProjectId)
     ).then(deepFreeze);
@@ -2333,7 +2343,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         this.#listCache.delete(key);
         this.#listCache.set(key, {
           version,
-          takenAt: hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS ? hit.takenAt : Date.now(),
+          takenAt: delta ? hit.takenAt : Date.now(),
           readFrom: startedAt,
           items,
         });
