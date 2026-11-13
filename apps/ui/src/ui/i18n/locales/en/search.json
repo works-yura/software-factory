@@ -42,6 +42,8 @@
   "context": {
     "workSession": "Work session · {{branch}}",
     "reviewSession": "Review session · {{branch}}",
+    "cardSession": "{{label}} · {{branch}}",
+    "cardSessionCurrent": "{{label}} · current · {{branch}}",
     "userSession": "User session",
     "userSessionOnBranch": "User session · {{branch}}",
     "notStarted": "{{source}} · {{stage}} · not started",

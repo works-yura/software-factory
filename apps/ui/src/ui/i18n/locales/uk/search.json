@@ -42,6 +42,8 @@
   "context": {
     "workSession": "Робоча сесія · {{branch}}",
     "reviewSession": "Сесія рев’ю · {{branch}}",
+    "cardSession": "{{label}} · {{branch}}",
+    "cardSessionCurrent": "{{label}} · поточна · {{branch}}",
     "userSession": "Сесія користувача",
     "userSessionOnBranch": "Сесія користувача · {{branch}}",
     "notStarted": "{{source}} · {{stage}} · не розпочато",
