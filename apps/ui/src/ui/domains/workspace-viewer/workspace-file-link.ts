@@ -6,7 +6,8 @@
  */
 
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
-const LINE_SUFFIX = /:\d+(?::\d+)?$/;
+/** `:42`, `:42:7` and a range `:262-275`. */
+const LINE_SUFFIX = /:\d+(?:[:-]\d+)?$/;
 /** A sandbox root segment an absolute path passes through before the workspace begins. */
 const WORKSPACE_ROOT_SEGMENT = /^(?:factory-item-[^/]+|session-[^/]+)$/;
 

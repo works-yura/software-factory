@@ -17,6 +17,9 @@ export interface ComposerAnnotationListProps {
   onRemove: (id: string) => void;
 }
 
+/** A passage's text as read in a list: a Markdown link it opens with (a file note's `path:262-275`) shows as its label. */
+const shownText = (text: string) => text.replace(/\[([^\]\n]+)\]\([^)\n]*\)/g, '$1');
+
 function revealSource({ source }: ChatAnnotation): boolean {
   const target = rangeFromSource(source)?.startContainer.parentElement;
   if (!target) return false;
@@ -57,7 +60,7 @@ export function ComposerAnnotationList({ annotations, onRemove }: ComposerAnnota
                         if (revealSource(annotation)) setOpen(false);
                       }}
                     >
-                      {annotation.text}
+                      {shownText(annotation.text)}
                     </button>
                     {comment && (
                       <p className="line-clamp-2 text-body-sm whitespace-pre-line text-foreground">{comment}</p>

@@ -30,7 +30,7 @@ export function FileDocument({ file, filePath }: { file: WorkspaceFilePreview; f
       <div data-slot="message-content">
         <MarkdownRenderer>{content}</MarkdownRenderer>
       </div>
-      <FileAnnotations containerRef={ref} filePath={filePath} />
+      <FileAnnotations containerRef={ref} filePath={filePath} source={content} />
     </div>
   );
 }

@@ -10,6 +10,8 @@ describe('workspaceFilePath', () => {
     expect(workspaceFilePath('./syncta-docs/README.md#overview')).toBe('syncta-docs/README.md');
     expect(workspaceFilePath('syncta-back/functions/index.js:42')).toBe('syncta-back/functions/index.js');
     expect(workspaceFilePath('syncta-back/functions/index.js:42:7')).toBe('syncta-back/functions/index.js');
+    expect(workspaceFilePath('syncta-docs/changes/x/requirements.md:262-275')).toBe('syncta-docs/changes/x/requirements.md');
+    expect(workspaceFilePath('syncta-docs/changes/x/requirements.md#L262-L275')).toBe('syncta-docs/changes/x/requirements.md');
     expect(workspaceFilePath('docs/My%20File.md')).toBe('docs/My File.md');
   });
 
