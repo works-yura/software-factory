@@ -140,9 +140,10 @@ activate() {
   ln -sfn "releases/$name" "$CURRENT.next" && mv -fh "$CURRENT.next" "$CURRENT"
   # The watchdog ships with the commit: a rollback brings its start-server.sh back too.
   [ -f "$RELEASES/$name/scripts/mac-mini/start-server.sh" ] \
-    && install -m 0755 "$RELEASES/$name/scripts/mac-mini/start-server.sh" "$STATE/start-server.sh"
+    && install -m 0700 "$RELEASES/$name/scripts/mac-mini/start-server.sh" "$STATE/start-server.sh"
   if [ -f "$CONFIG" ] && ! grep -qxF "FACTORY_REPO=\"$CURRENT\"" "$CONFIG"; then
-    { grep -v '^FACTORY_REPO=' "$CONFIG"; printf 'FACTORY_REPO="%s"\n' "$CURRENT"; } > "$CONFIG.next" && mv -f "$CONFIG.next" "$CONFIG"
+    # Owner-only, like the rest of the state folder (scripts/mac-mini/isolation).
+    ( umask 077; { grep -v '^FACTORY_REPO=' "$CONFIG"; printf 'FACTORY_REPO="%s"\n' "$CURRENT"; } > "$CONFIG.next" ) && mv -f "$CONFIG.next" "$CONFIG"
     log "server.env: FACTORY_REPO is now $CURRENT"
   fi
   log "$name is current; restarting the server"
@@ -222,7 +223,7 @@ DB="${MASTRA_DB_PATH:-$STATE/mastra.db}"
 if [ "$MODE" != dev ] && [ -f "$DB" ] && ! compgen -G "$STATE/backup-*-before-prod-mode.db" >/dev/null; then
   BACKUP="$STATE/backup-$(date +%F)-before-prod-mode.db"
   log "first production start: backing up $DB to $BACKUP"
-  sqlite3 "$DB" ".backup '$BACKUP'" && [ "$(sqlite3 "$BACKUP" 'pragma quick_check;')" = ok ] \
+  ( umask 077; sqlite3 "$DB" ".backup '$BACKUP'" ) && [ "$(sqlite3 "$BACKUP" 'pragma quick_check;')" = ok ] \
     || { rm -f "$BACKUP"; OUTCOME="failed: database backup"; discard "$NAME"; log "database backup failed: nothing changed, still on $(active_release)"; exit 1; }
 fi
 
