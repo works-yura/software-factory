@@ -1404,7 +1404,12 @@ describe('MastraFactory.prepare', () => {
       return requestContext;
     }
 
-    const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+    const READ_TOOLS = [
+      'factory_list_work_items',
+      'factory_inspect_work_item',
+      'factory_list_attention',
+      'factory_list_audit_events',
+    ];
     const MANAGEMENT_TOOLS = [
       'factory_create_work_item',
       'factory_update_work_item',

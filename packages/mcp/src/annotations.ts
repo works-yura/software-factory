@@ -27,6 +27,7 @@ export const FACTORY_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   device_screenshot: { ...read, openWorldHint: true, title: 'Screenshot device' },
   device_open: { ...toggle, openWorldHint: true, title: 'Open device' },
   device_close: { ...changes, idempotentHint: true, openWorldHint: true, title: 'Close device' },
+  factory_list_audit_events: { ...read, title: 'List audit events' },
   factory_create_work_item: { ...additive, title: 'Create a work item' },
   factory_update_work_item: { ...changes, title: 'Update a work item' },
   factory_transition_work_item: { ...changes, title: 'Move a work item to another stage' },
