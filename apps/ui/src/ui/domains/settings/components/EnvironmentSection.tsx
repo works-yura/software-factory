@@ -21,6 +21,7 @@ import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { RepositoriesBlock } from './environment/RepositoriesBlock';
 import type { RepositoryProviders } from './environment/RepositoriesBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
+import { SandboxesBlock } from './environment/SandboxesBlock';
 import { AddSandboxEnvButton, SandboxEnvsBlock } from './environment/SandboxEnvsBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -143,6 +144,16 @@ function EnvironmentBlocks({
       >
         <SandboxEnvsBlock factoryId={factoryId} />
       </SettingsSubsection>
+      {environment.sandbox.provider === 'local' && (
+        <SettingsSubsection
+          id="sandboxes"
+          scope="factory"
+          title={t('environment.sandboxes.title')}
+          description={t('environment.sandboxes.description')}
+        >
+          <SandboxesBlock factoryId={factoryId} />
+        </SettingsSubsection>
+      )}
       {canBuild && (
         <SettingsSubsection
           scope="factory"

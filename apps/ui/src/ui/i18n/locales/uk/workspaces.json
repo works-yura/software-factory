@@ -400,7 +400,9 @@
     "deleteFactory": "Не вдалося видалити Factory ({{status}})",
     "loadRepositorySettings": "Не вдалося завантажити налаштування репозиторію ({{status}})",
     "updateHarness": "Не вдалося змінити харнес Factory",
-    "updateToolPermissions": "Не вдалося змінити дозволи інструментів Factory"
+    "updateToolPermissions": "Не вдалося змінити дозволи інструментів Factory",
+    "listSandboxes": "Не вдалося завантажити пісочниці",
+    "sleepSandbox": "Не вдалося зберегти й зупинити пісочницю"
   },
   "sessions": {
     "newSession": "Нова сесія",

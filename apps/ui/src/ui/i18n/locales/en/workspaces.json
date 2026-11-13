@@ -394,7 +394,9 @@
     "deleteFactory": "Failed to delete Factory ({{status}})",
     "loadRepositorySettings": "Failed to load repository settings ({{status}})",
     "updateHarness": "Failed to update the Factory harness",
-    "updateToolPermissions": "Failed to update the Factory’s tool permissions"
+    "updateToolPermissions": "Failed to update the Factory’s tool permissions",
+    "listSandboxes": "Could not load the sandboxes",
+    "sleepSandbox": "Could not save and stop the sandbox"
   },
   "sessions": {
     "newSession": "New session",

@@ -107,7 +107,7 @@ function SettingRow({
   onCommit: (value: unknown | null) => Promise<boolean>;
 }) {
   const { t } = useTranslation('settings');
-  const label = schema.title ?? name;
+  const label = t(`environment.sandbox.settingLabels.${name}`, { defaultValue: schema.title ?? name });
   const type = Array.isArray(schema.type) ? schema.type.find(t => t !== 'null') : schema.type;
   const placeholder = schema.default === undefined ? undefined : String(schema.default);
   const choices = schemaChoices(schema);

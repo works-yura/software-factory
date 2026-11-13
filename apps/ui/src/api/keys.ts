@@ -49,6 +49,8 @@ export const queryKeys = {
     ['factory', 'environment-builds', factoryProjectId ?? null] as const,
   factoryEnvironmentBuild: (factoryProjectId: string | undefined, buildId: string | undefined) =>
     ['factory', 'environment-build', factoryProjectId ?? null, buildId ?? null] as const,
+  factorySandboxes: (factoryProjectId: string | undefined) =>
+    ['factory', 'sandboxes', factoryProjectId ?? null] as const,
   factorySandboxEnvs: (factoryProjectId: string | undefined) =>
     ['factory', 'sandbox-envs', factoryProjectId ?? null] as const,
   factorySandboxEnvFiles: (factoryProjectId: string | undefined) =>
