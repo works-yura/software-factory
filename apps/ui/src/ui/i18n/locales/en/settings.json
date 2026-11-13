@@ -844,7 +844,57 @@
     "origins": {
       "clickupStatus": "ClickUp: status “{{status}}”",
       "repository": "Tasks from the repository “{{repository}}”"
-    }
+    },
+    "whenKeyword": "When",
+    "from": "From",
+    "sendTo": "Send to",
+    "moveTo": "Move to",
+    "joinAndMoveTo": "Join the issue’s card, move to",
+    "steps": {
+      "if": "If",
+      "elseIf": "Else if",
+      "otherwise": "Otherwise",
+      "new": "New"
+    },
+    "turnedOn": "Route turned on",
+    "turnedOff": "Route turned off",
+    "renamed": "Route renamed",
+    "triggerChanged": "Trigger changed",
+    "destinationChanged": "Destination changed",
+    "conditionsSaved": "Conditions saved",
+    "changedFirst": "Someone else changed these routes first, so your change wasn’t saved.",
+    "undo": "Undo",
+    "undone": "Change undone",
+    "orderRestored": "Order restored",
+    "moved": "Moved {{name}} to position {{position}}",
+    "added": "Added {{name}}",
+    "deletedNamed": "Deleted {{name}}",
+    "restored": "Restored {{name}}",
+    "newCardsNowGoTo": "New cards no route takes now go to {{board}}",
+    "catchAllName": "Everything else goes to {{board}} › {{phase}}",
+    "copyName": "{{name}} on {{board}}",
+    "notInstalled": "{{board}} (not installed)",
+    "boardForNewCards": "Board for new cards",
+    "actionsFor": "{{name}} actions",
+    "moveUpItem": "Move up",
+    "moveDownItem": "Move down",
+    "conditionsOf": "{{name}} conditions",
+    "addAtLeastOne": "Add at least one.",
+    "matchesEveryCard": "Matches every card.",
+    "unreachable": "Never runs: a route above takes every new card.",
+    "addMove": "Add card move",
+    "newMove": "New card move",
+    "newName": "New route name",
+    "nameMove": "Name this card move",
+    "nameRoute": "Name this route",
+    "newConditions": "New route conditions",
+    "everythingElse": "Everything else goes to",
+    "movesListLabel": "Card moves",
+    "movesReadOnly": "Only organization admins can change card moves.",
+    "noMoves": "No card moves on this board.",
+    "reorder": "Reorder {{name}}",
+    "movesLoading": "Loading card moves…",
+    "boardNotInstalled": "This board isn’t installed."
   },
   "intakeTriggers": {
     "ifOpen": "If the last one is still open",
@@ -926,7 +976,13 @@
       "notScheduled": "Only a route “On a schedule” can be run now.",
       "adminOnly": "Only an organization admin can run routes.",
       "requestFailed": "Couldn't run the route"
-    }
+    },
+    "addSchedule": "Add schedule",
+    "newSchedule": "New schedule",
+    "namePlaceholder": "E.g. Weekly dependency check",
+    "schedulesTitle": "On a schedule",
+    "schedulesLabel": "Routes on a schedule",
+    "schedulesHint": "Each makes its own card when its schedule fires, outside the order above."
   },
   "workBoard": {
     "description": "How cards move through this board: when each phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only.",
@@ -961,7 +1017,7 @@
     "rule": {
       "invalidJson": "Not valid JSON.",
       "editJson": "Edit as JSON",
-      "useBuilder": "Use rule builder",
+      "useBuilder": "Edit as conditions",
       "jsonLabel": "{{label}} JSON",
       "everyCard": "Every card."
     },
@@ -1676,5 +1732,135 @@
       "mcpPending": "The database server is being set up; it appears here in a moment.",
       "choose": "Choose…"
     }
+  },
+  "conditions": {
+    "where": "Where",
+    "and": " and ",
+    "or": " or ",
+    "matchAllOrAny": "Match all or any",
+    "allOfThese": "All of these",
+    "anyOfThese": "Any of these",
+    "addCondition": "Add condition",
+    "addGroup": "Add group",
+    "removeGroup": "Remove group",
+    "removeCondition": "Remove condition",
+    "unfinished": "Finish or remove unfinished conditions to save.",
+    "field": "Field",
+    "chooseField": "Choose a field",
+    "operator": "Operator",
+    "value": "Value",
+    "values": {
+      "trusted": "Trusted",
+      "untrusted": "Outside author",
+      "issue": "Issue",
+      "pullRequest": "Pull request",
+      "task": "ClickUp task",
+      "completed": "Completed",
+      "canceled": "Not planned"
+    },
+    "chooseValue": "Choose a value",
+    "chooseValues": "Choose values",
+    "search": "Search",
+    "noOption": "No option found.",
+    "valuePlaceholder": "Value",
+    "valuesPlaceholder": "Values, comma separated",
+    "yes": "Yes",
+    "no": "No",
+    "operators": {
+      "equals": "is",
+      "not_equals": "is not",
+      "in": "is any of",
+      "not_in": "is none of",
+      "contains": "contains",
+      "not_contains": "does not contain",
+      "exists": "is set",
+      "not_exists": "is not set",
+      "greater_than": "is more than",
+      "less_than": "is less than",
+      "greater_than_or_equal": "is at least",
+      "less_than_or_equal": "is at most"
+    },
+    "listOperators": {
+      "equals": "has",
+      "not_equals": "does not have",
+      "in": "has any of",
+      "not_in": "has none of",
+      "exists": "has any",
+      "not_exists": "has none"
+    },
+    "presence": {
+      "exists": "exists",
+      "not_exists": "does not exist"
+    },
+    "groups": {
+      "pullRequest": "Pull request",
+      "closedIssue": "Closed issue",
+      "event": "Event"
+    },
+    "fields": {
+      "item.labels": "Labels",
+      "item.title": "Title",
+      "item.author": "Author",
+      "item.key": "Key",
+      "item.state": "Status",
+      "item.assignees": "Assignees",
+      "item.pullRequest": "Open pull request",
+      "author.trusted": "Author trust",
+      "source.kind": "Source kind",
+      "source.integration": "Integration",
+      "source.provider": "Provider",
+      "source.repository": "Repository or project",
+      "source.list": "ClickUp List",
+      "pullRequest.closesIssue": "Pull request closes an issue",
+      "closedIssue.phase": "Closed issue phase",
+      "closedIssue.hasPullRequest": "Closed issue has a pull request",
+      "event.type": "Event",
+      "event.reason": "Close reason"
+    },
+    "eventTypes": {
+      "work_item.created": "New card",
+      "work_item.state_changed": "Status changed",
+      "work_item.closed": "Closed",
+      "work_item.reopened": "Reopened",
+      "pull_request.opened": "PR opened",
+      "pull_request.synchronized": "PR updated",
+      "pull_request.review_requested": "Review requested",
+      "pull_request.merged": "PR merged",
+      "pull_request.closed": "PR closed"
+    },
+    "triggers": {
+      "work_item.created": "a new card arrives",
+      "work_item.state_changed": "a task's status changes",
+      "work_item.closed": "a card is closed",
+      "work_item.reopened": "a card is reopened",
+      "pull_request.opened": "a pull request opens",
+      "pull_request.synchronized": "a pull request gets new commits",
+      "pull_request.review_requested": "a review is requested",
+      "pull_request.merged": "a pull request is merged",
+      "pull_request.closed": "a pull request closes unmerged"
+    },
+    "phrases": {
+      "author.trusted": {
+        "yes": "author is trusted",
+        "no": "author is not trusted"
+      },
+      "pullRequest.closesIssue": {
+        "yes": "pull request closes an issue",
+        "no": "pull request closes no issue"
+      },
+      "closedIssue.hasPullRequest": {
+        "yes": "closed issue has a pull request",
+        "no": "closed issue has no pull request"
+      },
+      "item.pullRequest": {
+        "yes": "card has an open pull request",
+        "no": "card has no open pull request"
+      }
+    },
+    "phrase": {
+      "value": "{{fact}} {{operator}} {{values}}",
+      "valueless": "{{fact}} {{operator}}"
+    },
+    "valuesLabel": "Values"
   }
 }

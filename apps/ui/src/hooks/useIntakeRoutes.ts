@@ -108,58 +108,6 @@ export function useCanEditBoards(factoryProjectId: string | undefined): boolean 
   return useIntakeRoutesCanEditQuery(factoryProjectId).data ?? false;
 }
 
-function useRefetchRoutes(factoryProjectId: string) {
-  const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) });
-}
-
-export function useCreateIntakeRouteMutation(factoryProjectId: string) {
-  const { client } = useApiConfig();
-  const refetch = useRefetchRoutes(factoryProjectId);
-  return useMutation({
-    mutationFn: (draft: IntakeRouteDraft) =>
-      client.post<{ intakeRoute: IntakeRouteInfo }>(base(factoryProjectId), draft),
-    onSettled: refetch,
-  });
-}
-
-/** Changes the named fields of a route; `revision` is the one read, so a concurrent edit is refused. */
-export function useUpdateIntakeRouteMutation(factoryProjectId: string) {
-  const { client } = useApiConfig();
-  const refetch = useRefetchRoutes(factoryProjectId);
-  return useMutation({
-    mutationFn: ({ route, patch }: { route: IntakeRouteInfo; patch: Partial<IntakeRouteDraft> }) =>
-      client.patch<{ intakeRoute: IntakeRouteInfo }>(`${base(factoryProjectId)}/${encodeURIComponent(route.id)}`, {
-        ...patch,
-        expectedRevision: route.revision,
-      }),
-    onSettled: refetch,
-  });
-}
-
-export function useDeleteIntakeRouteMutation(factoryProjectId: string) {
-  const { client } = useApiConfig();
-  const refetch = useRefetchRoutes(factoryProjectId);
-  return useMutation({
-    mutationFn: (route: IntakeRouteInfo) =>
-      client.del<null>(
-        `${base(factoryProjectId)}/${encodeURIComponent(route.id)}?expectedRevision=${encodeURIComponent(String(route.revision))}`,
-      ),
-    onSettled: refetch,
-  });
-}
-
-/** Saves a new order: every route of the project, once each. */
-export function useReorderIntakeRoutesMutation(factoryProjectId: string) {
-  const { client } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (ids: string[]) => client.post<IntakeRouteListResponse>(`${base(factoryProjectId)}/reorder`, { ids }),
-    onSuccess: data => queryClient.setQueryData(queryKeys.intakeRoutes(factoryProjectId), data),
-    onError: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
-  });
-}
-
 /**
  * Fires a route «За розкладом» once, now, as its schedule would («Запустити зараз»): the answer is
  * the fire — the card it filed, or why it was skipped or failed. Its history and the list follow.
@@ -175,5 +123,43 @@ export function useFireIntakeRouteMutation(factoryProjectId: string) {
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRouteFires(factoryProjectId, routeId) }),
       ]),
+  });
+}
+
+/** One change to a project's routes, as the inline route editor queues it. */
+export type RouteWrite =
+  | { kind: 'create'; route: IntakeRouteDraft }
+  | { kind: 'update'; id: string; patch: Partial<IntakeRouteDraft> & { expectedRevision: number } }
+  | { kind: 'delete'; id: string; expectedRevision: number }
+  | { kind: 'reorder'; ids: string[] };
+
+/**
+ * Changes the project's intake routes, one request after another, then reloads them; resolves to
+ * the routes it created. A change someone else made first is refused with `revision_mismatch`
+ * (or, for a reorder, `intake_route_set_mismatch`).
+ */
+export function useIntakeRouteWrites(factoryProjectId: string) {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation<IntakeRouteInfo[], Error, RouteWrite[]>({
+    mutationFn: async writes => {
+      const created: IntakeRouteInfo[] = [];
+      for (const write of writes) {
+        if (write.kind === 'create') {
+          const response = await client.post<{ intakeRoute: IntakeRouteInfo }>(base(factoryProjectId), write.route);
+          created.push(response.intakeRoute);
+        } else if (write.kind === 'update') {
+          await client.patch(`${base(factoryProjectId)}/${encodeURIComponent(write.id)}`, write.patch);
+        } else if (write.kind === 'delete') {
+          await client.del(
+            `${base(factoryProjectId)}/${encodeURIComponent(write.id)}?expectedRevision=${encodeURIComponent(String(write.expectedRevision))}`,
+          );
+        } else {
+          await client.post(`${base(factoryProjectId)}/reorder`, { ids: write.ids });
+        }
+      }
+      return created;
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
   });
 }

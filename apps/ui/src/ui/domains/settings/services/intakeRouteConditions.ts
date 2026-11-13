@@ -1,8 +1,9 @@
 import { intakeSourceCondition, readIntakeSource } from '@factory/core/boards/intake-sources';
 import type { IntakeSourceDescriptor, IntakeSourceRegistry } from '@factory/core/boards/intake-sources';
-import type { RuleGroup } from '@factory/core/rules/rule-group';
+import type { RuleCondition, RuleGroup } from '@factory/core/rules/rule-group';
 
 import type { CardRuleGroup } from '../../../../api/types';
+import { INTAKE_SOURCES } from './intakeSources';
 
 /** The integrations an intake route can tell apart in v4. */
 export const ROUTE_INTEGRATIONS = ['github', 'gitlab', 'clickup'] as const;
@@ -37,15 +38,6 @@ const isTextFact = (field: string): field is RouteTextFact => (ROUTE_TEXT_FACTS 
 
 export type RouteConditionField = RouteCondition['field'];
 
-export const ROUTE_CONDITION_FIELDS: readonly RouteConditionField[] = [
-  'source.integration',
-  'source.kind',
-  'author.trusted',
-  'item.labels',
-  'item.title',
-  'source.list',
-  ...ROUTE_TEXT_FACTS,
-];
 
 const isIntegration = (value: unknown): value is RouteIntegration =>
   typeof value === 'string' && (ROUTE_INTEGRATIONS as readonly string[]).includes(value);
@@ -85,79 +77,6 @@ export function readRouteConditions(when: CardRuleGroup | null): RouteCondition[
     conditions.push(read);
   }
   return conditions;
-}
-
-/** The `when` the form's conditions stand for; no conditions match every card. */
-export function writeRouteConditions(conditions: readonly RouteCondition[]): CardRuleGroup | null {
-  const written = conditions.flatMap((condition): CardRuleGroup['conditions'] => {
-    switch (condition.field) {
-      case 'source.integration':
-        if (condition.value.length === 0) return [];
-        return condition.value.length === 1
-          ? [{ field: condition.field, operator: 'equals', value: condition.value[0]! }]
-          : [{ field: condition.field, operator: 'in', value: [...condition.value] }];
-      case 'item.labels':
-      case 'item.title': {
-        const value = condition.value.trim();
-        return value ? [{ field: condition.field, operator: 'contains', value }] : [];
-      }
-      case 'source.list':
-        return condition.value ? [{ field: condition.field, operator: 'equals', value: condition.value }] : [];
-      case 'source.repository':
-      case 'item.key':
-      case 'item.state':
-      case 'item.assignees': {
-        const value = condition.value.trim();
-        return value ? [{ field: condition.field, operator: 'equals', value }] : [];
-      }
-      default:
-        return [{ field: condition.field, operator: 'equals', value: condition.value }];
-    }
-  });
-  return written.length > 0 ? { operator: 'AND', conditions: written } : null;
-}
-
-/** A fresh condition for a field the form adds. */
-export function defaultCondition(field: RouteConditionField): RouteCondition {
-  switch (field) {
-    case 'source.integration':
-      return { field, value: ['clickup'] };
-    case 'source.kind':
-      return { field, value: 'issue' };
-    case 'author.trusted':
-      return { field, value: true };
-    default:
-      return { field, value: '' };
-  }
-}
-
-/** A condition the form would drop on save: an empty tag or title, or no integration chosen. */
-export function isBlankCondition(condition: RouteCondition): boolean {
-  if (condition.field === 'source.integration') return condition.value.length === 0;
-  if (condition.field === 'item.labels' || condition.field === 'item.title') return !condition.value.trim();
-  if (condition.field === 'source.list') return !condition.value;
-  if (isTextFact(condition.field)) return typeof condition.value === 'string' && !condition.value.trim();
-  return false;
-}
-
-/** Whether a route's condition names `field` = `value` anywhere in it. */
-function names(when: CardRuleGroup | null, field: string, value?: string): boolean {
-  if (!when) return false;
-  return when.conditions.some(member =>
-    'conditions' in member
-      ? names(member as CardRuleGroup, field, value)
-      : member.field === field && (value === undefined || member.value === value),
-  );
-}
-
-/** The routes that name this ClickUp List: they import its tasks and move their cards. */
-export function routesForList<R extends { when: CardRuleGroup | null }>(routes: readonly R[], listId: string): R[] {
-  return routes.filter(route => names(route.when, 'source.list', listId));
-}
-
-/** Whether a route makes its own cards on a trigger of its own («За розкладом»). */
-export function isScheduleRoute(route: { triggered?: unknown }): boolean {
-  return Boolean(route.triggered);
 }
 
 /** A closed issue's reason a route on «задачу закрито» can require (`event.reason`). */
@@ -208,47 +127,42 @@ export function readRouteWhen(sources: IntakeSourceRegistry, when: CardRuleGroup
   return { source: read.source, closeReason, conditions };
 }
 
-/** The `when` the editor's model stands for: the source, then the close reason, then the conditions. */
-export function writeRouteWhen(model: RouteWhenModel): CardRuleGroup | null {
-  const named = intakeSourceCondition(model.source);
-  const source: CardRuleGroup['conditions'] = named ? [named as CardRuleGroup['conditions'][number]] : [];
-  const reason: CardRuleGroup['conditions'] = model.closeReason
-    ? [{ field: 'event.reason', operator: 'equals', value: model.closeReason }]
-    : [];
-  const rest = writeRouteConditions(model.conditions.filter(condition => !isBlankCondition(condition)))?.conditions ?? [];
-  const conditions = [...source, ...reason, ...rest];
-  return conditions.length > 0 ? { operator: 'AND', conditions } : null;
+/** A route's `when` split into the source it names («Звідки») and the conditions on that source's fields. */
+interface SplitWhen {
+  /** Undefined when the route names its source in a way one source can't show; its whole `when` is then the rest. */
+  source: IntakeSourceDescriptor | undefined;
+  rest: RuleGroup | null;
 }
 
-/** The fields a condition on this source can test, in the source's order. */
-export function conditionFieldsFor(source: IntakeSourceDescriptor): RouteConditionField[] {
-  return source.fields.filter(
-    (field): field is RouteConditionField =>
-      field !== 'source.integration' && (ROUTE_CONDITION_FIELDS as readonly string[]).includes(field),
-  );
+export function splitWhen(when: RuleGroup | null, sources: IntakeSourceRegistry = INTAKE_SOURCES): SplitWhen {
+  const read = readIntakeSource(sources, when);
+  if (!read) return { source: undefined, rest: when };
+  // A route matching any source keeps its own top-level and/or.
+  if (read.source.id === 'any') return { source: read.source, rest: when };
+  if (read.rest.length === 0) return { source: read.source, rest: null };
+  const only = read.rest[0];
+  if (read.rest.length === 1 && only && 'conditions' in only) return { source: read.source, rest: only };
+  return { source: read.source, rest: { operator: 'AND', conditions: [...read.rest] } };
 }
 
-/**
- * The model after choosing another source: it names the new one (unless it is «будь-яке
- * джерело»), and conditions on fields the new source doesn't have are dropped.
- */
-export function chooseRouteSource(model: RouteWhenModel, source: IntakeSourceDescriptor): RouteWhenModel {
-  if (source.id === model.source.id) return model;
-  const fields = conditionFieldsFor(source);
-  return {
-    source,
-    closeReason: source.events.includes('work_item.closed') ? model.closeReason : null,
-    conditions: model.conditions.filter(condition => fields.includes(condition.field)),
-  };
+/** The `when` a source and the conditions on its fields stand for: the source's condition goes first. */
+export function joinWhen(source: IntakeSourceDescriptor | undefined, rest: RuleGroup | null): RuleGroup | null {
+  const named = source && intakeSourceCondition(source);
+  if (!named) return rest;
+  if (!rest) return { operator: 'AND', conditions: [named] };
+  if (rest.operator === 'AND') return { operator: 'AND', conditions: [named, ...rest.conditions] };
+  return { operator: 'AND', conditions: [named, rest] };
 }
 
-/** Whether the editor can change a route's events: all of them must be ones its source emits. */
-export function routeEventsEditable(source: IntakeSourceDescriptor, on: readonly string[]): boolean {
-  return on.every(event => source.events.includes(event));
-}
-
-/** The events kept for a source: the ones it emits, in its order; a new card when none is left. */
-export function eventsForSource(source: IntakeSourceDescriptor, on: readonly string[]): string[] {
-  const kept = source.events.filter(event => on.includes(event));
-  return kept.length > 0 ? kept : ['work_item.created'];
+/** `rule` without the conditions on fields outside `fields`; groups left empty drop out. */
+export function pruneRule(rule: RuleGroup | null, fields: ReadonlySet<string>): RuleGroup | null {
+  if (!rule) return null;
+  const conditions = rule.conditions.flatMap((member): (RuleCondition | RuleGroup)[] => {
+    if ('conditions' in member) {
+      const kept = pruneRule(member, fields);
+      return kept ? [kept] : [];
+    }
+    return fields.has(member.field) ? [member] : [];
+  });
+  return conditions.length > 0 ? { ...rule, conditions } : null;
 }

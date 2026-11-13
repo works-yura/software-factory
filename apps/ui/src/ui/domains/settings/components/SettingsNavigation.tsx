@@ -147,7 +147,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           return SETTINGS_SECTION_LABELS.intake;
         },
         icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github feed sync intake routes routing board catch-all',
+        searchText: 'work intake sources tasks issues pull requests github feed sync intake routes routing new cards card moves board catch-all',
       },
       {
         id: 'integrations',

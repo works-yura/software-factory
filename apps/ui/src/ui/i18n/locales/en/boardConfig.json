@@ -197,5 +197,10 @@
     "routed_other": "{{count}} intake routes send new cards here.",
     "routedPlusLeftovers_one": "1 intake route sends new cards here, plus cards no route takes.",
     "routedPlusLeftovers_other": "{{count}} intake routes send new cards here, plus cards no route takes."
+  },
+  "cardMoves": {
+    "nav": "Card moves",
+    "title": "Card moves",
+    "description": "Where cards on this board go when their issue, task or pull request changes. The first matching move wins."
   }
 }

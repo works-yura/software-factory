@@ -97,7 +97,7 @@ export function GlobalSearchNavigationResults({
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.intake}
         subtitle={t('subtitles.settings')}
-        value={searchValue(SETTINGS_SECTION_LABELS.intake, t('subtitles.settings'), `Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`)}
+        value={searchValue(SETTINGS_SECTION_LABELS.intake, t('subtitles.settings'), `Work Intake Settings intake routes new cards ${settingsSectionPath(factoryId, 'intake')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem

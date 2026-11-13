@@ -1,8 +1,7 @@
-import { cardRuleGroupSchema } from '@factory/core/rules/rule-group';
+import type { RuleGroup } from '@factory/core/rules/rule-group';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
-import type { RuleBuilderProps } from '@mastra/playground-ui/components/RuleBuilder';
+import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
@@ -10,74 +9,43 @@ import type { z } from 'zod';
 
 import { translator } from '../../../i18n/t';
 import { rawRuleProblem, readRawRule, ruleProblem } from '../services/rules';
+import { ConditionRows } from './ConditionRows';
+import { cardFacts, describeRule } from './conditionFields';
+import type { Facts } from './conditionFields';
 
 const tk = translator('settings');
 
-type Facts = RuleBuilderProps['schema'];
-
-/** The card facts a phase rule can test (`CARD_RULE_FIELDS`), as the rule builder's field tree. */
-export function cardFacts(): Facts {
-  return {
-    type: 'object',
-    properties: {
-      item: {
-        type: 'object',
-        title: tk('workBoard.facts.card'),
-        properties: {
-          labels: { type: 'string', title: tk('workBoard.facts.labels') },
-          title: { type: 'string', title: tk('workBoard.facts.title') },
-          author: { type: 'string', title: tk('workBoard.facts.author') },
-          key: { type: 'string', title: tk('workBoard.facts.key') },
-          state: { type: 'string', title: tk('workBoard.facts.state') },
-          assignees: { type: 'string', title: tk('workBoard.facts.assignees') },
-          pullRequest: { type: 'number', title: tk('workBoard.facts.pullRequest') },
-        },
-      },
-      author: {
-        type: 'object',
-        title: tk('workBoard.facts.author'),
-        properties: { trusted: { type: 'boolean', title: tk('workBoard.facts.trusted') } },
-      },
-      source: {
-        type: 'object',
-        title: tk('workBoard.facts.source'),
-        properties: {
-          kind: { type: 'string', title: tk('workBoard.facts.kind') },
-          integration: { type: 'string', title: tk('workBoard.facts.integration') },
-          provider: { type: 'string', title: tk('workBoard.facts.provider') },
-          // A GitHub repository or a GitLab project path.
-          repository: { type: 'string', title: tk('workBoard.facts.repository') },
-        },
-      },
-    },
-  };
-}
-
 /**
- * A rule, edited with the rule builder or as raw JSON. Unset means "every card".
+ * A rule, edited as condition rows or as raw JSON. Unset means "every card".
  * Reports a rule the server would refuse, so the form can hold back the save.
  * `facts` defaults to the card facts a phase rule tests (`cardFacts`). Pass `json` to keep the JSON being typed outside
  * the editor, so it outlives the editor; otherwise the editor keeps it.
  */
-export function RuleEditor<Rule>({
+export function RuleEditor({
   label,
   description,
   rule,
   disabled,
-  facts,
+  facts = cardFacts(),
+  options,
   schema,
   json,
   onChange,
+  onUnfinished,
 }: {
   label: string;
   description: string;
-  rule: Rule | null | undefined;
+  rule: RuleGroup | null | undefined;
   disabled: boolean;
   facts?: Facts;
-  schema: z.ZodType<Rule>;
-  /** The JSON being typed, unset while the rule builder shows. */
+  /** Values to pick from per field, such as a board's phases. */
+  options?: Record<string, FilterBarOption[]>;
+  schema: z.ZodType<RuleGroup>;
+  /** The JSON being typed, unset while the conditions show. */
   json?: { text: string | undefined; onChange: (text: string | undefined) => void };
-  onChange: (rule: Rule | null, problem: string | undefined) => void;
+  onChange: (rule: RuleGroup | null, problem: string | undefined) => void;
+  /** Whether a condition row is half filled in, which the form should treat as a problem until it isn't. */
+  onUnfinished?: (unfinished: boolean) => void;
 }) {
   const [ownRaw, setOwnRaw] = useState<string | undefined>(undefined);
   const raw = json ? json.text : ownRaw;
@@ -106,7 +74,7 @@ export function RuleEditor<Rule>({
               return;
             }
             setRaw(undefined);
-            // The builder edits the last valid rule, so JSON that never parsed no longer holds the save.
+            // The rows edit the last valid rule, so JSON that never parsed no longer holds the save.
             onChange(rule ?? null, ruleProblem(schema, rule));
           }}
         >
@@ -125,17 +93,20 @@ export function RuleEditor<Rule>({
         />
       ) : disabled ? (
         <Txt id={id} as="p" variant="caption" tone="muted">
-          {rule ? JSON.stringify(rule) : tk('workBoard.rule.everyCard')}
+          {describeRule(rule, options)}
         </Txt>
       ) : (
         <div id={id}>
-          <RuleBuilder
-            schema={facts ?? cardFacts()}
-            // Factory's rule groups have the builder's shape; the server validates the depth.
-            ruleGroup={(rule ?? undefined) as RuleBuilderProps['ruleGroup']}
-            onChange={next => {
-              const value = (next ?? null) as Rule | null;
-              onChange(value, ruleProblem(schema, value));
+          <ConditionRows
+            label={label}
+            rule={rule}
+            facts={facts}
+            options={options}
+            onChange={(next, incomplete) => {
+              onUnfinished?.(incomplete);
+              // A half-filled row keeps the last whole rule, so saving never quietly drops a condition.
+              if (incomplete) onChange(rule ?? null, tk('conditions.unfinished'));
+              else onChange(next, ruleProblem(schema, next));
             }}
           />
         </div>

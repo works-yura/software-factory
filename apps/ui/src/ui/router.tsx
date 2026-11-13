@@ -23,6 +23,7 @@ import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { BoardConfigPage } from './pages/BoardConfigPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { FactorySkillsPage } from './pages/FactorySkillsPage';
+import { CardMovesPage } from './pages/CardMovesPage';
 import { NewBoardPage } from './pages/NewBoardPage';
 import { ConnectAccountPage } from './pages/ConnectAccountPage';
 import { InvitePage } from './pages/InvitePage';
@@ -205,6 +206,8 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'boards/:boardId/config/:phaseKey?', element: <BoardConfigPage /> },
                 { path: 'work/skills', element: <FactorySkillsPage /> },
                 { path: 'boards/:boardId/skills', element: <FactorySkillsPage /> },
+                { path: 'work/moves', element: <CardMovesPage /> },
+                { path: 'boards/:boardId/moves', element: <CardMovesPage /> },
                 { path: 'activity', element: <FactoryHomeRedirect /> },
                 // Upstream's Overview and Metrics became Analytics, a Settings section.
                 { path: 'analytics', element: <AnalyticsRedirect /> },

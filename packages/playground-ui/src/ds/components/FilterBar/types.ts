@@ -66,6 +66,8 @@ export type FilterBarField = {
   type?: FilterBarFieldType;
   /** Operator ids allowed for this field. Defaults to every root operator. */
   operators?: string[];
+  /** How this field words some operators instead of their own label, such as "has" for a list's `equals`. */
+  operatorLabels?: Record<string, string>;
   /**
    * Optional value suggestions. Absent → free text.
    * - array: static list, filtered locally by the query.

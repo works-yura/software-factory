@@ -1,7 +1,16 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { BookOpen, Check, ChevronDown, GripVertical, Plus, SlidersHorizontal, SquareKanban } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  BookOpen,
+  Check,
+  ChevronDown,
+  GripVertical,
+  Plus,
+  SlidersHorizontal,
+  SquareKanban,
+} from 'lucide-react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ComponentProps, KeyboardEvent, PointerEvent, ReactNode } from 'react';
@@ -15,7 +24,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft, useShownDraft } from '../BoardDraftProvider';
-import { boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
+import { boardCardMovesPath, boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
 import type { BoardConfigLocation } from '../boardConfigPaths';
 import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
@@ -26,10 +35,10 @@ import { SidebarLoadError } from '../../../ui/LoadErrorState';
 const tk = translator('boardConfig');
 
 /**
- * The factory's skills no phase runs, then the board switcher and the open board's pages: General, then one
- * page per phase, in board order. Skills sit above the switcher because they belong to no board.
+ * The factory's skills no phase runs, then the board switcher and the open board's pages: General, Card moves,
+ * then one page per phase, in board order. Skills sit above the switcher because they belong to no board.
  */
-export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills }: BoardConfigLocation) {
+export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, moves }: BoardConfigLocation) {
   const query = useBoardQuery(factoryId, boardId);
 
   return (
@@ -46,9 +55,15 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills }: 
       <Sidebar.NavList>
         <ConfigLink
           to={boardConfigPath(factoryId, boardId)}
-          isActive={!phaseKey && !skills}
+          isActive={!phaseKey && !skills && !moves}
           icon={<SlidersHorizontal />}
           label={tk('nav.general')}
+        />
+        <ConfigLink
+          to={boardCardMovesPath(factoryId, boardId)}
+          isActive={moves === true}
+          icon={<ArrowRightLeft />}
+          label={tk('cardMoves.nav')}
         />
       </Sidebar.NavList>
       <section className="flex flex-col gap-1" aria-label={tk('editor.phases')}>
@@ -65,6 +80,7 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills }: 
             boardId={boardId}
             phaseKey={phaseKey}
             skills={skills}
+            moves={moves}
             response={query.data}
           />
         )}
@@ -136,6 +152,7 @@ function PhaseList({
   boardId,
   phaseKey,
   skills,
+  moves,
   response,
 }: BoardConfigLocation & {
   response: StoredBoardResponse;
@@ -143,8 +160,8 @@ function PhaseList({
   const { board, canEdit } = response;
   const { draft, locked, setDraft } = useBoardDraft(factoryId, boardId, board);
   const editable = canEdit === true && board.editable === true;
-  // The skills page has no save bar to keep a reorder made there.
-  const sortable = editable && !skills && !locked && draft.phases.length > 2;
+  // The skills and card moves pages have no save bar to keep a reorder made there.
+  const sortable = editable && !skills && !moves && !locked && draft.phases.length > 2;
   const [drag, setDrag] = useState<Drag>();
   const [announcement, setAnnouncement] = useState('');
 

@@ -73,6 +73,8 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiCli
     }
     const res = await doFetch(`${baseUrl}${path}`, init);
     if (!res.ok) throw await extractError(res);
+    // A delete answers 204 with no body.
+    if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
 

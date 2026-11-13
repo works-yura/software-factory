@@ -852,7 +852,57 @@
     "origins": {
       "clickupStatus": "ClickUp: статус «{{status}}»",
       "repository": "Задачі репозиторію «{{repository}}»"
-    }
+    },
+    "whenKeyword": "Коли",
+    "from": "Звідки",
+    "sendTo": "Куди",
+    "moveTo": "Перенести в",
+    "joinAndMoveTo": "Приєднати до картки задачі й перенести в",
+    "steps": {
+      "if": "Якщо",
+      "elseIf": "Інакше якщо",
+      "otherwise": "Інакше",
+      "new": "Новий"
+    },
+    "turnedOn": "Маршрут увімкнено",
+    "turnedOff": "Маршрут вимкнено",
+    "renamed": "Маршрут перейменовано",
+    "triggerChanged": "Подію змінено",
+    "destinationChanged": "Призначення змінено",
+    "conditionsSaved": "Умови збережено",
+    "changedFirst": "Хтось інший змінив ці маршрути раніше, тож вашу зміну не збережено.",
+    "undo": "Скасувати",
+    "undone": "Зміну скасовано",
+    "orderRestored": "Порядок повернуто",
+    "moved": "«{{name}}» тепер на місці {{position}}",
+    "added": "Додано «{{name}}»",
+    "deletedNamed": "Видалено «{{name}}»",
+    "restored": "Повернуто «{{name}}»",
+    "newCardsNowGoTo": "Нові картки, яких не бере жоден маршрут, тепер ідуть на «{{board}}»",
+    "catchAllName": "Усе інше йде в {{board}} › {{phase}}",
+    "copyName": "{{name}} на {{board}}",
+    "notInstalled": "{{board}} (не встановлено)",
+    "boardForNewCards": "Дошка для нових карток",
+    "actionsFor": "Дії маршруту «{{name}}»",
+    "moveUpItem": "Вище",
+    "moveDownItem": "Нижче",
+    "conditionsOf": "Умови маршруту «{{name}}»",
+    "addAtLeastOne": "Додайте хоча б одну.",
+    "matchesEveryCard": "Підходить будь-яка картка.",
+    "unreachable": "Ніколи не спрацює: маршрут вище бере всі нові картки.",
+    "addMove": "Додати перенесення",
+    "newMove": "Нове перенесення",
+    "newName": "Назва нового маршруту",
+    "nameMove": "Назвіть перенесення",
+    "nameRoute": "Назвіть маршрут",
+    "newConditions": "Умови нового маршруту",
+    "everythingElse": "Усе інше йде в",
+    "movesListLabel": "Перенесення карток",
+    "movesReadOnly": "Змінювати перенесення карток може лише адміністратор організації.",
+    "noMoves": "На цій дошці немає перенесень карток.",
+    "reorder": "Перемістити «{{name}}»",
+    "movesLoading": "Завантаження перенесень…",
+    "boardNotInstalled": "Цю дошку не встановлено."
   },
   "intakeTriggers": {
     "ifOpen": "Якщо попередня ще відкрита",
@@ -936,7 +986,13 @@
       "notScheduled": "Запустити зараз можна лише маршрут «За розкладом».",
       "adminOnly": "Запускати маршрути може лише адміністратор організації.",
       "requestFailed": "Не вдалося запустити маршрут"
-    }
+    },
+    "addSchedule": "Додати розклад",
+    "newSchedule": "Новий розклад",
+    "namePlaceholder": "Напр. Щотижнева перевірка залежностей",
+    "schedulesTitle": "За розкладом",
+    "schedulesLabel": "Маршрути за розкладом",
+    "schedulesHint": "Кожен сам створює картку, коли спрацьовує його розклад, поза порядком вище."
   },
   "workBoard": {
     "description": "Як картки рухаються цією дошкою: коли кожна фаза стартує сама, що каже її агентові, коли її план схвалюється без людини і куди картка йде далі. Зміни стосуються лише цієї Фабрики.",
@@ -971,7 +1027,7 @@
     "rule": {
       "invalidJson": "Некоректний JSON.",
       "editJson": "Редагувати як JSON",
-      "useBuilder": "Конструктор правил",
+      "useBuilder": "Редагувати як умови",
       "jsonLabel": "{{label}} (JSON)",
       "everyCard": "Кожна картка."
     },
@@ -1702,5 +1758,135 @@
       "mcpPending": "Сервер бази налаштовується; він з’явиться тут за мить.",
       "choose": "Виберіть…"
     }
+  },
+  "conditions": {
+    "where": "Де",
+    "and": " і ",
+    "or": " або ",
+    "matchAllOrAny": "Усі чи будь-яка",
+    "allOfThese": "Усі з цих",
+    "anyOfThese": "Будь-яка з цих",
+    "addCondition": "Додати умову",
+    "addGroup": "Додати групу",
+    "removeGroup": "Прибрати групу",
+    "removeCondition": "Прибрати умову",
+    "unfinished": "Допишіть або приберіть незавершені умови, щоб зберегти.",
+    "field": "Поле",
+    "chooseField": "Виберіть поле",
+    "operator": "Оператор",
+    "value": "Значення",
+    "values": {
+      "trusted": "Довірений",
+      "untrusted": "Сторонній автор",
+      "issue": "Задача",
+      "pullRequest": "Pull request",
+      "task": "Задача ClickUp",
+      "completed": "Виконано",
+      "canceled": "Не планується"
+    },
+    "chooseValue": "Виберіть значення",
+    "chooseValues": "Виберіть значення",
+    "search": "Пошук",
+    "noOption": "Нічого не знайдено.",
+    "valuePlaceholder": "Значення",
+    "valuesPlaceholder": "Значення через кому",
+    "yes": "Так",
+    "no": "Ні",
+    "operators": {
+      "equals": "дорівнює",
+      "not_equals": "не дорівнює",
+      "in": "— одне з",
+      "not_in": "— жодне з",
+      "contains": "містить",
+      "not_contains": "не містить",
+      "exists": "задано",
+      "not_exists": "не задано",
+      "greater_than": "більше за",
+      "less_than": "менше за",
+      "greater_than_or_equal": "щонайменше",
+      "less_than_or_equal": "щонайбільше"
+    },
+    "listOperators": {
+      "equals": "має",
+      "not_equals": "не має",
+      "in": "має одне з",
+      "not_in": "не має жодного з",
+      "exists": "має будь-яке",
+      "not_exists": "не має жодного"
+    },
+    "presence": {
+      "exists": "є",
+      "not_exists": "немає"
+    },
+    "groups": {
+      "pullRequest": "Pull request",
+      "closedIssue": "Закрита задача",
+      "event": "Подія"
+    },
+    "fields": {
+      "item.labels": "Мітки",
+      "item.title": "Назва",
+      "item.author": "Автор",
+      "item.key": "Номер",
+      "item.state": "Статус",
+      "item.assignees": "Виконавці",
+      "item.pullRequest": "Відкритий pull request",
+      "author.trusted": "Довіра до автора",
+      "source.kind": "Вид джерела",
+      "source.integration": "Інтеграція",
+      "source.provider": "Провайдер",
+      "source.repository": "Репозиторій або проєкт",
+      "source.list": "List у ClickUp",
+      "pullRequest.closesIssue": "Pull request закриває задачу",
+      "closedIssue.phase": "Фаза закритої задачі",
+      "closedIssue.hasPullRequest": "У закритої задачі є pull request",
+      "event.type": "Подія",
+      "event.reason": "Причина закриття"
+    },
+    "eventTypes": {
+      "work_item.created": "Нова картка",
+      "work_item.state_changed": "Статус змінився",
+      "work_item.closed": "Закрито",
+      "work_item.reopened": "Перевідкрито",
+      "pull_request.opened": "PR відкрито",
+      "pull_request.synchronized": "PR оновлено",
+      "pull_request.review_requested": "Запит на рев’ю",
+      "pull_request.merged": "PR злито",
+      "pull_request.closed": "PR закрито"
+    },
+    "triggers": {
+      "work_item.created": "приходить нова картка",
+      "work_item.state_changed": "статус задачі змінився",
+      "work_item.closed": "картку закрито",
+      "work_item.reopened": "картку перевідкрито",
+      "pull_request.opened": "відкрито pull request",
+      "pull_request.synchronized": "у pull request нові коміти",
+      "pull_request.review_requested": "запитано рев’ю",
+      "pull_request.merged": "pull request злито",
+      "pull_request.closed": "pull request закрито без злиття"
+    },
+    "phrases": {
+      "author.trusted": {
+        "yes": "автор довірений",
+        "no": "автор не довірений"
+      },
+      "pullRequest.closesIssue": {
+        "yes": "pull request закриває задачу",
+        "no": "pull request не закриває задачі"
+      },
+      "closedIssue.hasPullRequest": {
+        "yes": "у закритої задачі є pull request",
+        "no": "у закритої задачі немає pull request"
+      },
+      "item.pullRequest": {
+        "yes": "у картки є відкритий pull request",
+        "no": "у картки немає відкритого pull request"
+      }
+    },
+    "phrase": {
+      "value": "{{fact}} {{operator}} {{values}}",
+      "valueless": "{{fact}}: {{operator}}"
+    },
+    "valuesLabel": "Значення"
   }
 }

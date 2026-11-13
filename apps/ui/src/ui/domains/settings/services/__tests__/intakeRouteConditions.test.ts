@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { readRouteConditions, writeRouteConditions } from '../intakeRouteConditions';
+import { readRouteConditions } from '../intakeRouteConditions';
 
 describe('intake route conditions', () => {
-  it("reads the default route's condition and writes it back the same", () => {
+  it("reads the default route's condition for its summary", () => {
     const when = {
       operator: 'AND' as const,
       conditions: [
@@ -16,24 +16,9 @@ describe('intake route conditions', () => {
       { field: 'source.integration', value: ['github', 'gitlab'] },
       { field: 'author.trusted', value: false },
     ]);
-    expect(writeRouteConditions(conditions!)).toEqual(when);
   });
 
-  it('writes one integration as equals, tags and titles as contains, and nothing as every card', () => {
-    expect(
-      writeRouteConditions([
-        { field: 'source.integration', value: ['clickup'] },
-        { field: 'item.labels', value: ' docs ' },
-        { field: 'item.title', value: '' },
-      ]),
-    ).toEqual({
-      operator: 'AND',
-      conditions: [
-        { field: 'source.integration', operator: 'equals', value: 'clickup' },
-        { field: 'item.labels', operator: 'contains', value: 'docs' },
-      ],
-    });
-    expect(writeRouteConditions([])).toBeNull();
+  it('reads no condition as every card', () => {
     expect(readRouteConditions(null)).toEqual([]);
   });
 
