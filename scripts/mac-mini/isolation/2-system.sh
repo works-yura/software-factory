@@ -221,6 +221,7 @@ agent_path() {
   [ "$(stat -f '%Lp' "$DOT")" = 711 ] || die "run sudo $0 close-dot first"
   step "Saving the current modes"
   path_neighbours | save_modes 2-agent-path
+  path_dirs | save_modes 2-agent-path-dirs
   step "Closing the neighbours"
   local entry dir
   while IFS= read -r entry; do
@@ -229,6 +230,8 @@ agent_path() {
   step "Letting $AGENT_USER through"
   while IFS= read -r dir; do
     [ -n "$dir" ] || continue
+    # 700: only the ACL lets others in, and only to pass through, not to list.
+    chmod 700 "$dir"
     has_acl "allow search" "$dir" || chmod +a "$ACL_PASS" "$dir"
     has_acl "only_inherit" "$dir" || chmod +a "$ACL_DENY_NEW" "$dir"
     say "  $dir"
@@ -248,6 +251,7 @@ close_agent_path() {
   done < <(path_dirs)
   step "Restoring the neighbours' modes"
   restore_modes 2-agent-path
+  [ -f "$STATE/2-agent-path-dirs.modes" ] && restore_modes 2-agent-path-dirs
   status
 }
 
