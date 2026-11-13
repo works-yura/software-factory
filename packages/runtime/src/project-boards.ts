@@ -28,7 +28,6 @@ const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
 /** The key of the retired Review board; projects that ran earlier releases may still store its row. */
 const LEGACY_REVIEW_BOARD = 'review';
-const RESERVED_REVIEW_ROW = `Stored board "${LEGACY_REVIEW_BOARD}" isn't served: the key is reserved for the retired Review board.`;
 /**
  * The phases every release seeded the Review board with; only runners and tools changed between
  * them. Frozen: the Review board was retired (2fa2fed), so its declaration is gone.
@@ -446,13 +445,10 @@ export class ProjectBoardCache implements ProjectBoardSource {
     }
     for (const row of rows) {
       if (this.codeRegistry.has(row.key)) continue;
-      if (row.key === LEGACY_REVIEW_BOARD) {
-        // Factory seeded this row while Review was a built-in board and nobody edited it since:
-        // there is nothing in it to lose, so it is no problem. A person's edits are reported: the
-        // key is reserved, so the row is never served.
-        if (!isUntouchedReviewSeed(row)) report(row, [RESERVED_REVIEW_ROW]);
-        continue;
-      }
+      // Factory seeded this row while Review was a built-in board and nobody edited it since: the
+      // retired board's leftover, not a board anyone made. Any other row under `review` is a board
+      // like any other (upstream #29903): the retirement migrations ran once, so its cards stay its own.
+      if (row.key === LEGACY_REVIEW_BOARD && isUntouchedReviewSeed(row)) continue;
       let board: InstalledBoard;
       try {
         board = compileStoredBoard(row);

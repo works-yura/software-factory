@@ -462,7 +462,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect((await a.boards.get(scope, 'review'))!.revision).toBe(1);
   });
 
-  it('reports a non-Review board stored under the review key by Factory, and never serves it', async () => {
+  it('serves a board stored under the review key like any other, unless it is the untouched Review seed', async () => {
     const { a, scope } = await setup();
     // Factory's actor alone doesn't make a row the Review seed: its board isn't Review's.
     await a.boards.insertIfMissing(scope, { ...bugsBoard(), key: 'review', name: 'Review' }, 'factory');
@@ -473,10 +473,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
       recheckMs: RECHECK_MS,
     }).describe(scope);
 
-    expect(described.problems).toEqual([
-      'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
-    ]);
-    expect(described.registry.get('review')).toBeUndefined();
+    expect(described.problems).toEqual([]);
+    expect(described.registry.get('review')?.name).toBe('Review');
   });
 
   it('skips a stored board that no longer compiles and still loads the code boards and the other stored boards', async () => {
