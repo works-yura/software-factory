@@ -7,6 +7,8 @@
  * state back: `starting` while it runs, and why it failed until the next start.
  */
 
+import { classifySandboxFailure } from '@factory/sandbox';
+
 /**
  * What kind of failure ended a start, for the page to name in the viewer's language:
  * - `timeout`: a command or transfer ran out of time (e.g. a clone from a slow GitHub);
@@ -36,25 +38,12 @@ export class NothingToStartError extends Error {
   override readonly name = 'NothingToStartError';
 }
 
-const TIMEOUT = /timed out|timeout|too slow|stalled|low speed/i;
-const NETWORK = /could not reach|could not resolve host|failed to connect|network is unreachable|egress/i;
-const NO_ACCESS =
-  /authentication failed|could not read username|repository not found|permission denied|access denied|\b40[134]\b|not authorized|did not include usable credentials/i;
-const GIT_FAILURE_CODES = new Set(['clone-failed', 'pull-failed', 'git-missing']);
-
 /** Sort a start failure into a {@link SessionSandboxStartErrorCode}, keeping its message. */
 export function classifySessionSandboxStartError(error: unknown): SessionSandboxStartError {
-  const message = error instanceof Error ? error.message : String(error);
-  if (error instanceof NothingToStartError) return { code: 'no_sandbox', message };
-  // `MaterializeError` (sandbox package) carries a code; matched by shape so no import is needed.
-  const materialize = error instanceof Error ? (error as Error & { code?: unknown }).code : undefined;
-  if (materialize === 'egress-blocked') return { code: 'network', message };
-  if (TIMEOUT.test(message)) return { code: 'timeout', message };
-  if (NETWORK.test(message)) return { code: 'network', message };
-  if (NO_ACCESS.test(message)) return { code: 'no_access', message };
-  if (typeof materialize === 'string' && GIT_FAILURE_CODES.has(materialize)) return { code: 'clone_failed', message };
-  if (/\bgit (clone|checkout|fetch)\b/i.test(message)) return { code: 'clone_failed', message };
-  return { code: 'unknown', message };
+  if (error instanceof NothingToStartError) return { code: 'no_sandbox', message: error.message };
+  const { code, message } = classifySandboxFailure(error);
+  // The Files tab has no line of its own for a failed setup command.
+  return { code: code === 'setup_failed' ? 'unknown' : code, message };
 }
 
 interface StartEntry {

@@ -21,6 +21,8 @@ import type { ExecutableSandbox, SandboxCommandResult } from '../materialization
 import type { SourceControlStorageHandle } from '@factory/store';
 import { timedPhase } from '@factory/observability';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../sandbox-env.ts';
+import { gitProgressReader, withoutGitProgress } from '../setup-progress.ts';
+import type { SandboxSetupTransfer } from '../setup-progress.ts';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
@@ -62,6 +64,8 @@ interface ShOptions {
 interface CommandOptions extends ShOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  /** Streams the command's stderr as it arrives, e.g. a clone's `--progress`. */
+  onStderr?: (chunk: string) => void;
 }
 
 /**
@@ -155,6 +159,7 @@ async function executeOnce(
         timeout: timeoutMs,
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
         ...(options.env !== undefined ? { env: options.env } : {}),
+        ...(options.onStderr !== undefined ? { onStderr: options.onStderr } : {}),
       }),
       hangGuard,
     ]);
@@ -352,6 +357,11 @@ export interface MaterializeRepoOptions {
   /** A freshly minted, short-lived installation access token. */
   token: string;
   storage: MaterializationStore;
+  /**
+   * Told when a clone begins and, from `git clone --progress`, how far it has
+   * got. Without it the clone runs without `--progress`.
+   */
+  progress?: { cloning(): void; transfer(transfer: SandboxSetupTransfer): void };
 }
 
 async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promise<void> {
@@ -445,21 +455,45 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       'clone-failed',
     );
     await clearWorkdir(sandbox, workdir);
+    const progress = options.progress;
+    progress?.cloning();
+    let readProgress = gitProgressReader();
     const clone = await gitTransfer(
       sandbox,
-      ['clone', '--depth=1', '--single-branch', '--branch', repoInfo.defaultBranch, '--', cleanCloneUrl, workdir],
+      [
+        'clone',
+        ...(progress ? ['--progress'] : []),
+        '--depth=1',
+        '--single-branch',
+        '--branch',
+        repoInfo.defaultBranch,
+        '--',
+        cleanCloneUrl,
+        workdir,
+      ],
       {
         env: authEnv,
         phase: 'repository clone',
+        ...(progress
+          ? {
+              onStderr: (chunk: string) => {
+                const transfer = readProgress(chunk);
+                if (transfer) progress.transfer(transfer);
+              },
+            }
+          : {}),
         beforeRetry: async () => {
           // A clone that died partway leaves the destination non-empty, which
           // git refuses to clone into. Clear its contents so the retry starts
           // clean without removing LocalSandbox's process cwd.
           await clearWorkdir(sandbox, workdir);
+          readProgress = gitProgressReader();
         },
       },
     );
-    if (clone.exitCode !== 0) throw classifyGitFailure(clone, 'clone-failed');
+    if (clone.exitCode !== 0) {
+      throw classifyGitFailure(progress ? { ...clone, stderr: withoutGitProgress(clone.stderr) } : clone, 'clone-failed');
+    }
   }
 
   // 4. Mark materialized.

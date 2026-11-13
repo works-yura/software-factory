@@ -66,6 +66,8 @@ import type {
   WorkItemFolders,
 } from '@factory/sandbox';
 import { repositoryDirectoryName } from '@factory/sandbox';
+import { createSandboxSetupReporter, silentSandboxSetupReporter } from '@factory/sandbox';
+import type { SandboxSetupReporter } from '@factory/sandbox';
 import {
   clearSessionEnvironment,
   recordSessionEnvironment,
@@ -862,10 +864,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
      * and before its setup command, so the setup sees them. A failure is
      * logged: a missing env file never stops a boot.
      */
-    const writeCheckoutEnvFiles = async (target: ExecutableSandbox, projectRepositoryId: string, dir: string) => {
+    const writeCheckoutEnvFiles = async (
+      target: ExecutableSandbox,
+      projectRepositoryId: string,
+      dir: string,
+      progress: { reporter: SandboxSetupReporter; repo: string },
+    ) => {
       envFileTargets.set(projectRepositoryId, dir);
       if (!envScope) return;
       const { files } = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
+      if (files.length) progress.reporter.step('env-files', progress.repo);
       await timedPhase('workspace.env-files', () =>
         writeEnvFilesToCheckouts(target, [{ projectRepositoryId, dir }], files),
       );
@@ -910,6 +918,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // `session.sandboxWorkdir` written under a different provider): local
     // sandboxes derive it at construction, remote sandboxes clone into the
     // VM's own home so it resolves lazily at first start.
+    // The running setup's progress reporter; silent outside a setup.
+    let setupProgress: SandboxSetupReporter = silentSandboxSetupReporter;
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
     const runSetupOn = (target: unknown, workdir: string, gate: SessionSetupGate) =>
@@ -960,14 +970,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
       let setupError: SetupCommandError | undefined;
+      // The chat shows each step while the first turn waits on it.
+      const progress = (setupProgress = createSandboxSetupReporter(
+        session.sessionId,
+        environment ? environment.repos.map(repo => repo.slug) : [repoFullName],
+      ));
       try {
         // A card's sessions share one checkout: their setups take turns, so a
         // later role finds the clone and markers the first one left instead of
         // cloning beside it.
         await (folder ? withWorkItemFolderLock(folder.key, async () => guardedSetup(args)) : guardedSetup(args));
+        progress.finish();
       } catch (error) {
+        progress.finish(error);
         if (!(error instanceof SetupCommandError)) throw error;
         setupError = error;
+      } finally {
+        setupProgress = silentSandboxSetupReporter;
       }
       // Re-check after the (long) setup: a session retired mid-setup must not
       // register credentials for a workspace whose retirement teardown has
@@ -1574,6 +1593,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // tokens are fetched inside the run so a replacement VM healed mid-session
     // gets fresh credentials, not ones captured at workspace construction.
     const runSessionSetup = async (target: SessionSandbox, workdir: string, gate: SessionSetupGate): Promise<void> => {
+      const progress = setupProgress;
       const access = await getRepositoryAccess();
       const token = access.authorization?.token;
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
@@ -1597,7 +1617,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         sandbox: target,
         token,
         storage: storage.sessions,
+        progress: {
+          cloning: () => progress.step('clone', repoFullName),
+          transfer: transfer => progress.transfer(repoFullName, transfer),
+        },
       });
+      progress.step('checkout', repoFullName);
       await checkoutSessionBranch(target, workdir, {
         identity: gitIdentity,
         branch: session.branch,
@@ -1612,7 +1637,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // checkout is, so the role inherits what the earlier roles left.
         ...(folder ? { inheritCheckout: true } : {}),
       });
-      await writeCheckoutEnvFiles(target, projectRepository.id, workdir);
+      await writeCheckoutEnvFiles(target, projectRepository.id, workdir, { reporter: progress, repo: repoFullName });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
@@ -1628,6 +1653,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           });
           return;
         }
+        progress.step('setup', repoFullName);
         try {
           await timedPhase('workspace.setup', async () =>
             runSetupCommand(target, workdir, projectRepository.setupCommand!, ...(await setupEnv())),
@@ -1671,6 +1697,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // broken link never wedges the whole environment. The workspace setup
     // command runs last, once, and is fatal like the template build.
     const runSessionEnvironmentSetup = async (target: SessionSandbox, gate: SessionEnvironmentGate): Promise<void> => {
+      const progress = setupProgress;
       const repos = environment!.repos;
       const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
       const states: SessionEnvironmentRepositoryState[] = [];
@@ -1733,6 +1760,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             state.branch = session.branch;
             state.setupStatus = 'failed';
             failures.set(repo.slug, error.message);
+            progress.fail(error, { repo: repo.slug, phase: 'setup' });
             primaryError = error;
           }
           inFlight = undefined;
@@ -1762,7 +1790,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               token,
               // `materialized_at` is the session's own repository's.
               storage: { markMaterialized: async () => {} },
+              progress: {
+                cloning: () => progress.step('clone', repo.slug),
+                transfer: transfer => progress.transfer(repo.slug, transfer),
+              },
             });
+            progress.step('checkout', repo.slug);
             const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
               syncEnvironmentRepository(target, entry.dir, {
                 identity: gitIdentity,
@@ -1777,7 +1810,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             );
             state.branch = synced.branch;
             secondary.synced = true;
-            await writeCheckoutEnvFiles(target, repo.projectRepositoryId, entry.dir);
+            await writeCheckoutEnvFiles(target, repo.projectRepositoryId, entry.dir, { reporter: progress, repo: repo.slug });
           } catch (error) {
             console.warn('[Factory] Environment repository could not be synced; continuing the boot', {
               orgId: session.orgId,
@@ -1785,6 +1818,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               projectRepositoryId: repo.projectRepositoryId,
               error: error instanceof Error ? error.message.slice(-2000) : String(error),
             });
+            progress.fail(error, { repo: repo.slug });
             // The checkout may be missing or stale and its setup never ran.
             state.setupStatus = 'failed';
             failures.set(repo.slug, error instanceof Error ? error.message : String(error));
@@ -1798,6 +1832,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             continue;
           }
           inFlight = repo.slug;
+          progress.step('setup', repo.slug);
           try {
             await timedPhase(`workspace.setup(${repo.slug})`, async () =>
               runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
@@ -1808,6 +1843,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
             state.setupStatus = 'failed';
             failures.set(repo.slug, error.message);
+            progress.fail(error, { repo: repo.slug, phase: 'setup' });
             console.warn('[Factory] Environment repository setup command failed; continuing the boot', {
               orgId: session.orgId,
               sessionId: session.sessionId,
@@ -1829,6 +1865,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               sessionId: session.sessionId,
             });
           } else {
+            progress.step('setup');
             try {
               await timedPhase('workspace.setup(workspace)', async () =>
                 runSetupCommand(target, gate.root, workspaceCommand, ...(await setupEnv())),

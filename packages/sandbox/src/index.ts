@@ -13,3 +13,4 @@ export * from './session-retirement.ts';
 export * from './sandbox-env.ts';
 export * from './sandbox-env-cache.ts';
 export * from './sandbox-env-files.ts';
+export * from './setup-progress.ts';

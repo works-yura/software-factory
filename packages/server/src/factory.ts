@@ -296,6 +296,7 @@ import { observeSessionRunReports } from '@factory/harness-mastra';
 import { FactorySessionsStateProcessor } from '@factory/harness-mastra';
 import { assertFactorySkills, createWorkspaceFactory, FactoryWorkspaceRegistry, findBoardSkillProblems } from '@factory/harness-mastra';
 import type { FactorySandboxStart } from '@factory/harness-mastra';
+import { forwardSandboxSetupProgress } from './sandbox-setup-progress.ts';
 import { createCardRunCheck, createUsageLimitResumer, storeParkedSessions, type ParkedSessionSource, type UsageLimitResumer } from './session/usage-limit-resume.ts';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -664,6 +665,7 @@ export class MastraFactory {
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeSandboxSetupProgress: (() => void) | undefined;
   #mcpServers: McpServerHub | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
@@ -3569,6 +3571,12 @@ export class MastraFactory {
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
+    // The chat shows a session's sandbox setup step by step while its turn waits on it.
+    this.#unsubscribeSandboxSetupProgress?.();
+    this.#unsubscribeSandboxSetupProgress = forwardSandboxSetupProgress({
+      turnChannel: sessionId => this.#claudeSessionUi.channel(sessionId),
+      mastraSession: sessionId => prepared.base.controller.getSession(sessionId),
+    });
 
     // Chat-platform channels (Slack, Discord, …) contributed by integrations,
     // attached to the mounted controller so inbound platform messages reach
@@ -3728,6 +3736,8 @@ export class MastraFactory {
         ),
       );
     this.#usageLimitResumer?.stop();
+    this.#unsubscribeSandboxSetupProgress?.();
+    this.#unsubscribeSandboxSetupProgress = undefined;
     const backfill = this.#workItemSplitBackfill;
     backfill?.controller.abort();
     await Promise.all([
