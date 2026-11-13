@@ -113,34 +113,50 @@ async function acquire(lockDir: string, options: Required<Pick<FileLockOptions, 
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
     const { stale, owner } = await isStale(lockDir, options.staleMs, now());
-    if (stale) {
-      const away = `${lockDir}.stale-${randomUUID()}`;
-      try {
-        await rename(lockDir, away);
-      } catch {
-        // Another process took it over first; go round again.
-        continue;
-      }
-      // Between judging it stale and moving it, another process may have taken
-      // over the stale lock and made a fresh one: that is what moved. Put it back.
-      const moved = await readOwner(away);
-      if (moved?.token !== owner?.token) {
-        try {
-          await rename(away, lockDir);
-        } catch {
-          // A third process already holds the name; the moved holder's release finds its token gone and leaves it.
-          await rm(away, { recursive: true, force: true }).catch(() => {});
-        }
-        await new Promise(resolve => setTimeout(resolve, options.pollMs));
-        continue;
-      }
+    if (stale && (await takeOver(lockDir, owner, options.staleMs))) {
       options.onStale?.(owner);
-      await rm(away, { recursive: true, force: true });
       continue;
     }
     const waited = now() - started;
     if (waited >= options.waitMs) throw new LockTimeoutError(lockDir, waited);
     await new Promise(resolve => setTimeout(resolve, options.pollMs));
+  }
+}
+
+/**
+ * Remove a stale lock so the caller can take it, one taker at a time: the
+ * taker holds `<lock>.takeover` (an atomic `mkdir`) while it checks the lock
+ * is still the stale one it judged and removes it. A dead holder never
+ * releases, and only a taker removes a lock, so nothing can replace the stale
+ * lock between that check and the removal. A takeover directory a crashed
+ * taker left is cleared once it is older than a minute.
+ */
+async function takeOver(lockDir: string, judged: LockOwner | undefined, staleMs: number): Promise<boolean> {
+  const takeover = `${lockDir}.takeover`;
+  try {
+    await mkdir(takeover);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    const age = await stat(takeover).then(
+      entry => Date.now() - entry.mtimeMs,
+      () => 0,
+    );
+    if (age > 60_000) await rm(takeover, { recursive: true, force: true }).catch(() => {});
+    return false;
+  }
+  try {
+    const current = await readOwner(lockDir);
+    if (current?.token !== judged?.token) return false;
+    const { stale } = await isStale(lockDir, staleMs, Date.now());
+    if (!stale) return false;
+    const away = `${lockDir}.stale-${randomUUID()}`;
+    await rename(lockDir, away);
+    await rm(away, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await rm(takeover, { recursive: true, force: true }).catch(() => {});
   }
 }
 
