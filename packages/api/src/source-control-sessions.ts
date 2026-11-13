@@ -97,6 +97,11 @@ export interface SourceControlSessionRoutesOptions {
    * this, since only its first turn may create a checkout.
    */
   attachLocalCheckout?: LocalCheckoutAttacher;
+  /**
+   * Present with a local sandbox: sets a Claude Code or Codex session's checkout up (clone, branch,
+   * setup commands) when none is on disk, as its next turn would. Starting its sandbox calls it.
+   */
+  createLocalCheckout?: LocalCheckoutAttacher;
 }
 
 /** How the session routes reach the Claude Code harness for personal sessions. */
@@ -666,6 +671,18 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
               if (await options.attachLocalCheckout(session)) return c.json({ started: true });
             } catch (error) {
               console.error('[Factory Sessions] Failed to attach the local checkout', {
+                sessionId: session.sessionId,
+                error,
+              });
+              return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+            }
+          }
+          // None on disk: set it up (clone, branch, setup commands), as the session's next turn would.
+          if (options.createLocalCheckout) {
+            try {
+              if (await options.createLocalCheckout(session)) return c.json({ started: true });
+            } catch (error) {
+              console.error('[Factory Sessions] Failed to set up the local checkout', {
                 sessionId: session.sessionId,
                 error,
               });

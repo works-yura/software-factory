@@ -1401,6 +1401,7 @@ describe('personal sessions of a Claude Code Factory', () => {
     claudeCode: RouteOptions['claudeCode'],
     controller?: RouteOptions['controller'],
     attachLocalCheckout?: RouteOptions['attachLocalCheckout'],
+    createLocalCheckout?: RouteOptions['createLocalCheckout'],
   ) {
     const app = new Hono();
     app.use('*', async (context, next) => {
@@ -1417,6 +1418,7 @@ describe('personal sessions of a Claude Code Factory', () => {
         ...(controller ? { controller } : {}),
         ...(claudeCode ? { claudeCode } : {}),
         ...(attachLocalCheckout ? { attachLocalCheckout } : {}),
+        ...(createLocalCheckout ? { createLocalCheckout } : {}),
         workItems: seed.seed.workItems,
       }),
     );
@@ -1569,6 +1571,43 @@ describe('personal sessions of a Claude Code Factory', () => {
     expect(sandbox.status).toBe(200);
     await expect(sandbox.json()).resolves.toEqual({ started: true });
     expect(attached).toEqual([sessionId]);
+  });
+
+  it('sets a Claude Code session checkout up when none is on disk to attach', async () => {
+    const seeded = await claudeFactory();
+    const claude = fakeClaude();
+    const created: string[] = [];
+    const app = claudeApp(
+      seeded,
+      claude.claudeCode,
+      undefined,
+      async () => false,
+      async session => {
+        created.push(session.sessionId);
+        return true;
+      },
+    );
+    expect((await create(app, seeded.projectRepository.id)).status).toBe(200);
+
+    const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+
+    expect(sandbox.status).toBe(200);
+    await expect(sandbox.json()).resolves.toEqual({ started: true });
+    expect(created).toEqual([sessionId]);
+  });
+
+  it('reports a failed checkout setup on a Claude Code sandbox start', async () => {
+    const seeded = await claudeFactory();
+    const claude = fakeClaude();
+    const app = claudeApp(seeded, claude.claudeCode, undefined, async () => false, async () => {
+      throw new Error('clone failed: repository not found');
+    });
+    expect((await create(app, seeded.projectRepository.id)).status).toBe(200);
+
+    const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+
+    expect(sandbox.status).toBe(500);
+    await expect(sandbox.json()).resolves.toEqual({ error: 'clone failed: repository not found' });
   });
 
   it('keeps refusing a Claude Code sandbox start when nothing is on disk to attach', async () => {

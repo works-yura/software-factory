@@ -3135,6 +3135,17 @@ export class MastraFactory {
                     (await claudeCode?.harness.getSession(session.sessionId)) || (await codex?.harness.getSession(session.sessionId))
                       ? localCheckoutAttacher(session)
                       : false,
+                  // No checkout on disk: set it up through the same resolver its next turn uses.
+                  createLocalCheckout: async (session: { id: string; sessionId: string }) => {
+                    const checkout = (await claudeCode?.harness.getSession(session.sessionId))
+                      ? claudeCheckout
+                      : (await codex?.harness.getSession(session.sessionId))
+                        ? codexCheckout
+                        : undefined;
+                    if (!checkout) return false;
+                    await checkout(session.sessionId);
+                    return localCheckoutAttacher(session);
+                  },
                 }
               : {}),
             // Signing in (`claude auth login`, `codex login`) opens the CLI's browser page on this

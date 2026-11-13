@@ -194,6 +194,8 @@ export interface FactoryApiRoutesDeps {
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** With a local sandbox: attaches a session's checkout on disk without starting it (file panels, sandbox start). */
   attachLocalCheckout?: LocalCheckoutAttacher;
+  /** With a local sandbox: sets a Claude Code or Codex session's checkout up when none is on disk (sandbox start). */
+  createLocalCheckout?: LocalCheckoutAttacher;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -890,6 +892,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
           ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
           ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
+          ...(deps.createLocalCheckout ? { createLocalCheckout: deps.createLocalCheckout } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
