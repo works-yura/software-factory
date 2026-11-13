@@ -492,6 +492,7 @@
   },
   "wakeSandbox": {
     "notRunning": "The sandbox isn't running.",
+    "starting": "Starting the sandbox: cloning its repositories can take a few minutes.",
     "waking": "Waking sandbox…",
     "wake": "Wake sandbox"
   },

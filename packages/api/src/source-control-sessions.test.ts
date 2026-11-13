@@ -22,6 +22,8 @@ import type { SourceControlStorageHandle } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { routeExternalSessions } from '@factory/integrations';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
+import { listSessionWorkspaceTree } from './fs.ts';
+import { sessionSandboxStartState, settledSessionSandboxStart } from './session-sandbox-starts.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 // widened from a v3 module mock: real package exports, then the original overrides
@@ -1027,10 +1029,39 @@ describe('session sandbox recreate', () => {
 
       const response = await app.request(startPath(session.sessionId), { method: 'POST' });
 
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual({ started: true });
+      expect(response.status).toBe(202);
+      await expect(response.json()).resolves.toEqual({ starting: true });
+      await settledSessionSandboxStart(session.sessionId);
       expect(start).toHaveBeenCalledTimes(1);
       expect(controller.createSession).not.toHaveBeenCalled();
+      expect(sessionSandboxStartState(session.sessionId)).toEqual({ starting: false });
+    });
+
+    it('answers before a slow start ends, and a second request joins it instead of starting again', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession();
+      let finish!: () => void;
+      const start = vi.fn(() => new Promise<void>(resolve => (finish = resolve)));
+      const controller = fakeController({ getWorkspace: () => ({ sandbox: { start } }) });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const first = await app.request(startPath(session.sessionId), { method: 'POST' });
+      const second = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(first.status).toBe(202);
+      expect(second.status).toBe(202);
+      await expect(second.json()).resolves.toEqual({ starting: true });
+      await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+      // The tree reports the start while it runs, without reading the half-made checkout.
+      await expect(listSessionWorkspaceTree(session)).resolves.toMatchObject({
+        available: false,
+        starting: true,
+        entries: [],
+      });
+
+      finish();
+      await settledSessionSandboxStart(session.sessionId);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(sessionSandboxStartState(session.sessionId).starting).toBe(false);
     });
 
     it('brings an offline session online as its owner first', async () => {
@@ -1041,7 +1072,8 @@ describe('session sandbox recreate', () => {
 
       const response = await app.request(startPath(session.sessionId), { method: 'POST' });
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(202);
+      await settledSessionSandboxStart(session.sessionId);
       const created = controller.createSession.mock.calls[0]![0];
       expect(created).toMatchObject({ id: session.sessionId, threadId: session.sessionId, ownerId: 'user-1' });
       expect(created.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
@@ -1084,8 +1116,44 @@ describe('session sandbox recreate', () => {
 
       const response = await app.request(startPath(session.sessionId), { method: 'POST' });
 
-      expect(response.status).toBe(500);
-      await expect(response.json()).resolves.toEqual({ error: 'setup failed' });
+      expect(response.status).toBe(202);
+      await settledSessionSandboxStart(session.sessionId);
+      // Logged, and the tree tells the page why the sandbox is still not running.
+      expect(error).toHaveBeenCalledWith(
+        '[Factory Sessions] Failed to start session sandbox',
+        expect.objectContaining({ sessionId: session.sessionId }),
+      );
+      await expect(listSessionWorkspaceTree(session)).resolves.toMatchObject({
+        available: false,
+        startError: 'setup failed',
+      });
+
+      // The next start clears it while it runs.
+      const retried = fakeController({ getWorkspace: () => ({ sandbox: { start: async () => {} } }) });
+      const retry = await buildRecreateApp(seed, sourceControl, { controller: retried }).request(
+        startPath(session.sessionId),
+        { method: 'POST' },
+      );
+      expect(retry.status).toBe(202);
+      await settledSessionSandboxStart(session.sessionId);
+      expect(sessionSandboxStartState(session.sessionId)).toEqual({ starting: false });
+    });
+
+    it('reports a session with no sandbox to start through the tree', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession();
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      onTestFinished(() => error.mockRestore());
+      const controller = fakeController({ getWorkspace: () => undefined });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(202);
+      await settledSessionSandboxStart(session.sessionId);
+      expect(sessionSandboxStartState(session.sessionId)).toEqual({
+        starting: false,
+        error: 'This session has no sandbox to start.',
+      });
     });
   });
 
@@ -1591,14 +1659,18 @@ describe('personal sessions of a Claude Code Factory', () => {
 
     const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
 
-    expect(sandbox.status).toBe(200);
-    await expect(sandbox.json()).resolves.toEqual({ started: true });
+    expect(sandbox.status).toBe(202);
+    await expect(sandbox.json()).resolves.toEqual({ starting: true });
+    await settledSessionSandboxStart(sessionId);
     expect(created).toEqual([sessionId]);
+    expect(sessionSandboxStartState(sessionId)).toEqual({ starting: false });
   });
 
   it('reports a failed checkout setup on a Claude Code sandbox start', async () => {
     const seeded = await claudeFactory();
     const claude = fakeClaude();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    onTestFinished(() => error.mockRestore());
     const app = claudeApp(seeded, claude.claudeCode, undefined, async () => false, async () => {
       throw new Error('clone failed: repository not found');
     });
@@ -1606,8 +1678,30 @@ describe('personal sessions of a Claude Code Factory', () => {
 
     const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
 
-    expect(sandbox.status).toBe(500);
-    await expect(sandbox.json()).resolves.toEqual({ error: 'clone failed: repository not found' });
+    expect(sandbox.status).toBe(202);
+    await settledSessionSandboxStart(sessionId);
+    expect(sessionSandboxStartState(sessionId)).toEqual({
+      starting: false,
+      error: 'clone failed: repository not found',
+    });
+  });
+
+  it('sets a Claude Code checkout up once when started twice while it clones', async () => {
+    const seeded = await claudeFactory();
+    const claude = fakeClaude();
+    let finish!: () => void;
+    const createLocal = vi.fn(() => new Promise<boolean>(resolve => (finish = () => resolve(true))));
+    const app = claudeApp(seeded, claude.claudeCode, undefined, async () => false, createLocal);
+    expect((await create(app, seeded.projectRepository.id)).status).toBe(200);
+
+    const first = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+    const second = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+
+    expect([first.status, second.status]).toEqual([202, 202]);
+    expect(createLocal).toHaveBeenCalledTimes(1);
+    finish();
+    await settledSessionSandboxStart(sessionId);
+    expect(sessionSandboxStartState(sessionId)).toEqual({ starting: false });
   });
 
   it('keeps refusing a Claude Code sandbox start when nothing is on disk to attach', async () => {

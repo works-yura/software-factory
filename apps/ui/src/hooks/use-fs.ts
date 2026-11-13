@@ -1,4 +1,4 @@
-import { skipToken, useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -12,6 +12,9 @@ import type {
   WorkspaceTreeListing,
   WorkspaceRenderedListing,
 } from '../api/types';
+
+/** How often the tree asks again while the session's sandbox starts. */
+export const SANDBOX_START_POLL_MS = 2_000;
 
 /** A builder returns undefined while a required param is missing, which is what turns its query into a skipToken below. */
 function directoryListingUrl(path: string | undefined) {
@@ -133,11 +136,25 @@ export function useWorkspaceTree(
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
+  const queryClient = useQueryClient();
   const url = workspacePath ? `/web/workspace/tree?${new URLSearchParams({ workspacePath, path })}` : undefined;
+  const queryKey = queryKeys.workspaceTree(workspacePath, path);
   return useQuery<WorkspaceTreeListing>({
-    queryKey: queryKeys.workspaceTree(workspacePath, path),
+    queryKey,
     enabled,
-    queryFn: url ? () => client.get<WorkspaceTreeListing>(url) : skipToken,
+    queryFn: url
+      ? async () => {
+          const wasStarting = queryClient.getQueryData<WorkspaceTreeListing>(queryKey)?.starting === true;
+          const listing = await client.get<WorkspaceTreeListing>(url);
+          // The start ended (running or failed): the changes it may have brought are read again.
+          if (wasStarting && !listing.starting) {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
+          }
+          return listing;
+        }
+      : skipToken,
+    // A sandbox start runs in the background on the server: ask again until it ends.
+    refetchInterval: query => (query.state.data?.starting ? SANDBOX_START_POLL_MS : false),
   });
 }
 

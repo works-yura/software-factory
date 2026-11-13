@@ -32,6 +32,7 @@ import type {
 import type { WorkItemsStorage } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
 import type { LocalCheckoutAttacher } from './fs.ts';
+import { sessionSandboxStartState, startSessionSandboxInBackground } from './session-sandbox-starts.ts';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from '@factory/session';
 
 type RouteContext = Context;
@@ -647,7 +648,11 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     // Start a session's sandbox without sending it a message, for the Files tab.
     // Brings the controller session online as the row's owner, as a delivered
-    // message would, then starts its sandbox; a running sandbox returns at once.
+    // message would, then starts its sandbox. Cloning can outlast the request,
+    // so the start runs in the background (202 `{ starting: true }`; a second
+    // request joins it) and the workspace tree reports it: `starting`, then
+    // available or the error it failed with. A checkout already on disk is
+    // attached at once (`{ started: true }`).
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/start', {
       method: 'POST',
       requiresAuth: false,
@@ -662,6 +667,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (permission === 'forbidden') {
           return c.json({ error: "Only the session's owner or an organization admin can start its sandbox." }, 403);
         }
+        // A start already running (a second click, another tab) is joined, never run twice.
+        if (sessionSandboxStartState(session.sessionId).starting) return c.json({ starting: true }, 202);
         const turnSession = await options.claudeCode?.get(session.sessionId);
         if (turnSession) {
           // Its checkout may already be on this host's disk (a server restart): attach it, without
@@ -678,16 +685,16 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             }
           }
           // None on disk: set it up (clone, branch, setup commands), as the session's next turn would.
-          if (options.createLocalCheckout) {
-            try {
-              if (await options.createLocalCheckout(session)) return c.json({ started: true });
-            } catch (error) {
-              console.error('[Factory Sessions] Failed to set up the local checkout', {
-                sessionId: session.sessionId,
-                error,
-              });
-              return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-            }
+          // That clones over the network and can outlast the request, so it runs in the background.
+          const createLocalCheckout = options.createLocalCheckout;
+          if (createLocalCheckout) {
+            const label = TURN_HARNESS_LABELS[turnSession.harness ?? 'claude-code'];
+            startSessionSandboxInBackground(session.sessionId, async () => {
+              if (!(await createLocalCheckout(session))) {
+                throw new Error(`This ${label} session's checkout could not be set up: send it a message to create it.`);
+              }
+            });
+            return c.json({ starting: true }, 202);
           }
           return c.json(
             {
@@ -699,7 +706,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const controller = options.controller;
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
 
-        try {
+        // Bringing the session online and starting its sandbox clones its repositories, which can
+        // outlast the request: it runs in the background and the workspace tree reports how it went.
+        startSessionSandboxInBackground(session.sessionId, async () => {
           const live =
             (await controller.getSession(session.sessionId)) ??
             (await startUserSessionConversation(
@@ -708,13 +717,10 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
               await sessionMemoryResourceId(controller, session, options.workItems),
             ));
           const sandbox = live?.getWorkspace()?.sandbox;
-          if (!sandbox?.start) return c.json({ error: 'This session has no sandbox to start.' }, 409);
+          if (!sandbox?.start) throw new Error('This session has no sandbox to start.');
           await sandbox.start();
-          return c.json({ started: true });
-        } catch (error) {
-          console.error('[Factory Sessions] Failed to start session sandbox', { sessionId: session.sessionId, error });
-          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-        }
+        });
+        return c.json({ starting: true }, 202);
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {

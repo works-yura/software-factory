@@ -406,6 +406,78 @@ describe('WorkspaceViewerPanel', () => {
       expect(await screen.findByText('setup failed')).toBeInTheDocument();
     });
 
+    describe('when the start runs in the background', () => {
+      const START_URL = `${TEST_BASE_URL}/web/user-sessions/:sessionId/sandbox/start`;
+      const notRunning = { workspacePath: WORKSPACE, path: '', available: false, entries: [] };
+
+      /** The tree answers `starting` to the first poll after the start, then `ended`. */
+      function startInBackground(ended: Record<string, unknown>) {
+        let phase: 'idle' | 'starting' | 'ended' = 'idle';
+        const starts: string[] = [];
+        server.use(
+          http.get(TREE_URL, () => {
+            if (phase === 'idle') return HttpResponse.json(notRunning);
+            if (phase === 'starting') {
+              phase = 'ended';
+              return HttpResponse.json({ ...notRunning, starting: true });
+            }
+            return HttpResponse.json(ended);
+          }),
+          http.post(START_URL, ({ params }) => {
+            starts.push(String(params.sessionId));
+            phase = 'starting';
+            return HttpResponse.json({ starting: true }, { status: 202 });
+          }),
+        );
+        return starts;
+      }
+
+      it('stays waking while it clones, then lists the files, without falling back in between', async () => {
+        installHandlers();
+        const starts = startInBackground({
+          workspacePath: WORKSPACE,
+          path: '',
+          available: true,
+          entries: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        });
+        const user = userEvent.setup();
+
+        renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+        await user.click(await screen.findByRole('button', { name: /^Files/ }));
+        await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
+
+        expect(await screen.findByText(/Starting the sandbox/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Waking sandbox/ })).toBeDisabled();
+        let fellBack = false;
+        await waitFor(
+          () => {
+            if (screen.queryByText(/The sandbox isn.t running/) || screen.queryByRole('alert')) fellBack = true;
+            expect(screen.getByText('README.md')).toBeInTheDocument();
+          },
+          { timeout: 8_000 },
+        );
+        expect(fellBack).toBe(false);
+        expect(starts).toEqual([WORKSPACE]);
+      });
+
+      it('shows why the start failed once it ends, and offers to try again', async () => {
+        installHandlers();
+        startInBackground({ ...notRunning, startError: 'clone failed: repository not found' });
+        const user = userEvent.setup();
+
+        renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+        await user.click(await screen.findByRole('button', { name: /^Files/ }));
+        await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
+
+        expect(await screen.findByText(/Starting the sandbox/)).toBeInTheDocument();
+        expect(await screen.findByRole('alert', {}, { timeout: 8_000 })).toHaveTextContent(
+          'clone failed: repository not found',
+        );
+        expect(screen.getByText(/The sandbox isn.t running/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeEnabled();
+      });
+    });
+
     it('shows a folder the server refuses as an error inside that folder', async () => {
       installHandlers();
       server.use(

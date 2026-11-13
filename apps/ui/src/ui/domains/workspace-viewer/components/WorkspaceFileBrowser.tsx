@@ -19,7 +19,8 @@ import {
   NotepadText,
   RefreshCw,
 } from 'lucide-react';
-import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -201,9 +202,15 @@ export function WorkspaceFileBrowser({
   const { t } = useTranslation('workspaces');
   const queryClient = useQueryClient();
   const root = useWorkspaceTree(workspacePath, '', { enabled: visible });
-  const isRefreshing = useIsFetching({ queryKey: queryKeys.workspaceTreeScope(workspacePath) }) > 0;
-  const refresh = () =>
-    void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
+  // Only a refresh asked for here spins the button: background refetches (a starting sandbox's
+  // polls, a tool call's invalidation) leave it still instead of blinking.
+  const [isRefreshing, setRefreshing] = useState(false);
+  const refresh = () => {
+    setRefreshing(true);
+    void queryClient
+      .refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' })
+      .finally(() => setRefreshing(false));
+  };
   const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
   // A symlinked folder opens its target and every folder above it.
   const select = (id: string) => {
@@ -213,12 +220,14 @@ export function WorkspaceFileBrowser({
   };
 
   let content: ReactNode;
-  if (root.isLoading) {
+  // A listing on screen stays there through refetches: no sandbox (or one starting) keeps the wake
+  // panel even when a poll fails, so the panel does not alternate between it, a spinner and an error.
+  if (root.data && !root.data.available) {
+    content = <WakeSandbox workspacePath={workspacePath} />;
+  } else if (root.isLoading) {
     content = <Spinner size="sm" />;
   } else if (root.error) {
     content = <TreeMessage tone="error">{root.error.message}</TreeMessage>;
-  } else if (root.data && !root.data.available) {
-    content = <WakeSandbox workspacePath={workspacePath} />;
   } else if (entries.length === 0) {
     content = <TreeMessage>{t('fileBrowser.noFiles')}</TreeMessage>;
   }

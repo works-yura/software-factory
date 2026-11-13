@@ -153,14 +153,20 @@ export async function recreateSessionSandbox(
   return { recreated: body.recreated === true, aborted: body.aborted === true };
 }
 
-/** Start the session's sandbox without sending it a message. Resolves once it's running. */
-export async function startSessionSandbox(baseUrl: string, sessionId: string): Promise<void> {
+/**
+ * Start the session's sandbox without sending it a message. Resolves once the server has begun:
+ * `starting` while it clones in the background (the workspace tree reports how it ends), or
+ * already running.
+ */
+export async function startSessionSandbox(baseUrl: string, sessionId: string): Promise<{ starting: boolean }> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/sandbox/start`, {
     method: 'POST',
     credentials: 'include',
   });
-  const body: { error?: string } = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? tk('errors.startSandbox', { status: res.status }));
+  const body: { starting?: boolean; error?: string; message?: string } = await res.json().catch(() => ({}));
+  // A server fault names its code in `error` and the reason in `message`.
+  if (!res.ok) throw new Error(body.message ?? body.error ?? tk('errors.startSandbox', { status: res.status }));
+  return { starting: body.starting === true };
 }
 
 /** Ask the title model to re-name a session's conversation. Resolves to the new title. */
