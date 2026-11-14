@@ -7,7 +7,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 import { describe, expect, it } from 'vitest';
@@ -66,6 +67,20 @@ describe.runIf(ready)('as the agent user, for real', () => {
     ['use sudo', 'sudo -n true'],
   ])('cannot %s', async (_what, script) => {
     expect((await asAgent(script)).code).not.toBe(0);
+  });
+
+  it("uses git in a repository the server cloned (the server's own files, shared through the group ACLs)", async () => {
+    const repo = mkdtempSync(join(sandboxRoot, 'agent-git-test-'));
+    try {
+      spawnSync('git', ['init', '-q', repo]);
+      writeFileSync(join(repo, 'a.txt'), 'a');
+      const { code, out, err } = await asAgent(`cd '${repo}' && git status --porcelain && echo b > b.txt && git add b.txt && git status --porcelain`);
+      expect(err).not.toContain('dubious ownership');
+      expect(code).toBe(0);
+      expect(out).toContain('A  b.txt');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it('kill stops the agent and what it started', async () => {

@@ -537,7 +537,17 @@ export const PRODUCT_WEB_READ_TOOLS = ['WebFetch', 'WebSearch'] as const;
 export interface MastraFactoryClaudeCodeConfig
   extends Pick<
     ClaudeFactoryHarnessOptions,
-    'configDir' | 'allowedTools' | 'approvedPermissionMode' | 'turnTimeoutMs' | 'skillsDir' | 'command' | 'spawn' | 'env'
+    | 'configDir'
+    | 'sessionConfigRoot'
+    | 'allowedTools'
+    | 'approvedPermissionMode'
+    | 'turnTimeoutMs'
+    | 'skillsDir'
+    | 'command'
+    | 'spawn'
+    | 'env'
+    | 'tempDir'
+    | 'gateNode'
   > {
   /** Where session records live; required unless `store` is given. */
   storeDir?: string;

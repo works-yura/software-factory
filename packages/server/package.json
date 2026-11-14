@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@factory/activity": "workspace:*",
+    "@factory/agent-user": "workspace:*",
     "@factory/api": "workspace:*",
     "@factory/auth": "workspace:*",
     "@factory/capabilities": "workspace:*",
