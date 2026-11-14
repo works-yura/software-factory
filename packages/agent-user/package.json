@@ -11,6 +11,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "test:escape": "FACTORY_AGENT_USER_TEST=${FACTORY_AGENT_USER_TEST:-factory} FACTORY_AGENT_USER_TEST_STRICT=1 vitest run src/integration",
     "coverage": "vitest run --coverage --coverage.include=src --coverage.exclude=src/testing --coverage.exclude=src/**/*.test.ts"
   },
   "devDependencies": {

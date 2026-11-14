@@ -7,35 +7,22 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 
 import { describe, expect, it } from 'vitest';
 
-import { agentUserFromEnv } from '../config/from-env.ts';
 import { createAgentUserLauncher } from '../launch/agent-user-launcher.ts';
 import { PrivateFileStash } from '../shell/input-stash.ts';
 import { ShellCommandBridge } from '../shell/shell-command-bridge.ts';
 import { createProcessSpawner } from '../spawn/create-spawner.ts';
 
-const user = process.env.FACTORY_AGENT_USER_TEST?.trim();
-const sandboxRoot = process.env.FACTORY_AGENT_USER_TEST_ROOT ?? '/Volumes/dot/Project/factory/sandboxes';
-const config = user ? agentUserFromEnv({ FACTORY_AGENT_USER: user }, { serverUser: process.env.USER ?? '', sandboxRoot }) : undefined;
-const ready = Boolean(
-  config && existsSync(config.profilePath) && spawnSync('/usr/bin/sudo', ['-n', '-u', config.user, '--', '/usr/bin/env', 'true']).status === 0,
-);
-if (process.env.FACTORY_AGENT_USER_TEST_STRICT === '1' && !ready) throw new Error('The agent user is not set up (sudoers rule, profile).');
+import { agentConfig, agentUserReady, asAgent as asAgentUser, sandboxRoot } from './agent-shell.ts';
 
-async function asAgent(script: string, env: Record<string, string> = {}): Promise<{ code: number | null; out: string; err: string }> {
-  const child = createProcessSpawner(config).spawn({ command: '/bin/sh', args: ['-c', script], env }, { cwd: sandboxRoot });
-  let out = '';
-  let err = '';
-  child.stdout?.on('data', chunk => (out += chunk));
-  child.stderr?.on('data', chunk => (err += chunk));
-  const code = await new Promise<number | null>(resolve => child.on('close', resolve));
-  return { code, out, err };
-}
+const config = agentConfig();
+const ready = agentUserReady(config);
+const asAgent = (script: string, env: Record<string, string> = {}) => asAgentUser(config, script, env);
 
 describe.runIf(ready)('as the agent user, for real', () => {
   it('runs as the agent user with its own HOME and PATH', async () => {
