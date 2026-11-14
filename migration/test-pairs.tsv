@@ -492,3 +492,6 @@ work-items/card-source-filters.test.ts	work-items/src/card-source-filters.test.t
 	credentials/src/credential-accounts.test.ts	+1	v4 with upstream #30146: the Factory's runs take only sign-ins shared with them (+1)
 	api/src/agent-connections.test.ts	+1	v4 with upstream #30146: only the owner shares a sign-in with Factory cards (+1)
 	server/src/context-sandboxes.test.ts	+4	v4 with upstream #29981: one folder per card, stops only when the card runs in no context (+4)
+	playground-ui/src/ds/components/SearchInput/search-input.test.tsx	+17	v4 with upstream #30062: SearchInput takes over ListSearch (debounce, shortcut, own text) (+17)
+	playground-ui/src/ds/components/ListSearch/list-search.test.tsx	-9	v4 with upstream #30062: ListSearch removed (-9)
+	playground-ui/src/ds/components/FormFieldBlocks/fields/search-field-block.test.tsx	-36	v4 with upstream #30062: deprecated SearchFieldBlock removed (-36)

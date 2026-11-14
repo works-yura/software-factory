@@ -1,5 +1,5 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -66,7 +66,15 @@ export function SourcePicker({
     <>
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="min-w-0 flex-1">
-          <ListSearch label={t('intakeSource.search', { label })} placeholder={t('intakeSource.searchPlaceholder')} size="sm" value={query} onSearch={setQuery} />
+          <SearchInput
+            {...listSearchProps}
+            shortcut={false}
+            className="max-w-120"
+            label={t('intakeSource.search', { label })}
+            placeholder={t('intakeSource.searchPlaceholder')}
+            value={query}
+            onValueChange={setQuery}
+          />
         </div>
         {pending ? (
           <Spinner size="sm" aria-label={t('intakeSource.saving', { label })} />

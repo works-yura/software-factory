@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -86,12 +86,14 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         <>
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="min-w-0 flex-1">
-              <ListSearch
+              <SearchInput
+                {...listSearchProps}
+                shortcut={false}
+                className="max-w-120"
                 label={t('vcs.searchLabel')}
                 placeholder={t('connectRepos.searchPlaceholder')}
-                size="sm"
                 value={query}
-                onSearch={setQuery}
+                onValueChange={setQuery}
               />
             </div>
             {githubConnected && (
