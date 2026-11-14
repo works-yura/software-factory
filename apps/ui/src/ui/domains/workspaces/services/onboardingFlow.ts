@@ -84,6 +84,7 @@ export const completeOnboardingSchema = z.union([
   z.object({ repository: repositorySchema, harness: z.literal('mastra').optional(), model: modelChoiceSchema }),
   z.object({ repository: repositorySchema, harness: z.literal('claude-code'), harnessModel: z.enum(CLAUDE_CODE_MODELS).nullable() }),
   z.object({ repository: repositorySchema, harness: z.literal('codex'), harnessModel: harnessModelSchema }),
+  z.object({ repository: repositorySchema, harness: z.literal('opencode'), harnessModel: harnessModelSchema }),
 ]);
 
 export type CompleteOnboardingSetup = z.infer<typeof completeOnboardingSchema>;
@@ -96,7 +97,7 @@ export function onboardingCreateReadiness(draft: OnboardingDraft): { ready: bool
   if (completeOnboardingSchema.safeParse(draft).success) return { ready: true, missing: [] };
   const missing: OnboardingMissingField[] = [];
   if (!draft.repository) missing.push('repository');
-  const turn = draft.harness === 'claude-code' || draft.harness === 'codex';
+  const turn = draft.harness === 'claude-code' || draft.harness === 'codex' || draft.harness === 'opencode';
   if (turn ? draft.harnessModel === undefined : !draft.model?.modelId) missing.push('model');
   return { ready: false, missing };
 }

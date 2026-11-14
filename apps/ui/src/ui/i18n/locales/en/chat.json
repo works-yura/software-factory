@@ -239,6 +239,8 @@
     "removeFavorite": "Remove from favorites",
     "new": "New",
     "newModel": "New model",
+    "free": "Free",
+    "freeModelHint": "Free model: its provider may use what it is sent to improve its models. Use it on a client’s code only with the client’s consent.",
     "unavailableBadge": "Unavailable",
     "favorites": "Favorites",
     "providers": "Providers",

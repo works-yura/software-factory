@@ -46,7 +46,7 @@ export interface FactoryUserSession {
   /** What the viewer may do with this session, computed by the server. */
   capabilities?: { recreateSandbox: boolean; switchModel?: boolean };
   /** Set when the session runs on Claude Code or Codex (its Factory's model for that harness); absent for Mastra sessions. */
-  harness?: 'claude-code' | 'codex';
+  harness?: 'claude-code' | 'codex' | 'opencode';
   /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
   followedWorkItemIds?: readonly string[];
 }

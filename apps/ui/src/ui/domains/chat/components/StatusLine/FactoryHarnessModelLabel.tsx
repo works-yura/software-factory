@@ -10,6 +10,7 @@ import { settingsSectionPath } from '../../../settings/settingsSections';
 function modelName(harness: Pick<HarnessDescriptor, 'id'> | undefined, model: string | null, t: (key: string) => string): string {
   if (model && !isClaudeCodeModel(model)) return formatModelName(model);
   if (harness?.id === 'codex') return t('createFactory.codex.models.default.title');
+  if (harness?.id === 'opencode') return t('createFactory.openCode.models.default.title');
   return t(`createFactory.claudeCode.models.${isClaudeCodeModel(model) ? model : 'default'}.title`);
 }
 

@@ -30,6 +30,8 @@ export const ModelListRow = memo(function ModelListRow(props: {
   /** Marks this instance apart from another of the same provider. */
   showInstanceBadge: boolean;
   showNewBadge?: boolean;
+  /** A free model (OpenCode's): its provider may use what it is sent to improve its models. */
+  showFreeBadge?: boolean;
   /** The model a chat starts on (v4 marks the Factory's default model in its picker). */
   showDefaultBadge?: boolean;
   unavailable?: boolean;
@@ -88,6 +90,11 @@ export const ModelListRow = memo(function ModelListRow(props: {
         {props.showNewBadge ? (
           <Badge variant="blue" size="xs" aria-label={t("modelPicker.newModel")}>
             {t("modelPicker.new")}
+          </Badge>
+        ) : null}
+        {props.showFreeBadge ? (
+          <Badge variant="neutral" size="xs" title={t("modelPicker.freeModelHint")}>
+            {t("modelPicker.free")}
           </Badge>
         ) : null}
         {props.showDefaultBadge ? (

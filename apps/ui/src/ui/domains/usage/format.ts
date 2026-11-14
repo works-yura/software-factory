@@ -79,6 +79,6 @@ export function windowDetail(window: UsageWindow, now: number): string | undefin
 }
 
 export function harnessName(harnessId: string): string {
-  const known = ['claude-code', 'codex', 'mastra'];
+  const known = ['claude-code', 'codex', 'opencode', 'mastra'];
   return known.includes(harnessId) ? tu(`harness.${harnessId}`) : harnessId;
 }

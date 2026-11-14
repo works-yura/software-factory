@@ -38,9 +38,10 @@ interface ModelOption {
 const TURN_HARNESS_STEP: Record<TurnHarness, { key: (typeof TURN_HARNESS_TEXT_KEY)[TurnHarness] }> = {
   'claude-code': { key: TURN_HARNESS_TEXT_KEY['claude-code'] },
   codex: { key: TURN_HARNESS_TEXT_KEY.codex },
+  opencode: { key: TURN_HARNESS_TEXT_KEY.opencode },
 };
 
-/** The models a new Factory of the harness may start on: Claude Code's CLI aliases, or Codex's catalog. */
+/** The models a new Factory of the harness may start on: Claude Code's CLI aliases, or Codex's or OpenCode's catalog. */
 function useModelOptions(harness: TurnHarness): { options: ModelOption[]; loading: boolean } {
   const { t } = useTranslation('workspaces');
   const catalog = useModelCatalogQuery();
@@ -55,13 +56,19 @@ function useModelOptions(harness: TurnHarness): { options: ModelOption[]; loadin
     };
   }
   const instance = catalog.data?.instances?.find(entry => entry.instanceId === harness);
+  const key = TURN_HARNESS_TEXT_KEY[harness];
   return {
     loading: catalog.isPending,
     options: [
-      { model: null, title: t('createFactory.codex.models.default.title'), description: t('createFactory.codex.models.default.description') },
+      { model: null, title: t(`createFactory.${key}.models.default.title`), description: t(`createFactory.${key}.models.default.description`) },
       ...(instance?.models ?? [])
         .filter(model => !model.isLegacy)
-        .map(model => ({ model: model.slug, title: model.name, description: model.slug })),
+        .map(model => ({
+          model: model.slug,
+          title: model.name,
+          // A free model says so: its provider may use what it is sent (ADR-0043).
+          description: model.badge === 'free' ? `${model.slug} · ${t('createFactory.models.free')}` : model.slug,
+        })),
     ],
   };
 }

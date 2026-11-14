@@ -9,6 +9,7 @@ const HARNESS_TITLE: Record<string, string> = {
   mastra: 'createFactory.harness.mastra.title',
   'claude-code': 'createFactory.harness.claudeCode.title',
   codex: 'createFactory.harness.codex.title',
+  opencode: 'createFactory.harness.openCode.title',
 };
 
 /** Harness while closed: what the Factory's agents run on, or a preview until it is chosen. */

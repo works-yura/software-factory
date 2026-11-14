@@ -40,7 +40,8 @@
   "harness": {
     "claude-code": "Claude Code",
     "codex": "Codex",
-    "mastra": "Mastra"
+    "mastra": "Mastra",
+    "opencode": "OpenCode"
   },
   "category": {
     "input": "Вхід",

@@ -54,10 +54,11 @@ export interface FactoryOnboardingProps {
   onDismissGithubCallback: () => void;
 }
 
-/** How a turn-based harness's model reads: Claude's alias by its title, Codex's slug as it is. */
+/** How a turn-based harness's model reads: Claude's alias by its title, Codex's and OpenCode's slug as it is. */
 function turnModelTitle(harness: FactoryHarness, model: OnboardingDraft['harnessModel']) {
   if (model === undefined) return undefined;
   if (harness === 'codex') return model ?? tk('createFactory.codex.models.default.title');
+  if (harness === 'opencode') return model ?? tk('createFactory.openCode.models.default.title');
   return tk(`createFactory.claudeCode.models.${model ?? 'default'}.title`);
 }
 
@@ -162,7 +163,7 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
   const modelTitle = turn ? turnModelTitle(turn, draft.harnessModel) : model.choice?.modelId;
   const modelHint = turn ? tk(`onboarding.${TURN_HARNESS_TEXT_KEY[turn]}.hint`) : tk('onboarding.modelHint');
   const modelDetail = turn
-    ? tk(turn === 'codex' ? 'review.codexModelDetail' : 'review.claudeModelDetail')
+    ? tk(turn === 'codex' ? 'review.codexModelDetail' : turn === 'opencode' ? 'review.openCodeModelDetail' : 'review.claudeModelDetail')
     : tk(local ? 'review.sharedModel.local' : 'review.sharedModel.factory');
   const previewModel = turn ? modelTitle : (preview.model ?? (preview.providerId ? undefined : model.choice?.modelId));
   const index = (section: OnboardingStep) => onboardingSectionIndex(section, harnessChoice);

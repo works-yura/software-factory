@@ -49,7 +49,7 @@ type ModelPickerItem = {
   name: string;
   shortName?: string;
   subProvider?: string;
-  badge?: "new";
+  badge?: "new" | "free";
   isDefault?: boolean | undefined;
   instanceId: ProviderInstanceId;
   driverKind: ProviderDriverKind;
@@ -733,6 +733,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                   favoriteStarOnHover={selectedInstanceId === "favorites" && !isSearching}
                   showInstanceBadge={badgedInstanceIds.has(model.instanceId)}
                   showNewBadge={model.badge === "new"}
+                  showFreeBadge={model.badge === "free"}
                   showDefaultBadge={model.isDefault === true}
                   unavailable={model.isUnavailable === true}
                   disabledReason={disabledReason}

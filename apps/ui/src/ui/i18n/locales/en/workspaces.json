@@ -54,7 +54,8 @@
       "descriptions": {
         "mastra": "Any model — provider keys or sign-in",
         "claude-code": "The official Claude Code CLI. Runs on your Claude subscription or an Anthropic key; connect accounts in Settings → Connections.",
-        "codex": "OpenAI’s Codex CLI. Runs on your members’ ChatGPT sign-ins; connect accounts in Settings → Connections."
+        "codex": "OpenAI’s Codex CLI. Runs on your members’ ChatGPT sign-ins; connect accounts in Settings → Connections.",
+        "opencode": "OpenCode’s CLI on OpenCode’s own free models: no key, no account. Free models may use what they are sent to improve their models: run a client’s repository on them only with the client’s consent."
       },
       "mastra": {
         "title": "Mastra",
@@ -68,6 +69,10 @@
       "codex": {
         "title": "Codex",
         "description": "OpenAI’s Codex CLI. Runs on your members’ ChatGPT sign-ins; connect accounts in Settings → Connections."
+      },
+      "openCode": {
+        "title": "OpenCode",
+        "description": "OpenCode’s CLI on OpenCode’s own free models: no key, no account. Free models may use what they are sent to improve their models: run a client’s repository on them only with the client’s consent."
       }
     },
     "steps": {
@@ -94,6 +99,10 @@
       "codex": {
         "title": "Choose your Codex model",
         "placeholder": "Search Codex models…"
+      },
+      "openCode": {
+        "title": "Choose your OpenCode model",
+        "placeholder": "Search OpenCode models…"
       }
     },
     "repos": {
@@ -122,7 +131,8 @@
       "suggested": "Suggested",
       "noMatch": "No models match this search.",
       "provider": "Provider",
-      "selected": "Selected"
+      "selected": "Selected",
+      "free": "free"
     },
     "providers": {
       "noMatch": "No providers match this search.",
@@ -181,6 +191,20 @@
         "default": {
           "title": "Codex default",
           "description": "Whichever model the codex CLI picks"
+        }
+      }
+    },
+    "openCode": {
+      "signIn": {
+        "heading": "Availability",
+        "loading": "Checking OpenCode",
+        "none": "OpenCode cannot run on this server right now."
+      },
+      "models": {
+        "heading": "OpenCode model (free)",
+        "default": {
+          "title": "OpenCode default",
+          "description": "Big Pickle, OpenCode’s free default model"
         }
       }
     }
@@ -308,6 +332,12 @@
       "fallbackName": "Account",
       "menuFor": "Account menu for {{name}}",
       "signOut": "Sign out"
+    },
+    "openCode": {
+      "title": "Choose your OpenCode model.",
+      "description": "OpenCode runs on its own free models, with no key and no account. Their providers may use what they are sent to improve their models.",
+      "hint": "The OpenCode model for Factory work and sessions",
+      "factoryRuns": "Use free models on a client’s repository only with the client’s consent (ADR-0043)."
     }
   },
   "welcomePreview": {
@@ -345,7 +375,8 @@
       "factory": "Company account · Factory work and sessions"
     },
     "claudeModelDetail": "Claude Code · for Factory work and sessions",
-    "codexModelDetail": "Codex · for Factory work and sessions"
+    "codexModelDetail": "Codex · for Factory work and sessions",
+    "openCodeModelDetail": "OpenCode · free · for Factory work and sessions"
   },
   "githubCallback": {
     "requested": "GitHub App installation requested. An organization owner needs to approve it before repositories appear here.",
