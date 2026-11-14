@@ -41,12 +41,12 @@ import {
 } from '@factory/harness/transcript';
 import { claudeNotificationDecision } from '@factory/harness-claude-code/notifications';
 
-import type { OpenCodeClient, OpenCodePermissionReply } from './client.ts';
-import { openCodeConfigContent, type OpenCodeMcpServer, type OpenCodeTurnPolicy } from './config.ts';
+import { OpenCodeHttpError, type OpenCodeClient, type OpenCodePermissionReply } from './client.ts';
+import { openCodeConfigContent, openCodePermissionRules, type OpenCodeMcpServer, type OpenCodeTurnPolicy } from './config.ts';
 import { buildOpenCodeEnv, openCodeAuthContent, openCodeStateDirs, type OpenCodeStateDirs } from './env.ts';
 import { OpenCodeError } from './errors.ts';
 import { OpenCodeTurnTranslator, type OpenCodeQuestion, type OpenCodeTurnOutcome } from './events.ts';
-import { openCodeServerPassword, spawnOpenCodeServer, type OpenCodeServerProcess, type OpenCodeSpawn } from './server.ts';
+import { DEFAULT_OPENCODE_START_TIMEOUT_MS, openCodeServerPassword, spawnOpenCodeServer, type OpenCodeServerProcess, type OpenCodeSpawn } from './server.ts';
 import {
   emptyOpenCodeThreadState,
   type OpenCodePendingInput,
@@ -236,6 +236,8 @@ interface ActiveRun {
   abortRequested: boolean;
   settled: boolean;
   policy?: OpenCodeTurnPolicy;
+  /** The permission rules the run's server started with: a turn under other rules needs a server of its own. */
+  rules?: string;
   adopted?: ParkedTurn;
   started: Promise<void>;
   markStarted(error?: unknown): void;
@@ -926,6 +928,8 @@ export class OpenCodeSession implements AgentSession {
         run.watch = watch;
         run.markStarted();
         start.parked.respond(start.answer);
+        // OpenCode ended the turn while it waited (it dropped the ask): the answer has nothing to go on.
+        if (watch.translator.completed) watch.finish(watch.translator.outcome());
         result = await this.#awaitTurn(run, watch);
       } else {
         result = await this.#turn(run, start.inputs);
@@ -1183,7 +1187,18 @@ export class OpenCodeSession implements AgentSession {
 
   /** The run's server with the thread's OpenCode session open: started, or resumed after a restart. */
   async #openSession(run: ActiveRun, policy: OpenCodeTurnPolicy): Promise<OpenCodeClient> {
-    if (run.server?.isAlive() && run.client && run.openCodeSessionId) return run.client;
+    const rules = JSON.stringify(openCodePermissionRules(policy));
+    if (run.server?.isAlive() && run.client && run.openCodeSessionId) {
+      if (run.rules === rules) return run.client;
+      // The settings changed between two turns of the run: OpenCode reads its rules when it starts,
+      // so the next turn goes on in the same OpenCode session on a server started with the new ones.
+      this.#closeServer(run);
+      run.server = undefined;
+      run.client = undefined;
+      run.stream = undefined;
+      run.openCodeSessionId = undefined;
+    }
+    run.rules = rules;
     const cwd = await this.#cwd();
     const mcpServers = (await this.#config.mcpServersFor?.(this)) ?? {};
     const credentials = await this.#config.credentials?.(this, {
@@ -1250,10 +1265,24 @@ export class OpenCodeSession implements AgentSession {
     // The stream answers with `server.connected` first: once it came, the subscription is open.
     const first = iterator.next();
     let connected: IteratorResult<Parameters<OpenCodeTurnTranslator['handle']>[0]>;
+    const timeoutMs = this.#config.startTimeoutMs ?? DEFAULT_OPENCODE_START_TIMEOUT_MS;
+    let timer: NodeJS.Timeout | undefined;
     try {
-      connected = await first;
+      connected = await Promise.race([
+        first,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            stream.abort();
+            reject(new OpenCodeError('timeout', `The OpenCode server did not open its event stream within ${timeoutMs} ms.`));
+          }, timeoutMs);
+          timer.unref?.();
+        }),
+      ]);
     } catch (error) {
+      if (error instanceof OpenCodeError) throw error;
       throw new OpenCodeError('process', `Could not subscribe to the OpenCode server's events: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    } finally {
+      clearTimeout(timer);
     }
     if (connected.done) throw new OpenCodeError('process', 'The OpenCode server closed its event stream at once.');
     void (async () => {
@@ -1262,7 +1291,9 @@ export class OpenCodeSession implements AgentSession {
           const { value, done } = await iterator.next();
           if (done) break;
           const watch = current();
-          if (watch) this.#dispatch(server, watch, value);
+          if (!watch) continue;
+          // Awaited, so the events after it wait: they keep their order.
+          if (await this.#ownsAsk(watch, client, value)) this.#dispatch(server, current() ?? watch, value);
         }
       } catch (error) {
         if (stream.signal.aborted) return;
@@ -1275,6 +1306,36 @@ export class OpenCodeSession implements AgentSession {
         watch.finish(watch.translator.outcome());
       }
     })();
+  }
+
+  /**
+   * Whether the turn gets this event. An ask (a permission, a question) from a session the stream has
+   * not tied to the turn yet may be a subagent's whose `task` call has not shown up: OpenCode is asked
+   * who started that session, so the ask parks the turn instead of leaving it waiting unseen.
+   */
+  async #ownsAsk(watch: TurnWatch, client: OpenCodeClient, event: Parameters<OpenCodeTurnTranslator['handle']>[0]): Promise<boolean> {
+    if (event.type !== 'permission.asked' && event.type !== 'question.asked') return true;
+    const sessionId = event.properties.sessionID;
+    if (typeof sessionId !== 'string' || watch.translator.accepts(sessionId)) return true;
+    const seen = new Set<string>();
+    let next: string | undefined = sessionId;
+    const chain: Array<{ id: string; parent?: string }> = [];
+    try {
+      // A subagent's own subagent asks too: up the chain until a session of the turn, or none.
+      while (next && !seen.has(next) && !watch.translator.accepts(next)) {
+        seen.add(next);
+        const info = await client.getSession(next);
+        chain.push({ id: next, ...(info?.parentID ? { parent: info.parentID } : {}) });
+        next = info?.parentID;
+      }
+    } catch (error) {
+      // An ask nobody can place would leave the turn waiting on it: the turn ends with why instead.
+      watch.translator.fail(new OpenCodeError('process', `OpenCode asked from session ${sessionId}, and the Factory could not tell whose it is: ${error instanceof Error ? error.message : String(error)}`, { cause: error }));
+      watch.finish(watch.translator.outcome());
+      return false;
+    }
+    for (const link of chain.reverse()) watch.translator.adoptChild(link.id, link.parent);
+    return watch.translator.accepts(sessionId);
   }
 
   /** One event: its transcript entries, its usage, and a park, an end or a stop it means for the turn. */
@@ -1295,11 +1356,11 @@ export class OpenCodeSession implements AgentSession {
       return;
     }
     if (update.permission) {
-      const { requestId, request } = update.permission;
-      this.#ask(live, watch, update.entries, emit, request, answer => {
+      const { requestId, request, alwaysAsks } = update.permission;
+      this.#ask(live, watch, update.entries, emit, alwaysAsks ? { ...request, once: true } : request, answer => {
         if (!client) return;
         const reply: OpenCodePermissionReply = 'reply' in answer ? answer.reply : 'reject';
-        void client.replyPermission(requestId, reply).catch(error => console.warn('[opencode harness] Unable to answer a permission.', error));
+        void client.replyPermission(requestId, reply).catch(error => this.#answerFailed(server, 'permission', error));
       });
       return;
     }
@@ -1314,7 +1375,7 @@ export class OpenCodeSession implements AgentSession {
         answer => {
           if (!client) return;
           const sent = 'answers' in answer ? client.replyQuestion(requestId, answer.answers) : client.rejectQuestion(requestId);
-          void sent.catch(error => console.warn('[opencode harness] Unable to answer a question.', error));
+          void sent.catch(error => this.#answerFailed(server, 'question', error));
         },
         questions,
       );
@@ -1322,6 +1383,20 @@ export class OpenCodeSession implements AgentSession {
     }
     emit(update.entries);
     if (update.idle) watch.finish(watch.translator.outcome());
+  }
+
+  /**
+   * OpenCode did not take an answer: the turn that waits for it ends with why, instead of waiting
+   * forever. An ask OpenCode already dropped (404) took its answer as far as anyone can.
+   */
+  #answerFailed(server: OpenCodeServerProcess, kind: 'permission' | 'question', error: unknown) {
+    if (error instanceof OpenCodeHttpError && error.status === 404) return;
+    console.warn(`[opencode harness] Unable to answer a ${kind}.`, error);
+    const run = this.#run;
+    const watch = run && !run.settled && run.server === server ? run.watch : undefined;
+    if (!watch) return;
+    watch.translator.fail(new OpenCodeError('process', `OpenCode did not take the answer to its ${kind}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }));
+    watch.finish(watch.translator.outcome());
   }
 
   /**
@@ -1339,8 +1414,8 @@ export class OpenCodeSession implements AgentSession {
   ) {
     const policy = live?.policy;
     const question = built.toolName === ASK_USER_QUESTION_TOOL;
-    // A tool asked about on every call: its Allow is for this call alone.
-    const once = !question && policy?.askEachTime?.includes(built.toolName) === true;
+    // A tool asked about on every call (or an ask OpenCode always makes): its Allow is for this call alone.
+    const once = !question && (built.once === true || policy?.askEachTime?.includes(built.toolName) === true);
     const request: PermissionRequest = once ? { ...built, once: true } : built;
     const calls = entries.filter(entry => entry.kind !== 'permission');
     const thread = this.#threadState();
@@ -1402,7 +1477,7 @@ export class OpenCodeSession implements AgentSession {
     if (run.abortRequested) return { kind: 'aborted' };
     const openCodeSessionId = run.openCodeSessionId!;
     this.#emitTranscript({ kind: 'init', sessionId: openCodeSessionId, ...(selection?.model ? { model: selection.model } : {}) }, run);
-    const translator = new OpenCodeTurnTranslator({ sessionId: openCodeSessionId, mcpServers: run.mcpServers ?? [], planning });
+    const translator = new OpenCodeTurnTranslator({ sessionId: openCodeSessionId, mcpServers: run.mcpServers ?? [], planning, promptedAt: Date.now() });
     const watch = newTurnWatch(translator);
     run.watch = watch;
     // The thread's history when its OpenCode session is new after a failed resume, or a handoff a move
@@ -1423,7 +1498,12 @@ export class OpenCodeSession implements AgentSession {
       });
     } catch (error) {
       await handoff?.unsent().catch(failure => console.warn('[opencode harness] Unable to keep the handoff pending.', failure));
-      return { kind: 'error', error: error instanceof OpenCodeError ? error : new OpenCodeError('process', `OpenCode refused the turn: ${error instanceof Error ? error.message : String(error)}`, { cause: error }) };
+      // A server failing (5xx) is the transient kind a retry may get past; anything else is refused.
+      const kind = error instanceof OpenCodeHttpError && error.status >= 500 ? 'overloaded' : 'process';
+      return {
+        kind: 'error',
+        error: error instanceof OpenCodeError ? error : new OpenCodeError(kind, `OpenCode refused the turn: ${error instanceof Error ? error.message : String(error)}`, { cause: error, ...(error instanceof OpenCodeHttpError ? { status: error.status } : {}) }),
+      };
     }
     if (handoff) void handoff.delivered().catch(error => console.warn('[opencode harness] Unable to record the handoff as delivered.', error));
     // OpenCode has the prompt: from here on the input counts as delivered.

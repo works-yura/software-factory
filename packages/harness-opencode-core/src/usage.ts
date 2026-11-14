@@ -31,9 +31,10 @@ export function openCodeGoUsageToLimits(body: unknown, checkedAt: string): Accou
     goWindow(usage?.weekly, { id: 'go_weekly', kind: 'weekly', windowDurationMins: 7 * 24 * 60 }),
     goWindow(usage?.monthly, { id: 'go_monthly', kind: 'monthly' }),
   ].filter((window): window is UsageWindow => window !== undefined);
+  // The key has Go (no 403), yet nothing reads as a window: the answer is broken, not "no Go".
   return windows.length > 0
     ? { checkedAt, windows, source: 'probe' }
-    : { checkedAt, windows: [], source: 'probe', unavailable: { reason: 'unsupported' } };
+    : { checkedAt, windows: [], source: 'probe', unavailable: { reason: 'failed', message: 'OpenCode answered with no usage windows it could read.' } };
 }
 
 const PROBE_TIMEOUT_MS = 10_000;

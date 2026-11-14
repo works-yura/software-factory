@@ -8,6 +8,7 @@ import type { HarnessCommand } from '@factory/harness/executable';
 import type { OpenCodeProviderList } from './client.ts';
 import { openCodeConfigContent } from './config.ts';
 import { buildOpenCodeEnv, openCodeAuthContent, openCodeStateDirs } from './env.ts';
+import { OpenCodeError } from './errors.ts';
 import { openCodeServerPassword, spawnOpenCodeServer, type OpenCodeSpawn } from './server.ts';
 
 export interface OpenCodeProbeInput {
@@ -19,7 +20,13 @@ export interface OpenCodeProbeInput {
   sharedCacheDir?: string;
   /** An OpenCode account's key: the probe signs in with it, so its paid models list too. */
   apiKey?: string;
+  /** How long the server gets to list its providers once it answers; 30 seconds by default. */
+  listTimeoutMs?: number;
+  /** Tests: the HTTP client's fetch. */
+  fetch?: typeof fetch;
 }
+
+export const DEFAULT_OPENCODE_LIST_TIMEOUT_MS = 30_000;
 
 export async function probeOpenCode(input: OpenCodeProbeInput): Promise<{ providers: OpenCodeProviderList; version: string }> {
   const cwd = join(input.root, 'work');
@@ -35,10 +42,21 @@ export async function probeOpenCode(input: OpenCodeProbeInput): Promise<{ provid
       ...(input.apiKey ? { extra: { OPENCODE_AUTH_CONTENT: openCodeAuthContent(input.apiKey) } } : {}),
     }),
     ...(input.spawn ? { spawn: input.spawn } : {}),
+    ...(input.fetch ? { fetch: input.fetch } : {}),
   });
+  const timeoutMs = input.listTimeoutMs ?? DEFAULT_OPENCODE_LIST_TIMEOUT_MS;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  timer.unref?.();
   try {
-    return { providers: await server.client(cwd).providers(), version: server.version };
+    // A server that never lists its providers must not hold every catalog read behind it.
+    const providers = await server.client(cwd).providers(abort.signal).catch(error => {
+      if (abort.signal.aborted) throw new OpenCodeError('timeout', `OpenCode did not list its models within ${timeoutMs} ms.`, { cause: error });
+      throw error;
+    });
+    return { providers, version: server.version };
   } finally {
+    clearTimeout(timer);
     server.terminate();
   }
 }

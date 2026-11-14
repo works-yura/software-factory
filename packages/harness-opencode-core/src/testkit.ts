@@ -23,6 +23,27 @@ export interface FakeOpenCode {
   readonly spawns: Array<{ command: string; args: string[]; env: Record<string, string> }>;
   /** Sessions the fake knows; a test deletes one to make a resume fail. */
   readonly sessions: Set<string>;
+  /** Subagent sessions by the session that started them (`GET /session/{id}` answers `parentID`). */
+  readonly parents: Map<string, string>;
+  /** Every `GET /session/{id}` asked, in order. */
+  readonly sessionReads: string[];
+  /** The `authorization` header of every request. */
+  readonly authorizations: Array<string | undefined>;
+  /** What `GET /global/health` answers; `{ healthy: true, version: '1.19.5' }` by default. */
+  health: { status?: number; contentType?: string; body: string };
+  /** `GET /provider` never answers while set. */
+  hangProviders: boolean;
+  /** `GET /event` never answers (not even its headers) while set. */
+  hangEvents: boolean;
+  /** Routes that fail with this HTTP status: `prompt_async`, `abort`, `permission.reply`, `question.reply`. */
+  readonly failing: Map<'prompt_async' | 'abort' | 'permission.reply' | 'question.reply', number>;
+  /** Ends every open event stream, as a server that closes it cleanly. */
+  closeEvents(): void;
+  /**
+   * What OpenCode does as it takes a prompt, before `onPrompt`: the person's message comes in and
+   * the session goes busy. Off, a test plays those events itself.
+   */
+  admitPrompts: boolean;
   /** Called for every prompt; emit the turn's events with `emit`. */
   onPrompt: (prompt: FakePrompt, fake: FakeOpenCode) => void;
   onPermissionReply: (reply: { requestId: string; reply: string }, fake: FakeOpenCode) => void;
@@ -59,6 +80,18 @@ export async function startFakeOpenCode(): Promise<FakeOpenCode> {
     aborts: [],
     spawns: [],
     sessions: new Set(),
+    parents: new Map(),
+    sessionReads: [],
+    authorizations: [],
+    health: { body: JSON.stringify({ healthy: true, version: '1.19.5' }) },
+    hangProviders: false,
+    hangEvents: false,
+    failing: new Map(),
+    closeEvents() {
+      for (const stream of streams) stream.end();
+      streams.clear();
+    },
+    admitPrompts: true,
     onPrompt: () => {},
     onPermissionReply: () => {},
     onQuestionReply: () => {},
@@ -94,9 +127,18 @@ export async function startFakeOpenCode(): Promise<FakeOpenCode> {
       response.writeHead(status, { 'content-type': 'application/json' });
       response.end(value === undefined ? '' : JSON.stringify(value));
     };
-    if (request.method === 'GET' && path === '/global/health') return json(200, { healthy: true, version: '1.19.5' });
-    if (request.method === 'GET' && path === '/provider') return json(200, fake.providers);
+    fake.authorizations.push(request.headers.authorization);
+    if (request.method === 'GET' && path === '/global/health') {
+      response.writeHead(fake.health.status ?? 200, { 'content-type': fake.health.contentType ?? 'application/json' });
+      response.end(fake.health.body);
+      return;
+    }
+    if (request.method === 'GET' && path === '/provider') {
+      if (fake.hangProviders) return;
+      return json(200, fake.providers);
+    }
     if (request.method === 'GET' && path === '/event') {
+      if (fake.hangEvents) return;
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       streams.add(response);
       request.on('close', () => streams.delete(response));
@@ -109,18 +151,35 @@ export async function startFakeOpenCode(): Promise<FakeOpenCode> {
       return json(200, { id: sessionId });
     }
     let match = /^\/session\/([^/]+)$/.exec(path);
-    if (request.method === 'GET' && match) return fake.sessions.has(match[1]!) ? json(200, { id: match[1] }) : json(404, { name: 'NotFoundError' });
+    if (request.method === 'GET' && match) {
+      const sessionId = decodeURIComponent(match[1]!);
+      fake.sessionReads.push(sessionId);
+      const parentID = fake.parents.get(sessionId);
+      if (parentID) return json(200, { id: sessionId, parentID });
+      return fake.sessions.has(sessionId) ? json(200, { id: sessionId }) : json(404, { name: 'NotFoundError' });
+    }
     match = /^\/session\/([^/]+)\/prompt_async$/.exec(path);
     if (request.method === 'POST' && match) {
       const prompt = { sessionId: match[1]!, input: (await body(request)) as OpenCodePromptInput };
+      const failed = fake.failing.get('prompt_async');
+      if (failed) return json(failed, { name: 'UnknownError', data: { message: 'prompt refused' } });
       fake.prompts.push(prompt);
       json(204);
-      setImmediate(() => fake.onPrompt(prompt, fake));
+      setImmediate(() => {
+        if (fake.admitPrompts) {
+          const messageId = id('msg');
+          fake.emit({ type: 'message.updated', properties: { sessionID: prompt.sessionId, info: { id: messageId, role: 'user', sessionID: prompt.sessionId, time: { created: Date.now() } } } });
+          fake.emit({ type: 'session.status', properties: { sessionID: prompt.sessionId, status: { type: 'busy' } } });
+        }
+        fake.onPrompt(prompt, fake);
+      });
       return;
     }
     match = /^\/session\/([^/]+)\/abort$/.exec(path);
     if (request.method === 'POST' && match) {
       fake.aborts.push(match[1]!);
+      const failed = fake.failing.get('abort');
+      if (failed) return json(failed, { name: 'UnknownError', data: { message: 'abort failed' } });
       json(200, true);
       setImmediate(() => fake.idle(match![1]!));
       return;
@@ -129,6 +188,8 @@ export async function startFakeOpenCode(): Promise<FakeOpenCode> {
     if (request.method === 'POST' && match) {
       const reply = { requestId: match[1]!, reply: ((await body(request)) as { reply: string }).reply };
       fake.permissionReplies.push(reply);
+      const failed = fake.failing.get('permission.reply');
+      if (failed) return json(failed, { name: 'NotFoundError', data: { message: 'no such request' } });
       json(200, true);
       setImmediate(() => fake.onPermissionReply(reply, fake));
       return;
@@ -137,6 +198,8 @@ export async function startFakeOpenCode(): Promise<FakeOpenCode> {
     if (request.method === 'POST' && match) {
       const reply = match[2] === 'reject' ? { requestId: match[1]!, rejected: true as const } : { requestId: match[1]!, answers: ((await body(request)) as { answers: string[][] }).answers };
       fake.questionReplies.push(reply);
+      const failed = fake.failing.get('question.reply');
+      if (failed) return json(failed, { name: 'NotFoundError', data: { message: 'no such request' } });
       json(200, true);
       setImmediate(() => fake.onQuestionReply(reply, fake));
       return;

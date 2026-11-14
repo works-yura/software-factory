@@ -102,7 +102,7 @@ describe('OpenCodeTurnTranslator', () => {
       { kind: 'thinking', text: 'hmm', messageId: 'p_r' },
     ]);
     const step = t.handle({ type: 'message.part.updated', properties: { sessionID: sid, part: { id: 'p_s', messageID: 'msg_a', sessionID: sid, type: 'step-finish', tokens: { input: 10, output: 2, reasoning: 0, cache: { read: 5, write: 0 } } } } });
-    expect(step.usage).toEqual({ promptTokens: 10, completionTokens: 2, reasoningTokens: 0, cachedInputTokens: 5, cacheCreationInputTokens: 0, totalTokens: 17 });
+    expect(step.usage).toEqual({ promptTokens: 15, completionTokens: 2, reasoningTokens: 0, cachedInputTokens: 5, cacheCreationInputTokens: 0, totalTokens: 17 });
     expect(t.handle({ type: 'session.idle', properties: { sessionID: sid } }).idle).toBe(true);
     expect(t.outcome()).toEqual({ kind: 'complete' });
   });
@@ -117,6 +117,7 @@ describe('OpenCodeTurnTranslator', () => {
 
   it('ends a planning turn on a plan gate', () => {
     const t = new OpenCodeTurnTranslator({ sessionId: sid, planning: true });
+    t.handle({ type: 'session.status', properties: { sessionID: sid, status: { type: 'busy' } } });
     t.handle({ type: 'message.part.updated', properties: { sessionID: sid, part: { id: 'p_t', messageID: 'msg_a', sessionID: sid, type: 'text', text: '## The plan\nsteps', time: { start: 1, end: 2 } } } });
     const idle = t.handle({ type: 'session.idle', properties: { sessionID: sid } });
     expect(idle.entries.map(entry => entry.kind)).toEqual(['tool_call', 'plan']);
@@ -125,6 +126,7 @@ describe('OpenCodeTurnTranslator', () => {
 
   it('reads an aborted message as no failure', () => {
     const t = new OpenCodeTurnTranslator({ sessionId: sid });
+    t.handle({ type: 'session.status', properties: { sessionID: sid, status: { type: 'busy' } } });
     t.handle({ type: 'session.error', properties: { sessionID: sid, error: { name: 'MessageAbortedError', data: { message: 'aborted' } } } });
     t.handle({ type: 'session.idle', properties: { sessionID: sid } });
     expect(t.outcome()).toEqual({ kind: 'complete' });

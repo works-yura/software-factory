@@ -7,7 +7,7 @@ import { createServer } from 'node:net';
 
 import { harnessCommandPath, reportHarnessSpawnFailure, type HarnessCommand } from '@factory/harness/executable';
 
-import { OpenCodeClient } from './client.ts';
+import { OpenCodeClient, OpenCodeHttpError } from './client.ts';
 import { OpenCodeError } from './errors.ts';
 
 /** The oldest CLI whose server routes (`/permission/{id}/reply`, `/question/{id}/reply`) the harness speaks. */
@@ -66,15 +66,42 @@ export function freeLoopbackPort(): Promise<number> {
   });
 }
 
-/** `1.19.5` against `1.14.19`: negative when older. Pre-release suffixes are ignored. */
+const VERSION_RE = /^v?(\d+)\.(\d+)(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** `1.19.5` (or `v1.19.5`) as numbers and its pre-release tag; `undefined` when it is not a version. */
+export function parseOpenCodeVersion(value: string): { core: [number, number, number]; prerelease?: string } | undefined {
+  const match = VERSION_RE.exec(value.trim());
+  if (!match) return undefined;
+  return { core: [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)], ...(match[4] ? { prerelease: match[4] } : {}) };
+}
+
+/**
+ * `1.19.5` against `1.14.19`: negative when older. A pre-release comes before its release
+ * (`1.14.19-beta` is older than `1.14.19`). Throws on something that is not a version.
+ */
 export function compareVersions(a: string, b: string): number {
-  const parse = (value: string) => value.split(/[.+-]/).slice(0, 3).map(part => Number.parseInt(part, 10) || 0);
-  const [left, right] = [parse(a), parse(b)];
+  const [left, right] = [parseOpenCodeVersion(a), parseOpenCodeVersion(b)];
+  if (!left || !right) throw new Error(`Not a version: ${left ? b : a}`);
   for (let index = 0; index < 3; index += 1) {
-    const diff = (left[index] ?? 0) - (right[index] ?? 0);
+    const diff = left.core[index]! - right.core[index]!;
     if (diff !== 0) return diff;
   }
-  return 0;
+  if (left.prerelease === right.prerelease) return 0;
+  if (!left.prerelease) return 1;
+  if (!right.prerelease) return -1;
+  return left.prerelease < right.prerelease ? -1 : 1;
+}
+
+/** Why the health check failed, as an {@link OpenCodeError}: the password refused, the server failing, or not OpenCode at all. */
+function healthFailure(error: unknown): never {
+  if (error instanceof OpenCodeHttpError) {
+    if (error.status === 401 || error.status === 403) {
+      throw new OpenCodeError('auth', `The OpenCode server refused the password the Factory started it with (HTTP ${error.status}).`, { status: error.status, cause: error });
+    }
+    throw new OpenCodeError('process', `The OpenCode server failed its health check (HTTP ${error.status}).`, { status: error.status, cause: error });
+  }
+  if (error instanceof SyntaxError) throw new OpenCodeError('process', 'The server answered its health check with something other than JSON: it is not an OpenCode server.', { cause: error });
+  throw new OpenCodeError('process', `The OpenCode server did not answer its health check: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
 }
 
 /** Starts `opencode serve` and waits until it answers; throws an {@link OpenCodeError} (`process`) when it does not. */
@@ -171,8 +198,9 @@ export async function spawnOpenCodeServer(input: SpawnOpenCodeServerInput): Prom
   try {
     const url = await Promise.race([listening, failed, timedOut]);
     const probe = new OpenCodeClient({ baseUrl: url, password, directory: input.cwd, ...(input.fetch ? { fetch: input.fetch } : {}) });
-    const health = await Promise.race([probe.health(), failed, timedOut]);
+    const health = await Promise.race([probe.health().catch(healthFailure), failed, timedOut]);
     if (!health?.healthy || typeof health.version !== 'string') throw new OpenCodeError('process', 'The OpenCode server answered its health check without a version.');
+    if (!parseOpenCodeVersion(health.version)) throw new OpenCodeError('process', `The OpenCode server reports a version the Factory cannot read (${health.version.slice(0, 40)}).`);
     if (compareVersions(health.version, MINIMUM_OPENCODE_VERSION) < 0) {
       throw new OpenCodeError('process', `OpenCode ${health.version} is too old for the Factory; install ${MINIMUM_OPENCODE_VERSION} or newer.`);
     }

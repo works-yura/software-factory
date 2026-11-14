@@ -53,26 +53,37 @@ function effective(action: OpenCodePermissionAction, policy: OpenCodeTurnPolicy)
   return action === 'ask' && policy.unattended && !policy.parkAsks ? 'deny' : action;
 }
 
-/** OpenCode's permission rules for a run's policy. */
-export function openCodePermissionRules(policy: OpenCodeTurnPolicy): Record<string, OpenCodePermissionAction> {
+/**
+ * OpenCode's permission rules for a run's policy. OpenCode lets a tool no rule names run, so the
+ * first rule (`*`, the last rule that matches wins) asks about everything not listed here: a
+ * plugin's tool, an MCP server the checkout's own config adds. The Factory's own MCP servers
+ * (`mcpServers`) are allowed; their tools that change data are asked about each time (`askEachTime`).
+ */
+export function openCodePermissionRules(policy: OpenCodeTurnPolicy, mcpServers: readonly string[] = []): Record<string, OpenCodePermissionAction> {
   const web = policy.web ?? 'allow';
   const rules: Record<string, OpenCodePermissionAction> = {
+    '*': effective('ask', policy),
     read: 'allow',
     glob: 'allow',
     grep: 'allow',
     list: 'allow',
     lsp: 'allow',
     todowrite: 'allow',
+    todoread: 'allow',
+    // OpenCode's own answer to a malformed call: it runs nothing.
+    invalid: 'allow',
     question: 'allow',
     edit: effective(policy.edit ?? 'ask', policy),
     bash: effective(policy.bash ?? 'ask', policy),
     webfetch: effective(web, policy),
     websearch: effective(web, policy),
+    codesearch: effective(web, policy),
     task: 'allow',
     skill: 'allow',
     external_directory: effective('ask', policy),
     doom_loop: effective('ask', policy),
   };
+  for (const server of mcpServers) rules[`${openCodeMcpToolId(server, '')}*`] = 'allow';
   for (const name of policy.askEachTime ?? []) rules[openCodeToolIdForTranscriptName(name)] = effective('ask', policy);
   return rules;
 }
@@ -89,7 +100,7 @@ export function openCodeConfigContent(input: { policy: OpenCodeTurnPolicy; mcpSe
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
     share: 'disabled',
-    permission: openCodePermissionRules(input.policy),
+    permission: openCodePermissionRules(input.policy, Object.keys(mcp)),
     ...(Object.keys(mcp).length ? { mcp } : {}),
   });
 }
