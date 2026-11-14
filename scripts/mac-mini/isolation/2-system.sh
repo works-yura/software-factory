@@ -15,8 +15,10 @@
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-tools      # e4. the agent's own claude and node
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-mobile-tools  # e5. the agent's own fvm and Flutter SDKs
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-firewall   # e6. the agent cannot reach 5874 / 9222
+#   sudo scripts/mac-mini/isolation/2-system.sh host-hardening   # e7. close what linPEAS found open to it
 #
 # Rollback, in reverse order:
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-host-hardening
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-firewall
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-mobile-tools
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-tools
@@ -80,6 +82,13 @@
 #        profile is off (FACTORY_AGENT_SEATBELT=off, which Xcode and SwiftPM need). Loaded into the
 #        anchor com.apple/factory-agent now and by a LaunchDaemon at every boot. The Factory's MCP
 #        is reached through its public URL, not these ports.
+#    e7. host-hardening: what linPEAS, run as the agent, found open to it outside Factory:
+#        AnyDesk's config in /etc/anydesk is root:staff 662, and every local user is in staff, so
+#        the agent could rewrite the config of a root service that lets people in (600 now; the
+#        service runs as root and still reads it). The LaunchDaemon com.network_analyzer.bpf makes
+#        /dev/bpf* readable by everyone at boot, which lets any user capture the traffic; your
+#        own access comes from Wireshark's ChmodBPF (group access_bpf) and stays. The old modes
+#        and the daemon's plist are kept in /var/factory/host-hardening for the rollback.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/common.sh"
 REPO="$(cd "$HERE/../../.." && pwd)"
@@ -98,6 +107,10 @@ FIREWALL_ANCHOR="com.apple/factory-agent"
 FIREWALL_RULES="$PROFILE_DIR/agent-firewall.pf"
 FIREWALL_DAEMON="/Library/LaunchDaemons/ai.eclipt.factory-agent-firewall.plist"
 FIREWALL_PORTS="5874 9222"
+HARDENING_DIR="$PROFILE_DIR/host-hardening"
+ANYDESK_FILES="/private/etc/anydesk/system.conf /private/etc/anydesk/service.conf /private/etc/anydesk/system.conf.lock /private/etc/anydesk/service.conf.lock"
+BPF_DAEMON_LABEL="com.network_analyzer.bpf"
+BPF_DAEMON="/Library/LaunchDaemons/$BPF_DAEMON_LABEL.plist"
 # Directories: the rights and their inheritance. Files: the same without search (= execute).
 ACL_DIR="group:$AGENT_GROUP allow read,write,append,delete,delete_child,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown,search,list,add_file,add_subdirectory,directory_inherit"
 ACL_FILE_INHERIT="group:$AGENT_GROUP allow read,write,append,delete,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown,file_inherit,directory_inherit,only_inherit"
@@ -225,6 +238,10 @@ status() {
   [ -f "$SUDOERS" ] && say "  sudoers: $SUDOERS" || say "  sudoers: missing"
   [ -x "/Users/$AGENT_USER/.local/bin/claude" ] && say "  agent claude: installed" || say "  agent claude: missing"
   [ -x "/Users/$AGENT_USER/.local/node/bin/node" ] && say "  agent node: installed" || say "  agent node: missing"
+  step "e7. Host hardening"
+  local file
+  for file in $ANYDESK_FILES; do [ -e "$file" ] && say "  $(stat -f '%Su:%Sg %Sp' "$file")  $file"; done
+  [ -f "$BPF_DAEMON" ] && say "  $BPF_DAEMON: present (opens /dev/bpf* to everyone at boot)" || say "  $BPF_DAEMON: absent"
   return 0
 }
 
@@ -516,6 +533,54 @@ remove_agent_firewall() {
   say "  removed the rule and its LaunchDaemon (pf itself stays on, with the system's own rules)"
 }
 
+agent_can_write() { (cd / && sudo -n -u "$AGENT_USER" -- /bin/test -w "$1"); }
+
+host_hardening() {
+  need_root host-hardening
+  install -d -o root -g wheel -m 700 "$HARDENING_DIR"
+  local file
+  step "AnyDesk config: 600, root only"
+  for file in $ANYDESK_FILES; do
+    [ -e "$file" ] || continue
+    # The first run records the original mode; a rerun keeps it.
+    grep -qF " $file" "$HARDENING_DIR/modes" 2>/dev/null || echo "$(stat -f '%Lp' "$file") $file" >> "$HARDENING_DIR/modes"
+    chmod 600 "$file"
+    say "  $(stat -f '%Sp' "$file")  $file"
+  done
+  step "$BPF_DAEMON_LABEL: stopped, plist kept in $HARDENING_DIR"
+  if [ -f "$BPF_DAEMON" ]; then
+    launchctl bootout "system/$BPF_DAEMON_LABEL" 2>/dev/null || true
+    mv "$BPF_DAEMON" "$HARDENING_DIR/"
+    say "  moved $BPF_DAEMON"
+  else
+    say "  already gone"
+  fi
+  step "check"
+  for file in $ANYDESK_FILES; do
+    [ -e "$file" ] || continue
+    if agent_can_write "$file"; then die "$AGENT_USER can still write $file"; fi
+  done
+  say "  $AGENT_USER cannot write the AnyDesk config"
+  say "  /dev/bpf*: $(stat -f '%Sp' /dev/bpf* | sort -u | tr '\n' ' ')(reboot no longer opens them)"
+}
+
+remove_host_hardening() {
+  need_root remove-host-hardening
+  local mode file
+  if [ -f "$HARDENING_DIR/modes" ]; then
+    while read -r mode file; do
+      [ -e "$file" ] && chmod "$mode" "$file" && say "  $mode  $file"
+    done < "$HARDENING_DIR/modes"
+    rm -f "$HARDENING_DIR/modes"
+  fi
+  if [ -f "$HARDENING_DIR/$BPF_DAEMON_LABEL.plist" ]; then
+    mv "$HARDENING_DIR/$BPF_DAEMON_LABEL.plist" "$BPF_DAEMON"
+    chown root:wheel "$BPF_DAEMON"
+    launchctl bootstrap system "$BPF_DAEMON" 2>/dev/null || true
+    say "  restored $BPF_DAEMON"
+  fi
+}
+
 agent_sudo() {
   need_root agent-sudo
   user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
@@ -564,6 +629,8 @@ case "${1:-status}" in
   remove-agent-mobile-tools) remove_agent_mobile_tools ;;
   agent-firewall) agent_firewall ;;
   remove-agent-firewall) remove_agent_firewall ;;
+  host-hardening) host_hardening ;;
+  remove-host-hardening) remove_host_hardening ;;
   remove-agent-sudo) remove_agent_sudo ;;
-  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|agent-mobile-tools|agent-firewall|remove-agent-firewall|remove-agent-mobile-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
+  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|agent-mobile-tools|agent-firewall|host-hardening|remove-host-hardening|remove-agent-firewall|remove-agent-mobile-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
 esac

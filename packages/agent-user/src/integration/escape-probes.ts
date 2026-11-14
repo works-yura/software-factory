@@ -79,6 +79,20 @@ export const writeProbes: readonly WriteProbe[] = [
   { what: 'Homebrew bin (on the agent and owner PATH)', folder: '/opt/homebrew/bin' },
 ];
 
+export interface FileProbe {
+  what: string;
+  path: string;
+  /** `-w`: must not be writable, `-r`: must not be readable. */
+  test: '-w' | '-r';
+}
+
+/** Files of other software on the machine that would let the agent act as root or as the owner (found by linPEAS). */
+export const fileProbes: readonly FileProbe[] = [
+  { what: "change AnyDesk's config (a root service that lets people in)", path: '/private/etc/anydesk/system.conf', test: '-w' },
+  { what: "change AnyDesk's service config", path: '/private/etc/anydesk/service.conf', test: '-w' },
+  { what: 'capture network traffic (/dev/bpf0)', path: '/dev/bpf0', test: '-r' },
+];
+
 /** Every local address the server may listen on: loopback (v4, v6), LAN, Tailscale. */
 export function localAddresses(): string[] {
   const addresses = new Set(['127.0.0.1', '::1']);
