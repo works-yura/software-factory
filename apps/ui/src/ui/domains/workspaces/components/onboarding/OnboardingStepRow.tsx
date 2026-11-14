@@ -70,7 +70,9 @@ export function OnboardingDoneRow({
         disabled={changeDisabled}
         onClick={onChange}
         className={cn(
-          'state-layer flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-3 text-start before:transition-none disabled:cursor-not-allowed',
+          // No `before:` utility here: any of them gives the button a `::before` box, which the flex gap
+          // then pushes the checkmark past the numbers of the other rows.
+          'state-layer flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-3 text-start disabled:cursor-not-allowed',
           ONBOARDING_FRAME_RADIUS,
           focusRingInset,
         )}
