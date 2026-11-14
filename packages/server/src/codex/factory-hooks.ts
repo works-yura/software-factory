@@ -3,6 +3,7 @@
 // generates kept as attachments, where the chat and the card show files.
 import { createReadStream } from 'node:fs';
 import { basename } from 'node:path';
+import type { Readable } from 'node:stream';
 
 import type { AttachmentService, WorkItemsStorage } from '@factory/store';
 
@@ -20,13 +21,21 @@ export function codexLiveWebForProductCards(
   };
 }
 
+/** Opens a file a harness CLI named. */
+export type AgentFileOpener = (path: string) => Readable;
+
 /**
  * Keeps an image Codex generated as an attachment: the card's when the session works one, the
  * session's otherwise, added by the session's owner.
+ *
+ * The path comes from the CLI, which runs as the agent (ADR-0041) and may name any file: with an
+ * agent user, `open` reads it with the agent's rights (`cat` as the agent), never the server's, so a
+ * path into the server user's home yields nothing.
  */
 export function codexGeneratedImageKeeper(deps: {
   attachments: Pick<AttachmentService, 'ingest'>;
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
+  open?: AgentFileOpener;
 }): (session: Coordinates & { userId: string }, image: { path: string; prompt?: string }) => Promise<void> {
   return async (session, image) => {
     const binding = await deps.workItems?.findActiveRunBindingForSession({
@@ -40,7 +49,7 @@ export function codexGeneratedImageKeeper(deps: {
         ? { workItemId: binding.workItemId, factoryProjectId: session.factoryProjectId }
         : { sessionId: session.sessionId, factoryProjectId: session.factoryProjectId },
       name: basename(image.path),
-      body: createReadStream(image.path),
+      body: (deps.open ?? (path => createReadStream(path)))(image.path),
       source: 'chat',
       addedBy: session.userId,
     });
