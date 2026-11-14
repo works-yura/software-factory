@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -45,5 +46,25 @@ describe('Codex Factory hooks', () => {
       { orgId: 'org-a', owner: { workItemId: 'card-1', factoryProjectId: 'factory-a' }, name: 'fox.png', body: 'png-bytes', source: 'chat', addedBy: 'user-a' },
       { orgId: 'org-a', owner: { sessionId: 'session-a', factoryProjectId: 'factory-a' }, name: 'fox.png', body: 'png-bytes', source: 'chat', addedBy: 'user-a' },
     ]);
+  });
+
+  it('opens the image through the given opener: with an agent user, as the agent, never as the server', async () => {
+    const opened: string[] = [];
+    let body = '';
+    const keep = codexGeneratedImageKeeper({
+      attachments: {
+        ingest: async input => {
+          body = await bytes(input.body);
+          return {} as never;
+        },
+      },
+      open: path => {
+        opened.push(path);
+        return Readable.from([Buffer.from('as-agent')]);
+      },
+    });
+    await keep({ ...where, userId: 'user-a' }, { path: '/Users/owner/.ssh/id_ed25519' });
+    expect(opened).toEqual(['/Users/owner/.ssh/id_ed25519']);
+    expect(body).toBe('as-agent');
   });
 });

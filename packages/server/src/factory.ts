@@ -127,6 +127,7 @@ import {
   createCodexSignInService,
   createCodexUserSessions,
   codexGeneratedImageKeeper,
+  type AgentFileOpener,
   codexLiveWebForProductCards,
 } from './codex/index.ts';
 import type { CodexCredentials, CodexFactoryHarness, CodexFactoryHarnessOptions } from './codex/index.ts';
@@ -590,6 +591,8 @@ export interface MastraFactoryCodexConfig
   > {
   /** Where session records live (and, beside them, each session's own `CODEX_HOME`); required unless `store` is given. */
   storeDir?: string;
+  /** Opens a file the CLI names (a generated image) with the agent's rights, when agents run as their own user. */
+  openAgentFile?: AgentFileOpener;
   /**
    * Local development: the server and the person's browser share a machine, so ChatGPT sign-in
    * (`codex login`, which opens the CLI's browser page here) is offered. Runs still use only the
@@ -2693,7 +2696,7 @@ export class MastraFactory {
           // images Codex generates are kept as the card's (or the session's) attachments.
           ...(workItemsReady ? { liveWebFor: codexLiveWebForProductCards(workItemsStorage) } : {}),
           ...(attachmentService
-            ? { keepGeneratedImage: codexGeneratedImageKeeper({ attachments: attachmentService, ...(workItemsReady ? { workItems: workItemsStorage } : {}) }) }
+            ? { keepGeneratedImage: codexGeneratedImageKeeper({ attachments: attachmentService, ...(workItemsReady ? { workItems: workItemsStorage } : {}), ...(codexConfig.openAgentFile ? { open: codexConfig.openAgentFile } : {}) }) }
             : {}),
           ...(workItemsReady
             ? {

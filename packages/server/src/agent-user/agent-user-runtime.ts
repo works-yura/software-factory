@@ -12,6 +12,7 @@
 import { mkdirSync } from 'node:fs';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough, type Readable } from 'node:stream';
 
 import {
   AgentReaper,
@@ -54,6 +55,8 @@ export interface AgentUserRuntime {
     spawn: ReturnType<typeof codexSpawnAsAgent>;
     sessionHomeRoot: string;
     supervisorWorkdirRoot: string;
+    /** Reads a file the CLI names (a generated image) as the agent: it may name any path. */
+    openAgentFile: (path: string) => Readable;
   };
   /**
    * Stops agent processes no turn owns (daemons, `nohup … &`, turns of a server that restarted):
@@ -148,6 +151,7 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
       // Each session's CODEX_HOME (its thread history): the CLI writes there as the agent.
       sessionHomeRoot: codexHomeRoot,
       supervisorWorkdirRoot: codexSupervisorRoot,
+      openAgentFile: path => agentFileStream(spawner, path),
     }),
     opencode: () => ({
       // The agent's own `opencode` (agent-tools copies it, as it does `claude` and `codex`).
@@ -158,4 +162,23 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
       supervisorWorkdirRoot: openCodeSupervisorRoot,
     }),
   };
+}
+
+/**
+ * A file's bytes read by `cat` as the agent. The stream ends only once `cat` exited cleanly: a file
+ * the agent cannot read errors it instead, so no partial or empty file is ever kept.
+ */
+export function agentFileStream(spawner: ProcessSpawner, path: string): Readable {
+  const child = spawner.spawn({ command: '/bin/cat', args: ['--', path], env: {} }, { cwd: '/' });
+  child.stdin?.end();
+  const out = new PassThrough();
+  child.stdout?.pipe(out, { end: false });
+  let stderr = '';
+  child.stderr?.on('data', chunk => (stderr += chunk));
+  child.on('error', error => out.destroy(error));
+  child.on('close', code => {
+    if (code === 0) out.end();
+    else out.destroy(new Error(`The agent cannot read ${path}: ${stderr.trim() || `exit ${code}`}`));
+  });
+  return out;
 }

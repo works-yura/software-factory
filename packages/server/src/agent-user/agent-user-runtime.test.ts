@@ -1,9 +1,10 @@
 import type { ChildProcess } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 
 import type { ProcessSpawner } from '@factory/agent-user';
 import { describe, expect, it } from 'vitest';
 
-import { agentUserRuntimeFromEnv } from './agent-user-runtime.ts';
+import { agentFileStream, agentUserRuntimeFromEnv } from './agent-user-runtime.ts';
 
 const sandboxRoot = '/Volumes/dot/Project/factory/sandboxes';
 
@@ -12,7 +13,7 @@ function recordingSpawner() {
   const spawner: ProcessSpawner = {
     spawn: (spec, { cwd }) => {
       calls.push({ spec, cwd });
-      return { pid: 1 } as unknown as ChildProcess;
+      return { pid: 1, stdout: new PassThrough(), on: () => {} } as unknown as ChildProcess;
     },
   };
   return { spawner, calls };
@@ -111,5 +112,17 @@ describe('agentUserRuntimeFromEnv', () => {
     expect(agentUserRuntimeFromEnv({ ...base, env: { FACTORY_AGENT_USER: 'factory' } })?.reaper).toBeDefined();
     expect(agentUserRuntimeFromEnv({ ...base, env: { FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_REAP: 'off' } })?.reaper).toBeUndefined();
     expect(() => agentUserRuntimeFromEnv({ ...base, env: { FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_REAP: 'maybe' } })).toThrow(/on or off/);
+  });
+
+  it("Codex's generated images are read by `cat` as the agent, and a file it cannot read fails the stream", async () => {
+    const { spawner, calls } = recordingSpawner();
+    const runtime = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory' }, sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner });
+    runtime!.codex().openAgentFile('/Users/yura/.ssh/id_ed25519');
+    expect(calls[0]).toEqual({ spec: { command: '/bin/cat', args: ['--', '/Users/yura/.ssh/id_ed25519'], env: {} }, cwd: '/' });
+
+    const { spawn } = await import('node:child_process');
+    const real: ProcessSpawner = { spawn: ({ command, args }, { cwd }) => spawn(command, [...args], { cwd }) };
+    const missing = agentFileStream(real, '/nonexistent/image.png');
+    await expect(new Promise((resolve, reject) => missing.on('error', reject).on('end', resolve).resume())).rejects.toThrow(/cannot read/);
   });
 });
