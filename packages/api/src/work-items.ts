@@ -15,7 +15,7 @@ import { boardFlow, boardPhaseOutcomes, createBoardRegistry, isPullRequestCard, 
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry } from '@factory/core';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '@factory/integrations';
-import { decisionRetryable, overtakenDecisionIds, toBoardSource } from '@factory/runtime';
+import { decisionRetryable, overtakenDecisionIds, readRunQueue, toBoardSource } from '@factory/runtime';
 import type { ProjectBoardSource, StoredBoardDetails } from '@factory/runtime';
 import type {
   FactoryStartCoordinator,
@@ -51,6 +51,7 @@ import { createFactoryWorkItem } from '@factory/work-items';
 import { resolveFactoryProposal, retryFactoryDecision } from '@factory/work-items';
 import { buildAttentionRoutes, factoryDecisionType } from '@factory/activity';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import type { RunQueueResponse } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
 import { buildSupervisorRoutes } from '@factory/supervisor';
@@ -107,6 +108,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
    * card stays deleted.
    */
   releaseWorkItemSandboxes?: (item: Card) => Promise<void>;
+  /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
+  runSlots?: () => { inUse: number; cap: number } | undefined;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -778,6 +781,25 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             decisions: page.decisions.map(decision => decisionSummary(boards, decision, overtaken.has(decision.id))),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
+        },
+      }),
+
+      // ── Automated runs waiting for a run slot ───────────────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.runQueue.path, {
+        method: FACTORY_ROUTE_CONTRACTS.runQueue.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const queue: RunQueueResponse = await readRunQueue({
+            workItems,
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            slots: this.deps.runSlots?.(),
+            now: new Date(),
+          });
+          return c.json(queue);
         },
       }),
 

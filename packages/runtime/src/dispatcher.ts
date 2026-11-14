@@ -105,14 +105,14 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
-const MAX_IN_FLIGHT = 25;
+const MAX_IN_FLIGHT = 10;
 /**
  * Decisions that may start or wake an agent run, or wait for one to end, and so
  * hold a run slot. A transition's message is queued as a separate sendMessage,
  * so a transition stays bookkeeping, and so does a status event's route move:
  * it never waits for a run inline, it hands itself back until the run ends.
  */
-const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
+export const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
   decision.type === 'invokeSkill' || decision.type === 'sendMessage' || decision.type === 'signalActivity';
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
@@ -486,6 +486,7 @@ export interface FactoryDecisionDispatcherOptions {
   }) => Promise<void>;
   /** `false` spends a linked-card decision unfiled: its Factory project was deleted after the decision committed. */
   factoryProjectExists?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /** Automated agent runs one server process holds at once. Defaults to 10; runs past it wait in the run queue. */
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -825,6 +826,11 @@ export class FactoryDecisionDispatcher {
     if (this.#reconcileOwed) return;
     this.#reconcileOwed = true;
     this.wake();
+  }
+
+  /** Run slots this process holds now, out of its cap. Per process: other replicas keep their own. */
+  runSlots(): { inUse: number; cap: number } {
+    return { inUse: this.#runInFlight.size, cap: this.#maxInFlight };
   }
 
   async runOnce(now = new Date()): Promise<void> {

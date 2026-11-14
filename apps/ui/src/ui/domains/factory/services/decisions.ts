@@ -1,7 +1,10 @@
+import type { RunQueueResponse } from '@factory/contracts';
 import type { FactoryDispatchFailureCode } from '@factory/store/work-items/base';
 import { translator } from '../../../i18n/t';
 
 const tk = translator('board');
+
+export type { RunQueueResponse };
 
 /** `dismissed` is human rejection; `superseded` means newer Factory state made a proposal obsolete. */
 export type FactoryDecisionStatus =
@@ -87,4 +90,14 @@ export async function actOnFactoryDecision(
   );
   if (!response.ok) return throwRequestError(response);
   return (await response.json()) as { decision: FactoryDecisionSummary };
+}
+
+/** The project's automated runs waiting for a run slot, oldest first, and the runs holding one. */
+export async function fetchRunQueue(baseUrl: string, githubProjectId: string): Promise<RunQueueResponse> {
+  const response = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/run-queue`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!response.ok) return throwRequestError(response);
+  return (await response.json()) as RunQueueResponse;
 }

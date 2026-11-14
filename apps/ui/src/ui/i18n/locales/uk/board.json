@@ -105,7 +105,9 @@
     "failedRetrying": "{{failed}} — повторюємо…",
     "heldWaiting": "Розібрано · чекає на вас",
     "usageWait": "Чекає на скидання ліміту · продовжить о {{time}}",
-    "usageWaitProgress": "Чекає на скидання ліміту…"
+    "usageWaitProgress": "Чекає на скидання ліміту…",
+    "queued": "У черзі (№{{position}})",
+    "queuedProgress": "У черзі"
   },
   "linkedSource": {
     "githubIssue": "задача GitHub",
@@ -422,5 +424,17 @@
     "save": "Зберегти",
     "cancel": "Скасувати",
     "saveFailed": "Не вдалося зберегти опис."
+  },
+  "runQueue": {
+    "count": "У черзі: {{count}}",
+    "countRunning": "У черзі: {{count}}, на цьому сервері працює: {{inUse}}",
+    "tooltip": "Автоматичні запуски, що чекають на вільне місце",
+    "slots": "Зайнято {{inUse}} з {{cap}} місць для запусків на цьому сервері",
+    "heading": "Чекають на місце для запуску, найдавніші першими",
+    "cardGone": "Картки вже немає на дошці",
+    "more": "І ще {{count}}",
+    "message": "Повідомлення в сесію",
+    "activity": "Активність у pull request",
+    "prompt": "Запуск із промптом"
   }
 }

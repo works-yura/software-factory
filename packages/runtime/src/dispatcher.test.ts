@@ -26,6 +26,7 @@ import { createFactoryStorageForTests } from './test-support.ts';
 import { demoteCardsToLegacyForTests } from '@factory/store/testing';
 import type { FactoryRunEndReporter } from './run-end-report.ts';
 import { FACTORY_DISPATCH_CONSTANTS } from './dispatcher.ts';
+import { readRunQueue } from './run-queue.ts';
 import { commitDecisions, FactoryDecisionDispatcher, FactoryTransitionService } from './test-support.ts';
 import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.ts';
 import type { FactoryCommitDecision } from '@factory/core';
@@ -1778,6 +1779,146 @@ describe('FactoryDecisionDispatcher', () => {
       accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await vi.advanceTimersByTimeAsync(2_000);
       expect(await find('run-2')).not.toMatchObject({ status: 'pending' });
+      await dispatcher.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds ten runs per server unless configured otherwise', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards: autoStartingBoards(),
+      }),
+      storage,
+    });
+    expect(dispatcher.runSlots()).toEqual({ inUse: 0, cap: 10 });
+  });
+
+  it('lists the runs waiting for a slot on the run queue, oldest first, beside the run holding it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const now = new Date();
+      await seed.storage.ops.insertOne('factory_projects', {
+        id: PROJECT_ID,
+        org_id: 'org-1',
+        created_by: 'user-1',
+        name: 'Queue project',
+        description: null,
+        default_model_id: null,
+        model_scope: 'hybrid',
+        created_at: now,
+        updated_at: now,
+      });
+      const { item: holding, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Holds the only slot.',
+        idempotencyKey: 'holding',
+      });
+      let accept!: (value: unknown) => void;
+      const { controller } = createSession(
+        new Promise<unknown>(resolve => {
+          accept = resolve;
+        }),
+      );
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: holding.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-holding',
+        kickoffMessage: null,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        harness: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        maxInFlight: 1,
+      });
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.setSystemTime(new Date('2030-01-01T00:00:01Z'));
+      const { item: first } = await queueDecision(
+        storage,
+        { type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'first' },
+        { sourceKey: 'github-issue:2', ingress: 'queue-2' },
+      );
+      vi.setSystemTime(new Date('2030-01-01T00:00:02Z'));
+      const { item: second } = await queueDecision(
+        storage,
+        { type: 'sendMessage', role: 'work', message: 'Behind it.', idempotencyKey: 'second' },
+        { sourceKey: 'github-issue:3', ingress: 'queue-3' },
+      );
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      const body = await readRunQueue({
+        workItems: storage,
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        slots: dispatcher.runSlots(),
+        now: new Date(),
+      });
+      expect(body.slots).toEqual({ scope: 'server', inUse: 1, cap: 1 });
+      expect(body.running).toBe(1);
+      expect(body.claimed).toEqual([
+        expect.objectContaining({
+          state: 'claimed',
+          type: 'sendMessage',
+          workItem: expect.objectContaining({ id: holding.id }),
+        }),
+      ]);
+      expect(body.queuedCount).toBe(2);
+      expect(body.queued).toEqual([
+        expect.objectContaining({
+          state: 'waiting',
+          position: 1,
+          type: 'invokeSkill',
+          skillName: 'factory-plan',
+          role: 'work',
+          queuedSince: '2030-01-01T00:00:01.000Z',
+          workItem: { id: first.id, key: first.workItem.key, title: 'Fix issue', board: first.board, phase: 'execute' },
+        }),
+        expect.objectContaining({
+          state: 'waiting',
+          position: 2,
+          type: 'sendMessage',
+          skillName: null,
+          queuedSince: '2030-01-01T00:00:02.000Z',
+          workItem: expect.objectContaining({ id: second.id }),
+        }),
+      ]);
+
+      // Another organization's project shows nothing of this queue.
+      expect(
+        await readRunQueue({ workItems: storage, orgId: 'org-2', factoryProjectId: PROJECT_ID, slots: undefined, now: new Date() }),
+      ).toMatchObject({ running: 0, claimed: [], queuedCount: 0, queued: [] });
+
+      accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await dispatcher.stop();
     } finally {
       vi.useRealTimers();

@@ -232,6 +232,8 @@ export interface FactoryApiRoutesDeps {
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
   /** Start paths of the other harnesses a factory may be created with (see `HarnessRoutingStartCoordinator`). */
   harnessStartCoordinators?: HarnessStartCoordinators;
+  /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
+  runSlots?: () => { inUse: number; cap: number } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;
@@ -1147,6 +1149,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           liveSessions: deps.liveSessions,
           ...(deps.sandboxProblems ? { sandboxProblems: deps.sandboxProblems } : {}),
           ...(deps.releaseWorkItemSandboxes ? { releaseWorkItemSandboxes: deps.releaseWorkItemSandboxes } : {}),
+          runSlots: deps.runSlots,
         }).routes()
       : []),
     ...(deps.factoryReady

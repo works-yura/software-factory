@@ -53,6 +53,10 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/sandbox-env-files', () =>
     HttpResponse.json({ files: [], writable: true, canManage: true }),
   ),
+  // Ambient run queue: no automated run waits for a slot. Run-queue tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/run-queue', () =>
+    HttpResponse.json({ slots: null, running: 0, claimed: [], queuedCount: 0, queued: [] }),
+  ),
   // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
   // Routes are what a project reads (ADR-0022): the board suites' project reads its linked

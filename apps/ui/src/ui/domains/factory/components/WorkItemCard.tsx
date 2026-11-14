@@ -58,6 +58,7 @@ export function WorkItemCard({
   proposal,
   approvingDecisionId,
   retryingDecisionId,
+  queuePosition,
   onApproveProposal,
   onDismissProposal,
   onRetryDecision,
@@ -84,6 +85,8 @@ export function WorkItemCard({
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
+  /** The decision's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
   /** Run a rule wants to start on this card, waiting for someone to release it. */
   proposal?: FactoryDecisionSummary;
   approvingDecisionId?: string;
@@ -133,6 +136,7 @@ export function WorkItemCard({
     preparing: startingLabel,
     retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
+    queuePosition,
     transitionReason,
     sessionStatus,
     held: awaitsTriageDecision(item, columnStage, definition),

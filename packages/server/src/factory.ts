@@ -601,6 +601,7 @@ export type { FactorySandboxStart } from '@factory/harness-mastra';
  * limit shared across deployments.
  */
 export interface MastraFactoryDispatcherConfig {
+  /** Automated agent runs one server process holds at once. Defaults to 10; runs past it wait in the run queue. */
   maxInFlight?: number;
 }
 
@@ -3461,6 +3462,7 @@ export class MastraFactory {
                   },
                 }
               : {}),
+            runSlots: () => this.#dispatcher?.runSlots(),
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({

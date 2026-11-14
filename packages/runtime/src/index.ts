@@ -2,6 +2,7 @@ export * from './attention-providers.ts';
 export type { AuditRecorder } from './audit-recorder.ts';
 export * from './decision-applicability.ts';
 export * from './dispatcher.ts';
+export * from './run-queue.ts';
 export type { HarnessSessionState } from './harness-state.ts';
 export * from './board-writes.ts';
 export * from './project-boards.ts';

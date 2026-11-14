@@ -103,7 +103,9 @@
     "failedRetrying": "{{failed}} — retrying…",
     "heldWaiting": "Triaged · waiting for you",
     "usageWait": "Waiting for usage reset · resumes at {{time}}",
-    "usageWaitProgress": "Waiting for usage reset…"
+    "usageWaitProgress": "Waiting for usage reset…",
+    "queued": "Queued (#{{position}})",
+    "queuedProgress": "Queued"
   },
   "linkedSource": {
     "githubIssue": "GitHub issue",
@@ -416,5 +418,17 @@
     "save": "Save",
     "cancel": "Cancel",
     "saveFailed": "The description could not be saved."
+  },
+  "runQueue": {
+    "count": "{{count}} queued",
+    "countRunning": "{{count}} queued, {{inUse}} running on this server",
+    "tooltip": "Automated runs waiting for a run slot",
+    "slots": "{{inUse}} of {{cap}} run slots in use on this server",
+    "heading": "Waiting for a run slot, oldest first",
+    "cardGone": "Card no longer on the board",
+    "more": "And {{count}} more",
+    "message": "Message to the session",
+    "activity": "Pull request activity",
+    "prompt": "Prompt run"
   }
 }
