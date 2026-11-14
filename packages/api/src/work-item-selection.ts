@@ -1,3 +1,4 @@
+import { sourceExternalId } from '@factory/core';
 import type { Card } from '@factory/store';
 import { cardSearchText } from '@factory/work-items/card-search-text';
 import { hasEveryWord, searchWords } from '@factory/work-items/search-words';
@@ -34,13 +35,19 @@ export function unstartedCards(board: readonly Card[], query: string, limit: num
   return { cards: matches.slice(0, limit).map(({ card }) => card), total: matches.length };
 }
 
-/** The cards filed from one of `sources`, each a source id or a URL, in board order. */
+/**
+ * The cards filed from one of `sources`, each a source id or a URL, in board order. A pull request
+ * attached to an issue card counts as filed on that card.
+ */
 export function cardsFiledFrom(board: readonly Card[], sources: readonly string[]): Card[] {
   const wanted = new Set(sources);
   return board.filter(card =>
-    [card.externalSource?.externalId, card.externalSource?.url, card.workItem.url].some(
-      key => typeof key === 'string' && wanted.has(key),
-    ),
+    [
+      card.externalSource?.externalId,
+      card.externalSource?.url,
+      card.workItem.url,
+      ...card.workItem.sources.flatMap(source => [sourceExternalId(source), source.url]),
+    ].some(key => typeof key === 'string' && wanted.has(key)),
   );
 }
 
