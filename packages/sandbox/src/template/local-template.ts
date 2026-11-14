@@ -158,10 +158,14 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     this.#packageStores = options.packageStores ?? false;
     this.#logger = options.logger ?? consoleLogger;
     this.#isPublicRepository = options.isPublicRepository;
+    // With an agent user (ADR-0041) every command here runs as the agent: the mirrors and builds sit
+    // in folders the agent can write, so a git run there as the server would obey whatever config or
+    // hooks the agent left in them (core.fsmonitor, a hook) with the server's own rights.
+    const agent = options.agentProcesses ? { agent: options.agentProcesses } : {};
     this.repositoryCache = new LocalMirrorRepositoryCache({
       root: this.root,
       logger: this.#logger,
-      host: hostExecutor({ ...(options.env ? { env: options.env } : {}) }),
+      host: hostExecutor({ ...(options.env ? { env: options.env } : {}), ...agent }),
       ...(options.freshnessMs !== undefined ? { freshnessMs: options.freshnessMs } : {}),
     });
     this.sandboxes = new SandboxRegistry({ root: this.root });
@@ -173,10 +177,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     this.builds = new LocalEnvironmentBuilds({
       root: this.root,
       cache: this.repositoryCache,
-      host: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() } }),
-      ...(options.agentProcesses
-        ? { setupHost: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() }, agent: options.agentProcesses }) }
-        : {}),
+      host: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() }, ...agent }),
       logger: this.#logger,
       ...(options.pruneIdleMs !== undefined ? { pruneIdleMs: options.pruneIdleMs } : {}),
       pruneHiddenRefs: input => this.pruneHiddenRefs(input),

@@ -46,10 +46,11 @@ export interface LocalEnvironmentBuildsOptions {
   /** The template root: records under `builds/`, template copies under `templates/`. */
   root: string;
   cache: LocalMirrorRepositoryCache;
-  /** Runs setup commands and template git on the server host, with the sandbox environment and package stores. */
+  /**
+   * Runs setup commands and template git, with the sandbox environment and package stores: on the
+   * server host, or as the agent user (ADR-0041), since both touch folders the agent can write.
+   */
   host: ExecutableSandbox;
-  /** Runs the setup commands (repository code) instead of `host`: as the agent user (ADR-0041). */
-  setupHost?: ExecutableSandbox;
   logger: LocalMirrorLogger;
   now?: () => number;
   heartbeatMs?: number;
@@ -232,7 +233,7 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
           for (const command of commands.filter(command => command.trim())) {
             const setupStarted = this.#now();
             try {
-              await runSetupCommand(this.#options.setupHost ?? host, dir, command, buildEnvOf(ctx));
+              await runSetupCommand(host, dir, command, buildEnvOf(ctx));
               log(`${slug}: setup done in ${seconds(this.#now() - setupStarted)}`);
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
@@ -259,7 +260,7 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
         for (const command of workspaceCommands.filter(command => command.trim())) {
           try {
             await mkdir(templateRoot, { recursive: true });
-            await runSetupCommand(this.#options.setupHost ?? host, templateRoot, command, buildEnvOf(ctx));
+            await runSetupCommand(host, templateRoot, command, buildEnvOf(ctx));
             log('workspace setup done');
           } catch (error) {
             fatal = `workspace setup: ${error instanceof Error ? error.message : String(error)}`;
