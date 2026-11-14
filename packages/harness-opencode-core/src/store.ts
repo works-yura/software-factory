@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { join } from 'node:path';
 
 import type { PlanDecision } from '@factory/harness';
+import type { UsageLimitPark } from '@factory/harness/usage-limit-park';
 import type { MessageAuthor, NotificationRecord, PermissionRequest, PlanGate } from '@factory/harness/transcript';
 
 /** How a thread's turns run: planning (OpenCode's read-only `plan` agent, ends with a plan to approve) or not. */
@@ -41,6 +42,8 @@ export interface OpenCodeThreadState {
   deliveredIds: string[];
   /** Recent notification dedupe keys, newest last. */
   dedupeKeys: string[];
+  /** Set while the thread waits for a usage limit to reset (`@factory/harness/usage-limit-park`). */
+  usageLimitPark?: UsageLimitPark;
 }
 
 export interface OpenCodeSessionRecord {
@@ -49,6 +52,10 @@ export interface OpenCodeSessionRecord {
   resourceId?: string;
   /** Where OpenCode runs. Fixed after the first turn. */
   cwd?: string;
+  /** The OpenCode account (Settings → Connections → OpenCode) the last run signed in with; none runs the free models. */
+  accountId?: string;
+  /** Where the thread's history came from when it was imported from the person's own OpenCode. */
+  importedFrom?: { openCodeSessionId: string; directory: string; title: string; importedAt: string };
   threads: Record<string, OpenCodeThreadState>;
   updatedAt: string;
 }

@@ -20,13 +20,26 @@ export class OpenCodeError extends Error {
   readonly status?: number;
   /** OpenCode's own error name (`ProviderAuthError`, `APIError`, …), when it named one. */
   readonly code?: string;
+  /** When a usage limit comes back, when someone said (the account's usage windows, the account pool). */
+  readonly resetsAt?: Date;
 
-  constructor(kind: OpenCodeErrorKind, message: string, details: { status?: number; code?: string; cause?: unknown } = {}) {
+  constructor(kind: OpenCodeErrorKind, message: string, details: { status?: number; code?: string; cause?: unknown; resetsAt?: Date } = {}) {
     super(message, details.cause === undefined ? undefined : { cause: details.cause });
     this.name = 'OpenCodeError';
     this.kind = kind;
     if (details.status !== undefined) this.status = details.status;
     if (details.code) this.code = details.code;
+    if (details.resetsAt) this.resetsAt = details.resetsAt;
+  }
+
+  /** The same failure, now knowing when its limit comes back. */
+  withResetsAt(resetsAt: Date): OpenCodeError {
+    return new OpenCodeError(this.kind, this.message, {
+      ...(this.status !== undefined ? { status: this.status } : {}),
+      ...(this.code ? { code: this.code } : {}),
+      cause: this,
+      resetsAt,
+    });
   }
 
   get retryable(): boolean {

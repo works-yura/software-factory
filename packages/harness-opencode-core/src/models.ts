@@ -17,6 +17,8 @@ export const OPENCODE_INSTANCE_ID = 'opencode';
 export const OPENCODE_HARNESS_ID = 'opencode';
 /** OpenCode's own provider (OpenCode Zen): its free models run with no key. */
 export const OPENCODE_ZEN_PROVIDER = 'opencode';
+/** OpenCode Go: the subscription's models, listed once an account with it signs in. */
+export const OPENCODE_GO_PROVIDER = 'opencode-go';
 /** What a new session runs when nothing else is picked, while the CLI lists it. */
 export const OPENCODE_DEFAULT_MODEL = `${OPENCODE_ZEN_PROVIDER}/big-pickle`;
 
@@ -54,27 +56,32 @@ function variantDescriptor(model: OpenCodeProviderModel): ProviderOptionDescript
 }
 
 /**
- * The models a Factory can run on OpenCode: OpenCode Zen's free models (no key, no account). Each
- * is marked `free`: their providers may use what is sent to them to improve their models, so a
- * client's repository needs the client's consent first (ADR-0043). Deprecated ones are left out.
+ * The models a Factory can run on OpenCode: OpenCode Zen's free models (no key, no account), and,
+ * once an OpenCode account signs in (`signedIn`), the paid Zen models and OpenCode Go's that its
+ * server lists. Free ones are marked `free`: their providers may use what is sent to them to improve
+ * their models, so a client's repository needs the client's consent first (ADR-0043). Deprecated
+ * ones are left out.
  */
-export function openCodeCatalogModels(list: OpenCodeProviderList): ServerProviderModel[] {
-  const zen = list.all.find(provider => provider.id === OPENCODE_ZEN_PROVIDER);
-  if (!zen) return [];
-  const models = Object.values(zen.models)
-    .filter(model => model.status !== 'deprecated' && isFreeOpenCodeModel(model))
-    .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
-  return models.map(model => {
-    const slug = `${OPENCODE_ZEN_PROVIDER}/${model.id}`;
-    const descriptor = variantDescriptor(model);
-    return {
-      slug,
-      name: model.name ?? model.id,
-      badge: 'free' as const,
-      isCustom: false,
-      ...(slug === OPENCODE_DEFAULT_MODEL ? { isDefault: true } : {}),
-      capabilities: descriptor ? createModelCapabilities({ optionDescriptors: [descriptor] }) : null,
-    };
+export function openCodeCatalogModels(list: OpenCodeProviderList, { signedIn = false }: { signedIn?: boolean } = {}): ServerProviderModel[] {
+  const providers = signedIn ? [OPENCODE_ZEN_PROVIDER, OPENCODE_GO_PROVIDER] : [OPENCODE_ZEN_PROVIDER];
+  return providers.flatMap(providerId => {
+    const provider = list.all.find(candidate => candidate.id === providerId);
+    if (!provider) return [];
+    const models = Object.values(provider.models)
+      .filter(model => model.status !== 'deprecated' && (signedIn || isFreeOpenCodeModel(model)))
+      .sort((a, b) => Number(isFreeOpenCodeModel(b)) - Number(isFreeOpenCodeModel(a)) || (a.name ?? a.id).localeCompare(b.name ?? b.id));
+    return models.map(model => {
+      const slug = `${providerId}/${model.id}`;
+      const descriptor = variantDescriptor(model);
+      return {
+        slug,
+        name: providerId === OPENCODE_GO_PROVIDER ? `${model.name ?? model.id} (Go)` : (model.name ?? model.id),
+        ...(isFreeOpenCodeModel(model) ? { badge: 'free' as const } : {}),
+        isCustom: false,
+        ...(slug === OPENCODE_DEFAULT_MODEL ? { isDefault: true } : {}),
+        capabilities: descriptor ? createModelCapabilities({ optionDescriptors: [descriptor] }) : null,
+      };
+    });
   });
 }
 
@@ -84,8 +91,17 @@ export interface OpenCodeCatalogState extends HarnessModelAvailability {
   readonly version?: string;
 }
 
-/** Where the facet reads the catalog from; cached by {@link createOpenCodeCatalogSource}. */
-export type OpenCodeCatalogSource = () => Promise<OpenCodeCatalogState>;
+/** The OpenCode account a catalog is listed for: its key, and a stable key to cache the list under (never the key itself). */
+export interface OpenCodeCatalogAccount {
+  readonly cacheKey: string;
+  readonly apiKey: string;
+}
+
+/**
+ * Where the facet reads the catalog from; cached by {@link createOpenCodeCatalogSource}. Without an
+ * account it is the free models; with one, what that account's server lists.
+ */
+export type OpenCodeCatalogSource = (account?: OpenCodeCatalogAccount) => Promise<OpenCodeCatalogState>;
 
 /**
  * The CLI's catalog, probed once and kept for `ttlMs`: the free models an `opencode serve` lists;
@@ -94,22 +110,22 @@ export type OpenCodeCatalogSource = () => Promise<OpenCodeCatalogState>;
 export function createOpenCodeCatalogSource(options: {
   /** Whether the `opencode` binary is there at all; asked before each probe. */
   installed: () => boolean | Promise<boolean>;
-  /** Starts a server, lists its providers and stops it. */
-  probe: () => Promise<{ providers: OpenCodeProviderList; version?: string }>;
+  /** Starts a server (signed in with the account's key, when given), lists its providers and stops it. */
+  probe: (apiKey?: string) => Promise<{ providers: OpenCodeProviderList; version?: string }>;
   ttlMs?: number;
   now?: () => number;
 }): OpenCodeCatalogSource & { invalidate(): void } {
   const now = options.now ?? Date.now;
-  let cached: { state: OpenCodeCatalogState; until: number } | undefined;
-  let pending: Promise<OpenCodeCatalogState> | undefined;
+  const cached = new Map<string, { state: OpenCodeCatalogState; until: number }>();
+  const pending = new Map<string, Promise<OpenCodeCatalogState>>();
 
-  const read = async (): Promise<{ state: OpenCodeCatalogState; ttl: number }> => {
+  const read = async (account: OpenCodeCatalogAccount | undefined): Promise<{ state: OpenCodeCatalogState; ttl: number }> => {
     if (!(await options.installed())) {
       return { state: { available: false, needsSetup: true, reason: OPENCODE_NOT_INSTALLED_REASON, models: [] }, ttl: FAILED_PROBE_TTL_MS };
     }
     try {
-      const result = await options.probe();
-      const models = openCodeCatalogModels(result.providers);
+      const result = await options.probe(account?.apiKey);
+      const models = openCodeCatalogModels(result.providers, { signedIn: account !== undefined });
       if (models.length === 0) {
         return {
           state: { available: false, reason: 'OpenCode lists no free models right now.', models: [], ...(result.version ? { version: result.version } : {}) },
@@ -123,21 +139,25 @@ export function createOpenCodeCatalogSource(options: {
     }
   };
 
-  const source = async () => {
-    if (cached && cached.until > now()) return cached.state;
-    pending ??= read()
-      .then(({ state, ttl }) => {
-        cached = { state, until: now() + ttl };
-        return state;
-      })
-      .finally(() => {
-        pending = undefined;
-      });
-    return pending;
+  const source = async (account?: OpenCodeCatalogAccount) => {
+    const key = account?.cacheKey ?? '';
+    const hit = cached.get(key);
+    if (hit && hit.until > now()) return hit.state;
+    let inFlight = pending.get(key);
+    if (!inFlight) {
+      inFlight = read(account)
+        .then(({ state, ttl }) => {
+          cached.set(key, { state, until: now() + ttl });
+          return state;
+        })
+        .finally(() => pending.delete(key));
+      pending.set(key, inFlight);
+    }
+    return inFlight;
   };
   return Object.assign(source, {
     invalidate() {
-      cached = undefined;
+      cached.clear();
     },
   });
 }
@@ -160,6 +180,11 @@ export interface OpenCodeHarnessModelsOptions<Session extends { thread: Selectio
   /** Thread-setting keys: the session's own pick, and the selection its last turn ran. */
   settingKeys: { selection: string; lastSelection: string };
   catalog: OpenCodeCatalogSource;
+  /**
+   * The organization's OpenCode account the catalog is listed for (its paid models then show);
+   * none lists the free models alone.
+   */
+  accountFor?(orgId: string): Promise<OpenCodeCatalogAccount | undefined>;
 }
 
 export interface OpenCodeHarnessModels<Session> extends HarnessModels {
@@ -179,6 +204,11 @@ export function createOpenCodeHarnessModels<Session extends { thread: SelectionS
   options: OpenCodeHarnessModelsOptions<Session>,
 ): OpenCodeHarnessModels<Session> {
   const keys = options.settingKeys;
+  /** The catalog a person of `ctx` picks from: their organization's account's, else the free one. */
+  const catalogFor = async (ctx: HarnessModelContext) => {
+    const account = ctx.viewer.orgId ? await options.accountFor?.(ctx.viewer.orgId) : undefined;
+    return options.catalog(account);
+  };
   const catalogDefault = async (): Promise<ModelSelection | null> => {
     const models = (await options.catalog()).models;
     const slug = (models.find(model => model.isDefault) ?? models[0])?.slug;
@@ -204,7 +234,7 @@ export function createOpenCodeHarnessModels<Session extends { thread: SelectionS
       const { available, needsSetup, reason } = await options.catalog();
       return { available, ...(needsSetup ? { needsSetup } : {}), ...(reason ? { reason } : {}) };
     },
-    list: async () => (await options.catalog()).models,
+    list: async ctx => (await catalogFor(ctx)).models,
     catalogDefault,
     factoryDefault,
     async defaultSelection(ctx) {
@@ -215,14 +245,14 @@ export function createOpenCodeHarnessModels<Session extends { thread: SelectionS
         catalog: await catalogDefault(),
       });
     },
-    async check(request) {
+    async check(request, ctx) {
       let selected: ProviderOptionSelection[] = [];
       if (request.options !== undefined) {
         const parsed = ProviderOptionSelections.safeParse(request.options);
         if (!parsed.success) return { ok: false, error: 'options must be a list of { id, value }.' };
         selected = [...parsed.data];
       }
-      return checkModelSelection(OPENCODE_INSTANCE_ID, (await options.catalog()).models, { model: request.model, options: selected });
+      return checkModelSelection(OPENCODE_INSTANCE_ID, (await catalogFor(ctx)).models, { model: request.model, options: selected });
     },
     async getSelection(sessionId) {
       const session = await options.getSession(sessionId);

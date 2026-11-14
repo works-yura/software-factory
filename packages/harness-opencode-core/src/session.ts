@@ -19,7 +19,16 @@ import type {
 import type { HarnessCommand } from '@factory/harness/executable';
 import type { ModelSelection } from '@factory/harness/models/contracts';
 import { promptWithTurnHandoff } from '@factory/harness/turn-handoff';
-import type { UsageLimitPark, UsageLimitResumeResult } from '@factory/harness/usage-limit-park';
+import {
+  isUsageLimitFailure,
+  nextUsageLimitPark,
+  USAGE_LIMIT_RESUME_PROMPT,
+  usageLimitExpiredMessage,
+  usageLimitResumeOutcome,
+  type UsageLimitPark,
+  type UsageLimitParkEvent,
+  type UsageLimitResumeResult,
+} from '@factory/harness/usage-limit-park';
 import { splitQuestionAnswers } from '@factory/harness/elicitation';
 import {
   ASK_USER_QUESTION_TOOL,
@@ -34,7 +43,7 @@ import { claudeNotificationDecision } from '@factory/harness-claude-code/notific
 
 import type { OpenCodeClient, OpenCodePermissionReply } from './client.ts';
 import { openCodeConfigContent, type OpenCodeMcpServer, type OpenCodeTurnPolicy } from './config.ts';
-import { buildOpenCodeEnv, openCodeStateDirs, type OpenCodeStateDirs } from './env.ts';
+import { buildOpenCodeEnv, openCodeAuthContent, openCodeStateDirs, type OpenCodeStateDirs } from './env.ts';
 import { OpenCodeError } from './errors.ts';
 import { OpenCodeTurnTranslator, type OpenCodeQuestion, type OpenCodeTurnOutcome } from './events.ts';
 import { openCodeServerPassword, spawnOpenCodeServer, type OpenCodeServerProcess, type OpenCodeSpawn } from './server.ts';
@@ -146,12 +155,61 @@ export interface OpenCodeSessionConfig {
   mode?: OpenCodeSessionMode;
   /** Leads every planning turn's prompt; {@link OPENCODE_PLANNING_PROMPT} by default. */
   planningPrompt?: string;
+  /**
+   * The OpenCode account a run signs in with (Settings → Connections → OpenCode): its key goes to the
+   * run's server inline (`OPENCODE_AUTH_CONTENT`), never into a file. `undefined`: the run signs in
+   * with nothing and only OpenCode's free models answer.
+   */
+  credentials?: (session: OpenCodeSession, request: OpenCodeCredentialRequest) => Promise<OpenCodeTurnCredentials | undefined>;
+  /** Told when a run's account hit a usage limit or was refused, before the run settles. */
+  onCredentialFailure?: (session: OpenCodeSession, failure: { accountId: string; error: OpenCodeError }) => void | Promise<void>;
+  /**
+   * When usage comes back after a run hit a limit: the account's usage windows, or now when another
+   * account can take over. `undefined` when nobody knows (OpenCode's free models never say): the run
+   * then fails with the provider's words instead of parking.
+   */
+  usageLimitResetsAt?: (session: OpenCodeSession, failure: { accountId?: string; error: OpenCodeError }) => Promise<Date | undefined>;
+  /**
+   * Whether a run that hit a usage limit with a known reset parks the session until then
+   * (`usageLimitPark`, `usage_limit_parked`) instead of failing; the host resumes it then.
+   */
+  parkOnUsageLimit?: (session: OpenCodeSession) => boolean | Promise<boolean>;
   turnTimeoutMs?: number;
   parkTimeoutMs?: number;
   /** How long the server gets to start (see `spawnOpenCodeServer`). */
   startTimeoutMs?: number;
   /** Tests: the HTTP client's fetch. */
   fetch?: typeof fetch;
+}
+
+/** What a run asks the credentials hook. */
+export interface OpenCodeCredentialRequest {
+  /** The account the session ran on last; staying on it keeps the provider's cache. */
+  preferredAccountId?: string;
+  exclude: string[];
+}
+
+/** One OpenCode account's key for a run, and how the chat names it. */
+export interface OpenCodeTurnCredentials {
+  accountId: string;
+  apiKey: string;
+  credential: { label: string; ownerId?: string };
+}
+
+/** One turn of history from elsewhere (the person's own OpenCode): what was asked, then what came back. */
+export interface OpenCodeImportedTurn {
+  /** The person's message; absent for a reply with no message before it. */
+  input?: string;
+  /** The reply as transcript entries (text, thinking, tool calls and their results). */
+  entries: TranscriptEntry[];
+  model?: string;
+}
+
+/** Where an imported thread's history came from. */
+export interface OpenCodeImportSource {
+  openCodeSessionId: string;
+  directory: string;
+  title: string;
 }
 
 interface ActiveRun {
@@ -169,6 +227,10 @@ interface ActiveRun {
   openCodeSessionId?: string;
   /** The thread's OpenCode session was gone when the run opened it: a new one started. */
   resumeFailed?: boolean;
+  /** The OpenCode account the run's server signed in with. */
+  accountId?: string;
+  /** The usage-limit park this run took up (its first park counts toward the cap). */
+  priorPark?: UsageLimitPark;
   watch?: TurnWatch;
   begun?: boolean;
   abortRequested: boolean;
@@ -376,15 +438,54 @@ export class OpenCodeSession implements AgentSession {
   }
 
   /**
-   * Never set: OpenCode's free models say when their allowance ran out but not when it comes back,
-   * so a limited run fails instead of parking (the host's resume scheduler reads this).
+   * Set while the current thread waits for a usage limit to reset. Only a limit whose reset is known
+   * parks (an account's usage window, another account free): OpenCode's free models say when their
+   * allowance ran out but not when it comes back, so such a run fails with their words.
    */
   get usageLimitPark(): UsageLimitPark | undefined {
-    return undefined;
+    const park = this.#threadState().usageLimitPark;
+    return park ? { ...park } : undefined;
   }
 
+  /** Takes a session parked on a usage limit up again now; still limited, it parks anew. */
   async resumeFromUsageLimit(): Promise<UsageLimitResumeResult> {
-    return { action: 'not_parked' };
+    if (this.run.isRunning()) return { action: 'running' };
+    if (!this.#threadState().usageLimitPark) return { action: 'not_parked' };
+    const accepted = this.#accept([], true);
+    if (accepted.action !== 'wake') return { action: 'running' };
+    return usageLimitResumeOutcome(accepted.run, () => this.usageLimitPark);
+  }
+
+  /** The OpenCode account the session's last run signed in with; none when it ran the free models. */
+  get accountId(): string | undefined {
+    return this.#record.accountId;
+  }
+
+  /** Where the thread's history came from, when it was imported from the person's own OpenCode. */
+  get importedFrom(): (OpenCodeImportSource & { importedAt: string }) | undefined {
+    return this.#record.importedFrom ? { ...this.#record.importedFrom } : undefined;
+  }
+
+  /**
+   * Writes history from the person's own OpenCode into the current thread, as the transcript
+   * records a turn: its message, then its reply. Only a session that never ran takes it. OpenCode
+   * itself starts a new conversation on the first turn, which carries this history (the host's
+   * context handoff).
+   */
+  async importHistory(turns: readonly OpenCodeImportedTurn[], source: OpenCodeImportSource): Promise<void> {
+    if (this.#run || this.#threadState().openCodeSessionId || this.#record.importedFrom) {
+      throw new Error('Only a session that has not run yet takes imported history.');
+    }
+    const threadId = this.#record.threadId;
+    for (const turn of turns) {
+      const meta = { runId: randomUUID(), threadId };
+      if (turn.input !== undefined) this.#emitTranscript({ kind: 'input', source: 'signal', text: turn.input }, meta);
+      this.#emitTranscript({ kind: 'init', sessionId: source.openCodeSessionId, ...(turn.model ? { model: turn.model } : {}) }, meta);
+      for (const entry of turn.entries) this.#emitTranscript(entry, meta);
+      this.#emitTranscript({ kind: 'result', subtype: 'success', isError: false }, meta);
+    }
+    this.#record.importedFrom = { ...source, importedAt: new Date().toISOString() };
+    await this.#save();
   }
 
   /** Whether a parked approval or question still has its turn waiting in a live server. */
@@ -779,6 +880,14 @@ export class OpenCodeSession implements AgentSession {
     const thread = this.#threadState();
     const first = [...thread.pendingInputs, ...this.#fresh(inputs, thread.pendingInputs)];
     thread.pendingInputs = [];
+    const park = thread.usageLimitPark;
+    if (park) {
+      // The run takes the park up: a limit it runs into again parks anew, counted from the first park.
+      run.priorPark = park;
+      thread.usageLimitPark = undefined;
+      if (park.continueTurn) first.unshift({ kind: 'signal', text: USAGE_LIMIT_RESUME_PROMPT, gate: true });
+      this.#emitPark({ type: 'usage_limit_cleared', reason: 'resumed' });
+    }
     const previous = this.#barrier;
     run.loopDone = this.#loop(run, previous, { inputs: first });
     this.#barrier = run.loopDone;
@@ -865,11 +974,62 @@ export class OpenCodeSession implements AgentSession {
       if (!keepServer && !run.abortRequested) this.#closeServer(run);
     }
     if (run.settled) return;
-    if (reason === 'error') this.#emit({ type: 'error', error: failure });
+    let park: Omit<UsageLimitPark, 'continueTurn'> | undefined;
+    if (reason === 'error') {
+      failure = await this.#limitFailure(run, failure);
+      const parked = await this.#usageLimitPark(run, failure);
+      if (run.settled) return;
+      if (parked === 'expired' && isUsageLimitFailure(failure)) {
+        failure = new OpenCodeError('rate_limit', usageLimitExpiredMessage(run.priorPark, failure.message));
+        this.#emitPark({ type: 'usage_limit_cleared', reason: 'expired' });
+      } else if (parked && parked !== 'expired') {
+        park = parked;
+      }
+      // A parked run says so instead of failing: the chat shows when it resumes, not an error.
+      if (!park) this.#emit({ type: 'error', error: failure });
+    }
     // A run that could not start says so only once it settled: a send that follows at once starts a
     // run of its own, instead of joining this one's queue and ending with its failure.
     if (threw) run.markStarted(failure);
-    this.#settle(run, reason);
+    this.#settle(run, reason, { ...(park ? { park } : {}) });
+  }
+
+  /**
+   * A limit or a refusal on the run's account: the host is told (the account sits out or is turned
+   * off), and a limit learns when usage comes back, when the host knows.
+   */
+  async #limitFailure(run: ActiveRun, failure: unknown): Promise<unknown> {
+    if (!(failure instanceof OpenCodeError) || (failure.kind !== 'rate_limit' && failure.kind !== 'auth') || run.abortRequested) return failure;
+    let error = failure;
+    try {
+      if (error.kind === 'rate_limit' && !error.resetsAt && this.#config.usageLimitResetsAt) {
+        const resetsAt = await this.#config.usageLimitResetsAt(this, { ...(run.accountId ? { accountId: run.accountId } : {}), error });
+        if (resetsAt) error = error.withResetsAt(resetsAt);
+      }
+      if (run.accountId) await this.#config.onCredentialFailure?.(this, { accountId: run.accountId, error });
+    } catch (hookError) {
+      console.warn('[opencode harness] Unable to report a limited or refused account.', hookError);
+    }
+    return error;
+  }
+
+  /**
+   * The park a limited run leads to: only when the reset is known and the host lets the session
+   * park, `expired` once it waited past the cap; `undefined` otherwise (the run fails).
+   */
+  async #usageLimitPark(run: ActiveRun, failure: unknown): Promise<Omit<UsageLimitPark, 'continueTurn'> | 'expired' | undefined> {
+    if (!isUsageLimitFailure(failure) || !failure.resetsAt || run.abortRequested) return undefined;
+    try {
+      if (!this.#config.parkOnUsageLimit || !(await this.#config.parkOnUsageLimit(this))) return undefined;
+    } catch (error) {
+      console.warn('[opencode harness] Unable to tell whether a limited run may park.', error);
+      return undefined;
+    }
+    return nextUsageLimitPark(failure, { ...(run.priorPark ? { previous: run.priorPark } : {}) });
+  }
+
+  #emitPark(event: UsageLimitParkEvent) {
+    this.#emit(event as unknown as AgentEvent);
   }
 
   #closeServer(run: Pick<ActiveRun, 'stream' | 'server'>) {
@@ -877,12 +1037,21 @@ export class OpenCodeSession implements AgentSession {
     run.server?.terminate();
   }
 
-  #settle(run: ActiveRun, reason: AgentRunEndReason, { drainFollowUps = true }: { drainFollowUps?: boolean } = {}) {
+  #settle(
+    run: ActiveRun,
+    reason: AgentRunEndReason,
+    { drainFollowUps = true, park }: { drainFollowUps?: boolean; park?: Omit<UsageLimitPark, 'continueTurn'> } = {},
+  ) {
     if (run.settled) return;
     run.settled = true;
     if (this.#run === run) this.#run = undefined;
     if (reason === 'aborted' || reason === 'error') {
       const thread = this.#threadState(run.threadId);
+      if (park && run.threadId === this.#record.threadId) {
+        // The cut-off turn reached OpenCode (it is in its session): the resume goes on with it.
+        const continueTurn = run.unsent === undefined && run.begun === true;
+        thread.usageLimitPark = { ...park, ...(continueTurn ? { continueTurn: true as const } : {}) };
+      }
       const kept = (input: OpenCodePendingInput) => input.kind === 'notification' || input.gate || !input.id;
       if (run.unsent) {
         thread.pendingInputs.unshift(...run.unsent.filter(kept));
@@ -894,8 +1063,11 @@ export class OpenCodeSession implements AgentSession {
     run.markStarted();
     void this.#save().catch(() => {});
     run.resolveEnded(reason);
+    const parked = this.#threadState(run.threadId).usageLimitPark;
+    if (park && parked) this.#emitPark({ type: 'usage_limit_parked', park: { ...parked } });
     this.#emit({ type: 'agent_end', reason });
-    if (drainFollowUps && reason !== 'suspended') this.#drainFollowUps(run.threadId);
+    // A parked session waits for the limit: its follow-ups go with the resume, not into another limited run.
+    if (drainFollowUps && reason !== 'suspended' && !park) this.#drainFollowUps(run.threadId);
   }
 
   #drainFollowUps(threadId: string) {
@@ -1014,7 +1186,20 @@ export class OpenCodeSession implements AgentSession {
     if (run.server?.isAlive() && run.client && run.openCodeSessionId) return run.client;
     const cwd = await this.#cwd();
     const mcpServers = (await this.#config.mcpServersFor?.(this)) ?? {};
-    const extra = await this.#config.envFor?.(this);
+    const credentials = await this.#config.credentials?.(this, {
+      ...(this.#record.accountId ? { preferredAccountId: this.#record.accountId } : {}),
+      exclude: [],
+    });
+    const extra = {
+      ...(await this.#config.envFor?.(this)),
+      // The account's key inline: no file of the session's holds it, and nothing else signs in.
+      ...(credentials ? { OPENCODE_AUTH_CONTENT: openCodeAuthContent(credentials.apiKey) } : {}),
+    };
+    this.#record.accountId = credentials?.accountId;
+    if (credentials) {
+      run.accountId = credentials.accountId;
+      this.#emitTranscript({ kind: 'credential', ...credentials.credential }, run);
+    }
     const env = buildOpenCodeEnv(
       this.#config.env ?? process.env,
       { dirs: await this.#stateDirs(), configContent: openCodeConfigContent({ policy, mcpServers }), password: openCodeServerPassword(), ...(extra ? { extra } : {}) },

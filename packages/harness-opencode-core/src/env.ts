@@ -90,3 +90,17 @@ export function buildOpenCodeEnv(
     ...input.extra,
   };
 }
+
+/** The OpenCode providers an OpenCode account's key signs in: OpenCode Zen and, with a subscription, OpenCode Go. */
+export const OPENCODE_ACCOUNT_PROVIDERS = ['opencode', 'opencode-go'] as const;
+
+/**
+ * `OPENCODE_AUTH_CONTENT` for a run on an OpenCode account: the key as OpenCode's own `auth.json`
+ * files it (`{ "opencode": { "type": "api", "key": … } }`), for Zen and Go alike (one console key
+ * serves both). Passed inline, so no file of the session's ever holds it.
+ */
+export function openCodeAuthContent(apiKey: string): string {
+  const key = apiKey.trim();
+  if (!key) throw new Error('An OpenCode account key is empty.');
+  return JSON.stringify(Object.fromEntries(OPENCODE_ACCOUNT_PROVIDERS.map(provider => [provider, { type: 'api', key }])));
+}

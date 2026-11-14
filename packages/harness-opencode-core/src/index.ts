@@ -9,3 +9,5 @@ export * from './session.ts';
 export * from './harness.ts';
 export * from './models.ts';
 export * from './probe.ts';
+export * from './local-sessions.ts';
+export * from './usage.ts';
