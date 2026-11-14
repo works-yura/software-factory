@@ -13,8 +13,12 @@
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-profile    # e2. install the Seatbelt profile
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-sudo       # e3. sudoers rule: the server starts agents
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-tools      # e4. the agent's own claude and node
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-mobile-tools  # e5. the agent's own fvm and Flutter SDKs
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-firewall   # e6. the agent cannot reach 5874 / 9222
 #
 # Rollback, in reverse order:
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-firewall
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-mobile-tools
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-tools
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-sudo
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-profile
@@ -65,6 +69,17 @@
 #        default Node (with its global packages: npm, codex) into ~factory/.local, owned by the
 #        agent: your copies sit in your home, which the agent cannot read. Rerun after updating
 #        either, so agents run the same versions.
+#    e5. agent-mobile-tools: copies of your fvm and of the Flutter SDKs the projects pin
+#        ($AGENT_FLUTTER_VERSIONS, from your fvm cache) into ~factory (fvm in .local/fvm, SDKs in
+#        ~/fvm/versions, its fvm config pointing there), owned by the agent: your cache is on the
+#        closed disk. CocoaPods comes from Homebrew (/opt/homebrew/bin, readable by everyone).
+#        About 2.5 GB per SDK. Rerun after adding a version.
+#    e6. agent-firewall: a pf rule that refuses the agent's TCP connections to port 5874 (this
+#        server) and 9222 (Chrome's debugger: whoever reaches it drives your browser and its
+#        logins), on any address. The Seatbelt profile refuses the same; this keeps it when the
+#        profile is off (FACTORY_AGENT_SEATBELT=off, which Xcode and SwiftPM need). Loaded into the
+#        anchor com.apple/factory-agent now and by a LaunchDaemon at every boot. The Factory's MCP
+#        is reached through its public URL, not these ports.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/common.sh"
 REPO="$(cd "$HERE/../../.." && pwd)"
@@ -78,6 +93,11 @@ AGENT_GROUP="factory-agents"
 PROFILE_DIR="/var/factory"
 PROFILE="$PROFILE_DIR/agent-$AGENT_USER.sb"
 SUDOERS="/etc/sudoers.d/50-factory-agent"
+AGENT_FLUTTER_VERSIONS="${AGENT_FLUTTER_VERSIONS:-3.44.1 3.41.8 3.38.7}"
+FIREWALL_ANCHOR="com.apple/factory-agent"
+FIREWALL_RULES="$PROFILE_DIR/agent-firewall.pf"
+FIREWALL_DAEMON="/Library/LaunchDaemons/ai.eclipt.factory-agent-firewall.plist"
+FIREWALL_PORTS="5874 9222"
 # Directories: the rights and their inheritance. Files: the same without search (= execute).
 ACL_DIR="group:$AGENT_GROUP allow read,write,append,delete,delete_child,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown,search,list,add_file,add_subdirectory,directory_inherit"
 ACL_FILE_INHERIT="group:$AGENT_GROUP allow read,write,append,delete,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,chown,file_inherit,directory_inherit,only_inherit"
@@ -414,6 +434,88 @@ remove_agent_tools() {
   say "  removed the agent's claude and node"
 }
 
+agent_mobile_tools() {
+  need_root agent-mobile-tools
+  user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
+  local agent_home="/Users/$AGENT_USER" fvm_home="$OWNER_HOME/.fvm_flutter/bin" cache version
+  [ -x "$fvm_home/fvm" ] || die "no fvm in $fvm_home"
+  cache="$(sed -n 's/.*"cachePath"[^"]*"\([^"]*\)".*/\1/p' "$OWNER_HOME/Library/Application Support/fvm/.fvmrc" 2>/dev/null)"
+  cache="${cache:-$OWNER_HOME/fvm}"
+  step "fvm -> $agent_home/.local/fvm"
+  install -d -o "$AGENT_USER" -g staff -m 755 "$agent_home/.local"
+  rm -rf "$agent_home/.local/fvm"
+  ditto "$fvm_home" "$agent_home/.local/fvm"
+  chown -R "$AGENT_USER:staff" "$agent_home/.local/fvm"
+  install -d -o "$AGENT_USER" -g staff -m 755 "$agent_home/fvm" "$agent_home/fvm/versions" "$agent_home/Library/Application Support/fvm"
+  printf '{\n  "cachePath": "%s"\n}\n' "$agent_home/fvm" > "$agent_home/Library/Application Support/fvm/.fvmrc"
+  chown "$AGENT_USER:staff" "$agent_home/Library/Application Support/fvm/.fvmrc"
+  for version in $AGENT_FLUTTER_VERSIONS; do
+    [ -x "$cache/versions/$version/bin/flutter" ] || die "Flutter $version is not in $cache/versions (fvm install $version first)"
+    step "Flutter $version -> $agent_home/fvm/versions/$version"
+    rm -rf "$agent_home/fvm/versions/$version"
+    ditto "$cache/versions/$version" "$agent_home/fvm/versions/$version"
+    chown -R "$AGENT_USER:staff" "$agent_home/fvm/versions/$version"
+  done
+  [ -x /opt/homebrew/bin/pod ] || say "  note: no /opt/homebrew/bin/pod; iOS builds need CocoaPods (brew install cocoapods)"
+  say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/fvm:/opt/homebrew/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "fvm $(fvm --version 2>&1 | tail -1), pod $(pod --version 2>&1 | tail -1)"; for v in ~/fvm/versions/*; do echo "  flutter $(basename "$v"): $("$v/bin/flutter" --version --machine 2>/dev/null | sed -n "s/.*\"frameworkVersion\": *\"\([^\"]*\)\".*/\1/p")"; done')"
+}
+
+remove_agent_mobile_tools() {
+  need_root remove-agent-mobile-tools
+  rm -rf "/Users/$AGENT_USER/.local/fvm" "/Users/$AGENT_USER/fvm" "/Users/$AGENT_USER/Library/Application Support/fvm"
+  say "  removed the agent's fvm and Flutter SDKs"
+}
+
+# Whether a TCP connection to 127.0.0.1:<port> opens, as <user> (exit 0) or not.
+can_connect() { (cd / && sudo -n -u "$1" -- /usr/bin/nc -z -G 2 127.0.0.1 "$2") >/dev/null 2>&1; }
+
+agent_firewall() {
+  need_root agent-firewall
+  user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
+  install -d -o root -g wheel -m 755 "$PROFILE_DIR"
+  local tmp port
+  tmp="$(mktemp)"
+  printf '# Factory (ADR-0041): %s may not reach the Factory server or Chrome'"'"'s debugger.\n# Written by scripts/mac-mini/isolation/2-system.sh agent-firewall.\nblock return out quick proto tcp from any to any port { %s } user %s\n' \
+    "$AGENT_USER" "$(echo $FIREWALL_PORTS | tr ' ' ',')" "$AGENT_USER" > "$tmp"
+  pfctl -n -a "$FIREWALL_ANCHOR" -f "$tmp" 2>/dev/null || { rm -f "$tmp"; die "pfctl rejects the rule"; }
+  install -o root -g wheel -m 644 "$tmp" "$FIREWALL_RULES"
+  rm -f "$tmp"
+  step "the rule, loaded into $FIREWALL_ANCHOR; pf enabled"
+  pfctl -E >/dev/null 2>&1 || true
+  pfctl -a "$FIREWALL_ANCHOR" -f "$FIREWALL_RULES" 2>/dev/null
+  pfctl -a "$FIREWALL_ANCHOR" -s rules 2>/dev/null | sed 's/^/    /'
+  step "at every boot: $FIREWALL_DAEMON"
+  cat > "$FIREWALL_DAEMON" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ai.eclipt.factory-agent-firewall</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/sh</string><string>-c</string><string>/sbin/pfctl -E; /sbin/pfctl -a $FIREWALL_ANCHOR -f $FIREWALL_RULES</string></array>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+PLIST
+  chown root:wheel "$FIREWALL_DAEMON"; chmod 644 "$FIREWALL_DAEMON"
+  launchctl bootout system "$FIREWALL_DAEMON" 2>/dev/null || true
+  launchctl bootstrap system "$FIREWALL_DAEMON"
+  step "check"
+  for port in $FIREWALL_PORTS; do
+    if can_connect "$AGENT_USER" "$port"; then die "$AGENT_USER still reaches 127.0.0.1:$port"; fi
+    if can_connect "$OWNER" "$port"; then say "  $port: $OWNER connects, $AGENT_USER is refused"
+    else say "  $port: $AGENT_USER is refused (nothing listens there for $OWNER either right now)"; fi
+  done
+}
+
+remove_agent_firewall() {
+  need_root remove-agent-firewall
+  launchctl bootout system "$FIREWALL_DAEMON" 2>/dev/null || true
+  rm -f "$FIREWALL_DAEMON" "$FIREWALL_RULES"
+  pfctl -a "$FIREWALL_ANCHOR" -F rules 2>/dev/null || true
+  say "  removed the rule and its LaunchDaemon (pf itself stays on, with the system's own rules)"
+}
+
 agent_sudo() {
   need_root agent-sudo
   user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
@@ -458,6 +560,10 @@ case "${1:-status}" in
   agent-sudo) agent_sudo ;;
   agent-tools) agent_tools ;;
   remove-agent-tools) remove_agent_tools ;;
+  agent-mobile-tools) agent_mobile_tools ;;
+  remove-agent-mobile-tools) remove_agent_mobile_tools ;;
+  agent-firewall) agent_firewall ;;
+  remove-agent-firewall) remove_agent_firewall ;;
   remove-agent-sudo) remove_agent_sudo ;;
-  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
+  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|agent-mobile-tools|agent-firewall|remove-agent-firewall|remove-agent-mobile-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
 esac

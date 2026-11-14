@@ -18,7 +18,7 @@ describe('agentUserFromEnv', () => {
       home: '/Users/factory',
       profilePath: '/var/factory/agent-factory.sb',
       writableRoots: ['/Volumes/dot/Project/factory/sandboxes'],
-      toolPath: ['/Users/factory/.local/bin', '/Users/factory/.local/node/bin'],
+      toolPath: ['/Users/factory/.local/bin', '/Users/factory/.local/node/bin', '/Users/factory/.local/fvm', '/opt/homebrew/bin'],
       seatbelt: true,
     });
   });
