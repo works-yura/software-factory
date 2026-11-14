@@ -3,7 +3,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
-import { getModelReasoningOptions } from '@mastra/core/llm';
+import { getModelReasoningOptions, getProviderConfig } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { getAvailableThinkingLevelsForModel } from '@mastra/code-sdk/thinking';
 import type { ModelCapabilities } from '@factory/harness/models/contracts';
@@ -267,6 +267,14 @@ export async function buildProviderAccess({
   return access;
 }
 
+/**
+ * A model its provider has retired (the registry's `deprecatedModels`): it still lists, but a run on it fails
+ * ("Model is unavailable"), so it is not offered for picking.
+ */
+export function isDeprecatedModel(provider: string, modelName: string): boolean {
+  return getProviderConfig(provider)?.deprecatedModels?.includes(modelName) ?? false;
+}
+
 function canUseModelProvider(access: ProviderAccess, provider: string): boolean {
   return Boolean(access[provider]);
 }
@@ -322,7 +330,7 @@ export async function buildModelCatalog({
     }),
   ]);
   const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
-    typeof id === 'string' && canUseModelProvider(access, provider)
+    typeof id === 'string' && canUseModelProvider(access, provider) && !isDeprecatedModel(provider, modelName)
       ? [
           {
             id,
