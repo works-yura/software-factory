@@ -22,7 +22,7 @@ export interface OnboardingPreviewProps {
 }
 
 function sceneForStep(step: OnboardingStep): DrawingScene {
-  if (step === 'initial') return 'factory';
+  if (step === 'harness') return 'factory';
   if (step === 'vcs') return 'codebase';
   return 'accounts';
 }
@@ -93,7 +93,7 @@ export function OnboardingPreview({
     <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
         <OnboardingIllustration scene={scene} mode="shared" />
-        <OnboardingScene active={step === 'initial'}>
+        <OnboardingScene active={step === 'harness'}>
           <OnboardingWelcomePreview />
         </OnboardingScene>
         <OnboardingScene active={step === 'vcs'}>

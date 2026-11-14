@@ -9,7 +9,7 @@ export interface ProviderConnectionDialogsProps {
   keyProvider?: ProviderInfo;
   oauth?: ActiveProviderOAuth;
   authEnabled: boolean;
-  onCloseKeyDialog: () => void;
+  onCloseKeyDialog: (saved: boolean) => void;
   onCloseOAuth: () => void;
   onCompleteOAuth: () => void;
 }

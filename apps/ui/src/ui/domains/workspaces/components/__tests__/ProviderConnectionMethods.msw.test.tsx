@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
-import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
+import { ModelSection } from './fixtures/modelSection';
 
 const base = `${TEST_BASE_URL}/web/config/providers`;
 beforeEach(() => {
@@ -53,7 +53,7 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByText(/Everyone in your organization can use this key\./)).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('provider method and scope are independent choices', () => {
     server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
     registerProvider(() => ({ ...anthropic, source: 'oauth' }));
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -89,7 +89,7 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
     await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
     const dialog = within(await screen.findByRole('dialog'));
@@ -114,7 +114,7 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByText(/Everyone in your organization can use this key.*replaces the provider sign-in/)).toBeInTheDocument();

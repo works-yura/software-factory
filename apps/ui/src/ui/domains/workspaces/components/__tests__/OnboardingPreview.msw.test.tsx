@@ -7,7 +7,7 @@ describe('contextual onboarding previews', () => {
   it('shows the company Factory model in review for work and sessions', () => {
     renderWithProviders(
       <OnboardingPreview
-        step="review"
+        step="model"
         providerId="anthropic"
         model="anthropic/claude-fable-5"
         connectionMethod="api_key"

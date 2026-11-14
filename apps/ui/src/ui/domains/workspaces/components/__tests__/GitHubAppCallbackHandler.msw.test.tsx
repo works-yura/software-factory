@@ -5,7 +5,7 @@
  * real router search params and toaster, with no component mocks.
  */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -102,6 +102,20 @@ describe('GitHubAppCallbackHandler', () => {
     },
   );
 
+  it.each([
+    ['connected', 'GitHub App installed'],
+    ['no_app', 'This server has no GitHub App, so Connect GitHub can’t install one. Connect GitHub with a personal access token instead.'],
+    ['error', 'GitHub didn’t finish connecting. Connect GitHub again; if it keeps failing, ask an admin to check the server’s GitHub App settings.'],
+  ])(
+    "given this server's own GitHub App callback says %s, when the settings page renders, then it says what happened and cleans the param",
+    async (result, message) => {
+      const router = renderCallback(`/factories/fp-1/settings/repositories?github=${result}&keep=1`);
+
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      await waitFor(() => expect(router.state.location.search).toBe('?keep=1'));
+    },
+  );
+
   it('given an unrecognised callback error, when the settings page renders, then it falls back to a generic failure', async () => {
     renderCallback('/factories/fp-1/settings/repositories?github_app_error=something_new');
 
@@ -130,6 +144,31 @@ describe('OnboardingPage GitHub callback', () => {
     expect(
       await screen.findByText(/Uninstall the Mastra GitHub App from that GitHub account or organization/),
     ).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+  });
+
+  it('given a Connect on a server without a GitHub App, when onboarding renders, then it shows the reason in place and offers a token', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/onboarding',
+          element: (
+            <>
+              <OnboardingPage />
+              <Toaster position="bottom-right" />
+            </>
+          ),
+        },
+      ],
+      { initialEntries: ['/onboarding?github=no_app'] },
+    );
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('This server has no GitHub App');
+    expect(within(notice).getByRole('button', { name: 'Connect with a token' })).toBeInTheDocument();
+    // In place, not also as a toast.
+    expect(screen.getAllByText(/This server has no GitHub App, so Connect GitHub/)).toHaveLength(1);
     await waitFor(() => expect(router.state.location.search).toBe(''));
   });
 });

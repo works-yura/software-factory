@@ -1,72 +1,43 @@
-import type { FactoryHarness } from './github';
-import { isTurnHarness, TURN_HARNESS_TEXT_KEY } from './turnHarness';
 import type { OnboardingDraft, OnboardingStep } from './onboardingFlow';
 import { i18n } from '../../../i18n';
-import { translator } from '../../../i18n/t';
 
-const tk = translator('workspaces');
+/**
+ * The page's numbered cards: Codebase, Harness (only while the server offers more than one) and Model.
+ * Numbers follow the cards shown, so Model is second without a harness choice.
+ */
+export type OnboardingSection = OnboardingStep;
 
-/** The steps this run walks; the harness step only when the server runs Claude Code or Codex. */
-export function onboardingSteps({ harnessChoice = false }: { harnessChoice?: boolean } = {}): OnboardingStep[] {
-  return harnessChoice
-    ? ['initial', 'vcs', 'harness', 'model-provider', 'review']
-    : ['initial', 'vcs', 'model-provider', 'review'];
+/** A section's label, translated when read: module constants outlive a language switch. */
+export function onboardingSectionLabel(section: OnboardingSection): string {
+  return i18n.t(`workspaces:onboarding.sections.${section}` as never);
 }
 
-export function restoredOnboardingStep(saved: OnboardingStep, draft: OnboardingDraft): OnboardingStep {
-  if (saved !== 'initial' && !draft.repository) return 'vcs';
-  return saved;
+/** The sections this page shows, in order. */
+export function onboardingSections({ harnessChoice }: { harnessChoice: boolean }): OnboardingSection[] {
+  return harnessChoice ? ['vcs', 'harness', 'model'] : ['vcs', 'model'];
 }
 
-interface StepMeta {
-  label: string;
-  title: string;
-  description?: string;
+export function onboardingSectionIndex(section: OnboardingSection, harnessChoice: boolean): number {
+  return onboardingSections({ harnessChoice }).indexOf(section) + 1;
 }
 
-const ONBOARDING_STEPS: readonly OnboardingStep[] = ['initial', 'vcs', 'harness', 'model-provider', 'review'];
-
-/** Step copy, translated when read: module constants outlive a language switch. */
-function lazyStepMeta(step: OnboardingStep): StepMeta {
-  const key = `workspaces:onboarding.steps.${step}`;
-  const meta = {
-    get label() {
-      return i18n.t(`${key}.label` as never);
-    },
-    get title() {
-      return i18n.t(`${key}.title` as never);
-    },
-  };
-  if (!i18n.exists(`${key}.description`)) return meta;
-  return Object.defineProperty(meta, 'description', {
-    enumerable: true,
-    get: () => i18n.t(`${key}.description` as never),
-  }) as StepMeta;
+/** First section still missing a choice; Model once the codebase (and, with a choice, the harness) is settled. */
+export function nextOnboardingStep(
+  draft: OnboardingDraft,
+  { harnessChoice }: { harnessChoice: boolean },
+): OnboardingStep {
+  if (!draft.repository) return 'vcs';
+  if (harnessChoice && !draft.harness) return 'harness';
+  return 'model';
 }
 
-export const STEP_META: Readonly<Record<OnboardingStep, StepMeta>> = Object.fromEntries(
-  ONBOARDING_STEPS.map(step => [step, lazyStepMeta(step)]),
-) as Record<OnboardingStep, StepMeta>;
-
-export function onboardingStepMeta(step: OnboardingStep, local = false, harness?: FactoryHarness): StepMeta {
-  if (step === 'model-provider' && isTurnHarness(harness)) {
-    const key = TURN_HARNESS_TEXT_KEY[harness];
-    return {
-      label: STEP_META[step].label,
-      title: tk(`onboarding.${key}.title`),
-      description: tk(`onboarding.${key}.description`),
-    };
-  }
-  if (step === 'model-provider')
-    return {
-      ...STEP_META[step],
-      description: companyModelDescription(local),
-    };
-  const meta = STEP_META[step];
-  return { label: meta.label, title: meta.title, ...(meta.description ? { description: meta.description } : {}) };
-}
-
-function companyModelDescription(local: boolean) {
-  if (local) return tk('onboarding.companyModel.local');
-  return tk('onboarding.companyModel.factory');
+/** A draft without a repository always reopens Codebase; otherwise the stored open section wins. */
+export function restoredOnboardingStep(
+  saved: OnboardingStep | undefined,
+  draft: OnboardingDraft,
+  options: { harnessChoice: boolean },
+): OnboardingStep {
+  if (!draft.repository) return 'vcs';
+  if (saved === 'harness' && !options.harnessChoice) return 'model';
+  return saved ?? nextOnboardingStep(draft, options);
 }

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
-import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
+import { ModelSection } from './fixtures/modelSection';
 
 const base = `${TEST_BASE_URL}/web/config/providers`;
 const modelsUrl = `${TEST_BASE_URL}/web/config/models`;
@@ -66,7 +66,7 @@ describe('provider connection recovery', () => {
         }),
       );
       const user = userEvent.setup();
-      const { client } = renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+      const { client } = renderWithProviders(<ModelSection onComplete={vi.fn()} />);
       await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
       await user.click(screen.getByRole('button', { name: 'Continue with OpenAI' }));
       const dialog = within(await screen.findByRole('dialog'));
@@ -93,7 +93,7 @@ describe('provider connection recovery', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    const { client } = renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
     await user.click(screen.getByRole('button', { name: 'Continue with OpenAI' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Authorization expired');
@@ -117,7 +117,7 @@ describe('provider connection recovery', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     const input = within(screen.getByRole('dialog')).getByLabelText('API key for OpenAI');
     await user.type(input, 'test-key{Enter}');
@@ -139,7 +139,7 @@ describe('provider connection recovery', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Providers unavailable');
     failed = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -158,7 +158,7 @@ describe('provider connection recovery', () => {
       http.get(modelsUrl, () => HttpResponse.json({ models: empty ? [] : models })),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('No models are available');
     expect(screen.getByRole('button', { name: 'Change provider' })).toBeEnabled();
@@ -185,7 +185,7 @@ describe('provider connection recovery', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelSection onComplete={vi.fn()} />);
     expect(await screen.findByText('No API key providers available.')).toBeVisible();
     await user.click(screen.getByRole('tab', { name: 'Provider sign-in' }));
     expect(screen.getByRole('button', { name: 'Use GitHub Copilot connection' })).toBeEnabled();

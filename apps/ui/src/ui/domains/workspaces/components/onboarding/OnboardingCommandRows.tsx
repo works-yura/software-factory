@@ -43,15 +43,18 @@ export function OnboardingHarnessStep({
 export function OnboardingTurnHarnessStep({
   label,
   harness,
+  selected,
   onPick,
 }: {
   label: string;
   harness: TurnHarness;
+  /** The model already picked (null = the harness's default); undefined when none is. */
+  selected?: string | null;
   onPick: (model: string | null) => void;
 }) {
   return (
     <OnboardingCommandList label={label}>
-      <CreateFactoryTurnHarnessStep harness={harness} query="" onPick={onPick} />
+      <CreateFactoryTurnHarnessStep harness={harness} query="" selected={selected} onPick={onPick} />
     </OnboardingCommandList>
   );
 }

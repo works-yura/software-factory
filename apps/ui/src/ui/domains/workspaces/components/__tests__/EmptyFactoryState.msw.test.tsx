@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
+import type { UserEvent } from '@testing-library/user-event';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Routes, Route } from 'react-router';
@@ -168,8 +169,20 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
 beforeEach(() => sessionStorage.clear());
 afterEach(() => sessionStorage.clear());
 
+/** Create sits under the cards and stays off until every section is settled. */
+async function create(user: UserEvent) {
+  const button = await screen.findByRole('button', { name: 'Create factory' });
+  await waitFor(() => expect(button).toBeEnabled());
+  await user.click(button);
+}
+
+/** The open section is the one card with a heading. */
+async function openSection(name: string) {
+  return screen.findByRole('heading', { level: 2, name });
+}
+
 describe('Draft Factory onboarding', () => {
-  it('lets users change repository, VCS and model, then commits only the reviewed choices', async () => {
+  it('lets users change repository, VCS and model, then commits only the confirmed choices', async () => {
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
     const writes = registerSetup();
     const user = userEvent.setup();
@@ -178,32 +191,30 @@ describe('Draft Factory onboarding', () => {
     expect(within(screen.getByLabelText('Codebase preview')).getByText('octo/hello')).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'octo/hello' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(screen.getByRole('button', { name: 'Go back to previous step' }));
+    await openSection('Model');
+    await user.click(screen.getByRole('button', { name: 'Change codebase' }));
     expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeChecked();
     await user.click(screen.getByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
+    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     expect(writes).toEqual([]);
 
-    await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
+    await user.click(screen.getByRole('button', { name: 'Change codebase' }));
     expect(await screen.findByRole('radio', { name: 'octo/other' })).toBeChecked();
-    await user.click(screen.getByRole('button', { name: 'Change provider' }));
-    await user.click(screen.getByRole('button', { name: 'Continue with GitLab' }));
+    await user.click(screen.getByRole('radio', { name: 'GitLab' }));
     await user.click(await screen.findByRole('radio', { name: 'team/backend' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('team/backend')).toBeInTheDocument();
-    expect(review.getByText('GitLab · develop')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Edit model' }));
+    const codebase = within(await screen.findByRole('region', { name: 'Codebase' }));
+    expect(codebase.getByText('team/backend')).toBeInTheDocument();
+    expect(codebase.getByText('develop')).toBeInTheDocument();
     expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     await user.click(screen.getByRole('button', { name: 'Change provider' }));
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    await screen.findByRole('combobox');
     expect(writes).toEqual([]);
     expect(readOnboardingDraft().model?.providerId).toBe('anthropic');
-    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    await create(user);
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([
       { path: 'create', body: { name: 'backend' } },
@@ -222,10 +233,20 @@ describe('Draft Factory onboarding', () => {
     expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
   }, 20_000);
 
+  it('says what Create still needs while it is off', async () => {
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
+    registerSetup();
+    renderOnboarding();
+    await screen.findByRole('radio', { name: 'octo/hello' });
+    const button = screen.getByRole('button', { name: 'Create factory' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription('Choose a repository in Codebase to create your factory.');
+  });
+
   it('restores repository and model choices after a redirect or reload without writing them', async () => {
     const writes = registerSetup();
     persistOnboardingDraft({ repository: otherRepo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     const view = renderOnboarding();
     expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     view.unmount();
@@ -235,20 +256,39 @@ describe('Draft Factory onboarding', () => {
     expect(writes).toEqual([]);
   });
 
-  it('returns directly to review after reloading an edited step', async () => {
-    const writes = registerSetup();
+  it('reopens a step of the old wizard at the first incomplete section', async () => {
+    registerSetup();
     persistOnboardingDraft({ repository: repo, model });
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    renderOnboarding();
+    expect(await openSection('Model')).toBeInTheDocument();
+    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+  });
+
+  it('returns to Model after a reopened codebase is finished across a reload', async () => {
+    const writes = registerSetup();
+    persistOnboardingDraft({ repository: repo, model });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     const user = userEvent.setup();
     const view = renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Edit codebase' }));
+    await user.click(await screen.findByRole('button', { name: 'Change codebase' }));
     view.unmount();
     renderOnboarding();
     await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
+    expect(await openSection('Model')).toBeInTheDocument();
     expect(readOnboardingDraft().repository?.fullName).toBe('octo/other');
     expect(writes).toEqual([]);
+  });
+
+  it('moves keyboard focus to the section that opens instead of dropping it', async () => {
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
+    registerSetup();
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await screen.findByRole('radio', { name: 'octo/hello' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Model' })).toHaveFocus());
   });
 
   it.each(['connection', 'model'] as const)(
@@ -256,15 +296,15 @@ describe('Draft Factory onboarding', () => {
     async failure => {
       const writes = registerSetup(failure);
       persistOnboardingDraft({ repository: repo, model });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
       const user = userEvent.setup();
       const view = renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await create(user);
       expect(await screen.findByRole('alert')).toHaveTextContent('502');
       expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
       view.unmount();
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await create(user);
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       await waitFor(() => expect(writes.filter(item => item.path === 'create')).toHaveLength(1));
     },
@@ -278,11 +318,11 @@ describe('Draft Factory onboarding', () => {
       ),
     );
     persistOnboardingDraft({ repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     sessionStorage.setItem(ONBOARDING_FACTORY_KEY, 'fp-gone');
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    await create(user);
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
   });
@@ -317,20 +357,20 @@ describe('Draft Factory onboarding', () => {
         }),
       );
       persistOnboardingDraft({ repository: repo, model });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
       const user = userEvent.setup();
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await create(user);
       expect(await screen.findByRole('alert')).toBeInTheDocument();
 
       links.push({
         id: 'link-teammate',
         repository: { slug: 'octo/teammate', externalId: '7', defaultBranch: 'main' },
       });
-      await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
+      await user.click(screen.getByRole('button', { name: 'Change codebase' }));
       await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
       await user.click(screen.getByRole('button', { name: 'Continue' }));
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await create(user);
 
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
@@ -383,42 +423,41 @@ describe('Draft Factory onboarding', () => {
         }),
       );
       persistOnboardingDraft({ repository: repo, model });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
       const user = userEvent.setup();
       const view = renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await create(user);
       expect(await screen.findByRole('alert')).toHaveTextContent('502');
 
-      await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
+      await user.click(screen.getByRole('button', { name: 'Change codebase' }));
       await user.click(await screen.findByRole('radio', { name: otherRepo.fullName }));
       await user.click(screen.getByRole('button', { name: 'Continue' }));
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await create(user);
       expect(await screen.findByRole('alert')).toHaveTextContent('Failed to unlink repository (502)');
       expect([...links.keys()]).toEqual(['link-teammate', 'link-99', 'link-100']);
 
       view.unmount();
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Edit codebase' }));
+      await user.click(await screen.findByRole('button', { name: 'Change codebase' }));
       await user.click(await screen.findByRole('radio', { name: finalRepo.fullName }));
       await user.click(screen.getByRole('button', { name: 'Continue' }));
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await create(user);
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
       expect([...links.values()].map(item => item.fullName)).toEqual(['octo/teammate', finalRepo.fullName]);
     },
   );
 
-  it('refuses to create a Factory whose model is no longer available', async () => {
+  it('asks for another model when the saved one is no longer available, and keeps Create off', async () => {
     const writes = registerSetup();
     persistOnboardingDraft({
       repository: repo,
       model: { ...model, modelId: 'openai/retired-model' },
     });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('openai/retired-model is no longer available');
+    expect(await screen.findByText('Your previous model is no longer available. Choose another model.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
   });
 });
@@ -435,17 +474,14 @@ describe('Members without company access', () => {
     );
   }
 
-  it('asks members to have an admin connect the company account when shared access is gone while editing review', async () => {
+  it('asks members to have an admin connect the company account when shared access is gone', async () => {
     const writes = registerSetup();
     registerMemberWithoutCompanyAccount();
     persistOnboardingDraft({ repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Edit model' }));
     expect(await screen.findByText('An admin needs to connect the company account first.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Change setup' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create factory' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
   });
 
@@ -458,9 +494,9 @@ describe('Members without company access', () => {
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
     const user = userEvent.setup();
     renderOnboarding();
-    expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
+    await openSection('Model');
     expect(readOnboardingDraft()).toEqual({ repository: repo, model });
-    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    await create(user);
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ instanceId: 'mastra', model: model.modelId });
@@ -468,8 +504,7 @@ describe('Members without company access', () => {
 });
 
 describe('Account presets', () => {
-  it('connects the company account with an organization key and saves the Factory model', async () => {
-    const writes = registerSetup();
+  function serveKeylessProviders() {
     const credentials: Record<string, { orgCredential?: 'api_key' }> = { openai: {}, anthropic: {} };
     const savedKeys: { provider: string; scope: string }[] = [];
     server.use(
@@ -492,8 +527,14 @@ describe('Account presets', () => {
         return HttpResponse.json({ ok: true });
       }),
     );
+    return savedKeys;
+  }
+
+  it('connects the company account with an organization key and saves the Factory model', async () => {
+    const writes = registerSetup();
+    const savedKeys = serveKeylessProviders();
     persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     const user = userEvent.setup();
     renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
@@ -501,14 +542,31 @@ describe('Account presets', () => {
     await user.type(dialog.getByLabelText('API key for OpenAI'), 'test-key');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
     await screen.findByRole('combobox');
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    await screen.findByRole('region', { name: 'Review factory setup' });
     expect(savedKeys).toEqual([{ provider: 'openai', scope: 'org' }]);
     expect(writes).toEqual([]);
-    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    await create(user);
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ instanceId: 'mastra', model: model.modelId });
+  });
+
+  it('keeps the provider unpicked when its API key dialog is cancelled, and says what Create needs', async () => {
+    registerSetup();
+    serveKeylessProviders();
+    persistOnboardingDraft({ repository: repo });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'OpenAI' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(readOnboardingDraft().model).toBeUndefined();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toHaveAccessibleDescription(
+      'Connect a provider in Model to create your factory.',
+    );
   });
 
   it('creates a Factory whose company account was connected through provider sign-in', async () => {
@@ -545,7 +603,7 @@ describe('Account presets', () => {
       }),
     );
     persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     const user = userEvent.setup();
     renderOnboarding();
     await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
@@ -553,31 +611,37 @@ describe('Account presets', () => {
     const dialog = within(await screen.findByRole('dialog'));
     await user.type(dialog.getByLabelText('Authorization code'), 'demo-code');
     await user.click(dialog.getByRole('button', { name: 'Complete sign in' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
     expect(signInStarts).toEqual([{ mode: 'paste-code', scope: 'org' }]);
-    expect(readOnboardingDraft().model).toEqual({
-      providerId: 'anthropic',
-      method: 'oauth',
-      modelId: 'anthropic/claude-fable-5',
-    });
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    expect(readOnboardingDraft().model).toMatchObject({ providerId: 'anthropic', method: 'oauth' });
+    await create(user);
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name });
+    expect(writes.find(item => item.path === 'model')?.body).toEqual({
+      instanceId: 'mastra',
+      model: 'anthropic/claude-fable-5',
+    });
   });
 
   it('revalidates the company account catalog before creating the Factory', async () => {
     const writes = registerSetup();
-    server.use(http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })));
     persistOnboardingDraft({ repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('no longer available for the company account');
+    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    server.use(http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })));
+    await create(user);
+    // Create's own failure, beside the Model section now saying the connection has no models.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('alert').some(alert => /no longer available for the company account/.test(alert.textContent ?? '')),
+      ).toBe(true),
+    );
     expect(writes).toEqual([]);
   });
 
-  it('asks users to review a connection whose sign-in method changed before confirmation', async () => {
+  it('says the saved connection changed instead of reopening as a blank picker', async () => {
     const writes = registerSetup();
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -585,25 +649,37 @@ describe('Account presets', () => {
       ),
     );
     persistOnboardingDraft({ repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('connection for the company account has changed');
+    expect(await screen.findByText(/connection for the company account has changed/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
+  });
+
+  it('says the saved provider is gone when it left the provider list', async () => {
+    registerSetup();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'stored-org', orgCredential: 'api_key' }] }),
+      ),
+    );
+    persistOnboardingDraft({ repository: repo, model });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
+    renderOnboarding();
+    expect(await screen.findByText(/no longer available. Choose another provider/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
   });
 
   it('creates a local single-user Factory from its local connection', async () => {
     const writes = registerSetup();
     server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
     persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     const user = userEvent.setup();
     renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(screen.queryByRole('button', { name: 'Edit setup' })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    await screen.findByRole('combobox');
+    await create(user);
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name });
   });
@@ -628,25 +704,24 @@ describe('harness choice in onboarding', () => {
     await user.click(await screen.findByRole('radio', { name: 'octo/hello' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByRole('heading', { name: 'Choose the harness.' })).toBeInTheDocument();
-    expect(screen.getByText(/switch the harness later in Settings → Models/)).toBeInTheDocument();
-    expect(within(screen.getByLabelText('Factory setup progress')).getByText('Harness')).toBeInTheDocument();
+    expect(await openSection('Harness')).toBeInTheDocument();
+    expect(screen.getByText(/switch it later in Settings → Models/)).toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: /Claude Code.*Claude subscription/ }));
 
-    // Claude Code's sign-in and Claude model rows, no Mastra provider list.
-    expect(await screen.findByRole('heading', { name: 'Choose your Claude model.' })).toBeInTheDocument();
+    // Claude Code's Claude model rows, no Mastra provider list.
+    expect(await openSection('Model')).toBeInTheDocument();
     // Its accounts are connections (Settings › Підключення): nothing to sign in to here, no machine login either.
     expect(screen.queryByRole('option', { name: /Sign in with Claude/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument();
+    // Card runs need a shared sign-in; the page says so before the first card fails.
+    expect(screen.getByText(/turn on “Runs Factory cards”/)).toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: /Sonnet/ }));
 
-    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('Claude Code')).toBeInTheDocument();
-    expect(review.getByText('Sonnet')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Harness' })).getByText('Claude Code')).toBeInTheDocument();
     expect(writes).toEqual([]);
 
-    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    await create(user);
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([
       { path: 'create', body: { name: 'hello', harness: 'claude-code' } },
@@ -657,30 +732,28 @@ describe('harness choice in onboarding', () => {
     ]);
   }, 20_000);
 
-  it('switches back to Mastra from review and asks for a provider model again', async () => {
+  it('switches back to Mastra from its summary and asks for a provider model again', async () => {
     serveClaudeCode(true);
     persistOnboardingDraft({ repository: repo, harness: 'claude-code', harnessModel: null });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model');
     const writes = registerSetup();
     const user = userEvent.setup();
     renderOnboarding();
 
-    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('Claude Code default')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Edit harness' }));
+    await openSection('Model');
+    await user.click(await screen.findByRole('button', { name: 'Change harness' }));
     await user.click(await screen.findByRole('option', { name: /Mastra.*Any model/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+    expect(await openSection('Model')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    await screen.findByRole('heading', { name: 'Ready to create.' });
-    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    await screen.findByRole('combobox');
+    await create(user);
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([{ path: 'create', body: { name: 'hello' } }]);
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ instanceId: 'mastra', model: model.modelId });
   }, 20_000);
 
-  it('has no harness step when the server does not run Claude Code', async () => {
+  it('has no harness section when the server does not run Claude Code', async () => {
     serveClaudeCode(false);
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
     registerSetup();
@@ -689,7 +762,7 @@ describe('harness choice in onboarding', () => {
 
     await user.click(await screen.findByRole('radio', { name: 'octo/hello' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
-    expect(within(screen.getByLabelText('Factory setup progress')).queryByText('Harness')).not.toBeInTheDocument();
+    expect(await openSection('Model')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Harness' })).not.toBeInTheDocument();
   });
 });

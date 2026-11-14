@@ -108,12 +108,13 @@ function AuthUnavailableBanner({ retrying, onRetry }: { retrying: boolean; onRet
 
 const OnboardingGuard = () => {
   const { t } = useTranslation('auth');
-  const pathname = useLocation().pathname;
+  const { pathname, search } = useLocation();
   const { data: factories, isPending: factoriesPending, isFetching, refetch } = useFactoriesQuery();
 
   if (factoriesPending) return <AuthPendingSkeleton label={t('guards.loadingFactories')} />;
   if (!factories) return <FactoriesUnavailableScreen retrying={isFetching} onRetry={() => void refetch()} />;
-  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  // The GitHub App round trip lands on `/?github=…`; onboarding reads that result, so it keeps the query.
+  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to={`/onboarding${search}`} replace />;
   if (factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
     return <Navigate to={`/factories/${factories[0].id}`} replace />;
   }

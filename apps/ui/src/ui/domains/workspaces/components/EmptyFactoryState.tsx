@@ -4,8 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { FactoryOnboarding } from './FactoryOnboarding';
+import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
 
-export function EmptyFactoryState() {
+export function EmptyFactoryState({
+  githubCallback,
+  onDismissGithubCallback = () => {},
+}: {
+  githubCallback?: GitHubAppCallbackResult;
+  onDismissGithubCallback?: () => void;
+} = {}) {
   const { t } = useTranslation('workspaces');
   const auth = useFactoryAuth();
   if (auth.isPending) return <SkeletonRows label={t('setup.loading')} rows={3} />;
@@ -16,5 +23,11 @@ export function EmptyFactoryState() {
         <Button onClick={() => void auth.refetch()}>{t('actions.retry')}</Button>
       </div>
     );
-  return <FactoryOnboarding local={!auth.data.authEnabled} />;
+  return (
+    <FactoryOnboarding
+      local={!auth.data.authEnabled}
+      githubCallback={githubCallback}
+      onDismissGithubCallback={onDismissGithubCallback}
+    />
+  );
 }

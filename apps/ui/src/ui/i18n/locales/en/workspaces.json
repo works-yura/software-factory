@@ -14,13 +14,8 @@
     "accountError": "Unable to load your account.",
     "incomplete": "Choose a model before creating your factory.",
     "modelUnavailableCompany": "{{model}} is no longer available for the company account. Choose another model.",
-    "connectionChangedCompany": "The connection for the company account has changed. Review your provider connection."
-  },
-  "initialStep": {
-    "repository": "Connect your repository",
-    "work": "Bring in your work",
-    "model": "Choose your model",
-    "create": "Create my first factory"
+    "connectionChangedCompany": "The connection for the company account has changed. Review your provider connection.",
+    "providerGoneCompany": "The provider you chose for the company account is no longer available. Choose another provider."
   },
   "providers": {
     "setupLabel": "Model provider setup",
@@ -126,7 +121,8 @@
       "creating": "Creating Factory",
       "suggested": "Suggested",
       "noMatch": "No models match this search.",
-      "provider": "Provider"
+      "provider": "Provider",
+      "selected": "Selected"
     },
     "providers": {
       "noMatch": "No providers match this search.",
@@ -190,7 +186,6 @@
     }
   },
   "vcs": {
-    "label": "Source control repository",
     "loadingStatus": "Loading source control status",
     "hostConnected": "{{host}} connected",
     "searchLabel": "Search repositories",
@@ -200,18 +195,25 @@
     "githubDescription": "Repositories, branches, and pull requests.",
     "gitlabDescription": "Projects, branches, and merge requests.",
     "connectingGithub": "Connecting to GitHub",
-    "continueWith": "Continue with {{host}}",
     "connect": "Connect {{host}}",
-    "retryGitlab": "Retry GitLab",
     "loadingRepositories": "Loading {{provider}} repositories",
     "noMatching": "No matching repositories.",
     "noRepositories": "No {{host}} repositories found.",
     "chooseRepository": "Choose a repository",
     "private": "Private",
-    "gitlabUnavailable": {
+    "hostLabel": "Source control host",
+    "retryHost": "Retry {{host}}",
+    "githubNoApp": "This server has no GitHub App. Connect GitHub with a personal access token.",
+    "connectWithToken": "Connect with a token",
+    "emptyRepositories": {
+      "github": "No repositories are shared with this GitHub connection yet. Use Manage access to add some, or a token whose account can push to them.",
+      "gitlab": "No GitLab projects found."
+    },
+    "hostUnavailable": {
       "missing_config": "Unavailable for this deployment.",
-      "organization_required": "Join an organization to connect GitLab.",
-      "unavailable": "Couldn't load GitLab status."
+      "organization_required": "Join an organization to connect {{host}}.",
+      "unavailable": "Couldn't load {{host}} status.",
+      "auth_required": "Your session expired. Sign in again to connect {{host}}."
     }
   },
   "connectRepos": {
@@ -255,48 +257,57 @@
   },
   "onboarding": {
     "backLabel": "Go back to previous step",
-    "progress": "Factory setup progress",
     "adminNeeded": "An admin needs to connect the company account first.",
     "setups": {
       "factory": {
         "label": "Company account"
       }
     },
-    "steps": {
-      "initial": {
-        "label": "Welcome",
-        "title": "Set up your factory."
-      },
-      "vcs": {
-        "label": "Codebase",
-        "title": "Choose your codebase."
-      },
-      "harness": {
-        "label": "Harness",
-        "title": "Choose the harness.",
-        "description": "What your Factory’s agents run on."
-      },
-      "model-provider": {
-        "label": "Model",
-        "title": "Choose your model."
-      },
-      "review": {
-        "label": "Review",
-        "title": "Ready to create.",
-        "description": "Review your Factory settings. Connected accounts are already saved."
-      }
-    },
-    "companyModel": {
-      "local": "Connect a provider and choose the model for your Factory.",
-      "factory": "Company account · model for Factory work and sessions."
-    },
     "claudeCode": {
       "title": "Choose your Claude model.",
-      "description": "Claude Code signs in on its own: your claude login on this machine or the organization’s Claude Code accounts."
+      "description": "Claude Code signs in on its own: your claude login on this machine or the organization’s Claude Code accounts.",
+      "hint": "The Claude model for Factory work and sessions",
+      "factoryRuns": "Card runs use only Claude sign-ins their owners share with them. After creating the factory, turn on “Runs Factory cards” for your account in Settings → Connections."
     },
     "codex": {
       "title": "Choose your Codex model.",
-      "description": "Codex signs in with your organization’s Codex accounts (ChatGPT sign-ins), never this machine’s codex login."
+      "description": "Codex signs in with your organization’s Codex accounts (ChatGPT sign-ins), never this machine’s codex login.",
+      "hint": "The Codex model for Factory work and sessions",
+      "factoryRuns": "Card runs use only Codex sign-ins their owners share with them. After creating the factory, turn on “Runs Factory cards” for your account in Settings → Connections."
+    },
+    "title": "Set up your factory",
+    "changeLater": "You can change your codebase, harness and model anytime in Settings.",
+    "sections": {
+      "vcs": "Codebase",
+      "harness": "Harness",
+      "model": "Model"
+    },
+    "change": "Change",
+    "changeSection": "Change {{section}}",
+    "harnessHint": "What your Factory’s agents run on",
+    "harnessNote": "You can switch it later in Settings → Models.",
+    "modelHint": "A provider and the model for Factory work and sessions",
+    "signIn": "Sign in",
+    "blocked": {
+      "repository": "Choose a repository in Codebase to create your factory.",
+      "connect": "Connect a provider in Model to create your factory.",
+      "model": "Pick a model in Model to create your factory.",
+      "harnessModel": "Pick a model in Model to create your factory."
+    },
+    "github": {
+      "requestedTitle": "GitHub App installation requested",
+      "requestedBody": "An organization owner needs to approve it before repositories appear here.",
+      "unseenTitle": "Factory can’t see this GitHub installation yet",
+      "unseenBody": "GitHub reported the install, but this server found no installation it can use. Refresh in a moment, or install the app on another account.",
+      "chooseAnother": "Choose another account",
+      "connectAgain": "Connect GitHub again",
+      "dismiss": "Dismiss"
+    },
+    "account": {
+      "theme": "Theme",
+      "fallbackName": "Account",
+      "menuFor": "Account menu for {{name}}",
+      "signOut": "Sign out"
     }
   },
   "welcomePreview": {
@@ -325,11 +336,6 @@
     "sameModel": "Same model for sessions"
   },
   "review": {
-    "label": "Review factory setup",
-    "edit": "Edit",
-    "editLabel": "Edit {{label}}",
-    "codebase": "Codebase",
-    "model": "Model",
     "chooseModel": "Choose a model",
     "creatingLabel": "Creating factory",
     "creating": "Creating your factory…",
@@ -338,8 +344,6 @@
       "local": "Factory default · local connection",
       "factory": "Company account · Factory work and sessions"
     },
-    "harness": "Harness",
-    "harnessDetail": "You can switch it later in Settings → Models",
     "claudeModelDetail": "Claude Code · for Factory work and sessions",
     "codexModelDetail": "Codex · for Factory work and sessions"
   },
@@ -360,7 +364,9 @@
       "github_app_connection_mismatch": "Your Mastra account is already connected to a different GitHub account. Disconnect that GitHub account in Mastra Platform first, then connect GitHub here again.",
       "github_app_user_authorization_required": "Mastra Platform needs you to authorize the GitHub App with your GitHub account to link this installation. Connect GitHub again and approve the authorization step.",
       "github_app_user_authorization_failed": "GitHub authorization failed. Connect GitHub again."
-    }
+    },
+    "noApp": "This server has no GitHub App, so Connect GitHub can’t install one. Connect GitHub with a personal access token instead.",
+    "connectFailed": "GitHub didn’t finish connecting. Connect GitHub again; if it keeps failing, ask an admin to check the server’s GitHub App settings."
   },
   "errors": {
     "requestFailed": "Request failed ({{status}})",

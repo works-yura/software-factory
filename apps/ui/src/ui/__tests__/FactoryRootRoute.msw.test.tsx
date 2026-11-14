@@ -71,7 +71,7 @@ describe('Factory root route', () => {
 
     const router = renderFactoryRoute('/');
 
-    await screen.findByRole('heading', { name: 'Set up your factory.' });
+    await screen.findByRole('heading', { name: 'Set up your factory' });
     expect(router.state.location.pathname).toBe('/onboarding');
   });
 
@@ -91,8 +91,8 @@ describe('Factory root route', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/work'));
   });
 
-  it('keeps the review open after a failed confirmation created its factory', async () => {
-    seedOnboarding('review', 'fp-1');
+  it('keeps the Model section open after a failed confirmation created its factory', async () => {
+    seedOnboarding('model', 'fp-1');
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -106,7 +106,7 @@ describe('Factory root route', () => {
     const router = renderFactoryRoute('/onboarding');
 
     try {
-      await screen.findByRole('heading', { name: 'Ready to create.' });
+      await screen.findByRole('heading', { level: 2, name: 'Model' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();
@@ -114,7 +114,7 @@ describe('Factory root route', () => {
   });
 
   it('resumes a mid-flow onboarding from the root route after an OAuth round-trip', async () => {
-    // The account-setup step is gone (one model scope), so the flow resumes at the review.
+    // A step of the old wizard (`review`) resumes at the first incomplete section: here Model.
     seedOnboarding('review', null);
 
     server.use(
@@ -127,7 +127,7 @@ describe('Factory root route', () => {
     const router = renderFactoryRoute('/?github=connected');
 
     try {
-      await screen.findByRole('heading', { name: 'Ready to create.' });
+      await screen.findByRole('heading', { level: 2, name: 'Model' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();

@@ -2,7 +2,7 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Sparkles } from 'lucide-react';
+import { Check, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { CLAUDE_CODE_MODELS } from '@factory/harness-claude-code/models/aliases';
@@ -21,6 +21,8 @@ export interface CreateFactoryTurnHarnessStepProps {
   query: string;
   /** The model being written to the Factory being created; null is the harness's own default. */
   saving?: { model: string | null };
+  /** The model already picked (null = the harness's default); undefined when none is. */
+  selected?: string | null;
   error?: string;
   onPick: (model: string | null) => void;
 }
@@ -69,7 +71,7 @@ function useModelOptions(harness: TurnHarness): { options: ModelOption[]; loadin
  * connect (its runs sign in with the members' accounts), so it shows what turns will sign in with
  * and asks only which model to run, saved as the Factory's default for that harness.
  */
-export function CreateFactoryTurnHarnessStep({ harness, query, saving, error, onPick }: CreateFactoryTurnHarnessStepProps) {
+export function CreateFactoryTurnHarnessStep({ harness, query, saving, selected, error, onPick }: CreateFactoryTurnHarnessStepProps) {
   const { t } = useTranslation('workspaces');
   const { key } = TURN_HARNESS_STEP[harness];
   const descriptor = useHarness(harness);
@@ -104,7 +106,13 @@ export function CreateFactoryTurnHarnessStep({ harness, query, saving, error, on
                 }
                 title={option.title}
                 subtitle={option.description}
-                shortcut={<Kbd size="sm">↵</Kbd>}
+                shortcut={
+                  selected !== undefined && selected === option.model ? (
+                    <Check aria-label={t('createFactory.models.selected')} className="size-4" />
+                  ) : (
+                    <Kbd size="sm">↵</Kbd>
+                  )
+                }
                 value={`${harness}-model-${id}`}
                 disabled={busy}
                 onSelect={() => onPick(option.model)}

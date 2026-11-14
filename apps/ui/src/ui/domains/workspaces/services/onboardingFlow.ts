@@ -1,6 +1,6 @@
 /**
- * Session-scoped markers for the `/onboarding` wizard (`EmptyFactoryState`).
- * The draft and step survive full-page OAuth redirects
+ * Session-scoped markers for the `/onboarding` page (`EmptyFactoryState`).
+ * The draft and open section survive full-page OAuth redirects
  * (GitHub) so the flow can resume where it left off. The
  * create-Factory wizard uses separate keys (`useCreateFactoryFlow`) so
  * the two flows never collide.
@@ -13,7 +13,6 @@ import { z } from 'zod';
 import { CLAUDE_CODE_MODELS } from '@factory/harness-claude-code/models/aliases';
 import type { SourceControlRepository } from './github';
 
-export const ONBOARDING_REVIEW_RETURN_KEY = 'mastracode.factory-onboarding.return-to-review';
 export const ONBOARDING_DRAFT_KEY = 'mastracode.factory-onboarding.draft';
 export const ONBOARDING_STEP_KEY = 'mastracode.factory-onboarding.step';
 export const ONBOARDING_FACTORY_KEY = 'mastracode.factory-onboarding.factory-id';
@@ -27,14 +26,11 @@ export const ONBOARDING_UPDATED_AT_KEY = 'mastracode.factory-onboarding.updated-
  */
 export const ONBOARDING_RESUME_WINDOW_MS = 30 * 60 * 1000;
 
-/** `harness` is only walked when the server runs Claude Code or Codex (`features.claudeCode`, `features.codex`). */
-export const ONBOARDING_STEPS = [
-  'initial',
-  'vcs',
-  'harness',
-  'model-provider',
-  'review',
-] as const;
+/**
+ * The page's sections, in order. A stored step is the section that was open. `harness` shows only when the
+ * server runs Claude Code or Codex (`features.claudeCode`, `features.codex`).
+ */
+export const ONBOARDING_STEPS = ['vcs', 'harness', 'model'] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 function isOnboardingStep(value: string | null): value is OnboardingStep {
@@ -92,6 +88,19 @@ export const completeOnboardingSchema = z.union([
 
 export type CompleteOnboardingSetup = z.infer<typeof completeOnboardingSchema>;
 
+/** A draft field Create still needs: the repository, or the model (Mastra's company model, a turn harness's pick). */
+export type OnboardingMissingField = 'repository' | 'model';
+
+/** Whether Create can run and, if not, which fields block it, read from the schema that gates it. */
+export function onboardingCreateReadiness(draft: OnboardingDraft): { ready: boolean; missing: OnboardingMissingField[] } {
+  if (completeOnboardingSchema.safeParse(draft).success) return { ready: true, missing: [] };
+  const missing: OnboardingMissingField[] = [];
+  if (!draft.repository) missing.push('repository');
+  const turn = draft.harness === 'claude-code' || draft.harness === 'codex';
+  if (turn ? draft.harnessModel === undefined : !draft.model?.modelId) missing.push('model');
+  return { ready: false, missing };
+}
+
 export type OnboardingDraft = z.infer<typeof draftSchema>;
 export type OnboardingModelChoice = NonNullable<OnboardingDraft['model']>;
 
@@ -108,7 +117,7 @@ function writeOnboardingMarker(key: string, value: string): void {
   try {
     sessionStorage.setItem(key, value);
   } catch {
-    // Storage quota or a private window must never block the wizard; markers only aid resume.
+    // Storage quota or a private window must never block onboarding; markers only aid resume.
   }
 }
 
@@ -148,24 +157,16 @@ export function readOnboardingLinkedRepositories(): string[] {
   }
 }
 
-export function readOnboardingReviewReturn(): boolean {
-  return sessionStorage.getItem(ONBOARDING_REVIEW_RETURN_KEY) === 'true';
-}
-
-export function persistOnboardingReviewReturn(returnToReview: boolean): void {
-  if (returnToReview) writeOnboardingMarker(ONBOARDING_REVIEW_RETURN_KEY, 'true');
-  else sessionStorage.removeItem(ONBOARDING_REVIEW_RETURN_KEY);
-}
-
-/** Read the persisted step, defaulting to the beginning of the flow. */
-export function readOnboardingStep(): OnboardingStep {
+/** Read the persisted open section; a step of the old wizard (`initial`, `model-provider`, `review`) reads as undefined. */
+export function readOnboardingStep(): OnboardingStep | undefined {
   const value = sessionStorage.getItem(ONBOARDING_STEP_KEY);
-  return isOnboardingStep(value) ? value : 'initial';
+  return isOnboardingStep(value) ? value : undefined;
 }
 
 /** Drop every onboarding marker (flow finished or abandoned). */
 export function clearOnboardingFlow(): void {
-  sessionStorage.removeItem(ONBOARDING_REVIEW_RETURN_KEY);
+  // The old wizard's "back to review" marker: an older tab may still hold it.
+  sessionStorage.removeItem('mastracode.factory-onboarding.return-to-review');
   sessionStorage.removeItem(ONBOARDING_DRAFT_KEY);
   sessionStorage.removeItem(ONBOARDING_STEP_KEY);
   sessionStorage.removeItem(ONBOARDING_FACTORY_KEY);
@@ -178,10 +179,11 @@ export function clearOnboardingFlow(): void {
  * the only case where `/onboarding` may stay open (and `/` must route back
  * into it) even though a factory exists. A failed final confirmation can leave
  * a Factory to finish configuring. GitHub OAuth callbacks land on `/`, so
- * without this check the wizard would be abandoned at the factory home.
+ * without this check onboarding would be abandoned at the factory home.
  *
  * Three gates, all required:
- * - a step past `initial` is stored,
+ * - a step is stored (a step from the old wizard still counts: `/onboarding`
+ *   reopens it at the first incomplete section),
  * - the stored factory id exists in the server-backed list (a deleted
  *   factory never traps the user),
  * - the flow progressed within {@link ONBOARDING_RESUME_WINDOW_MS} (markers
@@ -190,7 +192,7 @@ export function clearOnboardingFlow(): void {
  */
 export function hasResumableFactoryOnboarding(factories: readonly { id: string }[]): boolean {
   const step = sessionStorage.getItem(ONBOARDING_STEP_KEY);
-  if (!isOnboardingStep(step) || step === 'initial') return false;
+  if (step === null || step === 'initial') return false;
 
   const updatedAt = Number(sessionStorage.getItem(ONBOARDING_UPDATED_AT_KEY));
   if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > ONBOARDING_RESUME_WINDOW_MS) return false;

@@ -21,7 +21,8 @@ import { providerDisplayName } from '@factory/credentials/provider-display-name'
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
   authEnabled: boolean;
-  onClose: () => void;
+  /** `saved` is true when the dialog closes because the key was saved, false on cancel. */
+  onClose: (saved: boolean) => void;
 }
 
 /** Dialog for adding or updating a provider API key; with auth enabled the key belongs to the organization. */
@@ -44,12 +45,12 @@ export function AddApiKeyDialog({ provider, authEnabled, onClose }: AddApiKeyDia
         envVar: provider.envVar,
         ...(authEnabled ? { scope: 'org' as const } : {}),
       });
-      onClose();
+      onClose(true);
     } catch {}
   };
 
   const close = () => {
-    if (!saveKeyMutation.isPending) onClose();
+    if (!saveKeyMutation.isPending) onClose(false);
   };
 
   return (
