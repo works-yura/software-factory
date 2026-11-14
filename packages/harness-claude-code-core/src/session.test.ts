@@ -2429,6 +2429,26 @@ describe('writeMcpConfigFile', () => {
   });
 });
 
+describe('writeMcpConfigFile with the embedded gate', () => {
+  it("runs the embedded gate with this process's Node by default, with another when told (an agent user's)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'factory-mcp-test-'));
+    try {
+      const own = await writeMcpConfigFile([], dir, { gate: 'embedded' });
+      const agents = await writeMcpConfigFile([], dir, { gate: 'embedded', node: 'node' });
+      const gateOf = async (path: string) =>
+        (JSON.parse(await readFile(path, 'utf8')) as { mcpServers: { factory_gate: { command: string; args: string[] } } }).mcpServers.factory_gate;
+      expect((await gateOf(own.paths[0]!)).command).toBe(process.execPath);
+      const gate = await gateOf(agents.paths[0]!);
+      expect(gate.command).toBe('node');
+      // The script sits next to the config, in the folder made under `dir`.
+      expect(dirname(gate.args[0]!)).toBe(dirname(agents.paths[0]!));
+      expect(existsSync(gate.args[0]!)).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('ClaudeCodeSession parity with a Mastra session', () => {
   const AUTHOR = { id: 'user-ada', name: 'Ada', avatarUrl: 'https://example.test/ada.png' };
   const asPerson = () => new ClaudeCodeRunContext().set(MESSAGE_AUTHOR_KEY, { ...AUTHOR, extra: 'ignored' });

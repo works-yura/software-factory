@@ -305,6 +305,11 @@ export interface ClaudeCodeSessionConfig
    * MCP config (`gate-server.ts`) and runs it with this process's Node.
    */
   gateServer?: GateServerCommand;
+  /**
+   * The Node that runs the embedded gate server; this process's (`process.execPath`) by default. A
+   * CLI spawned as another user cannot run the server's Node: pass that user's (`node` on its PATH).
+   */
+  gateNode?: string;
   spawn?: ClaudeSpawn;
   /** The CLI: a path, or the server's resolver (`@factory/harness/executable`); `claude` on PATH by default. */
   command?: HarnessCommand;
@@ -1607,6 +1612,7 @@ export class ClaudeCodeSession implements AgentSession {
     // MCP configs carry per-turn tokens: a private file, not the command line every local user can read.
     const mcpFile = await writeMcpConfigFile(configured, this.#config.tempDir, {
       gate: this.#config.gateServer ?? 'embedded',
+      ...(this.#config.gateNode ? { node: this.#config.gateNode } : {}),
       unattended: permissions?.unattended === true && permissions.parkAsks !== true,
     });
     // A call a person allowed once goes through on this turn (the retry), and asks again after it.
@@ -1892,7 +1898,11 @@ function signalText(input: AgentSignalInput): string {
 export async function writeMcpConfigFile(
   configs: ClaudeMcpConfig[],
   dir = tmpdir(),
-  { gate, unattended = false }: { gate?: GateServerCommand | 'embedded'; unattended?: boolean } = {},
+  {
+    gate,
+    unattended = false,
+    node = process.execPath,
+  }: { gate?: GateServerCommand | 'embedded'; unattended?: boolean; /** Runs the embedded gate. */ node?: string } = {},
 ): Promise<{ paths: string[]; servers: string[]; cleanup: () => Promise<void> }> {
   const servers: Record<string, unknown> = {};
   const paths: string[] = [];
@@ -1910,7 +1920,7 @@ export async function writeMcpConfigFile(
   const folder = await mkdtemp(join(dir, 'factory-claude-'));
   if (gate) {
     const command =
-      gate === 'embedded' ? { command: process.execPath, args: [await writeGateServerScript(folder)] } : gate;
+      gate === 'embedded' ? { command: node, args: [await writeGateServerScript(folder)] } : gate;
     Object.assign(
       servers,
       gateMcpConfig(unattended ? { ...command, args: [...(command.args ?? []), GATE_UNATTENDED_ARG] } : command).mcpServers,

@@ -33,6 +33,7 @@ import {
   LocalFactorySandbox,
   LocalFileBlobStore,
   MastraFactory,
+  agentUserRuntimeFromEnv,
 } from '@factory/server';
 import { GithubIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
@@ -369,6 +370,10 @@ if (sandboxProvider !== 'local' && !localDevelopmentMode) {
 }
 
 const sandboxRoot = process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes');
+// FACTORY_AGENT_USER: agents run as that separate macOS user, under a Seatbelt profile (ADR-0041,
+// scripts/mac-mini/isolation). Unset: as this server's user, as before.
+const agentUser = agentUserRuntimeFromEnv({ sandboxRoot });
+if (agentUser) console.info(`[factory] Agents run as ${agentUser.config.user} (profile ${agentUser.config.profilePath}).`);
 // The local environment template (ADR-0039): repository mirrors, builds, shared package stores and session work
 // kept outside session folders. On the sandboxes' volume by default, since session clones hard-link the mirrors'
 // objects. FACTORY_LOCAL_TEMPLATE=off turns it off: every session clones from the network again.
@@ -420,6 +425,8 @@ export const factory = new MastraFactory({
       process.env.FACTORY_CLAUDE_CODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'claude-code-sessions'),
     localDevelopment: ownMachine,
     ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
+    // As the agent user: its own `claude` on its PATH, config dirs and turn files where it can read them.
+    ...(agentUser ? agentUser.claudeCode() : {}),
   },
   // Factories created with `harness: 'codex'` run their agents on this machine's `codex` CLI (its
   // app-server), each session in its own CODEX_HOME beside the store, signed in only with the

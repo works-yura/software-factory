@@ -224,6 +224,13 @@ export interface ClaudeFactoryHarnessOptions {
   command?: HarnessCommand;
   spawn?: ClaudeSpawn;
   env?: Record<string, string | undefined>;
+  /**
+   * Where a turn's MCP config and gate script go; the OS temp dir by default. A CLI spawned as an
+   * agent user needs a folder it can read (ADR-0041), not the server's private temp dir.
+   */
+  tempDir?: string;
+  /** The Node that runs the embedded gate server; the server's by default, the agent user's when agents run as one. */
+  gateNode?: string;
   /** Every session object the harness builds, before anyone drives it (chat UI, run audit, reports). */
   onSession?: (session: ClaudeCodeSession) => void;
   /**
@@ -511,6 +518,8 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     ...(options.command ? { command: options.command } : {}),
     ...(options.spawn ? { spawn: options.spawn } : {}),
     ...(options.env ? { env: options.env } : {}),
+    ...(options.tempDir ? { tempDir: options.tempDir } : {}),
+    ...(options.gateNode ? { gateNode: options.gateNode } : {}),
     ...(options.onSession ? { onSession: options.onSession } : {}),
     ...(options.parkOnUsageLimit ? { parkOnUsageLimit: options.parkOnUsageLimit } : {}),
   });
