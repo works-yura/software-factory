@@ -16,7 +16,8 @@ export interface AgentUserEnvContext {
  *
  * `FACTORY_AGENT_USER` (required to turn it on), `FACTORY_AGENT_HOME` (`/Users/<user>`),
  * `FACTORY_AGENT_PROFILE` (`/var/factory/agent-<user>.sb`), `FACTORY_AGENT_WRITABLE` (more writable
- * folders, `:`-separated), `FACTORY_AGENT_PATH` (its tools; `<home>/.local/bin:<home>/.local/node/bin`),
+ * folders, `:`-separated), `FACTORY_AGENT_PATH` (its tools; `<home>/.local/bin:<home>/.local/node/bin:<home>/.local/fvm:/opt/homebrew/bin`:
+ * its own claude, node, codex and fvm (`2-system.sh agent-tools`, `agent-mobile-tools`), then Homebrew's CocoaPods and gh),
  * `FACTORY_AGENT_SEATBELT` (`on` by default; `off`: the user is the only boundary).
  */
 export function agentUserFromEnv(env: Record<string, string | undefined>, context: AgentUserEnvContext): AgentUserConfig | undefined {
@@ -43,7 +44,7 @@ export function agentUserFromEnv(env: Record<string, string | undefined>, contex
     home,
     profilePath,
     writableRoots: [...new Set(writableRoots)],
-    toolPath: toolPath.length > 0 ? toolPath : [`${home}/.local/bin`, `${home}/.local/node/bin`],
+    toolPath: toolPath.length > 0 ? toolPath : [`${home}/.local/bin`, `${home}/.local/node/bin`, `${home}/.local/fvm`, '/opt/homebrew/bin'],
     seatbelt: seatbelt === 'on',
   };
 }
