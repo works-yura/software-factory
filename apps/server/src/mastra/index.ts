@@ -374,6 +374,7 @@ const sandboxRoot = process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(ho
 // scripts/mac-mini/isolation). Unset: as this server's user, as before.
 const agentUser = agentUserRuntimeFromEnv({ sandboxRoot });
 if (agentUser) console.info(`[factory] Agents run as ${agentUser.config.user} (profile ${agentUser.config.profilePath}).`);
+agentUser?.reaper?.start();
 // The local environment template (ADR-0039): repository mirrors, builds, shared package stores and session work
 // kept outside session folders. On the sandboxes' volume by default, since session clones hard-link the mirrors'
 // objects. FACTORY_LOCAL_TEMPLATE=off turns it off: every session clones from the network again.

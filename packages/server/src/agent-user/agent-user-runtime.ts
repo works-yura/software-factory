@@ -14,10 +14,14 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  AgentReaper,
+  AgentUserSignaller,
   agentUserFromEnv,
   createAgentUserLauncher,
   createProcessSpawner,
+  MACOS_SYSTEM_PREFIXES,
   PrivateFileStash,
+  PsProcessTable,
   ShellCommandBridge,
   type AgentUserConfig,
   type ProcessSpawner,
@@ -50,6 +54,11 @@ export interface AgentUserRuntime {
     sessionHomeRoot: string;
     supervisorWorkdirRoot: string;
   };
+  /**
+   * Stops agent processes no turn owns (daemons, `nohup … &`, turns of a server that restarted):
+   * once at start, then every minute. `undefined` with FACTORY_AGENT_REAP=off.
+   */
+  readonly reaper: AgentReaper | undefined;
 }
 
 export interface AgentUserRuntimeOptions {
@@ -61,6 +70,8 @@ export interface AgentUserRuntimeOptions {
   spawner?: ProcessSpawner;
   /** For tests: no folders are made. */
   makeDirs?: (path: string) => void;
+  /** The server process: agent processes under it belong to running turns. */
+  serverPid?: number;
   /** Where launch inputs wait for the shell that opens them: owner-only, the server's temp folder by default. */
   inputDir?: string;
 }
@@ -85,10 +96,24 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
   // Mastra runs command lines: they reach the agent as a program that reads its environment from a
   // private file on a descriptor (the same launch as a spawned CLI's).
   const bridge = new ShellCommandBridge(createAgentUserLauncher(config), new PrivateFileStash(options.inputDir ?? join(tmpdir(), 'factory-agent-inputs')));
+  const reapSetting = env.FACTORY_AGENT_REAP?.trim().toLowerCase() || 'on';
+  if (reapSetting !== 'on' && reapSetting !== 'off') throw new Error(`FACTORY_AGENT_REAP must be on or off, got ${JSON.stringify(env.FACTORY_AGENT_REAP)}.`);
+  const reaper =
+    reapSetting === 'off'
+      ? undefined
+      : new AgentReaper(new PsProcessTable(), new AgentUserSignaller(config.user), {
+          agentUser: config.user,
+          serverPid: options.serverPid ?? process.pid,
+          // A Mastra turn has no process between two commands: what it started in the background keeps 10 minutes.
+          idleGraceSeconds: 10 * 60,
+          maxAgeSeconds: 6 * 3600,
+          systemPrefixes: MACOS_SYSTEM_PREFIXES,
+        });
   return {
     config,
     spawner,
     stateDir,
+    reaper,
     processes: {
       shellProgram: (command, commandEnv) => bridge.commandLine(command, commandEnv),
       spawn: (command, args, { cwd, env: commandEnv }) => spawner.spawn({ command, args, env: commandEnv }, { cwd }),
