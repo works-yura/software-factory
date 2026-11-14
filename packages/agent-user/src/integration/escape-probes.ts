@@ -5,7 +5,8 @@
  * reach, so the suite checks both sides: the server can, the agent cannot.
  */
 
-import { networkInterfaces, homedir, tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { networkInterfaces, homedir, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 
 export interface ReadProbe {
@@ -24,7 +25,16 @@ export interface WriteProbe {
 
 export interface PortProbe {
   what: string;
-  url: string;
+  host: string;
+  port: number;
+}
+
+/** A TCP port a process of the owner listens on, as lsof reports it. */
+export interface Listener {
+  command: string;
+  /** `*` for every address. */
+  address: string;
+  port: number;
 }
 
 const home = homedir();
@@ -32,7 +42,10 @@ const home = homedir();
 const checkout = resolve(import.meta.dirname, '../../../..');
 /** Where deploys keep releases, `current` and the card folders. */
 const deployRoot = process.env.FACTORY_AGENT_USER_TEST_DEPLOY_ROOT ?? '/Volumes/dot/Project/factory';
-const ports = (process.env.FACTORY_AGENT_USER_TEST_PORTS ?? '5874,9222').split(',').map(port => port.trim()).filter(Boolean);
+/** Ports the owner accepts the agent reaching (`FACTORY_AGENT_USER_TEST_ALLOWED_PORTS=5000,7000`). */
+export const allowedPorts = new Set(
+  (process.env.FACTORY_AGENT_USER_TEST_ALLOWED_PORTS ?? '').split(',').map(Number).filter(port => Number.isInteger(port) && port > 0),
+);
 
 export const readProbes: readonly ReadProbe[] = [
   { what: 'the owner home', path: home, read: 'ls' },
@@ -75,9 +88,36 @@ export function localAddresses(): string[] {
   return [...addresses];
 }
 
-export const portProbes: readonly PortProbe[] = ports.flatMap(port =>
-  localAddresses().map(address => {
-    const host = address.includes(':') ? `[${address}]` : address;
-    return { what: `port ${port} on ${address}`, url: `http://${host}:${port}/` };
-  }),
-);
+/** Parses `lsof -F cn` output: `c<command>` starts a process, `n<address>:<port>` names a socket. */
+export function parseListeners(output: string): Listener[] {
+  const listeners = new Map<string, Listener>();
+  let command = '';
+  for (const line of output.split('\n')) {
+    if (line.startsWith('c')) command = line.slice(1);
+    if (!line.startsWith('n')) continue;
+    const match = /^n(.*):(\d+)$/.exec(line);
+    if (!match) continue;
+    const address = match[1]!.replace(/^\[(.*)\]$/, '$1');
+    const port = Number(match[2]);
+    listeners.set(`${address}:${port}`, { command, address, port });
+  }
+  return [...listeners.values()];
+}
+
+/** Every TCP port the owner's processes listen on right now: Factory, Chrome, simulators, apps. */
+export function ownerListeners(user = userInfo().username): Listener[] {
+  const lsof = spawnSync('/usr/sbin/lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-u', user, '-F', 'pcn'], { encoding: 'utf8' });
+  return parseListeners(lsof.stdout ?? '');
+}
+
+/** One probe per address each listener answers on; a wildcard listener on every local address. */
+export function portProbes(listeners: readonly Listener[], addresses = localAddresses()): PortProbe[] {
+  const probes = new Map<string, PortProbe>();
+  for (const { command, address, port } of listeners) {
+    if (allowedPorts.has(port)) continue;
+    for (const host of address === '*' ? addresses : [address]) {
+      probes.set(`${host}:${port}`, { what: `${command} on ${host}:${port}`, host, port });
+    }
+  }
+  return [...probes.values()];
+}
