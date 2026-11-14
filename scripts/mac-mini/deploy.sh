@@ -190,6 +190,8 @@ fi
 
 REF="${1:-HEAD}"
 SHA="$(git -C "$REPO" rev-parse --verify "${REF}^{commit}")"
+# The release links this checkout's secrets: without them it would build, restart and never start.
+[ -f "$REPO/apps/server/.env" ] || { echo "$REPO/apps/server/.env is missing: deploy from the checkout that holds the server's secrets (any ref works there)." >&2; exit 1; }
 take_lock "deploy ${SHA:0:8} ($REF)"
 log_to_file
 [ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] && [ "$REF" = HEAD ] \
