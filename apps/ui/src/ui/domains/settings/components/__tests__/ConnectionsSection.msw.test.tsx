@@ -279,6 +279,34 @@ describe('Підключення', () => {
     expect(within(table).getByRole('link', { name: 'ACME-web' })).toHaveAttribute('href', 'https://acme.test/web');
   });
 
+  it("keeps the optional gh CLI tokens on the GitHub connection's page, and only there", async () => {
+    const githubConnection = {
+      ...acmeConnection,
+      id: 'github:inst-1',
+      connector: { id: 'github', name: 'GitHub', icon: 'github' },
+      label: 'eclipt-ai',
+      displayName: 'eclipt-ai',
+    };
+    useIntegrationHandlers({ connections: [acmeConnection, githubConnection] });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/pat`, () => HttpResponse.json({ configured: false, reviewerConfigured: false })),
+    );
+    renderConnections('?connection=github%3Ainst-1');
+
+    expect(await screen.findByRole('heading', { name: 'eclipt-ai', level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText('Optional: tokens for the gh CLI')).toBeInTheDocument();
+    expect(screen.getByText('Worker token (optional)')).toBeInTheDocument();
+    expect(screen.getByText('Reviewer token (optional)')).toBeInTheDocument();
+    expect(screen.getByText('When set, every sandbox gets it instead of the GitHub connection’s token.')).toBeInTheDocument();
+  });
+
+  it("shows no gh CLI tokens on another connector's page", async () => {
+    useHandlers();
+    renderConnections('?connection=acme%3Amain');
+    expect(await screen.findByRole('heading', { name: 'Acme main', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByText('Optional: tokens for the gh CLI')).not.toBeInTheDocument();
+  });
+
   it('tells a member the organization’s connections are changed by an admin, in the server’s words', async () => {
     const reason = { reason: 'Only organization admins change connections.' };
     useHandlers();

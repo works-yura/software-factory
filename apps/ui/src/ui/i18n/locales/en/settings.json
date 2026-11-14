@@ -26,8 +26,10 @@
   },
   "groups": {
     "account": "Account",
-    "agent": "Agent",
-    "factory": "Factory"
+    "organization": "Organization",
+    "factory": "Factory",
+    "factoryNamed": "Factory “{{name}}”",
+    "server": "Server"
   },
   "intake": {
     "retry": "Retry",
@@ -427,15 +429,15 @@
     "reconnect": "Reconnect"
   },
   "githubPat": {
-    "title": "GitHub CLI tokens",
-    "description": "Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories.",
+    "title": "Optional: tokens for the gh CLI",
+    "description": "Optional. Without them, sandboxes use this GitHub connection’s token. A classic PAT is needed only when gh commands in a sandbox fail with “Resource not accessible by integration”. The token’s account needs access to the linked repositories.",
     "worker": {
-      "title": "Worker token",
-      "description": "Used by every sandbox."
+      "title": "Worker token (optional)",
+      "description": "When set, every sandbox gets it instead of the GitHub connection’s token."
     },
     "reviewer": {
       "title": "Reviewer token (optional)",
-      "description": "Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
+      "description": "So PR reviews come from a different account than the code’s author. When unset, review sessions use the worker token, or without it the GitHub connection’s token."
     },
     "configured": "Configured",
     "updateToken": "Update token",

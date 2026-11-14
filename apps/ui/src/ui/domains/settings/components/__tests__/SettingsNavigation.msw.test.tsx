@@ -35,28 +35,37 @@ describe('SettingsNavigation', () => {
     );
   });
 
-  it('groups destinations by topic: account, agent, Factory', () => {
+  it("groups destinations by where they live: the person's, the organization's, this Factory's, the server's", async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'bookfate', repositories: [] }] }),
+      ),
+    );
     renderNavigation();
 
     const linksIn = (group: string) =>
       within(screen.getByRole('region', { name: group }))
         .getAllByRole('link')
         .map(link => link.textContent);
-    expect(linksIn('Account')).toEqual(['My account', 'Organization', 'Preferences']);
-    expect(screen.getByRole('link', { name: 'Organization' })).toHaveAttribute('href', '/factories/fp-1/settings/organization');
-    expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Behavior']);
-    expect(linksIn('Factory')).toEqual([
-      'Analytics',
+    expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
+    expect(linksIn('Organization')).toEqual(['Organization', 'Connections']);
+    // The Factory group is titled with the Factory these pages change.
+    await screen.findByRole('region', { name: 'Factory “bookfate”' });
+    expect(linksIn('Factory “bookfate”')).toEqual([
+      'Harness',
+      'Memory',
+      'Behavior',
       'Repositories',
       'Environment',
       'Work Intake',
-      'Connections',
+      'Analytics',
       'Manage Factory',
-      'Debug',
     ]);
+    expect(linksIn('Server')).toEqual(['Debug']);
+    expect(screen.queryByRole('region', { name: 'Agent' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Organization' })).toHaveAttribute('href', '/factories/fp-1/settings/organization');
     expect(screen.getByRole('link', { name: 'Harness' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
-    expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
-    expect(screen.getByRole('link', { name: 'Analytics' })).toHaveAttribute('href', '/factories/fp-1/settings/analytics');
+    expect(screen.getByRole('link', { name: 'Connections' })).toHaveAttribute('href', '/factories/fp-1/settings/integrations');
   });
 
   it('leaves Memory out for a Factory on Claude Code', async () => {
@@ -67,9 +76,17 @@ describe('SettingsNavigation', () => {
     );
     renderNavigation();
 
-    const agent = screen.getByRole('region', { name: 'Agent' });
-    await waitFor(() => expect(within(agent).queryByRole('link', { name: 'Memory' })).not.toBeInTheDocument());
-    expect(within(agent).getAllByRole('link').map(link => link.textContent)).toEqual(['Harness', 'Behavior']);
+    const factory = () => screen.getAllByRole('region').find(region => region.getAttribute('aria-labelledby') === 'settings-factory')!;
+    await waitFor(() => expect(within(factory()).queryByRole('link', { name: 'Memory' })).not.toBeInTheDocument());
+    expect(within(factory()).getAllByRole('link').map(link => link.textContent)).toEqual([
+      'Harness',
+      'Behavior',
+      'Repositories',
+      'Environment',
+      'Work Intake',
+      'Analytics',
+      'Manage Factory',
+    ]);
   });
 
   it('keeps legacy terms searchable while showing the clearer destination label', async () => {

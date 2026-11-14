@@ -9,6 +9,7 @@ import { useDependabotStatusQuery } from '../../../../hooks/useDependabotStatus'
 import type { DependabotRepositoryStatus } from '../../../../hooks/useDependabotStatus';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
+import { ScopeBadge } from './SettingsScope';
 
 /** The `source.kind` a route names to take Dependabot alerts (ADR-0042). */
 const DEPENDABOT_SOURCE_KIND = 'dependabot_alert';
@@ -49,9 +50,13 @@ export function DependabotIntakeBlock({ factoryProjectId }: { factoryProjectId: 
     <section aria-labelledby="dependabot-intake-title" className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <Txt as="h3" id="dependabot-intake-title" variant="card-title">
-            {t('intake.dependabot.title')}
-          </Txt>
+          {/* The switch is the organization's intake config, unlike the routes below (this Factory's). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Txt as="h3" id="dependabot-intake-title" variant="card-title">
+              {t('intake.dependabot.title')}
+            </Txt>
+            <ScopeBadge scope="org" />
+          </div>
           <Txt as="p" variant="caption" tone="muted">
             {t('intake.dependabot.description')}
           </Txt>

@@ -92,7 +92,7 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(gitlabProjectReads).toBe(1));
     expect(await screen.findByText(/factory-gitlab-control/)).toBeInTheDocument();
     expect(screen.queryByText('GitHub is disabled on the server.')).not.toBeInTheDocument();
-    expect(screen.queryByText('GitHub CLI tokens')).not.toBeInTheDocument();
+    expect(screen.queryByText('Optional: tokens for the gh CLI')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Sandbox' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Setup command for/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Environment' })).toHaveAttribute(
@@ -105,7 +105,7 @@ describe('Repositories settings', () => {
       'href',
       `/factories/${FACTORY_ID}/settings/integrations`,
     );
-    expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
+    expect(screen.queryByText('Worker token (optional)')).not.toBeInTheDocument();
   });
 
   it('never connects GitHub here: connecting is in Підключення, linked from this page', async () => {
@@ -197,5 +197,8 @@ describe('Repositories settings', () => {
     expect(await screen.findByText('yura/app')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Connect GitHub' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage GitHub connection' })).not.toBeInTheDocument();
+    // Org-wide gh CLI tokens live on the GitHub connection's page, the person's GitHub account in My account.
+    expect(screen.queryByText('Optional: tokens for the gh CLI')).not.toBeInTheDocument();
+    expect(screen.queryByText('Worker token (optional)')).not.toBeInTheDocument();
   });
 });

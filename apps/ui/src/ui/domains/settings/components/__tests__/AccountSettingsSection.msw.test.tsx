@@ -40,6 +40,48 @@ describe('AccountSettingsSection', () => {
       expect(screen.getByRole('button', { name: 'Copy organization ID' })).toBeInTheDocument();
     });
 
+    it("offers the person's own GitHub account here, once the organization has GitHub connected", async () => {
+      stubAuthenticatedAccount();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+          HttpResponse.json({
+            enabled: true,
+            appConfigured: true,
+            connected: true,
+            userConnected: false,
+            installations: [{ id: 'inst-1', installationId: 1, accountLogin: 'eclipt-ai', accountType: 'Organization' }],
+            reason: 'ready',
+          }),
+        ),
+      );
+
+      renderWithProviders(<AccountSettingsSection />);
+
+      expect(await screen.findByText('GitHub account')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Connect GitHub' })).toBeInTheDocument();
+    });
+
+    it('shows no GitHub account on a server without a GitHub App', async () => {
+      stubAuthenticatedAccount();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+          HttpResponse.json({
+            enabled: true,
+            appConfigured: false,
+            connected: true,
+            userConnected: false,
+            installations: [{ id: 'inst-1', installationId: 1, accountLogin: 'eclipt-ai', accountType: 'User', kind: 'token' }],
+            reason: 'ready',
+          }),
+        ),
+      );
+
+      renderWithProviders(<AccountSettingsSection />);
+
+      expect(await screen.findByText('Dev')).toBeInTheDocument();
+      expect(screen.queryByText('GitHub account')).not.toBeInTheDocument();
+    });
+
     it('names Google as the sign-in on better-auth deploys', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/auth/me`, () =>

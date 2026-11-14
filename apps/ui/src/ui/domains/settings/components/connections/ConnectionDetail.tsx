@@ -13,6 +13,7 @@ import { ConnectorDetailSections } from './ConnectorDetail';
 import { HealthBadge, useRenameConnection } from './ConnectionList';
 import { McpServerSection } from './McpServerSection';
 import { TimeAgo } from './TimeAgo';
+import { GithubPatBlock } from '../GithubPatBlock';
 
 /** «Хто»: a member's name, «вами», or nothing when unknown. */
 function useWho(factoryId: string) {
@@ -151,6 +152,8 @@ export function ConnectionDetail({
     <div className="flex min-w-0 flex-col gap-5">
       <Overview view={view} factoryId={factoryId} organizationWide={organizationWide} />
       <ConnectorDetailSections id={view.id} />
+      {/* The optional org-wide gh CLI tokens sandboxes use in place of this connection's token. */}
+      {view.connector.id === 'github' && <GithubPatBlock />}
     </div>
   );
 }

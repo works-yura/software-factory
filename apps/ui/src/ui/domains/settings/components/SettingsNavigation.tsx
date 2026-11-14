@@ -20,6 +20,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
+import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
@@ -41,45 +42,67 @@ type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
-const ACCOUNT_SETTINGS_GROUP = {
-  id: 'account',
-  get label() {
-    return i18n.t('groups.account', { ns: 'settings' });
-  },
-  items: [
-    {
-      id: 'account',
-      get label() {
-        return SETTINGS_SECTION_LABELS.account;
-      },
-      icon: CircleUserRound,
-      searchText: 'my account profile identity email authentication session log out sign out user',
-    },
-    {
-      id: 'organization',
-      get label() {
-        return SETTINGS_SECTION_LABELS.organization;
-      },
-      icon: Users,
-      searchText: 'organization team members invite invitation link roles owner admin remove switch organizations',
-    },
-    {
-      id: 'preferences',
-      get label() {
-        return SETTINGS_SECTION_LABELS.preferences;
-      },
-      icon: Palette,
-      searchText: 'preferences general theme appearance color scheme completion sound',
-    },
-  ],
-} satisfies SettingsNavGroup;
-
+/**
+ * Groups follow where a setting lives on the server, not its topic: the person's own, the
+ * organization's (every Factory in it), this Factory's, and the server's. The Factory group is
+ * titled with the Factory's name, so it is plain which Factory its pages change.
+ */
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  ACCOUNT_SETTINGS_GROUP,
+  // The person's own: profile, session, appearance.
   {
-    id: 'agent',
+    id: 'account',
     get label() {
-      return i18n.t('groups.agent', { ns: 'settings' });
+      return i18n.t('groups.account', { ns: 'settings' });
+    },
+    items: [
+      {
+        id: 'account',
+        get label() {
+          return SETTINGS_SECTION_LABELS.account;
+        },
+        icon: CircleUserRound,
+        searchText: 'my account profile identity email authentication session log out sign out user',
+      },
+      {
+        id: 'preferences',
+        get label() {
+          return SETTINGS_SECTION_LABELS.preferences;
+        },
+        icon: Palette,
+        searchText: 'preferences general theme appearance color scheme completion sound',
+      },
+    ],
+  },
+  // Organization-wide, for every Factory: members and connections (org-level).
+  {
+    id: 'organization',
+    get label() {
+      return i18n.t('groups.organization', { ns: 'settings' });
+    },
+    items: [
+      {
+        id: 'organization',
+        get label() {
+          return SETTINGS_SECTION_LABELS.organization;
+        },
+        icon: Users,
+        searchText: 'organization team members invite invitation link roles owner admin remove switch organizations',
+      },
+      {
+        id: 'integrations',
+        get label() {
+          return SETTINGS_SECTION_LABELS.integrations;
+        },
+        icon: Plug,
+        searchText: 'connections integrations services google cloud firebase logs crashes crashlytics database firestore clickup github gitlab mcp servers tools toolbox connectors service account',
+      },
+    ],
+  },
+  // This Factory only: stored per Factory project.
+  {
+    id: 'factory',
+    get label() {
+      return i18n.t('groups.factory', { ns: 'settings' });
     },
     items: [
       {
@@ -88,8 +111,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           return SETTINGS_SECTION_LABELS.models;
         },
         icon: Bot,
-        searchText:
-          'models harness runtime claude code default model factory models routing factory defaults thinking level api keys providers credentials sign in oauth custom endpoints',
+        searchText: 'models harness runtime claude code default model factory models routing factory defaults thinking level api keys providers credentials sign in oauth custom endpoints',
       },
       {
         id: 'memory',
@@ -97,8 +119,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           return SETTINGS_SECTION_LABELS.memory;
         },
         icon: Brain,
-        searchText:
-          'memory factory memory shared memory observational recall observer reflector thresholds attachments summarize context',
+        searchText: 'memory factory memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
         id: 'behavior',
@@ -107,23 +128,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
-      },
-    ],
-  },
-  {
-    id: 'factory',
-    get label() {
-      return i18n.t('groups.factory', { ns: 'settings' });
-    },
-    items: [
-      {
-        id: 'analytics',
-        get label() {
-          return SETTINGS_SECTION_LABELS.analytics;
-        },
-        icon: ChartColumn,
-        searchText:
-          'analytics metrics usage tokens cost turns cache completions lead time throughput queue health overview dashboard',
       },
       {
         id: 'repositories',
@@ -150,25 +154,35 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'work intake sources tasks issues pull requests github feed sync intake routes routing new cards card moves board catch-all',
       },
       {
-        id: 'integrations',
+        id: 'analytics',
         get label() {
-          return SETTINGS_SECTION_LABELS.integrations;
+          return SETTINGS_SECTION_LABELS.analytics;
         },
-        icon: Plug,
-        searchText:
-          'connections integrations services google cloud firebase logs crashes crashlytics database firestore clickup github gitlab mcp servers tools toolbox connectors service account',
+        icon: ChartColumn,
+        searchText: 'analytics metrics usage tokens cost turns cache completions lead time throughput queue health overview dashboard',
       },
       {
         id: 'factory',
         get label() {
           return SETTINGS_SECTION_LABELS.factory;
         },
-        icon: Building2,
-        searchText: 'factory project organization manage remove delete danger',
+        icon: ChartColumn,
+        searchText: 'analytics metrics usage tokens cost turns cache completions lead time throughput queue health overview dashboard',
       },
+    ],
+  },
+  // The deployment: the server's installed versions.
+  {
+    id: 'server',
+    get label() {
+      return i18n.t('groups.server', { ns: 'settings' });
+    },
+    items: [
       {
         id: 'debug',
-        label: SETTINGS_SECTION_LABELS.debug,
+        get label() {
+          return SETTINGS_SECTION_LABELS.debug;
+        },
         icon: Bug,
         searchText: 'debug versions packages release build node mastra core factory installed running',
       },
@@ -186,11 +200,15 @@ export function SettingsNavigation() {
   const [query, setQuery] = useState('');
   // Observational memory is Mastra's; a Factory on a harness without it (Claude Code, Codex) has nothing to set there.
   const { harness, descriptor } = useFactoryHarness(factoryId ?? '');
+  const factoryName = useFactoryQuery(factoryId).data?.name;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => {
     const items = group.items.filter(({ id }) => id !== 'memory' || harness === undefined || descriptor.supports.memory);
+    // The Factory group names the Factory once it is known; until then it reads «Factory».
+    const label = group.id === 'factory' && factoryName ? t('groups.factoryNamed', { name: factoryName }) : group.label;
     return {
       ...group,
+      label,
       items: normalizedQuery ? items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : items,
     };
   }).filter(group => group.items.length > 0);

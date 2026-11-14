@@ -7,10 +7,12 @@ import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
 import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
+import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 import { translator } from '../../../i18n/t';
 
 const tk = translator('settings');
@@ -37,6 +39,13 @@ function AccountValue({ children }: { children: string }) {
       {children}
     </Txt>
   );
+}
+
+/** The person's own GitHub account: it links through the App's OAuth, so only on a server with an App. */
+function AccountGithubRow() {
+  const github = useGithubStatusQuery().data;
+  if (!github?.connected || github.appConfigured === false) return null;
+  return <UserGithubConnectionRow />;
 }
 
 export function AccountSettingsSection() {
@@ -107,6 +116,7 @@ export function AccountSettingsSection() {
           )}
         </SettingsContainer>
       </SettingsSubsection>
+      <AccountGithubRow />
       <SettingsSubsection scope="personal" title={t('account.session.title')}>
         <SettingsContainer>
           <SettingsRow label={t('account.session.logOut')} description={t('account.session.description')}>
