@@ -71,6 +71,7 @@ export const queryKeys = {
   connectionDetail: (id: string) => ['connections', 'detail', id] as const,
   connectionImpact: (id: string) => ['connections', 'impact', id] as const,
   githubStatus: () => ['github', 'status'] as const,
+  dependabotStatus: () => ['github', 'dependabot', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (projectRepositoryIds: readonly string[], label?: string) =>

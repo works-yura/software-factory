@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router';
 import { useClickUpStatusQuery } from '../../../../hooks/useClickUp';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { connectionsPath } from '../settingsSections';
+import { DependabotIntakeBlock } from './DependabotIntakeBlock';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 
 /**
@@ -20,6 +21,8 @@ export function IntakeSection() {
   const clickup = useClickUpStatusQuery().data;
   // Routes belong to one Factory: the one these settings were opened from.
   const factory = factoryId ? (factoriesQuery.data ?? []).find(candidate => candidate.id === factoryId) : undefined;
+  // Dependabot reads the linked GitHub repositories' alerts: offered once there is one.
+  const linksGithub = (factory?.repositories ?? []).some(repository => (repository.provider ?? 'github') === 'github');
 
   return (
     <div className="flex flex-col gap-8">
@@ -31,6 +34,7 @@ export function IntakeSection() {
           </Link>
         </Txt>
       )}
+      {factory && linksGithub && <DependabotIntakeBlock factoryProjectId={factory.id} />}
       {factory && <IntakeRoutesSection factoryProjectId={factory.id} factoryName={factory.name} />}
     </div>
   );

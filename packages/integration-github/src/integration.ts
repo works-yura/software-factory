@@ -84,6 +84,14 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from './session-subscriptions.ts';
 import { settleOrAbort } from './settle-or-abort.ts';
+import {
+  DEPENDABOT_INTAKE_ID,
+  createDependabotSweep,
+  dependabotAccessError,
+  DependabotStatusBoard,
+  parseDependabotAlert,
+} from './dependabot.ts';
+import type { DependabotAlert, DependabotSweepSummary } from './dependabot.ts';
 import type { GithubSubscriptionStorage } from './subscriptions.ts';
 import { GithubTokenConnections } from './token-auth.ts';
 import type { GithubInstallationAuth } from './token-auth.ts';
@@ -160,6 +168,8 @@ const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
 const INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES = 1000;
 /** Missed-open issue discovery reads at most this many pages per repository per sweep. */
 const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
+/** Open Dependabot alerts read per repository (100 a page); recently closed ones: one page, newest first. */
+const DEPENDABOT_OPEN_MAX_PAGES = 5;
 const OPEN_ISSUE_DISCOVERY_PAGE_SIZE = 100;
 
 export interface IssueSummary {
@@ -269,6 +279,8 @@ const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slu
 export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
+  /** Dependabot alerts as an intake source, off until the organization turns them on (ADR-0042). */
+  readonly intakeSwitches = [DEPENDABOT_INTAKE_ID] as const;
   readonly #rules: GithubEventRules;
 
   get rules(): GithubEventRules {
@@ -469,6 +481,8 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
+  readonly #dependabotStatus = new DependabotStatusBoard();
+  #dependabotSweep: ((repositories: ReconcileRepository[]) => Promise<DependabotSweepSummary>) | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
   /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
@@ -1726,6 +1740,10 @@ export class GithubIntegration implements FactoryIntegration {
       issueSweep ? async (repositories: ReconcileRepository[]) => issueSweep(await this.issueSweepRepositories(ctx, repositories)) : undefined,
       configuredIssueInterval ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS,
     );
+    const dependabot = this.#paceAppRepositories(
+      issueEnabled ? this.#createDependabotSweep(ctx) : undefined,
+      configuredIssueInterval ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS,
+    );
     if (!reconcile && !issues && !discover) return [];
 
     const intervalMs = configuredPullRequestInterval ?? GITHUB_TOKEN_RECONCILE_INTERVAL_MS;
@@ -1735,6 +1753,7 @@ export class GithubIntegration implements FactoryIntegration {
       new GithubReconcileWorker({
         ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
+        ...(dependabot ? { reconcileDependabot: dependabot } : {}),
         ...(discover ? { discover } : {}),
         sourceControl: ctx.storage.sourceControl,
         intervalMs,
@@ -1742,6 +1761,27 @@ export class GithubIntegration implements FactoryIntegration {
         discoveryIntervalMs,
       }),
     ];
+  }
+
+  /**
+   * The Dependabot sweep (ADR-0042), on the issue sweep's repositories and cadence; a webhook runs
+   * it for one repository. Undefined without the routes domain, which decides what is read.
+   */
+  #createDependabotSweep(ctx: IntegrationContext) {
+    const runtime = ctx.runtime;
+    if (!runtime?.intakeRoutes || !runtime.projectBoards) return undefined;
+    const sweep = createDependabotSweep({
+      listAlerts: input => this.listDependabotAlerts(input),
+      projectRepositories: ctx.storage.sourceControl.projectRepositories,
+      intake: ctx.storage.intake,
+      intakeRoutes: runtime.intakeRoutes,
+      projectBoards: runtime.projectBoards,
+      workItems: runtime.workItems,
+      configVersion: runtime.configVersion,
+      status: this.#dependabotStatus,
+    });
+    this.#dependabotSweep = sweep;
+    return sweep;
   }
 
   /**
@@ -1856,6 +1896,62 @@ export class GithubIntegration implements FactoryIntegration {
       if (data.length < OPEN_ISSUE_DISCOVERY_PAGE_SIZE) break;
     }
     return issues;
+  }
+
+  /**
+   * A repository's Dependabot alerts through its own connection: the open ones (up to five pages),
+   * or the hundred closed most recently (`closed`), so a fix or a dismissal reaches its card. A
+   * refusal becomes a `DependabotAccessError` naming the missing permission.
+   */
+  async listDependabotAlerts(input: {
+    installationId: number;
+    repository: string;
+    state: 'open' | 'closed';
+  }): Promise<DependabotAlert[]> {
+    const parts = splitRepoFullName(input.repository);
+    if (!parts) return [];
+    const octokit = this.getInstallationOctokit(input.installationId);
+    const alerts: DependabotAlert[] = [];
+    const pages = input.state === 'open' ? DEPENDABOT_OPEN_MAX_PAGES : 1;
+    try {
+      for (let page = 1; page <= pages; page += 1) {
+        const { data } = await octokit.request('GET /repos/{owner}/{repo}/dependabot/alerts', {
+          owner: parts.owner,
+          repo: parts.repo,
+          state: input.state === 'open' ? 'open' : 'fixed,dismissed,auto_dismissed',
+          sort: 'updated',
+          direction: 'desc',
+          per_page: 100,
+          page,
+        });
+        for (const raw of data as unknown[]) {
+          const alert = parseDependabotAlert(raw);
+          if (alert) alerts.push(alert);
+        }
+        if ((data as unknown[]).length < 100) break;
+      }
+    } catch (error) {
+      throw dependabotAccessError(error, input.repository);
+    }
+    return alerts;
+  }
+
+  /** The last Dependabot sweep per repository of the organization, for Settings. */
+  dependabotStatus(orgId: string) {
+    return this.#dependabotStatus.forOrg(orgId);
+  }
+
+  /**
+   * A `dependabot_alert` webhook: sweeps that one repository now instead of waiting for the next
+   * sweep. Without the sweep (reconciliation off, no routes domain) the delivery is ignored.
+   */
+  async onDependabotAlertWebhook(payload: Record<string, unknown>): Promise<void> {
+    const sweep = this.#dependabotSweep;
+    const repository = payload.repository as { id?: unknown; full_name?: unknown } | undefined;
+    const installation = payload.installation as { id?: unknown } | undefined;
+    if (!sweep || typeof repository?.id !== 'number' || typeof repository.full_name !== 'string') return;
+    if (typeof installation?.id !== 'number') return;
+    await sweep([{ id: repository.id, fullName: repository.full_name, installationId: installation.id }]);
   }
 
   /**

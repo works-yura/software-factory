@@ -44,6 +44,27 @@
       "connected": "ClickUp підключено.",
       "notConnected": "ClickUp не підключено.",
       "open": "Налаштувати в «Підключеннях»"
+    },
+    "dependabot": {
+      "title": "Сповіщення Dependabot",
+      "description": "Заводить сповіщення GitHub Dependabot прив'язаних репозиторіїв як картки. Карткою стає лише сповіщення, яке бере маршрут: додайте маршрут GitHub з умовою «Тип джерела — Сповіщення Dependabot» (і серйозністю, якщо треба). Виправлене сповіщення завершує картку, відхилене — скасовує.",
+      "toggle": "Брати сповіщення Dependabot",
+      "saved": "Сповіщення Dependabot {{state}}",
+      "on": "увімкнено",
+      "off": "вимкнено",
+      "saveFailed": "Не вдалося зберегти перемикач Dependabot",
+      "noRoute": "Жоден маршрут ще не бере сповіщення Dependabot, тож картки не заводяться.",
+      "notChecked": "Ще не прочитано: наступне опитування GitHub прочитає прив'язані репозиторії.",
+      "open_one": "{{repository}}: {{count}} відкрите сповіщення",
+      "open_few": "{{repository}}: {{count}} відкриті сповіщення",
+      "open_many": "{{repository}}: {{count}} відкритих сповіщень",
+      "open_other": "{{repository}}: {{count}} відкритих сповіщень",
+      "problems": {
+        "permission": "{{repository}}: підключенню GitHub бракує дозволу «Dependabot alerts: read».",
+        "disabled": "{{repository}}: сповіщення Dependabot вимкнено в налаштуваннях репозиторію.",
+        "not_found": "{{repository}}: підключення GitHub не бачить сповіщень цього репозиторію.",
+        "error": "{{repository}}: {{message}}"
+      }
     }
   },
   "intakeSource": {
@@ -1809,7 +1830,12 @@
       "pullRequest": "Pull request",
       "task": "Задача ClickUp",
       "completed": "Виконано",
-      "canceled": "Не планується"
+      "canceled": "Не планується",
+      "dependabotAlert": "Сповіщення Dependabot",
+      "critical": "Критична",
+      "high": "Висока",
+      "medium": "Середня",
+      "low": "Низька"
     },
     "chooseValue": "Виберіть значення",
     "chooseValues": "Виберіть значення",
@@ -1848,7 +1874,8 @@
     "groups": {
       "pullRequest": "Pull request",
       "closedIssue": "Закрита задача",
-      "event": "Подія"
+      "event": "Подія",
+      "alert": "Сповіщення Dependabot"
     },
     "fields": {
       "item.labels": "Мітки",
@@ -1868,7 +1895,10 @@
       "closedIssue.phase": "Фаза закритої задачі",
       "closedIssue.hasPullRequest": "У закритої задачі є pull request",
       "event.type": "Подія",
-      "event.reason": "Причина закриття"
+      "event.reason": "Причина закриття",
+      "alert.severity": "Серйозність сповіщення",
+      "alert.ecosystem": "Екосистема пакета",
+      "alert.package": "Вразливий пакет"
     },
     "eventTypes": {
       "work_item.created": "Нова картка",

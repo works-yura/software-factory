@@ -43,6 +43,16 @@ function cardFactProperties(): FactProperties {
         list: { type: 'string', title: tk('conditions.fields.source.list') },
       },
     },
+    // A GitHub Dependabot alert's advisory (`source.kind = dependabot_alert`).
+    alert: {
+      type: 'object',
+      title: tk('conditions.groups.alert'),
+      properties: {
+        severity: { type: 'string', title: tk('conditions.fields.alert.severity') },
+        ecosystem: { type: 'string', title: tk('conditions.fields.alert.ecosystem') },
+        package: { type: 'string', title: tk('conditions.fields.alert.package') },
+      },
+    },
   };
 }
 
@@ -220,6 +230,7 @@ function fieldShapes(): Record<string, FieldShape> {
         { value: 'issue', label: tk('conditions.values.issue') },
         { value: 'pull_request', label: tk('conditions.values.pullRequest') },
         { value: 'task', label: tk('conditions.values.task') },
+        { value: 'dependabot_alert', label: tk('conditions.values.dependabotAlert') },
       ],
     },
     'source.integration': { label: label('source.integration'), options: integrations() },
@@ -227,6 +238,15 @@ function fieldShapes(): Record<string, FieldShape> {
     // Suggested from the project's repositories, but any value can be typed: `strict: false`.
     'source.repository': { label: label('source.repository'), strict: false },
     'source.list': { label: label('source.list') },
+    'alert.severity': {
+      label: label('alert.severity'),
+      options: (['critical', 'high', 'medium', 'low'] as const).map(value => ({
+        value,
+        label: tk(`conditions.values.${value}`),
+      })),
+    },
+    'alert.ecosystem': { label: label('alert.ecosystem') },
+    'alert.package': { label: label('alert.package') },
     'pullRequest.closesIssue': { label: label('pullRequest.closesIssue'), options: yesNo(), strict: true },
     'closedIssue.phase': { label: label('closedIssue.phase') },
     'closedIssue.hasPullRequest': { label: label('closedIssue.hasPullRequest'), options: yesNo(), strict: true },

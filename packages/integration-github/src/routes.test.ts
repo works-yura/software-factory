@@ -347,6 +347,8 @@ const getPullRequestDetail = vi.fn(
 // Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
 // instead of module mocking (github/client.ts no longer exists).
 const githubStub = {
+  onDependabotAlertWebhook: vi.fn(async (_payload: Record<string, unknown>) => {}),
+  dependabotStatus: vi.fn((_orgId: string) => [{ repository: 'acme/app', checkedAt: 't', problem: 'permission' }]),
   sourceControlStorage,
   integrationStorage,
   webhookSecret: undefined as string | undefined,
@@ -931,6 +933,26 @@ describe('webhook route', () => {
     );
     const runContext = sendNotificationSignal.mock.calls[0]![1].requestContext;
     expect(runContext.get('user')).toEqual({ id: 'u1', organizationId: 'org1' });
+  });
+
+  it('hands a dependabot_alert delivery to the Dependabot sweep, never to the rules ingress', async () => {
+    const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    githubStub.onDependabotAlertWebhook.mockClear();
+    const payload = { action: 'created', repository: { id: 42, full_name: 'acme/app' }, installation: { id: 7 } };
+    const res = await buildApp(null, { ingestFactoryEvent }).request(signedGithubWebhookRequest('dependabot_alert', payload));
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(githubStub.onDependabotAlertWebhook).toHaveBeenCalledWith(payload);
+    expect(ingestFactoryEvent).not.toHaveBeenCalled();
+    logSpy.mockRestore();
+  });
+
+  it('reports the last Dependabot sweep of the caller\'s organization', async () => {
+    const res = await buildApp({ id: 'u1' }).request('/web/github/dependabot/status');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ repositories: [{ repository: 'acme/app', checkedAt: 't', problem: 'permission' }] });
+    expect(githubStub.dependabotStatus).toHaveBeenCalledWith('org1');
   });
 
   it('rejects invalid signatures without logging', async () => {

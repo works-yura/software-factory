@@ -8,6 +8,8 @@ export const WORK_ITEM_SOURCES = [
   'gitlab-issue',
   'gitlab-pr',
   'clickup-task',
+  // A GitHub Dependabot alert (security advisory on a dependency); key `<owner>/<repo>#<alert number>`.
+  'github-dependabot-alert',
   'manual',
   // A card a trigger route (an intake route with a schedule) filed; key `<routeId>:<fireKey>`.
   'intake-route',
@@ -22,6 +24,7 @@ const WORK_ITEM_SOURCE_ORIGINS: Readonly<
   'gitlab-issue': { integrationId: 'gitlab', type: 'issue' },
   'gitlab-pr': { integrationId: 'gitlab', type: 'pull-request' },
   'clickup-task': { integrationId: 'clickup', type: 'task' },
+  'github-dependabot-alert': { integrationId: 'github', type: 'dependabot-alert' },
   manual: { integrationId: 'factory', type: 'manual' },
   'intake-route': { integrationId: 'factory', type: 'intake-route' },
 };
@@ -70,6 +73,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   // thread, or a stored card from an integration Factory no longer supports) is
   // a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
+  if (source.type === 'dependabot-alert') return 'github-dependabot-alert';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
 
@@ -712,9 +716,10 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
     case 'gitlab-pr':
       return 'gitlabPullRequest';
     case 'clickup-task':
+    case 'github-dependabot-alert':
     case 'intake-route':
     case 'manual':
-      // ClickUp tasks and trigger routes' cards have no provider-specific phase rules; boards treat them like hand-filed cards.
+      // ClickUp tasks, Dependabot alerts and trigger routes' cards have no provider-specific phase rules; boards treat them like hand-filed cards.
       return 'manual';
   }
 }

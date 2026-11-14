@@ -145,6 +145,7 @@ describe('useLinkRepositoryMutation', () => {
         github: { enabled: false, sourceIds: null },
         gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] },
         clickup: { enabled: false, sourceIds: null },
+        dependabot: { enabled: false, sourceIds: null },
       },
     ]);
   });

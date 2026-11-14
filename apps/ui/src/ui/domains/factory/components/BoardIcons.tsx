@@ -13,6 +13,7 @@ import {
   ListChecks,
   Play,
   Search,
+  ShieldAlert,
 } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
@@ -32,6 +33,7 @@ const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVG
   'gitlab-issue': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'gitlab-pr': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'clickup-task': { icon: ListChecks, className: 'text-badge-purple-indicator' },
+  'github-dependabot-alert': { icon: ShieldAlert, className: 'text-badge-orange-indicator' },
   manual: { icon: CircleDot, className: 'text-muted-foreground' },
 };
 

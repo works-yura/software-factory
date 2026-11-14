@@ -1106,6 +1106,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
+          switches: (deps.integrations ?? []).flatMap(({ integration }) => integration.intakeSwitches ?? []),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.knowledgeEnabled

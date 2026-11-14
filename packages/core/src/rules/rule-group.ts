@@ -45,6 +45,12 @@ export const CARD_RULE_FIELDS = [
    * Linear team later). A route that names it subscribes the source to it: see `routeSubscribesSource`.
    */
   'source.list',
+  /** A Dependabot alert's advisory severity (`critical`, `high`, `medium`, `low`). */
+  'alert.severity',
+  /** A Dependabot alert's package ecosystem (`npm`, `pip`, `maven`…). */
+  'alert.ecosystem',
+  /** A Dependabot alert's vulnerable package name. */
+  'alert.package',
 ] as const;
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;

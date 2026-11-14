@@ -12,7 +12,7 @@ export {
 } from './boards/define-board.ts';
 export { DEFAULT_BOARD_ID } from './boards/default-board.ts';
 export type { AnyBoardConfig } from './boards/define-board.ts';
-export { cardRuleFacts, sourceRepository } from './boards/card-facts.ts';
+export { cardRuleFacts, DEPENDABOT_ALERT_SOURCE_TYPE, sourceRepository } from './boards/card-facts.ts';
 export type { CardSourceFacts } from './boards/card-facts.ts';
 export {
   catchesEveryNewCard,

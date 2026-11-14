@@ -9,6 +9,7 @@ import type {
   SourceControlRepository,
 } from '@factory/store';
 import type { GithubIssueReconciler } from './issue-reconciler.ts';
+import type { DependabotSweepSummary } from './dependabot.ts';
 import type { GithubPullRequestDiscovery, GithubPullRequestReconciler, ReconcileRepository } from './rules.ts';
 
 // Webhooks are the primary sync; the sweeps only catch drift, so hourly.
@@ -36,6 +37,8 @@ export interface GithubReconcileRepositorySource {
 export interface GithubReconcileWorkerConfig {
   reconcile?: GithubPullRequestReconciler;
   reconcileIssues?: GithubIssueReconciler;
+  /** Dependabot alerts (ADR-0042): run on the issue sweep's cadence, after it. */
+  reconcileDependabot?: (repositories: ReconcileRepository[]) => Promise<DependabotSweepSummary>;
   discover?: GithubPullRequestDiscovery;
   sourceControl: GithubReconcileRepositorySource;
   intervalMs?: number;
@@ -55,6 +58,7 @@ export class GithubReconcileWorker extends MastraWorker {
 
   readonly #reconcile: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssues: GithubIssueReconciler | undefined;
+  readonly #reconcileDependabot: GithubReconcileWorkerConfig['reconcileDependabot'];
   readonly #discover: GithubPullRequestDiscovery | undefined;
   readonly #sourceControl: GithubReconcileRepositorySource;
   readonly #intervalMs: number;
@@ -79,6 +83,7 @@ export class GithubReconcileWorker extends MastraWorker {
     }
     this.#reconcile = config.reconcile;
     this.#reconcileIssues = config.reconcileIssues;
+    this.#reconcileDependabot = config.reconcileDependabot;
     this.#discover = config.discover;
     this.#sourceControl = config.sourceControl;
     this.#intervalMs = config.intervalMs ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS;
@@ -263,6 +268,25 @@ export class GithubReconcileWorker extends MastraWorker {
         }
       } else if (reconcileIssues && this.#reconcileIssues && !hasLease) {
         this.deps?.logger.debug('GitHub issue reconcile skipped: lease lost during pull-request sweep');
+      }
+
+      if (reconcileIssues && this.#reconcileDependabot && hasLease) {
+        const startedAt = Date.now();
+        try {
+          const { errors, ...counts } = await this.#reconcileDependabot(targets);
+          const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+          if (counts.failed > 0) {
+            this.deps?.logger.warn('GitHub Dependabot sweep completed with failures', { ...context, errors });
+          } else if (counts.created > 0 || counts.closed > 0 || counts.updated > 0) {
+            this.deps?.logger.info('GitHub Dependabot sweep filed alerts', context);
+          } else {
+            this.deps?.logger.debug('GitHub Dependabot sweep completed', context);
+          }
+        } catch (error) {
+          this.deps?.logger.warn('GitHub Dependabot sweep failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     } finally {
       clearInterval(renewalTimer);

@@ -18,6 +18,8 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   /** Intake selection domain handle. */
   intake: IntakeStorage;
   integrations?: IntakeIntegration[];
+  /** Config keys with only an on/off switch and no sources of their own (GitHub's `dependabot`). */
+  switches?: readonly string[];
 }
 
 export interface IntakeIntegrationFailure {
@@ -134,7 +136,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
 
   routes(): ApiRoute[] {
     const { audit, intake, integrations = [] } = this.deps;
-    const integrationIds = integrations.map(integration => integration.id);
+    const integrationIds = [...integrations.map(integration => integration.id), ...(this.deps.switches ?? [])];
 
     return [
       registerApiRoute('/web/intake/config', {

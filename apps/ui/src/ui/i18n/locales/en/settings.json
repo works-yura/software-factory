@@ -44,6 +44,25 @@
       "connected": "ClickUp is connected.",
       "notConnected": "ClickUp is not connected.",
       "open": "Set it up in Connections"
+    },
+    "dependabot": {
+      "title": "Dependabot alerts",
+      "description": "Files GitHub Dependabot alerts of the linked repositories as cards. Only alerts a route takes become cards: add a GitHub route with \"Source type is Dependabot alert\" (and a severity, if you like). Fixed alerts finish their card, dismissed ones cancel it.",
+      "toggle": "Take Dependabot alerts",
+      "saved": "Dependabot alerts turned {{state}}",
+      "on": "on",
+      "off": "off",
+      "saveFailed": "Failed to save the Dependabot switch",
+      "noRoute": "No route takes Dependabot alerts yet, so none are filed.",
+      "notChecked": "Not read yet: the next GitHub sweep reads the linked repositories.",
+      "open_one": "{{repository}}: {{count}} open alert",
+      "open_other": "{{repository}}: {{count}} open alerts",
+      "problems": {
+        "permission": "{{repository}}: the GitHub connection lacks the \"Dependabot alerts: read\" permission.",
+        "disabled": "{{repository}}: Dependabot alerts are switched off in the repository settings.",
+        "not_found": "{{repository}}: the GitHub connection can't see this repository's alerts.",
+        "error": "{{repository}}: {{message}}"
+      }
     }
   },
   "intakeSource": {
@@ -1775,7 +1794,12 @@
       "pullRequest": "Pull request",
       "task": "ClickUp task",
       "completed": "Completed",
-      "canceled": "Not planned"
+      "canceled": "Not planned",
+      "dependabotAlert": "Dependabot alert",
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
     },
     "chooseValue": "Choose a value",
     "chooseValues": "Choose values",
@@ -1814,7 +1838,8 @@
     "groups": {
       "pullRequest": "Pull request",
       "closedIssue": "Closed issue",
-      "event": "Event"
+      "event": "Event",
+      "alert": "Dependabot alert"
     },
     "fields": {
       "item.labels": "Labels",
@@ -1834,7 +1859,10 @@
       "closedIssue.phase": "Closed issue phase",
       "closedIssue.hasPullRequest": "Closed issue has a pull request",
       "event.type": "Event",
-      "event.reason": "Close reason"
+      "event.reason": "Close reason",
+      "alert.severity": "Alert severity",
+      "alert.ecosystem": "Package ecosystem",
+      "alert.package": "Vulnerable package"
     },
     "eventTypes": {
       "work_item.created": "New card",
