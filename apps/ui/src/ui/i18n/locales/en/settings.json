@@ -620,6 +620,8 @@
       "connect": "Connect {{name}}"
     },
     "agentAccounts": {
+      "optionalDescription": "{{name}} runs on its free models without an account. An organization account (Connections) signs runs in, so its paid models show, and runs move to the next account when one runs out of usage.",
+      "optionalNone": "No account: free models only.",
       "title": "Accounts",
       "description": "{{name}} sessions run on the members’ own sign-ins, connected in Connections; a session moves to the next account when one runs out of usage.",
       "label": "{{name}} accounts",

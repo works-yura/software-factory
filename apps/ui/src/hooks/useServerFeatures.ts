@@ -15,6 +15,8 @@ export interface ServerFeatures {
   codex?: boolean;
   /** Device preview: simulators and emulators on the server's machine (local development). Absent from older servers. */
   device?: boolean;
+  /** The person's own OpenCode sessions can be continued here (the server is their own machine). Absent from older servers. */
+  opencodeLocalSessions?: boolean;
   /** The harnesses this server runs and what each can do. Absent from older servers. */
   harnesses?: HarnessDescriptor[];
 }

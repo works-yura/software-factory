@@ -35,6 +35,7 @@ import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
 import { SidebarNewSessionButton } from './SidebarNewSessionButton';
+import { OpenCodeImportButton } from './OpenCodeImportDialog';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { useTranslation } from 'react-i18next';
 import { i18n } from '../../../i18n';
@@ -93,6 +94,7 @@ export function SessionsSection() {
         action={
           <div className="flex items-center gap-0.5">
             <SidebarNewSessionButton />
+            <OpenCodeImportButton />
             <PropertiesMenu
             label={t('sessions.properties')}
             changedCount={changedSettingCount + activeFilterCount}

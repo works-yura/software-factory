@@ -651,5 +651,21 @@
     "label": "Device preview",
     "back": "Back to workspace",
     "loading": "Loading device preview"
+  },
+  "openCodeImport": {
+    "open": "Continue an OpenCode session",
+    "title": "Continue an OpenCode session",
+    "description": "Your own OpenCode sessions on this machine. Continuing one makes a new private session here on OpenCode, with its conversation; OpenCode itself is only read.",
+    "loading": "Reading your OpenCode sessions…",
+    "empty": "No OpenCode sessions on this machine yet.",
+    "listLabel": "Your OpenCode sessions",
+    "meta_one": "{{count}} message · {{updated}}",
+    "meta_other": "{{count}} messages · {{updated}}",
+    "otherRepository": "{{slug}} is not in this Factory: pick a repository",
+    "noRepository": "not a repository: pick one to work in",
+    "repositoryFor": "Repository for {{title}}",
+    "pickRepository": "Pick a repository",
+    "continue": "Continue here",
+    "note": "The session works in a fresh checkout of the repository on its own branch: changes left uncommitted in the original folder do not come along."
   }
 }

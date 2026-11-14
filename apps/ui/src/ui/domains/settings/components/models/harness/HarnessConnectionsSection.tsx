@@ -22,8 +22,14 @@ export function HarnessConnectionsSection({ factoryId, descriptor }: { factoryId
   if (!connector) return null;
   const own = (connections.data?.connections ?? []).filter(connection => connection.connector.id === connector);
   const running = own.filter(connection => connection.state.tone === 'ok').length;
+  // A harness that runs without accounts (OpenCode's free models) says what one adds instead.
+  const optional = descriptor.setup.accounts?.optional === true;
   return (
-    <SettingsSubsection scope="factory" title={t('models.agentAccounts.title')} description={t('models.agentAccounts.description', { name: descriptor.label })}>
+    <SettingsSubsection
+      scope="factory"
+      title={t('models.agentAccounts.title')}
+      description={t(optional ? 'models.agentAccounts.optionalDescription' : 'models.agentAccounts.description', { name: descriptor.label })}
+    >
       <SettingsContainer>
         <SettingsRow
           label={t('models.agentAccounts.label', { name: descriptor.label })}
@@ -32,7 +38,7 @@ export function HarnessConnectionsSection({ factoryId, descriptor }: { factoryId
           <div className="flex items-center gap-2">
             {own.length === 0 && connections.data && (
               <Txt as="span" variant="caption" tone="muted">
-                {t('models.agentAccounts.none')}
+                {t(optional ? 'models.agentAccounts.optionalNone' : 'models.agentAccounts.none')}
               </Txt>
             )}
             <Button size="sm" variant="default" render={<Link to={connectorPath(factoryId, connector, { connect: own.length === 0 })} />}>
