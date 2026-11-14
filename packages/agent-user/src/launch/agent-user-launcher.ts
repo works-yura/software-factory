@@ -1,6 +1,7 @@
 import type { AgentUserConfig } from '../config/agent-user-config.ts';
 import { agentEnvironment, agentIdentity } from '../env/agent-environment.ts';
 import type { EnvTransport } from '../env/env-transport.ts';
+import { withGitTrust } from '../env/git-trust.ts';
 import { PipeEnvTransport } from '../env/pipe-env-transport.ts';
 
 import { WrappingLauncher } from './wrapping-launcher.ts';
@@ -25,6 +26,7 @@ export function createAgentUserLauncher(config: AgentUserConfig, options: AgentU
       new EnvLoaderWrapper(options.transport ?? new PipeEnvTransport()),
       new SeatbeltWrapper(config.profilePath),
     ],
-    env => agentEnvironment(config, env),
+    // Card folders are the server's clones: git as the agent must trust them.
+    env => withGitTrust(agentEnvironment(config, env), config.writableRoots),
   );
 }

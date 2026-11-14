@@ -21,6 +21,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@clack/prompts": "1.8.1",
+    "@factory/agent-user": "workspace:*",
     "@factory/api": "workspace:*",
     "@factory/auth-better-auth": "workspace:*",
     "@factory/http": "workspace:*",

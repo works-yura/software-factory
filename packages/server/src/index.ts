@@ -77,3 +77,4 @@ export type {
 } from '@factory/integrations';
 export { attachOnFirstRequest, DEVICE_BASE_PATH } from './device.ts';
 export type { FactoryDeviceConfig } from './device.ts';
+export * from './agent-user/index.ts';
