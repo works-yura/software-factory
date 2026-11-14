@@ -188,7 +188,8 @@ describe('OpenCodeSession', () => {
     fake.onPrompt = () => {};
     const { session: s, events } = await session();
     const sent = s.sendMessage({ content: 'long work', requestContext: context });
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Until OpenCode has the prompt: a fixed wait loses that race on a busy machine.
+    while (fake.prompts.length === 0) await new Promise(resolve => setTimeout(resolve, 5));
     expect(s.run.isRunning()).toBe(true);
     s.abort();
     expect(await sent).toEqual({ reason: 'aborted' });

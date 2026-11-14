@@ -57,26 +57,52 @@ export interface OpenCodeErrorPayload {
  * The free models' allowance ran out (`FreeUsageLimitError`), or another usage or rate limit:
  * the Zen API says so in its message or body, with a 429.
  */
-const USAGE_LIMIT_RE = /free\s*usage\s*limit|FreeUsageLimitError|usage\s+limit|rate[\s_-]*limit|too\s+many\s+requests|subscribe\s+to\s+opencode\s+go/i;
-const AUTH_RE = /unauthori[sz]ed|authentication|invalid\s+api\s+key|api\s+key\s+(?:is\s+)?(?:missing|invalid)|\b401\b|\b403\b/i;
+const USAGE_LIMIT_RE = /free\s*usage\s*limit|FreeUsageLimitError|GoUsageLimitError|usage\s+limit|rate[\s_-]*limit|too\s+many\s+requests|subscribe\s+to\s+opencode\s+go|budget\s+exceeded/i;
+/** A limit that holds until someone pays or a window resets: OpenCode's own retries never get past it. */
+const EXHAUSTED_RE = /free\s*usage\s*limit|FreeUsageLimitError|GoUsageLimitError|usage\s+limit|subscribe\s+to\s+opencode\s+go|budget\s+exceeded/i;
+/** A bare 401 or 403 is no proof (a port, a count): only beside the words HTTP or status. */
+const AUTH_RE = /unauthori[sz]ed|authentication|invalid\s+api\s+key|api\s+key\s+(?:is\s+)?(?:missing|invalid)|(?:HTTP|status(?:\s+code)?)\s*:?\s*40[13]\b/i;
 const CONTEXT_RE = /context\s*(?:window|length|overflow)|maximum\s+context|too\s+many\s+tokens/i;
 const MODEL_UNAVAILABLE_RE = /model\s+(?:is\s+)?(?:unavailable|not\s+found|not\s+supported|does\s+not\s+exist)|unknown\s+model|ProviderModelNotFound/i;
 const OVERLOADED_RE = /overloaded|server\s+error|service\s+unavailable|bad\s+gateway|timed?\s*out/i;
 
-/** The message a person reads for an OpenCode error: its message, else its name. */
+/** A URL in a provider's words without what a reader must not see: its credentials, query and fragment. */
+function sanitizeUrls(text: string): string {
+  return text.replace(/\bhttps?:\/\/[^\s"'<>)]+/gi, raw => {
+    try {
+      const url = new URL(raw);
+      return `${url.protocol}//${url.host}${url.pathname === '/' && !raw.endsWith('/') ? '' : url.pathname}`;
+    } catch {
+      return raw.replace(/\/\/[^/@\s]*@/, '//').replace(/[?#].*$/, '');
+    }
+  });
+}
+
+/** OpenCode writes `<none>` when it could not read the provider's message. */
+const meaningful = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '' && value.trim().toLowerCase() !== '<none>';
+
+/**
+ * The message a person reads for an OpenCode error: its message, else the provider's (a JSON body's
+ * message, an HTML page's title with the status), else what the status says, else its name.
+ */
 function messageOf(error: OpenCodeErrorPayload | undefined, fallback: string): string {
   const body = error?.data?.responseBody;
+  const status = error?.data?.statusCode;
   let bodyMessage: string | undefined;
   if (body) {
     try {
       const parsed = JSON.parse(body) as { error?: { message?: unknown } | string; message?: unknown };
       const nested = typeof parsed.error === 'object' ? parsed.error?.message : parsed.error;
-      bodyMessage = [nested, parsed.message].find((value): value is string => typeof value === 'string' && value.trim() !== '');
+      bodyMessage = [nested, parsed.message].find(meaningful);
     } catch {
-      bodyMessage = undefined;
+      const title = /<title[^>]*>([^<]*)<\/title>/i.exec(body)?.[1]?.replace(/\s+/g, ' ').trim();
+      if (title) bodyMessage = typeof status === 'number' ? `${title} (HTTP ${status}).` : title;
     }
   }
-  return [error?.data?.message, bodyMessage, error?.name].find((value): value is string => typeof value === 'string' && value.trim() !== '') ?? fallback;
+  const statusMessage = typeof status === 'number' ? `The model provider failed the request (HTTP ${status}).` : undefined;
+  const unnamed = typeof error?.data?.message === 'string' && !meaningful(error.data.message) ? 'The model provider failed the request and did not include an error message.' : undefined;
+  const message = [error?.data?.message, bodyMessage, statusMessage, unnamed, error?.name].find(meaningful) ?? fallback;
+  return sanitizeUrls(message.trim());
 }
 
 /**
@@ -96,7 +122,10 @@ export function openCodeErrorFrom(error: OpenCodeErrorPayload | undefined, fallb
   return new OpenCodeError('unknown', message, details);
 }
 
-/** Whether a `retry` status's message is a limit no retry gets past (the free allowance, a usage cap). */
+/**
+ * Whether a `retry` status's message is a limit no retry gets past (the free allowance, a usage cap).
+ * A rate limit per minute is not: OpenCode's retry waits it out, and the turn goes on.
+ */
 export function isTerminalRetry(message: string): boolean {
-  return USAGE_LIMIT_RE.test(message) || AUTH_RE.test(message) || MODEL_UNAVAILABLE_RE.test(message);
+  return EXHAUSTED_RE.test(message) || AUTH_RE.test(message) || MODEL_UNAVAILABLE_RE.test(message);
 }

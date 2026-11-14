@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import type { AgentEvent } from '@factory/harness';
 import type { TranscriptEntry } from '@factory/harness/transcript';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { createOpenCodeHarness } from './harness.ts';
 import { createOpenCodeCatalogSource } from './models.ts';
@@ -41,6 +41,8 @@ describe.skipIf(!command)('OpenCode on the real CLI', () => {
     const events: AgentEvent[] = [];
     session.onTranscript(entry => entries.push(entry));
     session.subscribe(event => events.push(event));
+    // A failed expectation must not leave a parked turn's server running after the test.
+    onTestFinished(() => session.dispose());
 
     const first = await session.sendMessage({ content: 'Create a file hello.txt containing exactly the word hi, using your write tool. Then reply DONE.' });
     expect(first).toEqual({ reason: 'suspended' });
@@ -64,4 +66,26 @@ describe.skipIf(!command)('OpenCode on the real CLI', () => {
       entries.filter(entry => entry.kind !== 'text_delta' && entry.kind !== 'thinking_delta').map(entry => entry.kind),
     );
   }, 300_000);
+
+  it('ends a turn OpenCode refuses (a model it does not have) with why, instead of waiting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'opencode-smoke-'));
+    const work = await mkdtemp(join(root, 'work-'));
+    const harness = createOpenCodeHarness({
+      store: createInMemoryOpenCodeSessionStore(),
+      cwdFor: () => work,
+      stateRootFor: session => join(root, 'state', session.id),
+      command: command!,
+      turnSelectionFor: () => ({ model: 'opencode/no-such-model-for-the-factory' }),
+      turnTimeoutMs: 90_000,
+    });
+    const session = await harness.createSession({ sessionId: 'smoke-refused', threadId: 'smoke-refused' });
+    onTestFinished(() => session.dispose());
+    const errors: unknown[] = [];
+    session.subscribe(event => {
+      if (event.type === 'error') errors.push(event.error);
+    });
+    expect(await session.sendMessage({ content: 'Say hi.' })).toEqual({ reason: 'error' });
+    console.info('[smoke] refused turn:', errors.map(error => [(error as { kind?: string }).kind, (error as Error).message]));
+    expect((errors[0] as { kind?: string }).kind).not.toBe('timeout');
+  }, 120_000);
 });

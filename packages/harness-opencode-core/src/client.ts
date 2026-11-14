@@ -104,8 +104,8 @@ export class OpenCodeClient {
     return response;
   }
 
-  async #json<T>(operation: string, method: string, path: string, body?: unknown): Promise<T> {
-    const response = await this.#request(operation, method, path, body);
+  async #json<T>(operation: string, method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    const response = await this.#request(operation, method, path, body, signal);
     const text = await response.text();
     return (text ? JSON.parse(text) : undefined) as T;
   }
@@ -118,8 +118,8 @@ export class OpenCodeClient {
     return this.#json('session.create', 'POST', '/session', input);
   }
 
-  /** The session, or `undefined` when this server's database does not have it. */
-  async getSession(sessionId: string): Promise<{ id: string } | undefined> {
+  /** The session (with the session that started it, for a subagent's), or `undefined` when this server's database does not have it. */
+  async getSession(sessionId: string): Promise<{ id: string; parentID?: string } | undefined> {
     try {
       return await this.#json('session.get', 'GET', `/session/${encodeURIComponent(sessionId)}`);
     } catch (error) {
@@ -150,8 +150,8 @@ export class OpenCodeClient {
     await this.#request('question.reject', 'POST', `/question/${encodeURIComponent(requestId)}/reject`);
   }
 
-  providers(): Promise<OpenCodeProviderList> {
-    return this.#json('provider.list', 'GET', '/provider');
+  providers(signal?: AbortSignal): Promise<OpenCodeProviderList> {
+    return this.#json('provider.list', 'GET', '/provider', undefined, signal);
   }
 
   /** The server's events until `signal` aborts or the server closes the stream. */

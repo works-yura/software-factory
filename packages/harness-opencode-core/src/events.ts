@@ -42,7 +42,7 @@ const str = (value: unknown): string | undefined => (typeof value === 'string' &
 const record = (value: unknown): Input => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Input) : {});
 const defined = (input: Input): Input => Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
 
-const TODO_STATUS: Record<string, string> = { pending: 'pending', in_progress: 'in_progress', completed: 'completed', cancelled: 'completed' };
+const TODO_STATUS: Record<string, string> = { pending: 'pending', in_progress: 'in_progress', completed: 'completed' };
 
 /**
  * A call as the transcript names it, with its input in that tool's shape. MCP tools (`<server>_<tool>`
@@ -83,7 +83,11 @@ export function openCodeToolCall(tool: string, rawInput: unknown, mcpServers: re
     case 'skill':
       return { toolName: OPENCODE_TOOL_NAMES.skill, input: defined({ name: str(input.name) }) };
     case 'todowrite': {
-      const todos = (Array.isArray(input.todos) ? input.todos : []).map(record).map(todo => ({
+      // A cancelled step is dropped, not shown as done: the list completes once the rest did.
+      const todos = (Array.isArray(input.todos) ? input.todos : [])
+        .map(record)
+        .filter(todo => str(todo.status) !== 'cancelled')
+        .map(todo => ({
         content: str(todo.content) ?? '',
         status: TODO_STATUS[str(todo.status) ?? ''] ?? 'pending',
         activeForm: str(todo.content) ?? '',
@@ -120,9 +124,14 @@ function permissionInput(permission: string, patterns: readonly string[], metada
 interface ToolState {
   callId: string;
   toolName: string;
+  /** The call's input as the transcript shows it, once known. */
+  input?: Input;
   started: boolean;
   finished: boolean;
 }
+
+/** Asks OpenCode makes every time, whatever a person allowed before (ADR-0043): leaving the checkout, a call repeated in a loop. */
+export const OPENCODE_ALWAYS_ASK_PERMISSIONS: readonly string[] = ['external_directory', 'doom_loop'];
 
 export interface OpenCodeTurnTranslatorOptions {
   /** The OpenCode session the turn runs in. */
@@ -131,14 +140,22 @@ export interface OpenCodeTurnTranslatorOptions {
   mcpServers?: readonly string[];
   /** A planning turn: the text it ends with is the plan a person approves. */
   planning?: boolean;
+  /**
+   * When the turn's prompt went out (epoch ms): a person's message created well before it is an
+   * earlier turn's, not proof OpenCode took this one.
+   */
+  promptedAt?: number;
 }
 
 /** What one event changes for the turn. */
 export interface OpenCodeTurnUpdate {
   entries: TranscriptEntry[];
   usage?: AgentTokenUsage;
-  /** OpenCode asks a person to allow a call: the run parks on it. */
-  permission?: { requestId: string; request: PermissionRequest };
+  /**
+   * OpenCode asks a person to allow a call: the run parks on it. `alwaysAsks`: the kind of ask
+   * a person's earlier Allow never covers (see {@link OPENCODE_ALWAYS_ASK_PERMISSIONS}).
+   */
+  permission?: { requestId: string; request: PermissionRequest; alwaysAsks?: true };
   /** OpenCode asks a person a question: the run parks on it as an `AskUserQuestion`. */
   question?: { requestId: string; request: PermissionRequest; questions: OpenCodeQuestion[] };
   /** The session went idle: the turn is over (see {@link OpenCodeTurnTranslator.outcome}). */
@@ -167,6 +184,13 @@ export class OpenCodeTurnTranslator {
   readonly #emittedParts = new Set<string>();
   readonly #tools = new Map<string, ToolState>();
   readonly #answered = new Set<string>();
+  readonly #steps = new Set<string>();
+  readonly #promptedAt: number | undefined;
+  /**
+   * OpenCode took the turn's prompt (its session went busy, the person's message came in): until
+   * then an idle is an earlier turn's, not this one's end.
+   */
+  #admitted = false;
   #lastText: { messageId: string; text: string } | undefined;
   #error: OpenCodeError | undefined;
   #idle = false;
@@ -177,6 +201,7 @@ export class OpenCodeTurnTranslator {
     this.sessionId = options.sessionId;
     this.#mcpServers = options.mcpServers ?? [];
     this.#planning = options.planning === true;
+    this.#promptedAt = options.promptedAt;
   }
 
   get completed(): boolean {
@@ -191,6 +216,17 @@ export class OpenCodeTurnTranslator {
   /** The person answered a call the turn parked on: its card is settled already. */
   answered(toolCallId: string): void {
     this.#answered.add(toolCallId);
+  }
+
+  /**
+   * A session the stream has not tied to the turn yet asks something: OpenCode said (`GET /session`)
+   * it was started by `parentSessionId`. A subagent of the turn is the turn's.
+   */
+  adoptChild(sessionId: string, parentSessionId: string | undefined): boolean {
+    if (this.accepts(sessionId)) return true;
+    if (!parentSessionId || !this.accepts(parentSessionId)) return false;
+    this.#children.set(sessionId, this.#childCall(sessionId));
+    return true;
   }
 
   /** The turn was stopped on purpose: the error OpenCode reports for it is not a failure. */
@@ -225,6 +261,11 @@ export class OpenCodeTurnTranslator {
         const id = str(info.id);
         const role = str(info.role);
         if (id && role) this.#roles.set(id, role);
+        if (role === 'user' && p.sessionID === this.sessionId) {
+          const created = record(info.time).created;
+          // Five seconds of slack: OpenCode's clock is this host's, but the stamp is taken on its side.
+          if (this.#promptedAt === undefined || typeof created !== 'number' || created >= this.#promptedAt - 5_000) this.#admitted = true;
+        }
         if (role === 'assistant' && p.sessionID === this.sessionId && info.error && !this.#error) {
           const error = record(info.error) as OpenCodeErrorPayload;
           if (error.name !== 'MessageAbortedError') this.#error = openCodeErrorFrom(error);
@@ -256,6 +297,7 @@ export class OpenCodeTurnTranslator {
       case 'session.status': {
         if (p.sessionID !== this.sessionId) return { entries: [] };
         const status = record(p.status);
+        if (status.type === 'busy' || status.type === 'retry') this.#admitted = true;
         if (status.type === 'retry') {
           const message = str(status.message) ?? '';
           if (isTerminalRetry(message)) {
@@ -274,6 +316,8 @@ export class OpenCodeTurnTranslator {
         const error = record(p.error) as OpenCodeErrorPayload;
         if (error.name === 'MessageAbortedError') return { entries: [] };
         this.#error ??= openCodeErrorFrom(error);
+        // OpenCode refused the prompt before it ran it (no busy, so no idle will follow): the turn is over.
+        if (!this.#admitted) return { entries: [], terminal: this.#error };
         return { entries: [] };
       }
       default:
@@ -282,7 +326,7 @@ export class OpenCodeTurnTranslator {
   }
 
   #markIdle(): OpenCodeTurnUpdate {
-    if (this.#idle) return { entries: [] };
+    if (this.#idle || !this.#admitted) return { entries: [] };
     this.#idle = true;
     return { entries: this.#closingEntries(), idle: true };
   }
@@ -325,16 +369,25 @@ export class OpenCodeTurnTranslator {
         return { entries: this.#nest(this.#tool(part), sessionId) };
       case 'step-finish': {
         if (sessionId !== this.sessionId) return { entries: [] };
+        // A step's part may be sent again (updated); its tokens count once.
+        if (partId) {
+          if (this.#steps.has(partId)) return { entries: [] };
+          this.#steps.add(partId);
+        }
         const tokens = record(part.tokens);
         const cache = record(tokens.cache);
         const num = (value: unknown) => (typeof value === 'number' ? value : 0);
+        // OpenCode counts cache reads and writes, and reasoning, apart; the contract counts them inside
+        // the prompt and the completion, as Claude Code's and Codex's usage does.
+        const promptTokens = num(tokens.input) + num(cache.read) + num(cache.write);
+        const completionTokens = num(tokens.output) + num(tokens.reasoning);
         const usage: AgentTokenUsage = {
-          promptTokens: num(tokens.input),
-          completionTokens: num(tokens.output),
+          promptTokens,
+          completionTokens,
           reasoningTokens: num(tokens.reasoning),
           cachedInputTokens: num(cache.read),
           cacheCreationInputTokens: num(cache.write),
-          totalTokens: num(tokens.total) || num(tokens.input) + num(tokens.output) + num(tokens.reasoning) + num(cache.read) + num(cache.write),
+          totalTokens: num(tokens.total) || promptTokens + completionTokens,
         };
         for (const key of Object.keys(usage) as Array<keyof AgentTokenUsage>) this.#usage[key] = (this.#usage[key] ?? 0) + (usage[key] ?? 0);
         return { entries: [], usage };
@@ -375,13 +428,20 @@ export class OpenCodeTurnTranslator {
       const call = openCodeToolCall(tool, state.input, this.#mcpServers);
       known.started = true;
       known.toolName = call.toolName;
+      known.input = call.input;
       entries.push({ kind: 'tool_call', toolCallId: callId, toolName: call.toolName, input: call.input });
     }
     if (!known.finished && (status === 'completed' || status === 'error')) {
       known.finished = true;
       if (status === 'completed') {
         const output = known.toolName === OPENCODE_TOOL_NAMES.tasks ? 'Plan updated.' : (str(state.output) ?? '');
-        entries.push({ kind: 'tool_result', toolCallId: callId, content: output, isError: false });
+        // A command that exited non-zero failed, as a Codex command does; OpenCode still calls the call completed.
+        const exit = tool === 'bash' && typeof metadata.exit === 'number' && metadata.exit !== 0 ? metadata.exit : undefined;
+        entries.push(
+          exit === undefined
+            ? { kind: 'tool_result', toolCallId: callId, content: output, isError: false }
+            : { kind: 'tool_result', toolCallId: callId, content: [output.trimEnd(), `Exit code ${exit}`].filter(Boolean).join('\n\n'), isError: true },
+        );
       } else {
         entries.push({ kind: 'tool_result', toolCallId: callId, content: str(state.error) ?? 'The call failed.', isError: true });
       }
@@ -403,13 +463,14 @@ export class OpenCodeTurnTranslator {
     let input: Input;
     if (known?.started) {
       toolName = known.toolName;
-      input = {};
+      // The card says what is asked about: the call's own input, as the transcript showed it.
+      input = known.input ?? permissionInput(permission, patterns, metadata).input;
     } else {
       const asked = permissionInput(permission, patterns, metadata);
       const call = openCodeToolCall(asked.tool, asked.input, this.#mcpServers);
       toolName = call.toolName;
       input = call.input;
-      this.#tools.set(callId, { callId, toolName, started: true, finished: false });
+      this.#tools.set(callId, { callId, toolName, input, started: true, finished: false });
       entries.push({ kind: 'tool_call', toolCallId: callId, toolName, input });
     }
     // The diff OpenCode shows with an edit's ask goes with the card, so the person sees what they allow.
@@ -417,7 +478,9 @@ export class OpenCodeTurnTranslator {
     const parent = this.#parent(sessionId);
     const request: PermissionRequest = { toolCallId: callId, toolName, input, ...(parent ? { parentToolCallId: parent } : {}) };
     entries.push({ kind: 'permission', ...request });
-    return { entries: this.#nest(entries, sessionId), permission: { requestId, request } };
+    this.#admitted = true;
+    const alwaysAsks = OPENCODE_ALWAYS_ASK_PERMISSIONS.includes(permission);
+    return { entries: this.#nest(entries, sessionId), permission: { requestId, request, ...(alwaysAsks ? { alwaysAsks: true as const } : {}) } };
   }
 
   #question(p: Input): OpenCodeTurnUpdate {
@@ -446,6 +509,7 @@ export class OpenCodeTurnTranslator {
     };
     const parent = this.#parent(sessionId);
     const request: PermissionRequest = { toolCallId: callId, toolName: ASK_USER_QUESTION_TOOL, input, ...(parent ? { parentToolCallId: parent } : {}) };
+    this.#admitted = true;
     return {
       entries: this.#nest([{ kind: 'tool_call', toolCallId: callId, toolName: ASK_USER_QUESTION_TOOL, input }, { kind: 'permission', ...request }], sessionId),
       question: { requestId, request, questions },

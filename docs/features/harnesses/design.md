@@ -28,6 +28,8 @@
 - Дозволи: `edit` / `bash` з налаштувань Factory (без налаштування — питати); вихід за межі чекауту питає завжди; «дозволити все» немає. Питання (`question`) — картка `AskUserQuestion`; планування — агент `plan`.
 - Запуск від імені агента (ADR-0041): `opencode` копіює `agent-tools`; профіль Seatbelt діє.
 - Перевірка на справжньому CLI: `FACTORY_OPENCODE_SMOKE_COMMAND=$(which opencode) npx vitest run src/real-cli.integration.test.ts` у пакеті.
+- Дозволи: перше правило конфігу — `*: ask` (інструмент без правила, як-от MCP-сервер з `opencode.json` чекауту, питає), MCP Factory — `<server>_*: allow`; `external_directory` і `doom_loop` дозволяються лише раз, не на нитку. Зміна налаштувань між ходами одного запуску перезапускає сервер з новими правилами в тій самій сесії OpenCode.
+- Паритет тестів із t3code (що перенесено, що н/з і чому, знайдені помилки) — [opencode-test-parity.md](opencode-test-parity.md).
 
 ## Спільне
 

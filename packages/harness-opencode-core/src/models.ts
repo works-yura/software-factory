@@ -8,7 +8,7 @@ import { createModelCapabilities, getModelSelectionStringOptionValue, modelSelec
 import { resolveModelDefault } from '@factory/harness/models/defaults';
 import { checkModelSelection, EFFORT_OPTION_ID, modelSwitchBetween } from '@factory/harness/models/selection';
 
-import type { OpenCodeProviderList, OpenCodeProviderModel } from './client.ts';
+import { OpenCodeHttpError, type OpenCodeProviderList, type OpenCodeProviderModel } from './client.ts';
 import type { OpenCodeTurnModelSelection } from './session.ts';
 
 /** `ModelSelection.instanceId` of every OpenCode selection, and `harnessModelDefaults.opencode`. */
@@ -134,7 +134,9 @@ export function createOpenCodeCatalogSource(options: {
       }
       return { state: { available: true, models, ...(result.version ? { version: result.version } : {}) }, ttl: options.ttlMs ?? DEFAULT_CATALOG_TTL_MS };
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      // What the server answered stays in the logs: a person reads the status, not the body.
+      const reason = error instanceof OpenCodeHttpError ? `HTTP ${error.status}` : error instanceof Error ? error.message : String(error);
+      if (error instanceof OpenCodeHttpError) console.warn('[opencode harness] The catalog probe failed.', error);
       return { state: { available: false, reason: `OpenCode could not list its models: ${reason}`, models: [] }, ttl: FAILED_PROBE_TTL_MS };
     }
   };
