@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { agentConfig, agentUserReady, asAgent, asServer } from './agent-shell.ts';
-import { ownerListeners, portProbes, readProbes, writeProbes } from './escape-probes.ts';
+import { fileProbes, ownerListeners, portProbes, readProbes, writeProbes } from './escape-probes.ts';
 
 const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 const ready = agentUserReady();
@@ -40,6 +40,10 @@ describe.runIf(ready).each(['off', 'on'] as const)('as the agent user, Seatbelt 
     // Removed again by the agent if it ever gets in, so a failure leaves nothing behind.
     const { code } = await asAgent(config, `: > ${file} && rm -f ${file}`);
     expect(code).not.toBe(0);
+  });
+
+  it.each(fileProbes.filter(probe => existsSync(probe.path)))('cannot $what', async ({ path, test }) => {
+    expect((await asAgent(config, `/bin/test ${test} ${quote(path)}`)).code).not.toBe(0);
   });
 
   // Every port the owner listens on, found at run time: an app's local API or a simulator's
