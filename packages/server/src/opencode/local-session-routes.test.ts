@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 
-import { buildOpenCodeLocalSessionRoutes } from './opencode-local-sessions.ts';
-import type { OpenCodeLocalSessionHistory, OpenCodeLocalSessionsService } from './opencode-local-sessions.ts';
-import type { ClaudeCodeUserSessions } from './source-control-sessions.ts';
+import { buildOpenCodeLocalSessionRoutes } from './local-session-routes.ts';
+import type { OpenCodeLocalSessionHistory, OpenCodeLocalSessionsService } from './local-session-routes.ts';
+import type { ClaudeCodeUserSessions } from '@factory/api';
 
 const user = { id: 'user-1', organizationId: 'org-1' };
 

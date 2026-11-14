@@ -5,6 +5,8 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import { MASTRA_HARNESS } from '@factory/contracts';
+import type { HarnessDescriptor } from '@factory/harness/descriptor';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 
 import { externalSessionFor } from '@factory/integrations';
@@ -69,6 +71,8 @@ type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IU
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
+  /** The harnesses the server knows (ADR-0044): how the routes name a turn harness. */
+  harnesses?: readonly Pick<HarnessDescriptor, 'id' | 'label'>[];
   projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
@@ -120,16 +124,20 @@ export interface SourceControlSessionRoutesOptions {
   createLocalCheckout?: LocalCheckoutAttacher;
 }
 
-/** How the session routes reach the Claude Code harness for personal sessions. */
-/** The harnesses whose sessions live in their own store and reach the chat through the session UI. */
-export const TURN_HARNESSES = ['claude-code', 'codex', 'opencode'] as const;
-export type TurnHarnessKind = (typeof TURN_HARNESSES)[number];
+/**
+ * A harness whose sessions live in its own store and reach the chat through the session UI: every
+ * harness but Mastra, the base one (ADR-0044). Its id as the Factory stores it.
+ */
+export type TurnHarnessKind = string;
 
 export function isTurnHarness(value: unknown): value is TurnHarnessKind {
-  return TURN_HARNESSES.some(harness => harness === value);
+  return typeof value === 'string' && value !== MASTRA_HARNESS.id;
 }
 
-const TURN_HARNESS_LABELS: Record<TurnHarnessKind, string> = { 'claude-code': 'Claude Code', codex: 'Codex', opencode: 'OpenCode' };
+/** A turn harness's name in the session routes' messages: its descriptor's label, else its id. */
+function turnHarnessLabel(options: Pick<SourceControlSessionRoutesOptions, 'harnesses'>, harness: TurnHarnessKind): string {
+  return options.harnesses?.find(descriptor => descriptor.id === harness)?.label ?? harness;
+}
 
 export interface ClaudeCodeUserSessions {
   /** The session behind a session id and the harness that runs it, or undefined when none of these harnesses does. */
@@ -149,7 +157,7 @@ export interface ClaudeCodeUserSessions {
 
 /** What a personal session of a Claude Code or Codex Factory needs and this server cannot give, or undefined. */
 function turnHarnessRefusal(options: SourceControlSessionRoutesOptions, harness: TurnHarnessKind = 'claude-code'): string | undefined {
-  const label = TURN_HARNESS_LABELS[harness];
+  const label = turnHarnessLabel(options, harness);
   const sessions = options.claudeCode;
   if (!sessions || !(sessions.harnesses ?? ['claude-code']).includes(harness)) {
     return `This Factory runs on ${label}, but this server has no ${label} harness. Switch the Factory's harness to Mastra in Settings → Models, or configure ${label} on the server.`;
@@ -372,7 +380,7 @@ async function startPersonalSession(
   if (held || isTurnHarness(harness)) {
     const kind: TurnHarnessKind = held ? (held.harness ?? 'claude-code') : (harness as TurnHarnessKind);
     const refused = held ? undefined : turnHarnessRefusal(options, kind);
-    if (refused || !options.claudeCode) return { refused: refused ?? `${TURN_HARNESS_LABELS[kind]} is unavailable.` };
+    if (refused || !options.claudeCode) return { refused: refused ?? `${turnHarnessLabel(options, kind)} is unavailable.` };
     await options.claudeCode.start({
       session,
       resourceId: held?.resourceId ?? userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
@@ -385,19 +393,23 @@ async function startPersonalSession(
 }
 
 /**
- * A personal session that continues one of the person's own OpenCode sessions: created on the
- * repository they chose, on the OpenCode harness whatever the Factory's harness is (the history is
- * OpenCode's), and shared on the Factory unless they keep it private. Refused before anything is
- * written when the repository is not this organization's or OpenCode cannot run here.
+ * A personal session that continues a session the person had in a harness of their own (OpenCode's,
+ * ADR-0043): created on the repository they chose, on that harness whatever the Factory's harness is
+ * (the history is that harness's), and shared on the Factory unless they keep it private. Refused
+ * (`unavailableError`) before anything is written when the repository is not this organization's or
+ * the harness cannot run here.
  */
-export async function createOpenCodeImportSession(
+export async function createImportedTurnSession(
   options: SourceControlSessionRoutesOptions,
+  target: { harness: TurnHarnessKind; unavailableError: string },
   input: { orgId: string; userId: string; projectRepositoryId: string; title: string; visibility: 'private' | 'org' },
 ): Promise<{ session: SourceControlSession; payload: ReturnType<typeof createdSessionPayload> } | { status: 404 | 409; error: string; message: string }> {
   const project = await resolveProjectRepository(options.sourceControls, input.orgId, input.projectRepositoryId);
   if (!project) return { status: 404, error: 'not_found', message: 'Project repository not found' };
-  const refused = turnHarnessRefusal(options, 'opencode');
-  if (refused || !options.claudeCode) return { status: 409, error: 'opencode_unavailable', message: refused ?? 'OpenCode is unavailable.' };
+  const refused = turnHarnessRefusal(options, target.harness);
+  if (refused || !options.claudeCode) {
+    return { status: 409, error: target.unavailableError, message: refused ?? `${turnHarnessLabel(options, target.harness)} is unavailable.` };
+  }
   const sessionId = globalThis.crypto.randomUUID();
   const session = await project.sourceControl.sessions.create({
     sessionId,
@@ -413,9 +425,9 @@ export async function createOpenCodeImportSession(
   await options.claudeCode.start({
     session,
     resourceId: userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
-    harness: 'opencode',
+    harness: target.harness,
   });
-  return { session, payload: createdSessionPayload(options, session, 'opencode') };
+  return { session, payload: createdSessionPayload(options, session, target.harness) };
 }
 
 /**
@@ -854,7 +866,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           // That clones over the network and can outlast the request, so it runs in the background.
           const createLocalCheckout = options.createLocalCheckout;
           if (createLocalCheckout) {
-            const label = TURN_HARNESS_LABELS[turnSession.harness ?? 'claude-code'];
+            const label = turnHarnessLabel(options, turnSession.harness ?? 'claude-code');
             startSessionSandboxInBackground(session.sessionId, async () => {
               if (!(await createLocalCheckout(session))) {
                 throw new NothingToStartError(
@@ -866,7 +878,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           }
           return c.json(
             {
-              error: `This ${TURN_HARNESS_LABELS[turnSession.harness ?? 'claude-code']} session has no checkout on disk yet: its first message creates it, so send it a message.`,
+              error: `This ${turnHarnessLabel(options, turnSession.harness ?? 'claude-code')} session has no checkout on disk yet: its first message creates it, so send it a message.`,
             },
             409,
           );
@@ -1056,7 +1068,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         // A turn-based harness's session keeps the resource it was created on in its own store; moving it is not supported yet.
         const turnSession = await options.claudeCode?.get(sessionId);
         if (turnSession) {
-          return c.json({ error: `${TURN_HARNESS_LABELS[turnSession.harness ?? 'claude-code']} sessions can't change visibility yet.` }, 409);
+          return c.json({ error: `${turnHarnessLabel(options, turnSession.harness ?? 'claude-code')} sessions can't change visibility yet.` }, 409);
         }
         // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
         if (visibility === 'org' && !row.factoryProjectId) {

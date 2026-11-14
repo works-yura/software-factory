@@ -9,8 +9,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { createOpenCodeImportSession, resolveOrgTenant } from './source-control-sessions.ts';
-import type { SourceControlSessionRoutesOptions } from './source-control-sessions.ts';
+import { createImportedTurnSession, resolveOrgTenant } from '@factory/api';
+import type { SourceControlSessionRoutesOptions } from '@factory/api';
 
 /** One of the person's OpenCode sessions, as the list reads it. */
 export interface OpenCodeLocalSessionItem {
@@ -122,7 +122,7 @@ export function buildOpenCodeLocalSessionRoutes(options: OpenCodeLocalSessionRou
         } catch (error) {
           return c.json({ error: 'unreadable', message: message(error) }, 409);
         }
-        const created = await createOpenCodeImportSession(options, {
+        const created = await createImportedTurnSession(options, { harness: 'opencode', unavailableError: 'opencode_unavailable' }, {
           orgId,
           userId,
           projectRepositoryId,

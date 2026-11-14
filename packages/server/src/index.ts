@@ -78,3 +78,7 @@ export type {
 export { attachOnFirstRequest, DEVICE_BASE_PATH } from './device.ts';
 export type { FactoryDeviceConfig } from './device.ts';
 export * from './agent-user/index.ts';
+// The harness modules (ADR-0044): the registry, the module shape and the deployment's harness configs.
+export { harnessConfigsFromEnv, mastraHarnessModule, SERVER_HARNESS_MODULES } from './harnesses/registry.ts';
+export type { HarnessModuleConfigs } from './harnesses/registry.ts';
+export type * from './harnesses/module.ts';

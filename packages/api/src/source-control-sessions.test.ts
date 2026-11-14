@@ -1,3 +1,4 @@
+import { HARNESSES } from '@factory/contracts';
 import { stateSchema } from '@mastra/code-sdk/schema';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import { Agent } from '@mastra/core/agent';
@@ -1481,6 +1482,8 @@ describe('personal sessions of a Claude Code Factory', () => {
       buildSourceControlSessionRoutes({
         auth: fakeRouteAuth(),
         sourceControls: [seed.sourceControl],
+        // The server names each harness in its messages by its descriptor (ADR-0044).
+        harnesses: HARNESSES,
         projects: seed.seed.projects,
         memorySettings: seed.seed.memorySettings,
         ...(controller ? { controller } : {}),

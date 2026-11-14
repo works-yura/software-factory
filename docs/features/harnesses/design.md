@@ -22,9 +22,9 @@
 - Один `opencode serve` на запуск: `127.0.0.1`, вільний порт, власний пароль; HTTP + SSE (`/event`), без SDK. Мінімальна версія CLI — 1.14.19.
 - Стан OpenCode — у власних `XDG_*` теках сесії (`~/.mastracode/web/opencode-sessions-home/<сесія>`), без ключів і входу; `~/.config/opencode` людини не читається. Конфіг Factory (дозволи, MCP `factory` з токеном запуску) — `OPENCODE_CONFIG_CONTENT`.
 - Моделі — безкоштовні моделі OpenCode Zen (`opencode/big-pickle` типова), у виборі з позначкою «Безкоштовно». **На репозиторіях клієнтів — лише зі згоди клієнта.** З обліковим записом організації — також платні моделі Zen і OpenCode Go.
-- Обліковий запис OpenCode (ADR-0043, доповнення 1): конектор «OpenCode» у Налаштуваннях › Підключення, ключ із консолі OpenCode (перевіряється при додаванні), на рівні організації. Запуск входить із ним через `OPENCODE_AUTH_CONTENT`; без запису — безкоштовні моделі. `packages/server/src/opencode/accounts.ts`, `packages/api/src/opencode-connections.ts`.
+- Обліковий запис OpenCode (ADR-0043, доповнення 1): конектор «OpenCode» у Налаштуваннях › Підключення, ключ із консолі OpenCode (перевіряється при додаванні), на рівні організації. Запуск входить із ним через `OPENCODE_AUTH_CONTENT`; без запису — безкоштовні моделі. `packages/server/src/opencode/accounts.ts`, `packages/server/src/opencode/connections.ts`.
 - Ліміти: вікна OpenCode Go (5 год, тиждень, місяць) — на сторінці підключення й у переглядах використання; вичерпаний запис виходить із ротації до скидання; чат-сесія паркується, коли час повернення відомий. Безкоштовні моделі часу не кажуть — хід завершується з їхніми словами.
-- «Продовжити сесію OpenCode» (лише на власній машині людини): список її сесій із `~/.local/share/opencode/opencode.db` (лише читання), нова приватна сесія Factory на OpenCode з історією й handoff на перший хід. `packages/harness-opencode-core/src/local-sessions.ts`, `packages/server/src/opencode/local-import.ts`, `packages/api/src/opencode-local-sessions.ts`, UI — `OpenCodeImportDialog.tsx`.
+- «Продовжити сесію OpenCode» (лише на власній машині людини): список її сесій із `~/.local/share/opencode/opencode.db` (лише читання), нова приватна сесія Factory на OpenCode з історією й handoff на перший хід. `packages/harness-opencode-core/src/local-sessions.ts`, `packages/server/src/opencode/local-import.ts`, `packages/server/src/opencode/local-session-routes.ts`, UI — `OpenCodeImportDialog.tsx`.
 - Дозволи: `edit` / `bash` з налаштувань Factory (без налаштування — питати); вихід за межі чекауту питає завжди; «дозволити все» немає. Питання (`question`) — картка `AskUserQuestion`; планування — агент `plan`.
 - Запуск від імені агента (ADR-0041): `opencode` копіює `agent-tools`; профіль Seatbelt діє.
 - Перевірка на справжньому CLI: `FACTORY_OPENCODE_SMOKE_COMMAND=$(which opencode) npx vitest run src/real-cli.integration.test.ts` у пакеті.
@@ -32,6 +32,8 @@
 - Паритет тестів із t3code (що перенесено, що н/з і чому, знайдені помилки) — [opencode-test-parity.md](opencode-test-parity.md).
 
 ## Спільне
+
+- Кожен harness — модуль (ADR-0044): `packages/server/src/<harness>/module.ts` реалізує `TurnHarnessModule` (`FactoryHarnessModule` з `@factory/harness/module`) і стоїть одним рядком у `SERVER_HARNESS_MODULES` (`packages/server/src/harnesses/registry.ts`). Сервер, API (`/web/config/features`, підключення, власні маршрути) і `apps/server` (конфіг з env) проходять цей список і harness не називають. Новий harness: модуль + рядок у реєстрі + дескриптор у `HARNESSES` (`@factory/contracts`) і id у `FACTORY_HARNESSES` (`@factory/store`); тест реєстру звіряє їх.
 
 - Рядок мови агентів додається в інструкції обох harness щоходу (`packages/server/src/agent-language.ts`).
 - Сесії карток працюють у пісочниці картки: одна папка на картку, спільна для її сесій.

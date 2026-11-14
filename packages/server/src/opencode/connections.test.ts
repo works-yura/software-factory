@@ -8,8 +8,8 @@ import { buildConnectionRoutes } from '@factory/integrations';
 import { describeConnectorContract } from '@factory/integrations/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 
-import { createOpenCodeAccountsConnections } from './opencode-connections.ts';
-import type { OpenCodeKeyCheck } from './opencode-connections.ts';
+import { createOpenCodeAccountsConnections } from './connections.ts';
+import type { OpenCodeKeyCheck } from './connections.ts';
 
 const now = new Date('2026-11-14T12:00:00.000Z');
 const connector = OPENCODE_HARNESS.setup.accounts!.connector;
