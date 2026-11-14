@@ -93,6 +93,23 @@ describe('condition rows', () => {
     expect(label('event.reason', 'canceled')).toBe('Not planned');
   });
 
+  it('offer a GitHub route the Dependabot alert kind and its severity', () => {
+    const github = ['source.repository', 'source.kind', 'author.trusted', 'item.labels', 'item.title', 'item.assignees', 'alert.severity', 'alert.ecosystem', 'alert.package'];
+    const fields = conditionFields(factsFor(intakeRouteFacts(['work_item.created']), github));
+    const kinds = fields.find(field => field.id === 'source.kind')?.suggestions;
+    expect(Array.isArray(kinds) && kinds.find(option => option.value === 'dependabot_alert')?.label).toBe('Dependabot alert');
+    const severity = fields.find(field => field.id === 'alert.severity');
+    expect(Array.isArray(severity?.suggestions) && severity.suggestions.map(option => option.value)).toEqual([
+      'critical',
+      'high',
+      'medium',
+      'low',
+    ]);
+    expect(describeRule({ operator: 'AND', conditions: [{ field: 'alert.severity', operator: 'in', value: ['critical', 'high'] }] })).toBe(
+      'Alert severity is critical or high',
+    );
+  });
+
   it('offer event facts only to routes that handle an event besides new cards', () => {
     const ids = (on: string[]) => conditionFields(intakeRouteFacts(on)).map(field => field.id);
 

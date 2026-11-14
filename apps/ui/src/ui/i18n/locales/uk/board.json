@@ -5,6 +5,7 @@
     "gitlab-issue": "GitLab",
     "gitlab-pr": "Рев'ю MR",
     "clickup-task": "ClickUp",
+    "github-dependabot-alert": "Dependabot",
     "manual": "Вручну"
   },
   "pullRequestStatus": {

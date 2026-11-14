@@ -19,6 +19,7 @@ const WORK_ITEM_SOURCES = [
   'gitlab-issue',
   'gitlab-pr',
   'clickup-task',
+  'github-dependabot-alert',
   'manual',
 ] as const satisfies readonly WorkItemSource[];
 

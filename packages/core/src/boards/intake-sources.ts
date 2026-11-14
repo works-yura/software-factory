@@ -58,6 +58,8 @@ const REPO_HOST_EVENTS = [
   'pull_request.closed',
 ] as const;
 const REPO_HOST_FIELDS = ['source.repository', 'source.kind', 'author.trusted', 'item.labels', 'item.title', 'item.assignees'];
+/** GitHub's fields: a repository host's, and a Dependabot alert's (`source.kind = dependabot_alert`). */
+const GITHUB_FIELDS = [...REPO_HOST_FIELDS, 'alert.severity', 'alert.ecosystem', 'alert.package'];
 /** The fields only a repository host's cards have: a route testing one names its host (see the migration). */
 export const REPO_HOST_ONLY_FIELDS: readonly string[] = ['source.repository', 'source.kind', 'author.trusted'];
 
@@ -76,7 +78,7 @@ export const BUILT_IN_INTAKE_SOURCES: readonly IntakeSourceDescriptor[] = [
     id: 'github',
     integrations: ['github'],
     events: [...REPO_HOST_EVENTS],
-    fields: REPO_HOST_FIELDS,
+    fields: GITHUB_FIELDS,
     availability: { via: 'linked-repository', integrationId: 'github' },
     wording: 'git',
   },

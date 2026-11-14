@@ -529,6 +529,16 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   const verifyState = (state: string | undefined) => stateSigner.verify(state);
 
   routes.push(
+    // Settings › Надходження задач: how the last Dependabot sweep went per repository (ADR-0042).
+    registerApiRoute('/web/github/dependabot/status', {
+      method: 'GET',
+      handler: async c => {
+        await auth.ensureUser(loose(c));
+        const tenant = auth.tenant(loose(c));
+        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+        return c.json({ repositories: github.dependabotStatus(tenant.orgId) });
+      },
+    }),
     registerApiRoute('/web/github/subscriptions', {
       method: 'GET',
       handler: async c => {
@@ -568,6 +578,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const result = await handleGithubWebhook(loose(c), {
           github,
           ingestFactoryEvent: options.ingestFactoryEvent,
+          onDependabotAlert: payload => github.onDependabotAlertWebhook(payload),
           ...(options.controller
             ? {
                 controller: options.controller,

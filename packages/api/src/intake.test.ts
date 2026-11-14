@@ -32,7 +32,11 @@ const integrations = [
   { id: 'gitlab', intake: gitlab },
 ];
 
-function buildApp(user: { id: string; organizationId?: string } | null, intakeIntegrations = integrations) {
+function buildApp(
+  user: { id: string; organizationId?: string } | null,
+  intakeIntegrations = integrations,
+  switches?: readonly string[],
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -45,6 +49,7 @@ function buildApp(user: { id: string; organizationId?: string } | null, intakeIn
       audit,
       intake: seed.intake,
       integrations: intakeIntegrations,
+      ...(switches ? { switches } : {}),
     }).routes(),
   );
   return app;
@@ -64,6 +69,31 @@ describe('intake configuration', () => {
   it('requires an authenticated organization', async () => {
     expect((await buildApp(null).request('/web/intake/config')).status).toBe(401);
     expect((await buildApp({ id: 'u1' }).request('/web/intake/config')).status).toBe(403);
+  });
+
+  it('keeps an integration\'s further switch (GitHub\'s Dependabot) off until saved on', async () => {
+    const app = buildApp(orgUser, integrations, ['dependabot']);
+    expect((await (await app.request('/web/intake/config')).json()).config.dependabot).toEqual({
+      enabled: false,
+      sourceIds: null,
+    });
+    const saved = await app.request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependabot: { enabled: true, sourceIds: null } }),
+    });
+    expect(saved.status).toBe(200);
+    expect((await (await app.request('/web/intake/config')).json()).config.dependabot).toEqual({
+      enabled: true,
+      sourceIds: null,
+    });
+    // Without the switch registered, turning it on is refused.
+    const refused = await buildApp(orgUser).request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependabot: { enabled: true, sourceIds: null } }),
+    });
+    expect(refused.status).toBe(400);
   });
 
   it('defaults every configured capability to disabled with no selected sources', async () => {

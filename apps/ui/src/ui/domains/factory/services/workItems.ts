@@ -28,6 +28,7 @@ export type WorkItemSource =
   | 'gitlab-issue'
   | 'gitlab-pr'
   | 'clickup-task'
+  | 'github-dependabot-alert'
   | 'manual';
 
 /** Takes any source string so callers holding a wider union (a user session's `'user'`) need no guard. */
@@ -201,6 +202,7 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (source.integrationId === 'gitlab' && source.type === 'issue') return 'gitlab-issue';
   if (source.integrationId === 'gitlab' && source.type === 'pull-request') return 'gitlab-pr';
   if (source.integrationId === 'clickup' && source.type === 'task') return 'clickup-task';
+  if (source.integrationId === 'github' && source.type === 'dependabot-alert') return 'github-dependabot-alert';
   return 'manual';
 }
 
@@ -218,6 +220,8 @@ function externalSourceTarget(
       return { integrationId: 'gitlab', type: 'pull-request' };
     case 'clickup-task':
       return { integrationId: 'clickup', type: 'task' };
+    case 'github-dependabot-alert':
+      return { integrationId: 'github', type: 'dependabot-alert' };
   }
 }
 

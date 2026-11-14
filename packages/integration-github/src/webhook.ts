@@ -18,6 +18,8 @@ export interface GithubWebhookHandlerOptions {
   /** Integration providing webhook-secret verification + collaborator permission checks. */
   github: GithubIntegration;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  /** A `dependabot_alert` delivery: the Dependabot sweep reads that repository now (ADR-0042). */
+  onDependabotAlert?: (payload: Record<string, unknown>) => Promise<void>;
 }
 
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
@@ -29,6 +31,8 @@ const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   // Direct pushes to the default branch drive base-checkpoint rebuilds and
   // the environment build hand-off; the subscription dispatcher ignores them.
   'push',
+  // Dependabot alerts go to their own sweep, not the rules ingress or the sessions.
+  'dependabot_alert',
 ]);
 
 export interface GithubWebhookMetadata {
@@ -601,6 +605,15 @@ export async function handleGithubWebhook(
 
   const metadata = normalizeGithubWebhookMetadata(parsed);
   console.info('[GitHub Webhook]', metadata);
+
+  if (parsed.event === 'dependabot_alert') {
+    if (!options.onDependabotAlert) return { status: 202, body: { ok: true, ignored: true } };
+    // The sweep reads the alert back through the connection, so a forged body can't file anything.
+    await options.onDependabotAlert(parsed.payload).catch((error: unknown) => {
+      console.warn('[GitHub Webhook] Dependabot sweep for the delivery failed', { deliveryId: parsed.deliveryId, error });
+    });
+    return { status: 202, body: { ok: true } };
+  }
 
   const { ignored } = await deliverGithubEvent(parsed, options);
   return { status: 202, body: { ok: true, ...(ignored ? { ignored: true as const } : {}) } };

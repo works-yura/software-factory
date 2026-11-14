@@ -20,6 +20,8 @@ export interface IntakeConfig {
   github: IntakeSelection;
   gitlab: IntakeSelection;
   clickup: IntakeSelection;
+  /** GitHub's Dependabot alerts (ADR-0042): a switch only, its sources are the linked repositories. */
+  dependabot: IntakeSelection;
 }
 
 /**
@@ -38,6 +40,7 @@ function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | n
     github: raw?.github ?? { enabled: false, sourceIds: null },
     gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
     clickup: raw?.clickup ?? { enabled: false, sourceIds: null },
+    dependabot: raw?.dependabot ?? { enabled: false, sourceIds: null },
   };
 }
 

@@ -228,6 +228,11 @@ export interface FactoryIntegration {
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
   /**
+   * Further intake switches the organization turns on in Settings beside the integration's own
+   * (`intake config` keys, off until enabled): GitHub's `dependabot` (ADR-0042).
+   */
+  readonly intakeSwitches?: readonly string[];
+  /**
    * Storage domains the integration can't work without, beyond the generic `integrations` domain
    * (e.g. `boards` for an integration that imports through intake routes). The factory counts the
    * integration ready only when they are, and logs which are missing otherwise: a not-ready
