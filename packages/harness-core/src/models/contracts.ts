@@ -171,7 +171,7 @@ export const ServerProviderModel = z.object({
   shortName: TrimmedNonEmptyString.optional(),
   subProvider: TrimmedNonEmptyString.optional(),
   aliases: z.array(TrimmedNonEmptyString).readonly().optional(),
-  badge: z.literal("new").optional(),
+  badge: z.enum(["new", "free"]).optional(),
   isCustom: z.boolean(),
   isDefault: z.boolean().optional(),
   isLegacy: z.boolean().optional(),
@@ -182,7 +182,7 @@ export type ServerProviderModel = z.infer<typeof ServerProviderModel>;
 export const ServerProviderUpdateRequiredModel = z.object({
   slug: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
-  badge: z.literal("new").optional(),
+  badge: z.enum(["new", "free"]).optional(),
   minVersion: TrimmedNonEmptyString,
 });
 export type ServerProviderUpdateRequiredModel = z.infer<typeof ServerProviderUpdateRequiredModel>;

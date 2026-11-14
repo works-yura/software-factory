@@ -1,0 +1,25 @@
+{
+  "name": "@factory/harness-opencode",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenCode harness: Factory sessions run as sessions of an `opencode serve` process started per run, so OpenCode's own models (its free ones included) work through the CLI, with OpenCode's permission asks and questions parked as the Factory's human gates.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/harness": "workspace:*",
+    "@factory/harness-claude-code": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
