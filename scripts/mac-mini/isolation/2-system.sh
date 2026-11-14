@@ -405,7 +405,7 @@ agent_tools() {
   rm -rf "$agent_home/.local/node"
   ditto "$node_dir" "$agent_home/.local/node"
   chown -R "$AGENT_USER:staff" "$agent_home/.local/node"
-  say "  as the agent: $(sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/bin:$agent_home/.local/node/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "claude $(claude --version 2>/dev/null | head -1), node $(node --version)"')"
+  say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/bin:$agent_home/.local/node/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "claude $(claude --version 2>/dev/null | head -1), node $(node --version)"')"
 }
 
 remove_agent_tools() {
