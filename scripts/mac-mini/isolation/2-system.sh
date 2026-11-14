@@ -12,8 +12,10 @@
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-group      # e1. shared group + ACLs on sandboxes
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-profile    # e2. install the Seatbelt profile
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-sudo       # e3. sudoers rule: the server starts agents
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-tools      # e4. the agent's own claude and node
 #
 # Rollback, in reverse order:
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-tools
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-sudo
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-profile
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-group
@@ -59,6 +61,10 @@
 #        you may run `env` and `kill` as "factory" without a password (env starts every agent
 #        command, kill stops them), and keep fd 3 open across sudo (closefrom_override), where the
 #        agent's environment travels. Nothing else, and nothing as root.
+#    e4. agent-tools: copies of your `claude` (the same version the server resolves) and of nvm's
+#        default Node (with its global packages: npm, codex) into ~factory/.local, owned by the
+#        agent: your copies sit in your home, which the agent cannot read. Rerun after updating
+#        either, so agents run the same versions.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/common.sh"
 REPO="$(cd "$HERE/../../.." && pwd)"
@@ -197,6 +203,8 @@ status() {
   has_acl "group:$AGENT_GROUP" "$AGENT_ROOT" && say "  sandboxes ACL: set" || say "  sandboxes ACL: missing"
   [ -f "$PROFILE" ] && say "  profile: $PROFILE ($(stat -f '%Su %Sp' "$PROFILE"))" || say "  profile: missing"
   [ -f "$SUDOERS" ] && say "  sudoers: $SUDOERS" || say "  sudoers: missing"
+  [ -x "/Users/$AGENT_USER/.local/bin/claude" ] && say "  agent claude: installed" || say "  agent claude: missing"
+  [ -x "/Users/$AGENT_USER/.local/node/bin/node" ] && say "  agent node: installed" || say "  agent node: missing"
   return 0
 }
 
@@ -381,6 +389,31 @@ remove_agent_profile() {
   say "  removed $PROFILE"
 }
 
+agent_tools() {
+  need_root agent-tools
+  user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
+  local agent_home="/Users/$AGENT_USER" claude node_dir version
+  claude="$(readlink -f "$OWNER_HOME/.local/bin/claude" 2>/dev/null || true)"
+  [ -x "$claude" ] || die "no claude in $OWNER_HOME/.local/bin"
+  version="$(cat "$OWNER_HOME/.nvm/alias/default" 2>/dev/null || true)"
+  node_dir="$(ls -d "$OWNER_HOME/.nvm/versions/node/${version:-none}"* 2>/dev/null | tail -1)"
+  [ -x "$node_dir/bin/node" ] || die "no nvm default node (alias: ${version:-unset})"
+  step "claude $(basename "$claude") -> $agent_home/.local/bin/claude"
+  install -d -o "$AGENT_USER" -g staff -m 755 "$agent_home/.local" "$agent_home/.local/bin"
+  install -o "$AGENT_USER" -g staff -m 755 "$claude" "$agent_home/.local/bin/claude"
+  step "node $(basename "$node_dir") -> $agent_home/.local/node"
+  rm -rf "$agent_home/.local/node"
+  ditto "$node_dir" "$agent_home/.local/node"
+  chown -R "$AGENT_USER:staff" "$agent_home/.local/node"
+  say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/bin:$agent_home/.local/node/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "claude $(claude --version 2>/dev/null | head -1), node $(node --version)"')"
+}
+
+remove_agent_tools() {
+  need_root remove-agent-tools
+  rm -rf "/Users/$AGENT_USER/.local/node" "/Users/$AGENT_USER/.local/bin/claude"
+  say "  removed the agent's claude and node"
+}
+
 agent_sudo() {
   need_root agent-sudo
   user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
@@ -423,6 +456,8 @@ case "${1:-status}" in
   agent-profile) agent_profile ;;
   remove-agent-profile) remove_agent_profile ;;
   agent-sudo) agent_sudo ;;
+  agent-tools) agent_tools ;;
+  remove-agent-tools) remove_agent_tools ;;
   remove-agent-sudo) remove_agent_sudo ;;
-  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
+  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
 esac

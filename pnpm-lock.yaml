@@ -348,6 +348,9 @@ importers:
       '@clack/prompts':
         specifier: 1.8.1
         version: 1.8.1
+      '@factory/agent-user':
+        specifier: workspace:*
+        version: link:../../packages/agent-user
       '@factory/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -1919,6 +1922,9 @@ importers:
       '@factory/activity':
         specifier: workspace:*
         version: link:../activity
+      '@factory/agent-user':
+        specifier: workspace:*
+        version: link:../agent-user
       '@factory/api':
         specifier: workspace:*
         version: link:../api

@@ -3,6 +3,7 @@ export * from './config/from-env.ts';
 export * from './env/agent-environment.ts';
 export * from './env/env-error.ts';
 export * from './env/env-transport.ts';
+export * from './env/git-trust.ts';
 export * from './env/pipe-env-transport.ts';
 export * from './env/shell-quote.ts';
 export * from './launch/agent-user-launcher.ts';
