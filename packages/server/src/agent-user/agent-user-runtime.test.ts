@@ -88,4 +88,11 @@ describe('agentUserRuntimeFromEnv', () => {
     runtime!.processes.spawn('pnpm', ['install'], { cwd: `${sandboxRoot}/t`, env: { A: '1' } });
     expect(calls).toEqual([{ spec: { command: 'pnpm', args: ['install'], env: { A: '1' } }, cwd: `${sandboxRoot}/t` }]);
   });
+
+  it('stops left-over agent processes unless FACTORY_AGENT_REAP=off', () => {
+    const base = { sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner: recordingSpawner().spawner };
+    expect(agentUserRuntimeFromEnv({ ...base, env: { FACTORY_AGENT_USER: 'factory' } })?.reaper).toBeDefined();
+    expect(agentUserRuntimeFromEnv({ ...base, env: { FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_REAP: 'off' } })?.reaper).toBeUndefined();
+    expect(() => agentUserRuntimeFromEnv({ ...base, env: { FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_REAP: 'maybe' } })).toThrow(/on or off/);
+  });
 });

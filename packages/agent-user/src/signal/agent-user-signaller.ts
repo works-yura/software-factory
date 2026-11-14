@@ -13,14 +13,20 @@ export class AgentUserSignaller implements ProcessSignaller {
     this.runner = runner;
   }
 
-  /** The sudo arguments for `kill -s <signal> -- -<group>` as the agent user. */
-  killArgs(target: string, signal: NodeJS.Signals): string[] {
-    return ['-n', '-u', this.user, '--', SYSTEM_BINARIES.kill, '-s', signal.replace(/^SIG/, ''), '--', target];
+  /** The sudo arguments for `kill -s <signal> -- <targets>` as the agent user. */
+  killArgs(target: string | readonly string[], signal: NodeJS.Signals): string[] {
+    return ['-n', '-u', this.user, '--', SYSTEM_BINARIES.kill, '-s', signal.replace(/^SIG/, ''), '--', ...[target].flat()];
   }
 
   async signalGroup(processGroup: number, signal: NodeJS.Signals): Promise<void> {
     assertProcessGroup(processGroup);
     await this.runner.run(SYSTEM_BINARIES.sudo, this.killArgs(`-${processGroup}`, signal));
+  }
+
+  /** Single processes (never a group, 0 or 1): ones the agent left behind. */
+  async signalProcesses(pids: readonly number[], signal: NodeJS.Signals): Promise<void> {
+    for (const pid of pids) if (!Number.isInteger(pid) || pid <= 1) throw new RangeError(`${pid} is not a process to signal.`);
+    if (pids.length > 0) await this.runner.run(SYSTEM_BINARIES.sudo, this.killArgs(pids.map(String), signal));
   }
 
   /** Every process of the agent user: for a server shutting down or a person stopping all agents. */
