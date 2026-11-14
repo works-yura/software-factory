@@ -10,6 +10,7 @@ import { useBoardConfigRoute } from './domains/boardConfig/hooks/useBoardConfigR
 import type { BoardConfigLocation } from './domains/boardConfig/boardConfigPaths';
 import { rememberedBoardPath } from './domains/factory/services/boardViews';
 
+import { SidebarOrganizationMenu } from './domains/auth/components/SidebarOrganizationMenu';
 import { SidebarSettingsLink } from './domains/auth/components/SidebarSettingsLink';
 import { FactorySection } from './domains/factory/components/FactorySection';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
@@ -40,6 +41,7 @@ export function AppSidebar() {
       </Sidebar.Nav>
       <Sidebar.Footer aria-label={t('footer')}>
         <Sidebar.NavList>
+          <SidebarOrganizationMenu />
           <SidebarSettingsLink />
         </Sidebar.NavList>
       </Sidebar.Footer>

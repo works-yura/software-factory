@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useOrganizationsQuery, useSwitchOrganizationMutation } from '../../../../hooks/useOrganizations';
 import {
   cancelInvitation,
   canManageMembers,
@@ -24,10 +25,7 @@ import {
   invitationLink,
   inviteMember,
   isOpenInvitation,
-  listOrganizations,
-  reloadIntoOrganization,
   removeMember,
-  setActiveOrganization,
 } from '../../auth/services/organization';
 import type {
   FullOrganization,
@@ -218,15 +216,8 @@ function PendingInvitationRow({ invitation }: { invitation: OrganizationInvitati
 
 function OrganizationSwitcher({ activeId }: { activeId: string }) {
   const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
-  const organizations = useQuery({
-    queryKey: queryKeys.organizations(),
-    queryFn: () => listOrganizations(baseUrl),
-  });
-  const switchTo = useMutation({
-    mutationFn: (organizationId: string) => setActiveOrganization(baseUrl, organizationId),
-    onSuccess: () => reloadIntoOrganization(),
-  });
+  const organizations = useOrganizationsQuery();
+  const switchTo = useSwitchOrganizationMutation();
 
   if (organizations.isError) {
     return (

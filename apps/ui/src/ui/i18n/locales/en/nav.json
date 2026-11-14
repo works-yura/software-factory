@@ -73,5 +73,14 @@
   "backToBoard": "Back to {{name}}",
   "backToBoardFallback": "Back to board",
   "configureBoard": "Configure board",
-  "configureNamedBoard": "Configure {{name}}"
+  "configureNamedBoard": "Configure {{name}}",
+  "organization": {
+    "fallbackName": "Organization",
+    "subtitle": "Organization",
+    "menuFor": "Organization: {{name}}",
+    "list": "Organizations",
+    "settings": "Organization settings",
+    "loadFailed": "Couldn't load organizations: {{message}}",
+    "switchFailed": "Couldn't switch organization: {{message}}"
+  }
 }

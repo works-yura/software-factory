@@ -75,5 +75,14 @@
   "backToBoard": "Назад до «{{name}}»",
   "backToBoardFallback": "Назад до дошки",
   "configureBoard": "Налаштувати дошку",
-  "configureNamedBoard": "Налаштувати «{{name}}»"
+  "configureNamedBoard": "Налаштувати «{{name}}»",
+  "organization": {
+    "fallbackName": "Організація",
+    "subtitle": "Організація",
+    "menuFor": "Організація: {{name}}",
+    "list": "Організації",
+    "settings": "Налаштування організації",
+    "loadFailed": "Не вдалося завантажити організації: {{message}}",
+    "switchFailed": "Не вдалося перейти в організацію: {{message}}"
+  }
 }
