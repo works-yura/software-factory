@@ -195,7 +195,8 @@ export function BoardListRow({
       }}
       onSelectRow={onToggleDetails}
       className={cn(
-        'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
+        // The icon track fits a source icon plus an attached PR icon (2 × 1rem + gap-1.5) so keys line up across rows.
+        'group min-h-10 grid-cols-[2.375rem_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[2.375rem_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
         locked && 'cursor-wait opacity-70',
         highlighted && 'ring-2 ring-warning-indicator/60 ring-offset-2 ring-offset-background',
       )}
