@@ -30,6 +30,7 @@
 - Перевірити на живому PR, що CLI дотримується `attribution` (без «Generated with Claude Code»).
 
 - OpenCode (ADR-0043): перевірити від імені агента на Mac mini (`FACTORY_AGENT_USER`, профіль Seatbelt; `opencode` у `agent-tools`); MCP-інструменти з «ask» для OpenCode (хаб зараз їх прибирає, як для Codex); вкладення-зображення в хід; steer без зупинки ходу; ротація облікового запису OpenCode посеред ходу (зараз наступний запис бере лише наступний запуск); час повернення безкоштовного ліміту (OpenCode його не каже); продовження власної сесії OpenCode на рідній розмові OpenCode (`opencode import`) замість handoff історії.
+- Непогано було б зробити харнес ACP (Agent Client Protocol): один модуль харнесу для будь-якого агента з реєстру ACP (`cdn.agentclientprotocol.com/registry/v1/latest/registry.json`) замість окремого пакета на кожного. Джерело для перенесення — `temp/t3code/packages/provider-acp` і `provider-acp-registry` з тестами; приклад у paperclip — `@agentclientprotocol/claude-agent-acp`. Після рефакторингу модулів харнесів. Агентів з реєстру вмикає людина в налаштуваннях (це сторонній код), дозволи лише з налаштувань Factory, запуск у пісочниці від імені агента.
 
 ## Логи й креші
 
