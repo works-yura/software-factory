@@ -11,6 +11,7 @@ import {
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +23,6 @@ import {
   useUpdateOMThresholds,
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
@@ -137,7 +137,7 @@ export function OMSection({
   };
 
   if (omQuery.isPending) {
-    return <SkeletonRows label={t('memory.loading')} rows={2} rowClassName="h-14 w-full" />;
+    return <SettingsSkeleton label={t('memory.loading')} rows={5} />;
   }
 
   if (omQuery.data === undefined) {

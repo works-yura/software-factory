@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
 import { translator } from '../../../i18n/t';
@@ -32,37 +31,11 @@ function authProviderLabel(provider: string | undefined): string {
   );
 }
 
-function AccountValue({ children, mono = false }: { children: string; mono?: boolean }) {
+function AccountValue({ children }: { children: string }) {
   return (
-    <Txt tone="muted" as="span" variant="caption" font={mono ? 'mono' : undefined} className="truncate">
+    <Txt tone="muted" as="span" variant="caption" className="truncate">
       {children}
     </Txt>
-  );
-}
-
-function CopyableAccountValue({ value, tooltip }: { value: string; tooltip: string }) {
-  return (
-    <div className="flex min-w-0 items-center gap-1">
-      <AccountValue mono>{value}</AccountValue>
-      <CopyButton content={value} size="icon-sm" variant="ghost" tooltip={tooltip} />
-    </div>
-  );
-}
-
-function AccountSettingsSkeleton() {
-  const { t } = useTranslation('settings');
-  return (
-    <SettingsContainer>
-      <SettingsRow label={t('account.name')}>
-        <Skeleton className="h-4 w-28" />
-      </SettingsRow>
-      <SettingsRow label={t('account.email')}>
-        <Skeleton className="h-4 w-40" />
-      </SettingsRow>
-      <SettingsRow label={t('account.authentication')}>
-        <Skeleton className="h-4 w-24" />
-      </SettingsRow>
-    </SettingsContainer>
   );
 }
 
@@ -74,7 +47,9 @@ export function AccountSettingsSection() {
   if (auth.isPending) {
     return (
       <SettingsSubsection scope="personal" title={t('account.profile.title')}>
-        <AccountSettingsSkeleton />
+        <SettingsContainer>
+          <SettingsSkeleton label={t('account.loading')} rows={3} />
+        </SettingsContainer>
       </SettingsSubsection>
     );
   }
@@ -100,30 +75,34 @@ export function AccountSettingsSection() {
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <>
       <SettingsSubsection
         scope="personal"
         title={t('account.profile.title')}
         description={t('account.profile.description')}
       >
         <SettingsContainer>
-          <SettingsRow label={t('account.name')}>
+          <SettingsRow label={t('account.name')} description={t('account.fromProvider')}>
             <AccountValue>{user?.name ?? t('account.notProvided')}</AccountValue>
           </SettingsRow>
-          <SettingsRow label={t('account.email')}>
+          <SettingsRow label={t('account.email')} description={t('account.fromProvider')}>
             <AccountValue>{user?.email ?? t('account.notProvided')}</AccountValue>
           </SettingsRow>
-          <SettingsRow label={t('account.authentication')}>
+          <SettingsRow label={t('account.authentication')} description={t('account.howSignedIn')}>
             <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
           </SettingsRow>
           {user?.userId && (
             <SettingsRow label={t('account.accountId.label')} description={t('account.accountId.description')}>
-              <CopyableAccountValue value={user.userId} tooltip={t('account.accountId.copy')} />
+              <CopyInput value={user.userId} label={t('account.accountId.label')} copyLabel={t('account.accountId.copy')} />
             </SettingsRow>
           )}
           {user?.organizationId && (
             <SettingsRow label={t('account.organizationId.label')} description={t('account.organizationId.description')}>
-              <CopyableAccountValue value={user.organizationId} tooltip={t('account.organizationId.copy')} />
+              <CopyInput
+                value={user.organizationId}
+                label={t('account.organizationId.label')}
+                copyLabel={t('account.organizationId.copy')}
+              />
             </SettingsRow>
           )}
         </SettingsContainer>
@@ -138,6 +117,6 @@ export function AccountSettingsSection() {
           </SettingsRow>
         </SettingsContainer>
       </SettingsSubsection>
-    </div>
+    </>
   );
 }

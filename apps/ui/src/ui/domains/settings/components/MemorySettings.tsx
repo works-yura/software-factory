@@ -3,25 +3,22 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { SettingsContainer, SettingsGroup, SettingsTitle } from '@mastra/playground-ui/new/settings';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { settingsSectionPath } from '../settingsSections';
 import { useFactoryHarness } from './models/harness/HarnessSettings';
-import { IconTile } from './models/routing/IconTile';
 import {
-  MODEL_DEFAULTS_ICONS,
   MODEL_DEFAULTS_TONES,
   MODEL_LANES,
   MODEL_LANE_ICONS,
   MODEL_LANE_LABELS,
 } from './models/routing/model-routes';
 import type { ModelDefaults, ModelLane } from './models/routing/model-routes';
-import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 
 export function MemorySettings({ factoryId }: { factoryId: string }) {
@@ -50,6 +47,7 @@ export function MemorySettings({ factoryId }: { factoryId: string }) {
   if (providersKnown && !anyConnected) {
     return (
       <EmptyState
+        variant="fill"
         as="h2"
         iconSlot={<Brain />}
         titleSlot={t('memory.empty.title')}
@@ -64,13 +62,9 @@ export function MemorySettings({ factoryId }: { factoryId: string }) {
   }
 
   return (
-    <SettingsSubsection title={t('memory.title')} description={t('memory.description')}>
-      <div className="flex flex-col gap-3">
-        <MemoryCard title={t('memory.factoryCard')} defaults="factory" usedBy={MODEL_LANES}>
-          <FactoryOMSection factoryId={factoryId} />
-        </MemoryCard>
-      </div>
-    </SettingsSubsection>
+    <MemoryGroup title={t('memory.factoryCard')} info={t('memory.description')} defaults="factory" usedBy={MODEL_LANES}>
+      <FactoryOMSection factoryId={factoryId} />
+    </MemoryGroup>
   );
 }
 
@@ -79,13 +73,16 @@ function FactoryOMSection({ factoryId }: { factoryId: string }) {
   return <OMSection factoryId={factoryId} models={modelsQuery.data ?? []} />;
 }
 
-function MemoryCard({
+/** One memory section: a dimmed title (the description in its tooltip, the lanes it serves beside it) over its card. */
+function MemoryGroup({
   title,
+  info,
   defaults,
   usedBy,
   children,
 }: {
   title: string;
+  info: string;
   defaults: ModelDefaults;
   usedBy: readonly ModelLane[];
   children: ReactNode;
@@ -93,13 +90,10 @@ function MemoryCard({
   const { t } = useTranslation('settings');
   const tone = MODEL_DEFAULTS_TONES[defaults];
   return (
-    <Card as="section" aria-label={title}>
-      <CardContent className="flex flex-col gap-4">
-        <header className="flex flex-wrap items-center gap-3">
-          <IconTile icon={MODEL_DEFAULTS_ICONS[defaults]} className={tone} />
-          <Txt as="h3" variant="label" className="flex-1">
-            {title}
-          </Txt>
+    <SettingsGroup>
+      <SettingsTitle
+        info={info}
+        accessory={
           <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-2">
             {t('memory.usedBy')}{' '}
             {usedBy.map(lane => {
@@ -115,9 +109,11 @@ function MemoryCard({
               );
             })}
           </Txt>
-        </header>
-        {children}
-      </CardContent>
-    </Card>
+        }
+      >
+        {title}
+      </SettingsTitle>
+      <SettingsContainer>{children}</SettingsContainer>
+    </SettingsGroup>
   );
 }

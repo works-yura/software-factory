@@ -8,7 +8,7 @@ import { Link, useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
 import { useHarness } from '../../../../hooks/useHarness';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { settingsSectionPath } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -26,7 +26,7 @@ export function FactoryManagementSection() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <>
       <SettingsSubsection
         scope="factory"
         title={t('factory.harness.title')}
@@ -84,14 +84,14 @@ export function FactoryManagementSection() {
             </AlertDialog>
           </SettingsRow>
           {deleteMutation.isError && (
-            <div className="p-4">
+            <SettingsNoticeRow>
               <Notice variant="destructive">
                 {deleteMutation.error instanceof Error ? deleteMutation.error.message : t('factory.deleteFailed')}
               </Notice>
-            </div>
+            </SettingsNoticeRow>
           )}
         </SettingsContainer>
       </SettingsSubsection>
-    </div>
+    </>
   );
 }

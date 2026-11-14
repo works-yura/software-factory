@@ -2,7 +2,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
@@ -48,9 +48,9 @@ export function DebugSection() {
       }
     >
       {query.isPending ? (
-        <Txt tone="muted" as="p" variant="caption" role="status">
-          {t('debug.loading')}
-        </Txt>
+        <SettingsContainer>
+          <SettingsSkeleton label={t('debug.loading')} />
+        </SettingsContainer>
       ) : query.isError ? (
         <div className="flex items-center gap-3">
           <Txt as="p" variant="caption" className="text-destructive-foreground">

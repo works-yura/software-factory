@@ -2,7 +2,7 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
@@ -16,7 +16,6 @@ import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfig
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { boardPath } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-import { SkeletonRows } from '../ui/SkeletonRows';
 import { LoadErrorState } from '../ui/LoadErrorState';
 import { translator } from '../i18n/t';
 
@@ -85,7 +84,7 @@ export function BoardConfigPage() {
       <div className={COLUMN}>
         {query.isPending ? (
           <SettingsContainer>
-            <SkeletonRows label={tk('page.loadingBoard')} rows={3} />
+            <SettingsSkeleton label={tk('page.loadingBoard')} rows={3} />
           </SettingsContainer>
         ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
           <EmptyState

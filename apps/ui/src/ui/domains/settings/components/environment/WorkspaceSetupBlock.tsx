@@ -27,29 +27,25 @@ export function WorkspaceSetupBlock({
   return (
     <SettingsContainer>
       <SettingsRow label={t('environment.workspace.workdir')} description={t('environment.workspace.workdirDescription')}>
-        <div className="w-full lg:max-w-96">
-          <CommittedInput
-            label={t('environment.workspace.workdir')}
-            placeholder="/workspace"
-            value={workdir ?? ''}
-            disabled={disabled}
-            onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
-          />
-        </div>
+        <CommittedInput
+          label={t('environment.workspace.workdir')}
+          placeholder="/workspace"
+          value={workdir ?? ''}
+          disabled={disabled}
+          onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
+        />
       </SettingsRow>
       <SettingsRow
         label={t('environment.workspace.setupCommand')}
         description={t('environment.workspace.setupCommandDescription')}
       >
-        <div className="w-full lg:max-w-96">
-          <CommittedInput
-            label={t('environment.workspace.setupCommand')}
-            value={command ?? ''}
-            placeholder={t('environment.workspace.setupCommandPlaceholder')}
-            disabled={disabled}
-            onCommit={next => onSave({ workspaceSetupCommand: next || null })}
-          />
-        </div>
+        <CommittedInput
+          label={t('environment.workspace.setupCommand')}
+          value={command ?? ''}
+          placeholder={t('environment.workspace.setupCommandPlaceholder')}
+          disabled={disabled}
+          onCommit={next => onSave({ workspaceSetupCommand: next || null })}
+        />
       </SettingsRow>
       {children}
     </SettingsContainer>

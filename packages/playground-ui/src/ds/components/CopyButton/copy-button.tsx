@@ -13,6 +13,7 @@ export type CopyButtonProps = {
   className?: string;
   size?: ButtonProps['size'];
   variant?: ButtonProps['variant'];
+  disabled?: boolean;
 };
 
 export function CopyButton({
@@ -23,6 +24,7 @@ export function CopyButton({
   size = 'sm',
   variant,
   className,
+  disabled,
 }: CopyButtonProps) {
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: content,
@@ -37,6 +39,7 @@ export function CopyButton({
       size={size}
       variant={variant}
       className={className}
+      disabled={disabled}
       tooltip={isCopied ? libText('Copied!') : tooltip}
       aria-label={isCopied ? libText('Copied!') : tooltip}
     >

@@ -213,29 +213,25 @@ function RepositoryRow({
             label={t('environment.repository.setup')}
             description={t('environment.repository.setupDescription')}
           >
-            <div className="w-full lg:max-w-96">
-              <CommittedInput
-                label={t('environment.repository.setupAria', { name: label })}
-                value={repository.setupCommand ?? ''}
-                placeholder={t('environment.repository.setupPlaceholder')}
-                disabled={disabled}
-                onCommit={value => onCommands({ setupCommand: value || null })}
-              />
-            </div>
+            <CommittedInput
+              label={t('environment.repository.setupAria', { name: label })}
+              value={repository.setupCommand ?? ''}
+              placeholder={t('environment.repository.setupPlaceholder')}
+              disabled={disabled}
+              onCommit={value => onCommands({ setupCommand: value || null })}
+            />
           </SettingsRow>
           <SettingsRow
             label={t('environment.repository.teardown')}
             description={t('environment.repository.teardownDescription')}
           >
-            <div className="w-full lg:max-w-96">
-              <CommittedInput
-                label={t('environment.repository.teardownAria', { name: label })}
-                value={repository.teardownCommand ?? ''}
-                placeholder={t('environment.repository.teardownPlaceholder')}
-                disabled={disabled}
-                onCommit={value => onCommands({ teardownCommand: value || null })}
-              />
-            </div>
+            <CommittedInput
+              label={t('environment.repository.teardownAria', { name: label })}
+              value={repository.teardownCommand ?? ''}
+              placeholder={t('environment.repository.teardownPlaceholder')}
+              disabled={disabled}
+              onCommit={value => onCommands({ teardownCommand: value || null })}
+            />
           </SettingsRow>
           {factoryId && (
             <RepositoryEnvFiles

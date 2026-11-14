@@ -495,3 +495,6 @@ work-items/card-source-filters.test.ts	work-items/src/card-source-filters.test.t
 	playground-ui/src/ds/components/SearchInput/search-input.test.tsx	+17	v4 with upstream #30062: SearchInput takes over ListSearch (debounce, shortcut, own text) (+17)
 	playground-ui/src/ds/components/ListSearch/list-search.test.tsx	-9	v4 with upstream #30062: ListSearch removed (-9)
 	playground-ui/src/ds/components/FormFieldBlocks/fields/search-field-block.test.tsx	-36	v4 with upstream #30062: deprecated SearchFieldBlock removed (-36)
+	playground-ui/src/ds/new/settings/settings-layout.test.tsx	-5	v4 with upstream #29400: SettingsLayout is the page column only, container variants gone (-5)
+	playground-ui/src/ds/new/settings/settings.test.tsx	+6	v4 with upstream #29400: list header, empty row, item, skeleton (+6)
+	playground-ui/src/ds/components/CopyInput/copy-input.test.tsx	+2	v4 with upstream #29400: new CopyInput (+2)

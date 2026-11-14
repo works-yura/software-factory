@@ -97,7 +97,9 @@
     "history": {
       "empty": "No builds yet.",
       "buildAria": "Build {{id}}",
-      "noLogs": "No logs for this build."
+      "noLogs": "No logs for this build.",
+      "label": "Build history",
+      "loading": "Loading build history"
     },
     "status": {
       "pending": "Pending",
@@ -244,7 +246,8 @@
         "public-repository": "Public repository: its work is kept on this machine only, never published.",
         "processes-unchecked": "The processes in its folder could not be checked; some may still run and hold ports."
       }
-    }
+    },
+    "loading": "Loading environment"
   },
   "repositories": {
     "selectFactory": "Select a factory to manage its repositories.",
@@ -465,7 +468,10 @@
       "notConnected": "Not connected",
       "notConnectedDescription": "Connect it so issues and PRs you create are authored as you.",
       "connect": "Connect GitHub"
-    }
+    },
+    "fromProvider": "From your sign-in provider.",
+    "howSignedIn": "How you signed in.",
+    "loading": "Loading your account"
   },
   "panel": {
     "label": "Settings",

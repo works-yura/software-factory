@@ -68,7 +68,7 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label={t('panel.label')} className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
+    <>
       {section === 'account' && <AccountSettingsSection />}
       {section === 'organization' && <OrganizationSection />}
       {section === 'preferences' && <GeneralSettings />}
@@ -92,6 +92,6 @@ export function SettingsPanel() {
           setPermissionForCategory={setPermissionForCategory}
         />
       )}
-    </section>
+    </>
   );
 }

@@ -1,7 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
@@ -53,7 +52,15 @@ export function EnvironmentSection() {
       </Notice>
     );
   }
-  if (!environmentQuery.data) return <Skeleton className="h-24 w-full" />;
+  if (!environmentQuery.data) {
+    return (
+      <SettingsSubsection scope="factory" title={t('environment.repositories.title')}>
+        <SettingsContainer>
+          <SettingsSkeleton label={t('environment.loading')} rows={3} />
+        </SettingsContainer>
+      </SettingsSubsection>
+    );
+  }
 
   return (
     <EnvironmentBlocks
@@ -106,7 +113,7 @@ function EnvironmentBlocks({
   const disabled = saveMutation.isPending;
   const canBuild = environment.sandbox.capabilities.builds.available && environment.buildTriggers !== undefined;
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <>
       <SettingsSubsection
         scope="factory"
         title={t('environment.repositories.title')}
@@ -161,15 +168,17 @@ function EnvironmentBlocks({
           description={t('environment.builds.description')}
           action={<BuildNow factoryId={factoryId} environment={environment} />}
         >
-          <div className="flex flex-col gap-4">
-            <SettingsContainer>
-              <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
-            </SettingsContainer>
-            {environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
-          </div>
+          <SettingsContainer>
+            <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
+          </SettingsContainer>
         </SettingsSubsection>
       )}
-    </div>
+      {canBuild && environment.sandbox.capabilities.builds.history && (
+        <SettingsSubsection scope="factory" title={t('environment.history.label')}>
+          <BuildHistory factoryId={factoryId} />
+        </SettingsSubsection>
+      )}
+    </>
   );
 }
 
