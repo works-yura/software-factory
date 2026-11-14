@@ -24,6 +24,7 @@ export interface AgentUserRuntime {
   readonly stateDir: string;
   /** What the Claude Code harness takes to run its turns as the agent user. */
   claudeCode(): {
+    command: string;
     spawn: ReturnType<typeof claudeSpawnAsAgent>;
     sessionConfigRoot: string;
     tempDir: string;
@@ -60,6 +61,9 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
     spawner,
     stateDir,
     claudeCode: () => ({
+      // The agent's own `claude` on its PATH: a configured FACTORY_CLAUDE_CODE_COMMAND points into the
+      // server user's home, which the agent can neither read nor run.
+      command: env.FACTORY_AGENT_CLAUDE_COMMAND?.trim() || 'claude',
       spawn: claudeSpawnAsAgent(spawner),
       sessionConfigRoot: claudeConfigRoot,
       tempDir,

@@ -29,7 +29,14 @@ describe('agentUserRuntimeFromEnv', () => {
     expect(runtime?.stateDir).toBe(`${sandboxRoot}/.agent-state`);
     expect(made).toEqual([`${sandboxRoot}/.agent-state`, `${sandboxRoot}/.agent-state/claude-code-config`, `${sandboxRoot}/.agent-state/tmp`]);
     const claude = runtime!.claudeCode();
-    expect(claude).toMatchObject({ sessionConfigRoot: `${sandboxRoot}/.agent-state/claude-code-config`, tempDir: `${sandboxRoot}/.agent-state/tmp`, gateNode: 'node' });
+    expect(claude).toMatchObject({ command: 'claude', sessionConfigRoot: `${sandboxRoot}/.agent-state/claude-code-config`, tempDir: `${sandboxRoot}/.agent-state/tmp`, gateNode: 'node' });
+  });
+
+  it("never runs the server user's configured claude: the agent cannot reach it", () => {
+    const runtime = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory', FACTORY_CLAUDE_CODE_COMMAND: '/Users/yura/.local/bin/claude' }, sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner: recordingSpawner().spawner });
+    expect(runtime?.claudeCode().command).toBe('claude');
+    const pinned = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_CLAUDE_COMMAND: '/Users/factory/.local/bin/claude' }, sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner: recordingSpawner().spawner });
+    expect(pinned?.claudeCode().command).toBe('/Users/factory/.local/bin/claude');
   });
 
   it('takes its own state folder', () => {
