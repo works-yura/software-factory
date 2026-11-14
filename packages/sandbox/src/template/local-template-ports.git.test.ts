@@ -48,7 +48,10 @@ class FakeCache implements RepositoryCache {
 /** A store in memory: what was saved, per clone URL and branch. */
 class FakeStore implements SessionWorkStore {
   readonly saved = new Map<string, SessionWorkSnapshot>();
-  constructor(readonly kind: string) {}
+  readonly kind: string;
+  constructor(kind: string) {
+    this.kind = kind;
+  }
   async save(checkout: SessionCheckout, snapshot: SessionWorkSnapshot) {
     this.saved.set(`${checkout.cloneUrl} ${snapshot.branch}`, snapshot);
     return {};
