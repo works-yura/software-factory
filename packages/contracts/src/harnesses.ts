@@ -104,7 +104,29 @@ export const CODEX_HARNESS: HarnessDescriptor = {
   setup: { modelProvider: false, accounts: { provider: 'openai-codex', connector: 'codex' } },
 };
 
-export const HARNESSES: readonly HarnessDescriptor[] = [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS];
+/**
+ * OpenCode: the `opencode` CLI's server on the server host, on OpenCode's own free models (no key,
+ * no account). Free models may use what they are sent to improve their models (ADR-0043).
+ */
+export const OPENCODE_HARNESS: HarnessDescriptor = {
+  id: 'opencode',
+  label: 'OpenCode',
+  icon: 'opencode',
+  modelScope: 'factory',
+  supports: {
+    goal: false,
+    thinkingLevel: false,
+    sessionPermissions: false,
+    imageAttachments: false,
+    memory: false,
+    knowledge: false,
+    sandboxRecreate: false,
+    sessionlessChat: false,
+  },
+  setup: { modelProvider: false },
+};
+
+export const HARNESSES: readonly HarnessDescriptor[] = [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS, OPENCODE_HARNESS];
 
 /** The harness with this id; an unknown or missing id is Mastra, the harness sessions ran on before there was a choice. */
 export function harnessById(id: string | null | undefined, available: readonly HarnessDescriptor[] = HARNESSES): HarnessDescriptor {

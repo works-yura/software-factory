@@ -28,7 +28,16 @@ describe('agentUserRuntimeFromEnv', () => {
     const runtime = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory' }, sandboxRoot, serverUser: 'yura', makeDirs: dir => void made.push(dir), spawner: recordingSpawner().spawner });
     expect(runtime?.stateDir).toBe(`${sandboxRoot}/.agent-state`);
     const state = `${sandboxRoot}/.agent-state`;
-    expect(made).toEqual([state, `${state}/claude-code-config`, `${state}/tmp`, `${state}/codex-home`, `${state}/claude-code-supervisor`, `${state}/codex-supervisor`]);
+    expect(made).toEqual([
+      state,
+      `${state}/claude-code-config`,
+      `${state}/tmp`,
+      `${state}/codex-home`,
+      `${state}/claude-code-supervisor`,
+      `${state}/codex-supervisor`,
+      `${state}/opencode-home`,
+      `${state}/opencode-supervisor`,
+    ]);
     const claude = runtime!.claudeCode();
     expect(claude).toMatchObject({
       command: 'claude',
@@ -38,6 +47,7 @@ describe('agentUserRuntimeFromEnv', () => {
       gateNode: 'node',
     });
     expect(runtime!.codex()).toMatchObject({ command: 'codex', sessionHomeRoot: `${state}/codex-home`, supervisorWorkdirRoot: `${state}/codex-supervisor` });
+    expect(runtime!.opencode()).toMatchObject({ command: 'opencode', sessionHomeRoot: `${state}/opencode-home`, supervisorWorkdirRoot: `${state}/opencode-supervisor` });
   });
 
   it("never runs the server user's configured claude: the agent cannot reach it", () => {
@@ -73,6 +83,13 @@ describe('agentUserRuntimeFromEnv', () => {
     expect(runtime?.codex().command).toBe('codex');
     const pinned = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_CODEX_COMMAND: '/Users/factory/.local/node/bin/codex' }, sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner: recordingSpawner().spawner });
     expect(pinned?.codex().command).toBe('/Users/factory/.local/node/bin/codex');
+  });
+
+  it("OpenCode goes through the agent spawner under the Seatbelt profile: it runs commands with no sandbox of its own", () => {
+    const { spawner, calls } = recordingSpawner();
+    const runtime = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory' }, sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner });
+    runtime!.opencode().spawn('opencode', ['serve', '--hostname=127.0.0.1', '--port=50000'], { cwd: `${sandboxRoot}/card`, env: { OPENCODE_SERVER_PASSWORD: 'p' } });
+    expect(calls).toEqual([{ spec: { command: 'opencode', args: ['serve', '--hostname=127.0.0.1', '--port=50000'], env: { OPENCODE_SERVER_PASSWORD: 'p' } }, cwd: `${sandboxRoot}/card` }]);
   });
 
   it('Codex goes through the agent spawner without the Seatbelt profile: it sandboxes its own commands, and macOS cannot nest sandboxes', () => {

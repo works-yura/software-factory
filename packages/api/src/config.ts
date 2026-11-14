@@ -33,7 +33,7 @@ import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { MASTRA_INSTANCE_ID, mastraModelInstance } from '@factory/credentials/mastra-models';
 import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import type { ModelCatalog, ModelCatalogEntry } from '@factory/credentials';
-import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES, OPENCODE_HARNESS } from '@factory/contracts';
 
 import { readRunningPackages } from './running-packages.ts';
 import type { RunningPackage } from './running-packages.ts';
@@ -313,6 +313,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
     claudeSignIn?: boolean;
     codex?: boolean;
     codexSignIn?: boolean;
+    /** The OpenCode harness runs here: factories may pick `harness: 'opencode'` (ADR-0043). Only filters `harnesses`. */
+    opencode?: boolean;
     device?: boolean;
   };
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
@@ -470,7 +472,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             harnesses: HARNESSES.filter(
               harness =>
                 (harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true) &&
-                (harness.id !== CODEX_HARNESS.id || options.features?.codex === true),
+                (harness.id !== CODEX_HARNESS.id || options.features?.codex === true) &&
+                (harness.id !== OPENCODE_HARNESS.id || options.features?.opencode === true),
             ),
           }),
       }),

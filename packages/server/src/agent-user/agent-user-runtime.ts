@@ -30,6 +30,7 @@ import type { AgentProcesses } from '@factory/sandbox';
 
 import { claudeSpawnAsAgent } from './claude-spawn.ts';
 import { codexSpawnAsAgent } from './codex-spawn.ts';
+import { openCodeSpawnAsAgent } from './opencode-spawn.ts';
 
 export interface AgentUserRuntime {
   readonly config: AgentUserConfig;
@@ -59,6 +60,13 @@ export interface AgentUserRuntime {
    * once at start, then every minute. `undefined` with FACTORY_AGENT_REAP=off.
    */
   readonly reaper: AgentReaper | undefined;
+  /** What the OpenCode harness takes to run its sessions as the agent user. */
+  opencode(): {
+    command: string;
+    spawn: ReturnType<typeof openCodeSpawnAsAgent>;
+    sessionHomeRoot: string;
+    supervisorWorkdirRoot: string;
+  };
 }
 
 export interface AgentUserRuntimeOptions {
@@ -92,7 +100,11 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
   // The Factory chat's empty working folders: the CLI starts in them, so the agent must reach them.
   const claudeSupervisorRoot = join(stateDir, 'claude-code-supervisor');
   const codexSupervisorRoot = join(stateDir, 'codex-supervisor');
-  for (const dir of [stateDir, claudeConfigRoot, tempDir, codexHomeRoot, claudeSupervisorRoot, codexSupervisorRoot]) mkdir(dir);
+  const openCodeHomeRoot = join(stateDir, 'opencode-home');
+  const openCodeSupervisorRoot = join(stateDir, 'opencode-supervisor');
+  for (const dir of [stateDir, claudeConfigRoot, tempDir, codexHomeRoot, claudeSupervisorRoot, codexSupervisorRoot, openCodeHomeRoot, openCodeSupervisorRoot]) {
+    mkdir(dir);
+  }
   // Mastra runs command lines: they reach the agent as a program that reads its environment from a
   // private file on a descriptor (the same launch as a spawned CLI's).
   const bridge = new ShellCommandBridge(createAgentUserLauncher(config), new PrivateFileStash(options.inputDir ?? join(tmpdir(), 'factory-agent-inputs')));
@@ -136,6 +148,14 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
       // Each session's CODEX_HOME (its thread history): the CLI writes there as the agent.
       sessionHomeRoot: codexHomeRoot,
       supervisorWorkdirRoot: codexSupervisorRoot,
+    }),
+    opencode: () => ({
+      // The agent's own `opencode` (agent-tools copies it, as it does `claude` and `codex`).
+      command: env.FACTORY_AGENT_OPENCODE_COMMAND?.trim() || 'opencode',
+      spawn: openCodeSpawnAsAgent(spawner),
+      // Each session's OpenCode state (its database): the CLI writes there as the agent.
+      sessionHomeRoot: openCodeHomeRoot,
+      supervisorWorkdirRoot: openCodeSupervisorRoot,
     }),
   };
 }

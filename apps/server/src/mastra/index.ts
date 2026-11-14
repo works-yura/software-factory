@@ -447,6 +447,17 @@ export const factory = new MastraFactory({
     // As the agent user: its own `codex`, session homes and the Factory chat's folders where it can reach them.
     ...(agentUser ? agentUser.codex() : {}),
   },
+  // Factories created with `harness: 'opencode'` run their agents on this machine's `opencode` CLI (its
+  // server, one per run) on OpenCode's own free models: no key, no login (ADR-0043). Each session keeps
+  // OpenCode's state in its own folders beside the store; this machine's own OpenCode (its
+  // `~/.config/opencode`, `~/.local/share/opencode`) is never read. Without the CLI, Settings lists
+  // OpenCode as needing setup.
+  opencode: {
+    storeDir: process.env.FACTORY_OPENCODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'opencode-sessions'),
+    ...(process.env.FACTORY_OPENCODE_COMMAND?.trim() ? { command: process.env.FACTORY_OPENCODE_COMMAND.trim() } : {}),
+    // As the agent user: its own `opencode`, session state and the Factory chat's folders where it can reach them.
+    ...(agentUser ? agentUser.opencode() : {}),
+  },
   ...(browser ? { browser } : {}),
   // Device preview drives simulators and emulators on this machine, so only a local development
   // server (the person's own machine) offers it. State and the device tools sit next to the database.

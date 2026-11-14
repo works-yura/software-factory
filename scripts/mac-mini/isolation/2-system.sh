@@ -66,9 +66,11 @@
 #        command, kill stops them), and keep fd 3 open across sudo (closefrom_override), where the
 #        agent's environment travels. Nothing else, and nothing as root.
 #    e4. agent-tools: copies of your `claude` (the same version the server resolves) and of nvm's
-#        default Node (with its global packages: npm, codex) into ~factory/.local, owned by the
-#        agent: your copies sit in your home, which the agent cannot read. Rerun after updating
-#        either, so agents run the same versions.
+#        default Node (with its global packages: npm, codex, opencode-ai) into ~factory/.local, owned
+#        by the agent: your copies sit in your home, which the agent cannot read. OpenCode comes with
+#        Node when it is a global npm package there; otherwise the installer's ~/.opencode/bin/opencode
+#        is copied to ~factory/.local/bin. Rerun after updating any of them, so agents run the same
+#        versions.
 #    e5. agent-mobile-tools: copies of your fvm and of the Flutter SDKs the projects pin
 #        ($AGENT_FLUTTER_VERSIONS, from your fvm cache) into ~factory (fvm in .local/fvm, SDKs in
 #        ~/fvm/versions, its fvm config pointing there), owned by the agent: your cache is on the
@@ -412,7 +414,7 @@ remove_agent_profile() {
 agent_tools() {
   need_root agent-tools
   user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
-  local agent_home="/Users/$AGENT_USER" claude node_dir version
+  local agent_home="/Users/$AGENT_USER" claude node_dir version opencode
   claude="$(readlink -f "$OWNER_HOME/.local/bin/claude" 2>/dev/null || true)"
   [ -x "$claude" ] || die "no claude in $OWNER_HOME/.local/bin"
   version="$(cat "$OWNER_HOME/.nvm/alias/default" 2>/dev/null || true)"
@@ -425,13 +427,24 @@ agent_tools() {
   rm -rf "$agent_home/.local/node"
   ditto "$node_dir" "$agent_home/.local/node"
   chown -R "$AGENT_USER:staff" "$agent_home/.local/node"
-  say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/bin:$agent_home/.local/node/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "claude $(claude --version 2>/dev/null | head -1), node $(node --version)"')"
+  # OpenCode (ADR-0043): with Node when it is a global npm package (opencode-ai), else the installer's binary.
+  opencode="$(readlink -f "$OWNER_HOME/.opencode/bin/opencode" 2>/dev/null || true)"
+  rm -f "$agent_home/.local/bin/opencode"
+  if [ -x "$node_dir/bin/opencode" ]; then
+    step "opencode: with node (global opencode-ai)"
+  elif [ -x "$opencode" ]; then
+    step "opencode $(basename "$opencode") -> $agent_home/.local/bin/opencode"
+    install -o "$AGENT_USER" -g staff -m 755 "$opencode" "$agent_home/.local/bin/opencode"
+  else
+    say "  no opencode (npm i -g opencode-ai under nvm's default node, or the installer's ~/.opencode/bin): OpenCode factories will need setup"
+  fi
+  say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/bin:$agent_home/.local/node/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "claude $(claude --version 2>/dev/null | head -1), node $(node --version), opencode $(opencode --version 2>/dev/null | head -1 || echo none)"')"
 }
 
 remove_agent_tools() {
   need_root remove-agent-tools
-  rm -rf "/Users/$AGENT_USER/.local/node" "/Users/$AGENT_USER/.local/bin/claude"
-  say "  removed the agent's claude and node"
+  rm -rf "/Users/$AGENT_USER/.local/node" "/Users/$AGENT_USER/.local/bin/claude" "/Users/$AGENT_USER/.local/bin/opencode"
+  say "  removed the agent's claude, node and opencode"
 }
 
 agent_mobile_tools() {

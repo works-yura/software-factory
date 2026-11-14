@@ -188,6 +188,8 @@ export interface FactoryApiRoutesDeps {
   claudeCodeEnabled?: boolean;
   /** The Codex harness runs here (the `codex` CLI is installed), so factories may pick `harness: 'codex'`. */
   codexEnabled?: boolean;
+  /** The OpenCode harness is configured here, so factories may pick `harness: 'opencode'` (ADR-0043). */
+  openCodeEnabled?: boolean;
   /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
   harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession' | 'forInstance'> | undefined;
   /** The CLIs the turn-based harnesses spawn, for `/web/config/versions` (ADR-0038). */
@@ -1051,6 +1053,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         mcp: deps.mcpEnabled,
         claudeCode: deps.claudeCodeEnabled ?? false,
         codex: deps.codexEnabled ?? false,
+        opencode: deps.openCodeEnabled ?? false,
         device: deps.deviceEnabled ?? false,
         claudeSignIn: deps.claudeSignIn !== undefined,
         codexSignIn: deps.codexSignIn !== undefined,

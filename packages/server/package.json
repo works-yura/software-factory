@@ -29,6 +29,7 @@
     "@factory/harness-claude-code-ui": "workspace:*",
     "@factory/harness-codex": "workspace:*",
     "@factory/harness-codex-ui": "workspace:*",
+    "@factory/harness-opencode": "workspace:*",
     "@factory/harness-handoff": "workspace:*",
     "@factory/harness-mastra": "workspace:*",
     "@factory/http": "workspace:*",

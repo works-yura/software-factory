@@ -276,7 +276,7 @@ const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
 /** The engines a Factory can run its agents on; switching applies to sessions started afterwards. */
-export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code', 'codex'] as const;
+export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code', 'codex', 'opencode'] as const;
 
 /** `claude --model` aliases a Claude Code Factory may pin; null means the CLI's own default. */
 export { CLAUDE_CODE_MODELS };

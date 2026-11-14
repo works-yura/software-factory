@@ -122,14 +122,14 @@ export interface SourceControlSessionRoutesOptions {
 
 /** How the session routes reach the Claude Code harness for personal sessions. */
 /** The harnesses whose sessions live in their own store and reach the chat through the session UI. */
-export const TURN_HARNESSES = ['claude-code', 'codex'] as const;
+export const TURN_HARNESSES = ['claude-code', 'codex', 'opencode'] as const;
 export type TurnHarnessKind = (typeof TURN_HARNESSES)[number];
 
 export function isTurnHarness(value: unknown): value is TurnHarnessKind {
   return TURN_HARNESSES.some(harness => harness === value);
 }
 
-const TURN_HARNESS_LABELS: Record<TurnHarnessKind, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
+const TURN_HARNESS_LABELS: Record<TurnHarnessKind, string> = { 'claude-code': 'Claude Code', codex: 'Codex', opencode: 'OpenCode' };
 
 export interface ClaudeCodeUserSessions {
   /** The session behind a session id and the harness that runs it, or undefined when none of these harnesses does. */

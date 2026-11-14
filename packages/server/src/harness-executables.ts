@@ -16,6 +16,7 @@ type ExecutableIdentity = Pick<HarnessExecutableSpec, 'harness' | 'name' | 'sett
 
 export const CLAUDE_CODE_EXECUTABLE: ExecutableIdentity = { harness: 'Claude Code', name: 'claude', setting: 'FACTORY_CLAUDE_CODE_COMMAND' };
 export const CODEX_EXECUTABLE: ExecutableIdentity = { harness: 'Codex', name: 'codex', setting: 'FACTORY_CODEX_COMMAND' };
+export const OPENCODE_EXECUTABLE: ExecutableIdentity = { harness: 'OpenCode', name: 'opencode', setting: 'FACTORY_OPENCODE_COMMAND' };
 
 /**
  * The executable a harness's config spawns. Undefined when the host launches the CLI itself: an
