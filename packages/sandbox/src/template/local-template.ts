@@ -161,7 +161,9 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     // With an agent user (ADR-0041) every command here runs as the agent: the mirrors and builds sit
     // in folders the agent can write, so a git run there as the server would obey whatever config or
     // hooks the agent left in them (core.fsmonitor, a hook) with the server's own rights.
-    const agent = options.agentProcesses ? { agent: options.agentProcesses } : {};
+    // They start in the template root, not the server's folder: the agent cannot enter that one, and
+    // git there fails before it reads a byte ("Unable to read current working directory").
+    const agent = options.agentProcesses ? { agent: options.agentProcesses, cwd: this.root } : {};
     this.repositoryCache = new LocalMirrorRepositoryCache({
       root: this.root,
       logger: this.#logger,
