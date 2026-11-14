@@ -53,11 +53,12 @@ const PUBLIC_ORIGIN = 'https://factory.example.com';
  * can't run here; everything behind it (projects, work items, sessions,
  * subscriptions, audit) is real Factory storage.
  */
-const USERS: Record<string, { orgId?: string; userId: string }> = {
+const USERS: Record<string, { orgId?: string; userId: string; role?: string }> = {
   'token-alice': { orgId: 'org-1', userId: 'alice' },
   'token-bob': { orgId: 'org-1', userId: 'bob' },
   'token-mallory': { orgId: 'org-2', userId: 'mallory' },
   'token-no-org': { userId: 'drifter' },
+  'token-viewer': { orgId: 'org-1', userId: 'vera', role: 'viewer' },
 };
 
 function tokenAuth(): RouteAuth {
@@ -489,6 +490,13 @@ describe('Factory MCP server', () => {
     const { url } = await setup();
     const response = await claudeRequest(url, 'tools/list', {}, 'token-mallory');
     expect(response.status).toBe(404);
+  });
+
+  it('refuses a viewer of the organization: the tools change things (ADR-0045)', async () => {
+    const { url } = await setup();
+    const response = await claudeRequest(url, 'tools/list', {}, 'token-viewer');
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: 'viewer_read_only' });
   });
 
   it('refuses a signed-in user without an organization', async () => {

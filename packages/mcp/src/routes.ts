@@ -433,6 +433,16 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
   const tenant = deps.auth.tenant(c);
   if (!tenant) return unauthorized(deps, mcpPath);
   if (!tenant.orgId) return c.json({ error: 'organization_required' }, 403);
+  // The endpoint's tools change cards, sessions and settings; a viewer only reads (ADR-0045).
+  if (tenant.role === 'viewer') {
+    return c.json(
+      {
+        error: 'viewer_read_only',
+        message: 'Viewers cannot use the Factory MCP endpoint. Ask an admin of your organization for the Member role.',
+      },
+      403,
+    );
+  }
 
   const project = await deps.projects.get({ orgId: tenant.orgId, id: factoryProjectId });
   if (!project) return c.json({ error: 'not_found' }, 404);

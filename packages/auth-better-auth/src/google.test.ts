@@ -317,23 +317,6 @@ describe('who may do what in an organization', () => {
     expect(await ctx.adapter.count({ model: 'invitation', where: [{ field: 'email', value: EVE.email }] })).toBe(0);
   });
 
-  it('has no role changes: update-member-role is off for everyone, the owner included', async () => {
-    const { orgId, ada, bob, carol } = await organizationWithAdminAndMember();
-
-    const attempts = [
-      { cookie: ada.cookie, memberId: carol.memberId, role: 'admin' },
-      { cookie: ada.cookie, memberId: bob.memberId, role: 'owner' },
-      { cookie: bob.cookie, memberId: carol.memberId, role: 'admin' },
-      { cookie: carol.cookie, memberId: carol.memberId, role: 'owner' },
-    ];
-    for (const { cookie, memberId, role } of attempts) {
-      const response = await api('/organization/update-member-role', cookie, { body: { memberId, role, organizationId: orgId } });
-      expect(response.status).toBe(404);
-    }
-    const roles = (await memberRows()).filter(row => row.organizationId === orgId).map(row => [row.userId, row.role]);
-    expect(Object.fromEntries(roles)).toEqual({ [ada.userId]: 'owner', [bob.userId]: 'admin', [carol.userId]: 'member' });
-  });
-
   it('does not let the owner leave (the organization would be left without one); others may', async () => {
     const { orgId, ada, carol } = await organizationWithAdminAndMember();
 

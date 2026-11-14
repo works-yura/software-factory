@@ -23,6 +23,7 @@ describe('audit action registry', () => {
       'integration',
       'sandbox_env',
       'mcp_server',
+      'organization',
     ]);
   });
 

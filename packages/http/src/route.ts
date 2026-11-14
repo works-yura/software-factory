@@ -25,8 +25,11 @@ export interface RouteAuth {
    * called before `tenant()` so the request context is populated.
    */
   ensureUser(c: Context): Promise<unknown>;
-  /** Tenant identity for the request, when signed in. */
-  tenant(c: Context): { orgId?: string; userId: string } | undefined;
+  /**
+   * Tenant identity for the request, when signed in. `role` is the person's role in
+   * `orgId` when the provider reports roles (`viewer` reads and changes nothing).
+   */
+  tenant(c: Context): { orgId?: string; userId: string; role?: string } | undefined;
   /** Fail-closed check that the caller administers the given organization. */
   isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean>;
 }

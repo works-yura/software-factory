@@ -31,6 +31,19 @@ export const AUDIT_ACTIONS = {
   sandbox_env: ['set', 'updated', 'deleted', 'stages_updated', 'file_created', 'file_updated', 'file_deleted'],
   // External MCP servers: their config, and each agent call to one of their tools (no payloads).
   mcp_server: ['created', 'updated', 'deleted', 'tool_called', 'tool_tried', 'reconnected'],
+  // The organization itself (ADR-0045): its name and avatar, members' roles, invitations and join links.
+  organization: [
+    'updated',
+    'member_role_changed',
+    'member_removed',
+    'member_left',
+    'invitation_created',
+    'invitation_canceled',
+    'invitation_accepted',
+    'join_link_created',
+    'join_link_revoked',
+    'join_link_used',
+  ],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

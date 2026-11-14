@@ -8,6 +8,8 @@ import { makeSignature } from 'better-auth/crypto';
 import { getMigrations } from 'better-auth/db/migration';
 
 import { factoryBetterAuthOptions, factoryMcpResource, MastraAuthBetterAuth, OAUTH_CONSENT_PAGE } from './index';
+import { OrganizationEventRelay } from './team.ts';
+import type { OrganizationEvent } from './team.ts';
 
 /**
  * Tests only: the options Factory actually runs on (`factoryBetterAuthOptions`)
@@ -42,12 +44,18 @@ export interface TestGoogleAuth {
   /** A better-auth endpoint under `/auth/api` as the holder of `cookie`. */
   api(path: string, cookie: string, init?: { method?: string; body?: unknown }): Promise<Response>;
   members(): Promise<MemberRecord[]>;
+  /** Organization events the provider reported, in order (the audit log's input). */
+  events: OrganizationEvent[];
 }
 
 export async function createTestGoogleAuth(): Promise<TestGoogleAuth> {
   const profiles = new Map<string, GoogleProfile>();
   const client = createClient({ url: ':memory:' });
+  const relay = new OrganizationEventRelay();
+  const events: OrganizationEvent[] = [];
+  relay.setHandler(async event => void events.push(event));
   const base = factoryBetterAuthOptions({
+    events: relay,
     database: {
       dialect: new LibsqlDialect({ client } as ConstructorParameters<typeof LibsqlDialect>[0]),
       type: 'sqlite',
@@ -83,7 +91,7 @@ export async function createTestGoogleAuth(): Promise<TestGoogleAuth> {
   const { runMigrations } = await getMigrations(options);
   await runMigrations();
   const auth = betterAuth(options) as unknown as Auth;
-  const provider = new MastraAuthBetterAuth({ auth });
+  const provider = new MastraAuthBetterAuth({ auth, events: relay });
 
   const api: TestGoogleAuth['api'] = (path, cookie, init = {}) =>
     provider.handleAuthRequest(
@@ -98,6 +106,7 @@ export async function createTestGoogleAuth(): Promise<TestGoogleAuth> {
     provider,
     auth,
     api,
+    events,
     async signIn(profile) {
       const idToken = `id-token-${profile.sub}`;
       profiles.set(idToken, profile);

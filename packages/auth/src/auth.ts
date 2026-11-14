@@ -58,6 +58,11 @@ export interface FactoryAuthUser {
   organizationId?: string;
   /** Organization ids proven by the provider's authenticated membership response. */
   organizationMembershipIds?: string[];
+  /**
+   * The person's role in `organizationId` (`owner`, `admin`, `member`, `viewer`), when the
+   * provider reports roles (better-auth). Set by the gate and `/auth/me`, never by the client.
+   */
+  organizationRole?: string;
 }
 
 /**
@@ -70,6 +75,8 @@ export interface FactoryAuthTenant {
   orgId?: string;
   /** Stable provider user id. */
   userId: string;
+  /** The person's role in `orgId`, when the provider reports roles (see {@link FactoryAuthUser.organizationRole}). */
+  role?: string;
 }
 
 /**
@@ -171,7 +178,7 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
   const user = getFactoryAuthUser(c);
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
-  return { orgId: getFactoryAuthOrgId(user), userId };
+  return { orgId: getFactoryAuthOrgId(user), userId, ...(user?.organizationRole ? { role: user.organizationRole } : {}) };
 }
 
 function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
@@ -372,6 +379,68 @@ export function bearerTokenOrgClaim(token: string | undefined): string | undefin
   }
 }
 
+/** A provider that reports a person's role in an organization (better-auth, ADR-0045). */
+export interface OrganizationRoleProvider {
+  organizationRole(organizationId: string, userId: string): Promise<string | null>;
+}
+
+function isOrganizationRoleProvider(provider: IMastraAuthProvider): provider is IMastraAuthProvider & OrganizationRoleProvider {
+  return typeof (provider as Partial<OrganizationRoleProvider>).organizationRole === 'function';
+}
+
+/** The role that may read everything and change nothing (ADR-0045). */
+export const VIEWER_ROLE = 'viewer';
+
+/** What a viewer's write answers (403). */
+export const VIEWER_READ_ONLY_BODY = {
+  error: 'viewer_read_only',
+  message: 'Viewers can look but not change anything. Ask an admin of your organization for the Member role.',
+} as const;
+
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * Writes a viewer may still make: marking their own attention items read,
+ * archived or restored, and previewing an intake route without saving it.
+ * Everything under `/auth/*` (their profile, sessions, leaving, invitations and
+ * join links) never reaches the gate; better-auth checks those itself.
+ */
+const VIEWER_WRITABLE_PATHS: readonly RegExp[] = [
+  /^\/web\/factory\/projects\/[^/]+\/attention\/read-all$/,
+  /^\/web\/factory\/projects\/[^/]+\/attention\/[^/]+\/[^/]+\/[^/]+\/(read|archive|restore)$/,
+  /^\/web\/factory\/projects\/[^/]+\/intake-routes\/preview$/,
+];
+
+/** Whether a viewer may make this request: every read, and the writes in {@link VIEWER_WRITABLE_PATHS}. */
+export function viewerMayRequest(method: string, path: string): boolean {
+  if (!MUTATING_METHODS.has(method.toUpperCase())) return true;
+  return VIEWER_WRITABLE_PATHS.some(pattern => pattern.test(path));
+}
+
+/**
+ * Reads the person's role in the request's organization onto the user, for
+ * providers that report roles. A provider that throws could not check it: 503,
+ * never a request run as if the role were known.
+ */
+async function applyOrganizationRole(provider: IMastraAuthProvider, user: FactoryAuthUser, raw: Request): Promise<void> {
+  if (!isOrganizationRoleProvider(provider)) return;
+  const organizationId = getFactoryAuthOrgId(user);
+  const userId = getFactoryAuthUserId(user);
+  if (!organizationId || !userId) return;
+  let role: string | null;
+  try {
+    role = await provider.organizationRole(organizationId, userId);
+  } catch (error) {
+    console.error(
+      `[auth] Provider ${provider.name ?? 'unknown'} could not read the role of user ${userId} in organization ${organizationId} for ${describeRequest(raw)}; answering 503 auth_unavailable.`,
+      error,
+    );
+    throw new AuthUnavailableError('Could not read the organization role', { cause: error });
+  }
+  if (role) user.organizationRole = role;
+  else delete user.organizationRole;
+}
+
 /**
  * Picks the request's org: an explicit `X-Mastra-Organization-Id` header, else
  * a bearer token's `org_id` claim (MCP clients such as ChatGPT can't send the
@@ -497,6 +566,7 @@ export async function ensureFactoryAuthUser(
     forwardPendingResponseHeaders(provider, c);
     if (!user) return undefined;
     allowed = await applyRequestedOrganization(provider, c, token, user);
+    if (allowed) await applyOrganizationRole(provider, user, c.req.raw);
   } catch (error) {
     if (error instanceof AuthUnavailableError) throw authUnavailableException(error);
     throw error;
@@ -558,6 +628,7 @@ async function authMeResponse(provider: IMastraAuthProvider, c: Context): Promis
   // Resolve the org the same way gated requests do (providers cache, so this
   // is a lookup — not a create — after first bootstrap).
   await ensureUserOrg(provider, user, c.req.raw);
+  await applyOrganizationRole(provider, user, c.req.raw);
   return c.json({
     authenticated: true,
     telemetryEnabled: isFactoryTelemetryEnabled(provider.name),
@@ -567,6 +638,7 @@ async function authMeResponse(provider: IMastraAuthProvider, c: Context): Promis
       name: user.name,
       avatarUrl: user.avatarUrl,
       organizationId: user.organizationId,
+      ...(user.organizationRole ? { organizationRole: user.organizationRole } : {}),
     },
     ...meta,
   });
@@ -1021,6 +1093,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       // Without a requested org, no-org accounts get a bootstrapped personal org
       // so the org id resolves on this request (see ensureFactoryAuthUser).
       if (user) allowed = await applyRequestedOrganization(provider, c, token, user);
+      if (user && allowed) await applyOrganizationRole(provider, user, c.req.raw);
     } catch (error) {
       if (!(error instanceof AuthUnavailableError)) throw error;
       // The provider could not answer: not "signed out", so no sign-in redirect.
@@ -1030,6 +1103,11 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (user) {
       if (!allowed) {
         return c.json({ error: 'organization_forbidden' }, 403);
+      }
+      // A viewer reads everything and changes nothing (ADR-0045); the UI hides
+      // the controls, this is what enforces it.
+      if (user.organizationRole === VIEWER_ROLE && !viewerMayRequest(c.req.method, path)) {
+        return c.json(VIEWER_READ_ONLY_BODY, 403);
       }
       c.set(FACTORY_AUTH_USER_KEY, user);
       const requestContext = c.get('requestContext');

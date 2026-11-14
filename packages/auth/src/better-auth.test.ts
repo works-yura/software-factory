@@ -25,6 +25,7 @@ beforeEach(async () => {
   app = new Hono();
   mountFactoryAuth(app, { provider: google.provider });
   app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? null));
+  app.post('/web/factory/projects/:id/runs/start', c => c.json({ started: true }));
   app.get('/web/admin/:organizationId', async c =>
     c.json({ admin: await routeAuth.isOrganizationAdmin(c, c.req.param('organizationId')) }),
   );
@@ -55,7 +56,7 @@ async function organization() {
   const ada = await google.signIn(ADA);
   const { orgId } = await tenant(ada);
   if (!orgId) throw new Error('the gate gave Ada no organization');
-  async function join(profile: GoogleProfile, role: 'admin' | 'member'): Promise<string> {
+  async function join(profile: GoogleProfile, role: 'admin' | 'member' | 'viewer'): Promise<string> {
     const invited = await google.api('/organization/invite-member', ada, { body: { email: profile.email, role, organizationId: orgId } });
     const { id } = (await invited.json()) as { id: string };
     const cookie = await google.signIn(profile);
@@ -98,7 +99,7 @@ describe('Factory gate on the Google provider', () => {
     error.mockRestore();
   });
 
-  it('takes a removed member out of the organization on /web/* once the membership cache expires', async () => {
+  it('takes a removed member out of the organization on /web/* at once in the process that removed them', async () => {
     const { orgId, ada, carol } = await organization();
     expect(await tenant(carol)).toMatchObject({ orgId });
 
@@ -107,10 +108,8 @@ describe('Factory gate on the Google provider', () => {
     });
     expect(removed.status).toBe(200);
 
-    // Within the minute the confirmed membership is still cached.
-    expect(await tenant(carol)).toMatchObject({ orgId });
-
-    vi.setSystemTime(Date.now() + 61_000);
+    // The removal clears this process's membership caches (ADR-0045); other replicas follow
+    // within the minute their cache lasts.
     const after = await tenant(carol);
     expect(after.orgId).toBeDefined();
     expect(after.orgId).not.toBe(orgId);
@@ -118,5 +117,26 @@ describe('Factory gate on the Google provider', () => {
     // Her own organization is hers to administer; Ada's stays Ada's.
     expect(await isAdmin(carol, after.orgId!)).toBe(true);
     expect(await tenant(ada)).toMatchObject({ orgId });
+  });
+
+  it('keeps a viewer read-only, and lets them write once an admin makes them a member', async () => {
+    const { ada, carol, orgId } = await organization();
+    const members = await google.members();
+    const carolMember = members.find(row => row.organizationId === orgId && row.role === 'member')!;
+    const start = (cookie: string) =>
+      app.request('/web/factory/projects/p1/runs/start', { method: 'POST', headers: { cookie, Accept: 'application/json' } });
+
+    const demoted = await google.api('/organization/update-member-role', ada, {
+      body: { memberId: carolMember.id, role: 'viewer', organizationId: orgId },
+    });
+    expect(demoted.status).toBe(200);
+
+    expect(await tenant(carol)).toMatchObject({ orgId, role: 'viewer' });
+    const refused = await start(carol);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: 'viewer_read_only' });
+
+    expect((await google.api('/organization/update-member-role', ada, { body: { memberId: carolMember.id, role: 'member', organizationId: orgId } })).status).toBe(200);
+    expect((await start(carol)).status).toBe(200);
   });
 });

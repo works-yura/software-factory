@@ -800,6 +800,9 @@ importers:
       better-auth:
         specifier: 1.7.7
         version: 1.7.7(@opentelemetry/api@1.10.0)(pg@8.22.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.11)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@libsql/client':
         specifier: 0.18.0

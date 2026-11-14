@@ -1004,3 +1004,92 @@ describe('isOrganizationAdmin', () => {
     error.mockRestore();
   });
 });
+
+describe('viewer role (ADR-0045)', () => {
+  const mockOrganizationRole = vi.fn(async (_organizationId: string, _userId: string): Promise<string | null> => 'viewer');
+
+  class FakeRoleProvider extends FakeSsoProvider {
+    organizationRole = mockOrganizationRole;
+  }
+
+  function buildRoleApp() {
+    const app = new Hono();
+    mountFactoryAuth(app, { provider: new FakeRoleProvider() as unknown as IMastraAuthProvider });
+    app.get('*', c => c.json({ tenant: factoryAuthTenant(c) }));
+    for (const method of ['post', 'put', 'patch', 'delete'] as const) app[method]('*', c => c.text('changed'));
+    return app;
+  }
+
+  beforeEach(() => {
+    mockOrganizationRole.mockReset();
+    mockOrganizationRole.mockResolvedValue('viewer');
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'v@b.com', organizationId: 'org_1' });
+  });
+
+  it('lets a viewer read, with the role on the tenant', async () => {
+    const res = await buildRoleApp().request('/web/factory/projects/p1/work-items', { headers: { Accept: 'application/json' } });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ tenant: { orgId: 'org_1', userId: 'user_1', role: 'viewer' } });
+    expect(mockOrganizationRole).toHaveBeenCalledWith('org_1', 'user_1');
+  });
+
+  it('refuses every write of a viewer with 403 viewer_read_only', async () => {
+    const app = buildRoleApp();
+    for (const [method, path] of [
+      ['POST', '/web/factory/projects/p1/runs/start'],
+      ['POST', '/api/agents/factory/stream'],
+      ['PATCH', '/web/factory/work-items/w1'],
+      ['PUT', '/web/factory/projects/p1/skills/s'],
+      ['DELETE', '/web/factory/projects/p1/boards/b'],
+    ] as const) {
+      const res = await app.request(path, { method, headers: { Accept: 'application/json' } });
+      expect(res.status, `${method} ${path}`).toBe(403);
+      expect(await res.json()).toMatchObject({ error: 'viewer_read_only' });
+    }
+  });
+
+  it("lets a viewer mark their own attention items and preview an intake route", async () => {
+    const app = buildRoleApp();
+    for (const path of [
+      '/web/factory/projects/p1/attention/read-all',
+      '/web/factory/projects/p1/attention/mention/c1/0/read',
+      '/web/factory/projects/p1/attention/mention/c1/0/archive',
+      '/web/factory/projects/p1/attention/mention/c1/0/restore',
+      '/web/factory/projects/p1/intake-routes/preview',
+    ]) {
+      const res = await app.request(path, { method: 'POST', headers: { Accept: 'application/json' } });
+      expect(res.status, path).toBe(200);
+    }
+  });
+
+  it('lets members and admins write', async () => {
+    const app = buildRoleApp();
+    for (const role of ['member', 'admin', 'owner']) {
+      mockOrganizationRole.mockResolvedValue(role);
+      const res = await app.request('/web/factory/projects/p1/runs/start', { method: 'POST', headers: { Accept: 'application/json' } });
+      expect(res.status, role).toBe(200);
+    }
+  });
+
+  it('answers 503 auth_unavailable when the role cannot be read, never running the request', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockOrganizationRole.mockRejectedValue(new Error('db down'));
+
+    const res = await buildRoleApp().request('/web/factory/projects/p1/runs/start', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('could not read the role of user user_1'), expect.any(Error));
+    error.mockRestore();
+  });
+
+  it('reports the role on /auth/me', async () => {
+    const res = await buildRoleApp().request('/auth/me');
+
+    expect(await res.json()).toMatchObject({ authenticated: true, user: { userId: 'user_1', organizationRole: 'viewer' } });
+  });
+});

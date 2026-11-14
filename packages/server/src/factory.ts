@@ -232,7 +232,7 @@ import { githubRepositoryVisibility } from './repository-visibility.ts';
 /** How often idle local sandboxes are looked for (ADR-0039); the grace period is twice this. */
 const SANDBOX_SWEEP_INTERVAL_MS = 5 * 60_000;
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
-import { backfillUntilDone, factoryPrincipalId, WorkItemSplitModeError } from '@factory/store';
+import { auditActorProfile, backfillUntilDone, factoryPrincipalId, WorkItemSplitModeError } from '@factory/store';
 import { factoryRunsNeedSharedSignIn } from './accounts/pool.ts';
 import { createContextSandboxStops } from './context-sandboxes.ts';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
@@ -993,6 +993,22 @@ export class MastraFactory {
     // the same lifecycle as the backend connection.
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
+    // The auth provider's organization events (roles, removals, invitations, join links, the
+    // organization's name and avatar; ADR-0045) go to the same audit log as everything else.
+    if (auth && hasOrganizationEventHandler(auth)) {
+      auth.setOrganizationEventHandler(async event => {
+        const actorProfile = auditActorProfile(event.actor);
+        await auditStorage.record({
+          orgId: event.organizationId,
+          actorId: event.actor.userId,
+          actorType: 'human',
+          ...(actorProfile ? { actorProfile } : {}),
+          action: event.action,
+          targets: event.targets,
+          ...(event.metadata ? { metadata: event.metadata } : {}),
+        });
+      });
+    }
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
@@ -4233,4 +4249,21 @@ export class MastraFactory {
       backfill?.promise,
     ]);
   }
+}
+
+/** An auth provider that reports organization events for the audit log (`@factory/auth-better-auth`). */
+interface OrganizationEventSource {
+  setOrganizationEventHandler(
+    handler: (event: {
+      action: string;
+      organizationId: string;
+      actor: { userId: string; name?: string; email?: string; avatarUrl?: string };
+      targets: Array<{ type: string; id: string; name?: string }>;
+      metadata?: Record<string, unknown>;
+    }) => Promise<void>,
+  ): void;
+}
+
+function hasOrganizationEventHandler(provider: object): provider is OrganizationEventSource {
+  return typeof (provider as Partial<OrganizationEventSource>).setOrganizationEventHandler === 'function';
 }

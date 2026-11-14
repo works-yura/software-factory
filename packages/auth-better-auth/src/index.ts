@@ -8,7 +8,9 @@
  * to an existing user row with the same email, a session's active organization
  * is honored only while the user is still a member of it, and a membership
  * lookup that fails refuses the request instead of acting in another
- * organization. See THIRD_PARTY_NOTICES.md and MIGRATION.md.
+ * organization; Factory adds a `viewer` role, role changes among
+ * viewer/member/admin, join links, avatars and audited organization events
+ * (`team.ts`, ADR-0045). See THIRD_PARTY_NOTICES.md and MIGRATION.md.
  */
 import type {
   AuthInitContext,
@@ -31,7 +33,20 @@ import { jwt, organization } from 'better-auth/plugins';
 import { verifyJwsAccessToken } from 'better-auth/oauth2';
 import { oauthProvider } from '@better-auth/oauth-provider';
 
+import {
+  factoryTeam,
+  isAssignableRole,
+  OrganizationEventRelay,
+  organizationAccessControl,
+  organizationEventsHook,
+  OWNER_ROLE,
+} from './team.ts';
+import type { OrganizationEventHandler } from './team.ts';
+
+export * from './team.ts';
+
 type BetterAuthContext = Awaited<Auth['$context']>;
+type OrganizationPluginOptions = NonNullable<Parameters<typeof organization>[0]>;
 
 function tryDecode(value: string): string {
   try {
@@ -138,15 +153,8 @@ export const OAUTH_ACCESS_TOKEN_EXPIRES_IN_SECONDS = 60 * 60;
 /** How long an invitation link stays valid. */
 export const INVITATION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
 
-/** The organization plugin's creator role: the one role nobody is given through the API. */
-const OWNER_ROLE = 'owner';
-
-/**
- * Organization endpoints Factory turns off (better-auth answers 404). Roles are
- * deferred: invitations are for `member`, and nobody changes a role until there
- * is a UI and a decision for it.
- */
-const DISABLED_PATHS = ['/organization/update-member-role'];
+/** How long a person's role in an organization stays cached (the viewer gate reads it per request). */
+const ROLE_CACHE_TTL_MS = 10_000;
 
 export interface MastraAuthBetterAuthOptions extends MastraAuthProviderOptions<BetterAuthUser> {
   /**
@@ -167,6 +175,13 @@ export interface MastraAuthBetterAuthOptions extends MastraAuthProviderOptions<B
 
   /** Google sign-in, the only way in for the provider-built instance. Ignored when `auth` is provided. */
   google?: GoogleClientOptions;
+
+  /**
+   * Organization events (role changes, join links…) and membership changes.
+   * Pass the same relay to `factoryBetterAuthOptions` when bringing your own
+   * `auth`; the provider-built instance gets the provider's own.
+   */
+  events?: OrganizationEventRelay;
 }
 
 /** Host context the provider-built better-auth instance needs. */
@@ -176,6 +191,8 @@ export interface FactoryBetterAuthConfig {
   google: GoogleClientOptions;
   publicUrl?: string;
   allowedOrigins?: string[];
+  /** Where organization events go (the provider's relay). Without one, events are logged as not audited. */
+  events?: OrganizationEventRelay;
 }
 
 /**
@@ -190,6 +207,7 @@ export interface FactoryBetterAuthConfig {
 export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): BetterAuthOptions {
   const allowedOrigins = config.allowedOrigins ?? [];
   const crossSite = allowedOrigins.length > 0;
+  const events = config.events ?? new OrganizationEventRelay();
   return {
     database: config.database,
     secret: config.secret,
@@ -213,14 +231,25 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
       // A Google sign-in whose email matches an existing user row signs in as
       // that row, so people moved over from the previous sign-in keep their id.
       // The row must have a verified email (better-auth's
-      // `requireLocalEmailVerified` default).
+      // `requireLocalEmailVerified` default). The profile (name, picture) is
+      // copied from Google only at that first link; later sign-ins leave a
+      // name or picture the person chose alone (Google's
+      // `overrideUserInfoOnSignIn` stays off).
       accountLinking: { enabled: true, trustedProviders: ['google'], updateUserInfoOnLink: true },
     },
-    disabledPaths: DISABLED_PATHS,
-    ...(config.publicUrl ? { hooks: { before: loopbackClientsAreNative } } : {}),
+    hooks: {
+      ...(config.publicUrl ? { before: loopbackClientsAreNative } : {}),
+      // Role changes, removals, invitations and organization edits go to the audit log.
+      after: organizationEventsHook(events),
+    },
     plugins: [
       ...(config.publicUrl ? mcpAuthorizationServerPlugins(config.publicUrl) : []),
+      factoryTeam(events),
       organization({
+        // Owner, admin, member and viewer (ADR-0045). better-auth's own `defaultAc`
+        // does not satisfy its option type's generic parameters, hence the casts.
+        ac: organizationAccessControl.ac as unknown as OrganizationPluginOptions['ac'],
+        roles: organizationAccessControl.roles as unknown as OrganizationPluginOptions['roles'],
         // Personal organizations are created by this provider (ensureOrganization);
         // nobody creates further ones through the API.
         allowUserToCreateOrganization: false,
@@ -234,12 +263,25 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
         organizationHooks: {
           // better-auth lets an owner invite another owner; Factory keeps one
           // owner per organization (the one who cannot leave it).
+          // Invitations carry one of the three roles a person can be given.
           beforeCreateInvitation: async ({ invitation }) => {
             const roles = invitation.role.split(',').map(role => role.trim());
-            if (roles.includes(OWNER_ROLE)) {
+            if (roles.length !== 1 || !roles.every(isAssignableRole)) {
               throw APIError.from('FORBIDDEN', {
                 code: 'YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE',
                 message: 'You are not allowed to invite a user with this role',
+              });
+            }
+          },
+          // A role change gives one of the three roles, and never touches the owner
+          // (better-auth would let the owner hand `owner` on, or demote themself
+          // while another owner exists).
+          beforeUpdateMemberRole: async ({ member, newRole }) => {
+            const roles = newRole.split(',').map(role => role.trim());
+            if (member.role.split(',').includes(OWNER_ROLE) || roles.length !== 1 || !roles.every(isAssignableRole)) {
+              throw APIError.from('FORBIDDEN', {
+                code: 'YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_MEMBER',
+                message: 'The owner keeps their role, and a member can only be made viewer, member or admin.',
               });
             }
           },
@@ -338,6 +380,11 @@ interface TaggedAuthDatabase {
  */
 class ExpiringMap<V> {
   #entries = new Map<string, { value: V; expiresAt: number }>();
+  readonly #ttlMs: number;
+
+  constructor(ttlMs: number = ORG_CACHE_TTL_MS) {
+    this.#ttlMs = ttlMs;
+  }
 
   get(key: string): V | undefined {
     const entry = this.#entries.get(key);
@@ -362,7 +409,11 @@ class ExpiringMap<V> {
       this.#entries.delete(existing);
     }
     this.#entries.delete(key);
-    this.#entries.set(key, { value, expiresAt: now + ORG_CACHE_TTL_MS });
+    this.#entries.set(key, { value, expiresAt: now + this.#ttlMs });
+  }
+
+  delete(key: string): void {
+    this.#entries.delete(key);
   }
 
   get size(): number {
@@ -400,6 +451,10 @@ export class MastraAuthBetterAuth
   #membershipCache = new ExpiringMap<true>();
   /** `userId → every orgId`, for token requests that name an organization; same TTL. */
   #membershipsCache = new ExpiringMap<string[]>();
+  /** `userId|orgId → role` (`null` = not a member), for the viewer gate; short TTL, cleared on a change here. */
+  #roleCache = new ExpiringMap<string | null>(ROLE_CACHE_TTL_MS);
+  /** Organization events and membership changes from better-auth (see `OrganizationEventRelay`). */
+  readonly #events: OrganizationEventRelay;
   /** Where the access-token signing keys are cached between verifications. */
   readonly #jwksCacheKey = {};
 
@@ -427,8 +482,23 @@ export class MastraAuthBetterAuth
     }
 
     this.#auth = options.auth;
+    this.#events = options.events ?? new OrganizationEventRelay();
+    this.#events.onMembershipChanged((organizationId, userId) => {
+      this.#roleCache.delete(`${userId}|${organizationId}`);
+      this.#membershipCache.delete(`${userId}|${organizationId}`);
+      this.#membershipsCache.delete(userId);
+      this.#orgCache.delete(userId);
+    });
 
     this.registerOptions(options);
+  }
+
+  /**
+   * Where organization events (role changes, removals, invitations, join links,
+   * organization edits) are recorded; the Factory server sets its audit log.
+   */
+  setOrganizationEventHandler(handler: OrganizationEventHandler | undefined): void {
+    this.#events.setHandler(handler);
   }
 
   /**
@@ -509,6 +579,7 @@ export class MastraAuthBetterAuth
         google: deferred.google,
         publicUrl: ctx.publicUrl,
         allowedOrigins: ctx.allowedOrigins,
+        events: this.#events,
       }),
     );
     this.#ownsInstance = true;
@@ -730,6 +801,24 @@ export class MastraAuthBetterAuth
     const ctx = await this.#requireAuthContext();
     const membership = await this.#findMember(ctx, organizationId, userId);
     return membership?.role === OWNER_ROLE || membership?.role === 'admin';
+  }
+
+  /**
+   * The person's role in the organization (`owner`, `admin`, `member`,
+   * `viewer`), or `null` when they are not a member. Cached for
+   * {@link ROLE_CACHE_TTL_MS}; a role change, removal or join in this process
+   * clears the entry at once. A failed lookup throws; the gate answers 503.
+   */
+  async organizationRole(organizationId: string, userId: string): Promise<string | null> {
+    const key = `${userId}|${organizationId}`;
+    const cached = this.#roleCache.get(key);
+    if (cached !== undefined) return cached;
+    await this.#ensureDbReady();
+    const ctx = await this.#requireAuthContext();
+    const membership = await this.#findMember(ctx, organizationId, userId);
+    const role = membership?.role ?? null;
+    this.#roleCache.set(key, role);
+    return role;
   }
 
   // ============================================
