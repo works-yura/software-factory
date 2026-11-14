@@ -83,7 +83,7 @@ import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
 import type { HarnessExecutableReport } from '@factory/harness/executable';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
-import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES, OPENCODE_HARNESS } from '@factory/contracts';
 import { createAgentAccountsConnections } from './agent-connections.ts';
 import { SIGN_IN_ACCOUNT_PROVIDERS } from './credential-accounts.ts';
 import type { AccountSignInFlows } from './credential-accounts.ts';
@@ -101,6 +101,10 @@ import { BoardRoutes } from './boards.ts';
 import { SkillRoutes } from './skills.ts';
 import { AttachmentRoutes } from './attachments.ts';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
+import { buildOpenCodeLocalSessionRoutes } from './opencode-local-sessions.ts';
+import type { OpenCodeLocalSessionsService } from './opencode-local-sessions.ts';
+import { createOpenCodeAccountsConnections } from './opencode-connections.ts';
+import type { OpenCodeKeyCheck } from './opencode-connections.ts';
 import type { ClaudeCodeUserSessions } from './source-control-sessions.ts';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
 import { invalidateTenantCredentialSnapshots } from '@factory/credentials';
@@ -190,6 +194,13 @@ export interface FactoryApiRoutesDeps {
   codexEnabled?: boolean;
   /** The OpenCode harness is configured here, so factories may pick `harness: 'opencode'` (ADR-0043). */
   openCodeEnabled?: boolean;
+  /** Checks an OpenCode key with OpenCode before Settings › Connections keeps it (the OpenCode accounts connector). */
+  checkOpenCodeKey?: (apiKey: string) => Promise<OpenCodeKeyCheck>;
+  /**
+   * The person's own OpenCode sessions, continued in the Factory (ADR-0043, amendment): only where
+   * the server is the person's own machine.
+   */
+  opencodeLocalSessions?: OpenCodeLocalSessionsService;
   /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
   harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession' | 'forInstance'> | undefined;
   /** The CLIs the turn-based harnesses spawn, for `/web/config/versions` (ADR-0038). */
@@ -876,6 +887,27 @@ function agentAccountConnectors(deps: FactoryApiRoutesDeps): ConnectorRegistrati
   });
 }
 
+/**
+ * OpenCode's accounts connector (ADR-0043, amendment): the organization's OpenCode keys, which
+ * OpenCode runs sign in with. Present when the OpenCode harness runs here.
+ */
+function openCodeAccountConnector(deps: FactoryApiRoutesDeps): ConnectorRegistration[] {
+  const accounts = OPENCODE_HARNESS.setup.accounts;
+  if (!deps.openCodeEnabled || !accounts || !deps.checkOpenCodeKey) return [];
+  const facet = deps.usage?.harnesses.forHarness(OPENCODE_HARNESS.id);
+  return [
+    {
+      id: accounts.connector,
+      connections: createOpenCodeAccountsConnections({
+        harness: OPENCODE_HARNESS,
+        credentials: deps.domains.modelCredentials,
+        checkKey: deps.checkOpenCodeKey,
+        ...(deps.usage ? { usage: { storage: deps.usage.usage, ...(facet ? { facet } : {}) } } : {}),
+      }),
+    },
+  ];
+}
+
 export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[] {
   const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
   const registrations = deps.integrations ?? [];
@@ -1057,6 +1089,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         device: deps.deviceEnabled ?? false,
         claudeSignIn: deps.claudeSignIn !== undefined,
         codexSignIn: deps.codexSignIn !== undefined,
+        opencodeLocalSessions: deps.opencodeLocalSessions !== undefined,
       },
       deploymentProviders: deps.deploymentModelProviders,
       ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
@@ -1090,6 +1123,17 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
+    // The person's own OpenCode sessions, continued here: only on their own machine (ADR-0043).
+    ...(deps.opencodeLocalSessions && sourceControls.length > 0
+      ? buildOpenCodeLocalSessionRoutes({
+          auth: deps.auth,
+          sourceControls,
+          projects: deps.domains.projects,
+          memorySettings: deps.domains.memorySettings,
+          ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
+          opencodeLocalSessions: deps.opencodeLocalSessions,
+        })
+      : []),
     ...(sourceControls.length === 0
       ? []
       : buildSourceControlSettingsRoutes({
@@ -1102,7 +1146,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     // the accounts each turn-based harness runs on (ADR-0036).
     ...buildConnectionRoutes({
       auth: deps.auth,
-      connectors: [...connectors, ...agentAccountConnectors(deps), ...(deps.connectors ?? [])],
+      connectors: [...connectors, ...agentAccountConnectors(deps), ...openCodeAccountConnector(deps), ...(deps.connectors ?? [])],
       emitAudit,
     }),
     ...absentStubs,

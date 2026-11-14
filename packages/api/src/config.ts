@@ -315,6 +315,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
     codexSignIn?: boolean;
     /** The OpenCode harness runs here: factories may pick `harness: 'opencode'` (ADR-0043). Only filters `harnesses`. */
     opencode?: boolean;
+    /** The person's own OpenCode sessions can be continued here (the server is their own machine). */
+    opencodeLocalSessions?: boolean;
     device?: boolean;
   };
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
@@ -467,6 +469,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             claudeSignIn: (options.features?.claudeCode ?? false) && (options.features?.claudeSignIn ?? false),
             codex: options.features?.codex ?? false,
             codexSignIn: (options.features?.codex ?? false) && (options.features?.codexSignIn ?? false),
+            opencodeLocalSessions: (options.features?.opencode ?? false) && (options.features?.opencodeLocalSessions ?? false),
             device: options.features?.device ?? false,
             // What each harness this server runs can do; the UI asks these instead of checking ids.
             harnesses: HARNESSES.filter(

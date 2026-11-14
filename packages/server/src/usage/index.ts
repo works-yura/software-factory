@@ -29,9 +29,11 @@ export function createFactoryUsage(options: {
   /** Each turn harness's sign-in reader (its credentials' `signIn`); a harness without one has no usage facet. */
   claudeSignIn?: SignIn | undefined;
   codexSignIn?: SignIn | undefined;
+  /** Facets of harnesses whose accounts are read another way (OpenCode's keys). */
+  extraFacets?: HarnessUsage[];
   fetch?: typeof fetch;
 }): FactoryUsage {
-  const facets: HarnessUsage[] = [];
+  const facets: HarnessUsage[] = [...(options.extraFacets ?? [])];
   const probe = (signIn: SignIn) => ({ signIn, ...(options.fetch ? { fetch: options.fetch } : {}) });
   if (options.claudeSignIn) facets.push(createClaudeHarnessUsage(probe(options.claudeSignIn)));
   if (options.codexSignIn) facets.push(createCodexHarnessUsage(probe(options.codexSignIn)));

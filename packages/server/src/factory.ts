@@ -134,6 +134,9 @@ import type { CodexCredentials, CodexFactoryHarness, CodexFactoryHarnessOptions 
 import { OPENCODE_NOT_INSTALLED_REASON, OpenCodeSession } from '@factory/harness-opencode';
 import type { OpenCodeSessionMode } from '@factory/harness-opencode';
 import { createOpenCodeFactoryHarness, createOpenCodeUserSessions } from './opencode/index.ts';
+import { createOpenCodeAccounts, createOpenCodeHarnessUsage } from './opencode/accounts.ts';
+import { createOpenCodeLocalSessions } from './opencode/local-import.ts';
+import { readOpenCodeAccountLimits } from '@factory/harness-opencode';
 import type { OpenCodeFactoryHarness, OpenCodeFactoryHarnessOptions } from './opencode/index.ts';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID, selfReviewedHeadFor } from '@factory/harness-mastra';
@@ -619,6 +622,13 @@ export interface MastraFactoryOpenCodeConfig
   cwdFor?: (sessionId: string) => string | Promise<string>;
   /** The origin OpenCode reaches this server's MCP endpoint at; `publicUrl` by default. */
   mcpOrigin?: string;
+  /**
+   * The server runs on the person's own machine: their own OpenCode sessions can be continued in
+   * the Factory (read-only from their OpenCode database, at their request; ADR-0043).
+   */
+  localDevelopment?: boolean;
+  /** The person's OpenCode database; where OpenCode keeps it for this server's user by default. */
+  localSessionsDatabase?: string;
 }
 
 export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from '@factory/sandbox';
@@ -2359,9 +2369,12 @@ export class MastraFactory {
     };
     factoryRunAccountsCheck = factoryRunAccounts;
     // Every session's token usage, and the turn harnesses' accounts' allowances (`./usage`).
+    // The organization's OpenCode accounts (Settings → Connections → OpenCode): runs sign in with one; none runs the free models.
+    const openCodeAccounts = openCodeConfig ? createOpenCodeAccounts({ credentials: modelCredentialsStorage }) : undefined;
     const factoryUsage = createFactoryUsage({
       storage: usageStorage,
       sessions: sourceControlSessions,
+      ...(openCodeAccounts ? { extraFacets: [createOpenCodeHarnessUsage(openCodeAccounts)] } : {}),
       ...(claudeCodeConfig ? { claudeSignIn: createClaudeCodeCredentials({ credentials: modelCredentialsStorage }).signIn } : {}),
       ...(codexConfig ? { codexSignIn: createCodexCredentials({ credentials: modelCredentialsStorage }).signIn } : {}),
     });
@@ -2855,9 +2868,12 @@ export class MastraFactory {
             tokens: sessionTokens!,
           },
           onSession: observeTurnSession,
+          ...(openCodeAccounts ? { accounts: openCodeAccounts } : {}),
+          parkOnUsageLimit,
         })
       : undefined;
     if (opencode) {
+      parkedSessionSources.push({ parked: storeParkedSessions(opencode.store), get: sessionId => opencode.harness.getSession(sessionId) });
       removeOpenCodeSessionHome = sessionId => opencode.removeSessionHome(sessionId);
       // Its free models in the picker, Settings and `factory_switch_session_model`, through its facet.
       harnessModels.register(openCodeExecutable ? withExecutableAvailability(opencode.models, openCodeExecutable) : opencode.models);
@@ -3494,6 +3510,29 @@ export class MastraFactory {
             codexEnabled: codex !== undefined,
             // Factories may pick OpenCode where it is configured; while its CLI is missing, its facet says why (ADR-0043).
             openCodeEnabled: opencode !== undefined,
+            // An OpenCode key is checked with OpenCode before Settings › Connections keeps it.
+            checkOpenCodeKey: async apiKey => {
+              const limits = await readOpenCodeAccountLimits(apiKey);
+              if (limits.unavailable?.reason === 'signed_out') return { ok: false, message: limits.unavailable.message ?? 'refused' };
+              if (limits.unavailable?.reason === 'failed') return { ok: false, message: limits.unavailable.message ?? 'OpenCode did not answer.' };
+              return { ok: true, go: limits.windows.length > 0 };
+            },
+            // The person's own OpenCode sessions, continued here: only on their own machine (ADR-0043).
+            ...(opencode && openCodeConfig?.localDevelopment === true
+              ? {
+                  opencodeLocalSessions: createOpenCodeLocalSessions({
+                    harness: opencode.harness,
+                    ...(openCodeConfig.localSessionsDatabase ? { databasePath: openCodeConfig.localSessionsDatabase } : {}),
+                    flushed: async sessionId => {
+                      await this.#claudeSessionUi.channel(sessionId)?.flushed();
+                    },
+                    // The first turn starts a new OpenCode conversation that carries the imported history.
+                    handOff: async ({ threadId, resourceId }) => {
+                      await sessionHandoffs.prepare({ threadId, resourceId, fromInstanceId: 'opencode', toInstanceId: 'opencode', reason: 'resume_failed' });
+                    },
+                  }),
+                }
+              : {}),
             harnessModels: () => harnessModels,
             harnessExecutables: () => Promise.all(this.#harnessExecutables.map(executable => executable.report())),
             deviceEnabled: device !== undefined,

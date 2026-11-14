@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 import type { HarnessRoute, TurnHandoffHook } from '@factory/harness';
@@ -32,6 +33,7 @@ import { createSessionDirs } from '../claude/config-dir.ts';
 import { CLAUDE_SUPERVISOR_WRITE_TOOLS, claudeSupervisorProjectId, createClaudeSupervisorWorkdir, createTurnSupervisorSessions } from '../claude/supervisor.ts';
 import { CLAUDE_THREAD_SETTINGS } from '../claude/start-coordinator.ts';
 import { isUntrustedCheckout } from '../turn-harness.ts';
+import type { OpenCodeAccounts } from './accounts.ts';
 
 /** The MCP server name the Factory's tools are mounted under in an OpenCode session. */
 export const OPENCODE_FACTORY_MCP_SERVER = 'factory';
@@ -130,6 +132,13 @@ export interface OpenCodeFactoryHarnessOptions {
   /** Replaces the CLI probe behind the model facet (tests). */
   catalog?: OpenCodeCatalogSource;
   onSession?: (session: OpenCodeSession) => void;
+  /**
+   * The organization's OpenCode accounts (Settings → Connections → OpenCode): a run signs in with
+   * one, and the catalog lists its paid models. Without them every run is on the free models.
+   */
+  accounts?: OpenCodeAccounts;
+  /** Whether a run that hit a limit with a known reset parks until then (a chat session) or fails (a card's run). */
+  parkOnUsageLimit?: (session: OpenCodeSession) => boolean | Promise<boolean>;
 }
 
 export interface OpenCodeFactoryHarness {
@@ -147,8 +156,9 @@ export interface OpenCodeFactoryHarness {
  * The OpenCode harness as a Factory runs it: sessions recorded in their own store, checked out per
  * session, given the Factory's tools over MCP with a token minted for the run, the Factory's signals
  * ahead of each turn, and its tool permissions as OpenCode's rules. Each session keeps OpenCode's
- * state in its own folders: never the person's `~/.config/opencode` or `~/.local/share/opencode`,
- * and no login: the free models of OpenCode's own provider need none (ADR-0043).
+ * state in its own folders: never the person's `~/.config/opencode` or `~/.local/share/opencode`.
+ * A run signs in with one of the organization's OpenCode accounts when it has any (its key inline);
+ * otherwise with nothing, on the free models (ADR-0043).
  */
 export function createOpenCodeFactoryHarness(options: OpenCodeFactoryHarnessOptions): OpenCodeFactoryHarness {
   const store = options.store ?? (options.storeDir ? createJsonFileOpenCodeSessionStore(options.storeDir) : undefined);
@@ -221,15 +231,22 @@ export function createOpenCodeFactoryHarness(options: OpenCodeFactoryHarnessOpti
     options.catalog ??
     createOpenCodeCatalogSource({
       installed: () => harnessCommandAvailable(options.command, 'opencode', env),
-      probe: () =>
+      probe: apiKey =>
         probeOpenCode({
           ...(options.command ? { command: options.command } : {}),
-          root: join(homeRoot, '.catalog-probe'),
+          // A signed-in probe gets a folder of its own (named by a digest, never the key).
+          root: join(homeRoot, '.catalog-probe', apiKey ? createHash('sha256').update(apiKey).digest('hex').slice(0, 16) : 'free'),
           env,
           sharedCacheDir,
           ...(options.spawn ? { spawn: options.spawn } : {}),
+          ...(apiKey ? { apiKey } : {}),
         }),
     });
+  const accounts = options.accounts;
+  const accountTenant = async (session: OpenCodeSession) => {
+    const tenant = await tenantOf(session);
+    return { orgId: tenant.orgId, userId: tenant.userId };
+  };
 
   const models = createOpenCodeHarnessModels<OpenCodeSession>({
     owns,
@@ -243,6 +260,7 @@ export function createOpenCodeFactoryHarness(options: OpenCodeFactoryHarnessOpti
       : {}),
     settingKeys: { selection: CLAUDE_THREAD_SETTINGS.modelSelection, lastSelection: CLAUDE_THREAD_SETTINGS.lastModelSelection },
     catalog,
+    ...(accounts ? { accountFor: (orgId: string) => accounts.catalogAccount(orgId) } : {}),
   });
 
   const harness = createOpenCodeHarness({
@@ -307,6 +325,16 @@ export function createOpenCodeFactoryHarness(options: OpenCodeFactoryHarnessOpti
       return openCodePolicyFromPermissions(cardRun ? { ...permissions, unattended: true, parkAsks: true } : permissions);
     },
     ...(options.handoffContextFor ? { handoffContextFor: options.handoffContextFor } : {}),
+    ...(accounts
+      ? {
+          credentials: async (session: OpenCodeSession, request: Parameters<OpenCodeAccounts['credentials']>[1]) =>
+            accounts.credentials(await accountTenant(session), request),
+          onCredentialFailure: async (session: OpenCodeSession, failure: Parameters<OpenCodeAccounts['onCredentialFailure']>[1]) =>
+            accounts.onCredentialFailure(await accountTenant(session), failure),
+          usageLimitResetsAt: async (session: OpenCodeSession, failure: { accountId?: string }) => accounts.resetsAt(await accountTenant(session), failure),
+        }
+      : {}),
+    ...(options.parkOnUsageLimit ? { parkOnUsageLimit: options.parkOnUsageLimit } : {}),
     turnContextFor: async session => {
       const environment = peekSessionEnvironment(session.id);
       const signals = environment ? [`<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>`] : [];

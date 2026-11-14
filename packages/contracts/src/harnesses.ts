@@ -43,9 +43,10 @@ export interface HarnessDescriptor {
     /**
      * The members' sign-ins its turns run on: the credential-account provider they
      * are filed under, and the connector that connects them in Settings ›
-     * Підключення (ADR-0036). Absent: no accounts.
+     * Підключення (ADR-0036). Absent: no accounts. `optional`: runs work without one (OpenCode's
+     * free models); an account adds what it unlocks.
      */
-    accounts?: { provider: string; connector: string };
+    accounts?: { provider: string; connector: string; optional?: boolean };
   };
 }
 
@@ -106,7 +107,9 @@ export const CODEX_HARNESS: HarnessDescriptor = {
 
 /**
  * OpenCode: the `opencode` CLI's server on the server host, on OpenCode's own free models (no key,
- * no account). Free models may use what they are sent to improve their models (ADR-0043).
+ * no account), or signed in with one of the organization's OpenCode accounts (Settings → Connections
+ * → OpenCode), whose paid models then show. Free models may use what they are sent to improve their
+ * models (ADR-0043).
  */
 export const OPENCODE_HARNESS: HarnessDescriptor = {
   id: 'opencode',
@@ -123,7 +126,8 @@ export const OPENCODE_HARNESS: HarnessDescriptor = {
     sandboxRecreate: false,
     sessionlessChat: false,
   },
-  setup: { modelProvider: false },
+  // Accounts are optional here: without one, OpenCode runs on its free models.
+  setup: { modelProvider: false, accounts: { provider: 'opencode', connector: 'opencode', optional: true } },
 };
 
 export const HARNESSES: readonly HarnessDescriptor[] = [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS, OPENCODE_HARNESS];

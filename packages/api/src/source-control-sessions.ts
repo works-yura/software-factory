@@ -250,7 +250,7 @@ interface ResolvedProjectRepository {
   defaultBranch: string;
 }
 
-async function resolveOrgTenant(
+export async function resolveOrgTenant(
   c: RouteContext,
   auth: RouteAuth,
 ): Promise<{ tenant: { orgId: string; userId: string } } | { response: Response }> {
@@ -382,6 +382,40 @@ async function startPersonalSession(
   }
   await startUserSessionConversation(options.controller, session);
   return { claude: false };
+}
+
+/**
+ * A personal session that continues one of the person's own OpenCode sessions: created on the
+ * repository they chose, on the OpenCode harness whatever the Factory's harness is (the history is
+ * OpenCode's), and shared on the Factory unless they keep it private. Refused before anything is
+ * written when the repository is not this organization's or OpenCode cannot run here.
+ */
+export async function createOpenCodeImportSession(
+  options: SourceControlSessionRoutesOptions,
+  input: { orgId: string; userId: string; projectRepositoryId: string; title: string; visibility: 'private' | 'org' },
+): Promise<{ session: SourceControlSession; payload: ReturnType<typeof createdSessionPayload> } | { status: 404 | 409; error: string; message: string }> {
+  const project = await resolveProjectRepository(options.sourceControls, input.orgId, input.projectRepositoryId);
+  if (!project) return { status: 404, error: 'not_found', message: 'Project repository not found' };
+  const refused = turnHarnessRefusal(options, 'opencode');
+  if (refused || !options.claudeCode) return { status: 409, error: 'opencode_unavailable', message: refused ?? 'OpenCode is unavailable.' };
+  const sessionId = globalThis.crypto.randomUUID();
+  const session = await project.sourceControl.sessions.create({
+    sessionId,
+    projectRepositoryId: project.project.id,
+    factoryProjectId: project.factoryProjectId,
+    orgId: input.orgId,
+    userId: input.userId,
+    branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
+    baseBranch: project.defaultBranch,
+    title: normalizeSessionTitle(input.title),
+    visibility: input.visibility,
+  });
+  await options.claudeCode.start({
+    session,
+    resourceId: userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+    harness: 'opencode',
+  });
+  return { session, payload: createdSessionPayload(options, session, 'opencode') };
 }
 
 /**
