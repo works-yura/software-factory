@@ -16,6 +16,7 @@ import type {
   ConnectionCopy,
   ConnectionDetailSection,
   ConnectionLanguage,
+  ConnectionOutcome,
   ConnectionRequest,
   ConnectMethod,
   ConnectorConnection,
@@ -190,13 +191,16 @@ export function createOpenCodeAccountsConnections(options: OpenCodeAccountsConne
   const notFound = (language: ConnectionLanguage) => connectionRefused(404, { error: 'not_found', message: localize(COPY, language).notFound });
 
   /** The key from the form, checked with OpenCode; a refusal says why. */
-  const checkedKey = async (request: ConnectionRequest, input: Record<string, string>) => {
+  const checkedKey = async (
+    request: ConnectionRequest,
+    input: Record<string, string>,
+  ): Promise<{ refused: ConnectionOutcome<never> } | { key: string; go: boolean }> => {
     const copy = localize(COPY, request.language);
     const key = input.key?.trim();
-    if (!key) return { refused: connectionRefused(422, { error: 'key_required', message: copy.keyMissing }) } as const;
+    if (!key) return { refused: connectionRefused(422, { error: 'key_required', message: copy.keyMissing }) };
     const check = await options.checkKey(key);
-    if (!check.ok) return { refused: connectionRefused(422, { error: 'key_refused', message: copy.keyRefused(check.message) }) } as const;
-    return { key, go: check.go } as const;
+    if (!check.ok) return { refused: connectionRefused(422, { error: 'key_refused', message: copy.keyRefused(check.message) }) };
+    return { key, go: check.go };
   };
 
   const limitsSection = async (account: CredentialAccount, request: ConnectionRequest): Promise<ConnectionDetailSection | undefined> => {

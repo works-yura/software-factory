@@ -45,46 +45,55 @@ describe('GET /web/config/features', () => {
   it.each([
     {
       features: undefined,
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
     {
       features: { knowledge: true },
-      expected: { knowledge: true, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
+      expected: { knowledge: true, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
     {
       features: { knowledge: false, mcp: true },
-      expected: { knowledge: false, mcp: true, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
+      expected: { knowledge: false, mcp: true, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
     {
       features: { knowledge: false, claudeCode: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
     {
       features: { knowledge: false, claudeCode: true, claudeSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: true, codex: false, codexSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: true, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
     {
       features: { knowledge: false, device: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: true },
     },
     // Codex where its CLI is installed.
     {
       features: { knowledge: false, codex: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, codexSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
     // Codex sign-in where Codex runs.
     {
       features: { knowledge: false, codex: true, codexSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, codexSignIn: true, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, codexSignIn: true, opencodeLocalSessions: false, device: false },
     },
     {
       features: { knowledge: false, codexSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
+    },
+    // The person's own OpenCode sessions, where OpenCode runs and the server is their machine.
+    {
+      features: { knowledge: false, opencode: true, opencodeLocalSessions: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: true, device: false },
+    },
+    {
+      features: { knowledge: false, opencodeLocalSessions: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
     // No Claude Code, no sign-in to speak of.
     {
       features: { knowledge: false, claudeSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, opencodeLocalSessions: false, device: false },
     },
   ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();
@@ -108,6 +117,7 @@ describe('GET /web/config/features', () => {
       'mastra',
       ...(expected.claudeCode ? ['claude-code'] : []),
       ...(expected.codex ? ['codex'] : []),
+      ...((features as { opencode?: boolean } | undefined)?.opencode ? ['opencode'] : []),
     ]);
   });
 
