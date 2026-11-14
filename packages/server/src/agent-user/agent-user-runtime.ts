@@ -10,12 +10,22 @@
  */
 
 import { mkdirSync } from 'node:fs';
-import { userInfo } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 
-import { agentUserFromEnv, createProcessSpawner, type AgentUserConfig, type ProcessSpawner } from '@factory/agent-user';
+import {
+  agentUserFromEnv,
+  createAgentUserLauncher,
+  createProcessSpawner,
+  PrivateFileStash,
+  ShellCommandBridge,
+  type AgentUserConfig,
+  type ProcessSpawner,
+} from '@factory/agent-user';
+import type { AgentProcesses } from '@factory/sandbox';
 
 import { claudeSpawnAsAgent } from './claude-spawn.ts';
+import { codexSpawnAsAgent } from './codex-spawn.ts';
 
 export interface AgentUserRuntime {
   readonly config: AgentUserConfig;
@@ -27,8 +37,18 @@ export interface AgentUserRuntime {
     command: string;
     spawn: ReturnType<typeof claudeSpawnAsAgent>;
     sessionConfigRoot: string;
+    supervisorWorkdirRoot: string;
     tempDir: string;
     gateNode: string;
+  };
+  /** Sandbox commands (Mastra's agents, session and template setup) as the agent user. */
+  readonly processes: AgentProcesses;
+  /** What the Codex harness takes to run its sessions as the agent user. */
+  codex(): {
+    command: string;
+    spawn: ReturnType<typeof codexSpawnAsAgent>;
+    sessionHomeRoot: string;
+    supervisorWorkdirRoot: string;
   };
 }
 
@@ -41,6 +61,8 @@ export interface AgentUserRuntimeOptions {
   spawner?: ProcessSpawner;
   /** For tests: no folders are made. */
   makeDirs?: (path: string) => void;
+  /** Where launch inputs wait for the shell that opens them: owner-only, the server's temp folder by default. */
+  inputDir?: string;
 }
 
 const makeDir = (path: string) => mkdirSync(path, { recursive: true, mode: 0o770 });
@@ -55,20 +77,40 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
   const mkdir = options.makeDirs ?? makeDir;
   const claudeConfigRoot = join(stateDir, 'claude-code-config');
   const tempDir = join(stateDir, 'tmp');
-  for (const dir of [stateDir, claudeConfigRoot, tempDir]) mkdir(dir);
+  const codexHomeRoot = join(stateDir, 'codex-home');
+  // The Factory chat's empty working folders: the CLI starts in them, so the agent must reach them.
+  const claudeSupervisorRoot = join(stateDir, 'claude-code-supervisor');
+  const codexSupervisorRoot = join(stateDir, 'codex-supervisor');
+  for (const dir of [stateDir, claudeConfigRoot, tempDir, codexHomeRoot, claudeSupervisorRoot, codexSupervisorRoot]) mkdir(dir);
+  // Mastra runs command lines: they reach the agent as a program that reads its environment from a
+  // private file on a descriptor (the same launch as a spawned CLI's).
+  const bridge = new ShellCommandBridge(createAgentUserLauncher(config), new PrivateFileStash(options.inputDir ?? join(tmpdir(), 'factory-agent-inputs')));
   return {
     config,
     spawner,
     stateDir,
+    processes: {
+      shellProgram: (command, commandEnv) => bridge.commandLine(command, commandEnv),
+      spawn: (command, args, { cwd, env: commandEnv }) => spawner.spawn({ command, args, env: commandEnv }, { cwd }),
+    },
     claudeCode: () => ({
       // The agent's own `claude` on its PATH: a configured FACTORY_CLAUDE_CODE_COMMAND points into the
       // server user's home, which the agent can neither read nor run.
       command: env.FACTORY_AGENT_CLAUDE_COMMAND?.trim() || 'claude',
       spawn: claudeSpawnAsAgent(spawner),
       sessionConfigRoot: claudeConfigRoot,
+      supervisorWorkdirRoot: claudeSupervisorRoot,
       tempDir,
       // On the agent's PATH (its own Node, `<home>/.local/node/bin`): the server's is in a home it cannot read.
       gateNode: 'node',
+    }),
+    codex: () => ({
+      // The agent's own `codex` (agent-tools copies nvm's Node with its global packages).
+      command: env.FACTORY_AGENT_CODEX_COMMAND?.trim() || 'codex',
+      spawn: codexSpawnAsAgent(spawner),
+      // Each session's CODEX_HOME (its thread history): the CLI writes there as the agent.
+      sessionHomeRoot: codexHomeRoot,
+      supervisorWorkdirRoot: codexSupervisorRoot,
     }),
   };
 }

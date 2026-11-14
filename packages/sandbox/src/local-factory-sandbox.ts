@@ -4,6 +4,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
 
+import type { AgentProcesses } from './agent-processes.ts';
 import { hostExecutor } from './template/host-exec.ts';
 import type { FactorySandboxCheckoutServices, LocalEnvironmentTemplate } from './template/local-template.ts';
 import { localSandboxSettingsSchema } from './template/local-sandbox-settings.ts';
@@ -23,6 +24,8 @@ export interface LocalFactorySandboxOptions {
   template?: LocalEnvironmentTemplate;
   /** Tests: the rename that moves a folder to the trash (to simulate another volume). */
   renameForRemoval?: (from: string, to: string) => Promise<void>;
+  /** Sandbox commands (the agent's, the session's setup) run as the agent user, not as the server (ADR-0041). */
+  agentProcesses?: AgentProcesses;
 }
 
 /**
@@ -91,12 +94,14 @@ class SessionLocalSandbox extends LocalSandbox {
     shared: boolean,
     legacyDirectory: string | undefined,
     removeOwnFolder: (directory: string, sessionId: string) => Promise<void>,
+    agent?: AgentProcesses,
   ) {
     super(options);
     this.#root = resolve(root);
     this.#shared = shared;
     this.#legacyDirectory = legacyDirectory;
     this.#removeOwnFolder = removeOwnFolder;
+    if (agent) runProcessesAsAgent(this, agent);
   }
 
   /**
@@ -534,8 +539,25 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
         if (key && this.#sleeping.has(key)) return;
         await this.#removeFolder(directory, { publish: false, sessionId });
       },
+      this.#options.agentProcesses,
     );
   }
+}
+
+/**
+ * Every command the sandbox starts (its `executeCommand`, the agent's foreground and background
+ * commands) goes through `processes.spawn` as one shell command line: it becomes a program that
+ * runs that line as the agent user, with the environment the sandbox would have given it. The
+ * process the sandbox tracks is the server's side of that launch (`sudo`), which passes signals on.
+ */
+export function runProcessesAsAgent(sandbox: LocalSandbox, agent: AgentProcesses): void {
+  if (sandbox.isolation !== 'none') throw new Error('A sandbox that runs commands as the agent user takes no other isolation.');
+  const processes = sandbox.processes;
+  const spawn = processes.spawn.bind(processes);
+  processes.spawn = (command, options = {}) => {
+    const { originalInvocation: _invocation, ...rest } = options;
+    return spawn(agent.shellProgram(command, sandbox.buildEnv(options.env)), rest);
+  };
 }
 
 /**

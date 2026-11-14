@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 
 import { gitAuthenticationEnvironment, gitTransfer, runSandboxCommand } from '../github/sandbox.ts';
 import { sanitizeSegment } from '../workdir.ts';
+import type { AgentProcesses } from '../agent-processes.ts';
 import { hostExecutor } from './host-exec.ts';
 import { LocalEnvironmentBuilds } from './local-builds.ts';
 import { LocalMirrorRepositoryCache } from './local-mirror-cache.ts';
@@ -97,6 +98,8 @@ export interface LocalEnvironmentTemplateOptions {
   freshnessMs?: number;
   /** Whether a repository is public (then uncommitted work is never published); probes it anonymously by default. */
   isPublicRepository?: (checkout: SessionCheckout) => Promise<boolean>;
+  /** Setup commands (repository code) run as the agent user, not as the server (ADR-0041). */
+  agentProcesses?: AgentProcesses;
 }
 
 const consoleLogger: LocalMirrorLogger = {
@@ -171,6 +174,9 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
       root: this.root,
       cache: this.repositoryCache,
       host: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() } }),
+      ...(options.agentProcesses
+        ? { setupHost: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() }, agent: options.agentProcesses }) }
+        : {}),
       logger: this.#logger,
       ...(options.pruneIdleMs !== undefined ? { pruneIdleMs: options.pruneIdleMs } : {}),
       pruneHiddenRefs: input => this.pruneHiddenRefs(input),

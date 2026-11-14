@@ -29,3 +29,5 @@ export * from './spawn/launching-spawner.ts';
 export * from './spawn/process-spawner.ts';
 export * from './system/command-runner.ts';
 export * from './system/paths.ts';
+export * from './shell/input-stash.ts';
+export * from './shell/shell-command-bridge.ts';

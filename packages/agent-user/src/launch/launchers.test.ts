@@ -27,6 +27,12 @@ describe('createAgentUserLauncher', () => {
   const launcher = createAgentUserLauncher(agentConfig);
   const plan = launcher.plan({ command: '/Users/factory/.local/bin/claude', args: ['-p', 'a b'], env: { HOME: '/Users/yura', CLAUDE_CODE_OAUTH_TOKEN: nastyValue } });
 
+  it('leaves sandbox-exec out when the configuration turns Seatbelt off', () => {
+    const off = createAgentUserLauncher({ ...agentConfig, seatbelt: false });
+    expect(off.layers).toEqual(['sudo', 'clear-env', 'env-loader']);
+    expect(off.plan({ command: 'xcodebuild', args: [], env: {} }).argv).not.toContain('/usr/bin/sandbox-exec');
+  });
+
   it('is sudo → env -i → loader → sandbox-exec → command, in that order', () => {
     expect(launcher.layers).toEqual(['sudo', 'clear-env', 'env-loader', 'seatbelt']);
     const at = (arg: string) => plan.argv.indexOf(arg);

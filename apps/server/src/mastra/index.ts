@@ -388,9 +388,13 @@ const sandbox = new LocalFactorySandbox({
           env: localSandboxEnv(),
           // Shared package stores move pnpm off the store existing checkouts were installed from: opt-in.
           packageStores: process.env.FACTORY_LOCAL_PACKAGE_STORES?.trim().toLowerCase() === 'on',
+          // Setup commands are repository code: as the agent user when one is configured.
+          ...(agentUser ? { agentProcesses: agentUser.processes } : {}),
         }),
       }
     : {}),
+  // Mastra agents' commands and session setup: as the agent user when one is configured.
+  ...(agentUser ? { agentProcesses: agentUser.processes } : {}),
 });
 
 /**
@@ -439,6 +443,8 @@ export const factory = new MastraFactory({
     storeDir: process.env.FACTORY_CODEX_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'codex-sessions'),
     localDevelopment: ownMachine,
     ...(process.env.FACTORY_CODEX_COMMAND?.trim() ? { command: process.env.FACTORY_CODEX_COMMAND.trim() } : {}),
+    // As the agent user: its own `codex`, session homes and the Factory chat's folders where it can reach them.
+    ...(agentUser ? agentUser.codex() : {}),
   },
   ...(browser ? { browser } : {}),
   // Device preview drives simulators and emulators on this machine, so only a local development
