@@ -16,6 +16,16 @@
 - CLI отримує `--settings` з `attribution: { commit: '', pr: '' }` — без «Generated with Claude Code» і `Co-Authored-By` (`session.ts`).
 - Системні інструкції — `appendSystemPromptFor` у `packages/server/src/claude/harness.ts`.
 
+## OpenCode
+
+- Рішення: [ADR-0043](../../adr/0043-opencode-harness-free-models.md). Пакет `packages/harness-opencode-core` (`@factory/harness-opencode`); сервер — `packages/server/src/opencode/`.
+- Один `opencode serve` на запуск: `127.0.0.1`, вільний порт, власний пароль; HTTP + SSE (`/event`), без SDK. Мінімальна версія CLI — 1.14.19.
+- Стан OpenCode — у власних `XDG_*` теках сесії (`~/.mastracode/web/opencode-sessions-home/<сесія>`), без ключів і входу; `~/.config/opencode` людини не читається. Конфіг Factory (дозволи, MCP `factory` з токеном запуску) — `OPENCODE_CONFIG_CONTENT`.
+- Моделі — лише безкоштовні моделі OpenCode Zen (`opencode/big-pickle` типова), у виборі з позначкою «Безкоштовно». **На репозиторіях клієнтів — лише зі згоди клієнта.**
+- Дозволи: `edit` / `bash` з налаштувань Factory (без налаштування — питати); вихід за межі чекауту питає завжди; «дозволити все» немає. Питання (`question`) — картка `AskUserQuestion`; планування — агент `plan`.
+- Запуск від імені агента (ADR-0041): `opencode` копіює `agent-tools`; профіль Seatbelt діє.
+- Перевірка на справжньому CLI: `FACTORY_OPENCODE_SMOKE_COMMAND=$(which opencode) npx vitest run src/real-cli.integration.test.ts` у пакеті.
+
 ## Спільне
 
 - Рядок мови агентів додається в інструкції обох harness щоходу (`packages/server/src/agent-language.ts`).

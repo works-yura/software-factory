@@ -7,7 +7,7 @@
 | [product-board](product-board/design.md) | Дошка «Продукт»: дослідження → бриф → специфікація → фази, ворота, інструменти сесії |
 | [work-board](work-board/design.md) | Дошка «Розробка»: розбір → план → збірка → рев'ю → PR; документація проєкту в роботі |
 | [skills](skills/design.md) | Скіли агентів: де лежать, як потрапляють на сервер і в сесію |
-| [harnesses](harnesses/design.md) | Mastra і Claude Code: як запускається сесія, дозволи, системні інструкції |
+| [harnesses](harnesses/design.md) | Mastra, Claude Code, Codex і OpenCode: як запускається сесія, дозволи, системні інструкції |
 | [chat](chat/design.md) | Чат сесії: Markdown, картки питань, посилання, бічна панель сесій |
 | [workspace-files](workspace-files/design.md) | Перегляд файлів сесії: повний екран, завантаження, нотатки на тексті |
 | [attachments](attachments/design.md) | Вкладення карток і сесій: сховище, API, файли для агента |

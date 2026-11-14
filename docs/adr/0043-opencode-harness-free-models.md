@@ -1,0 +1,28 @@
+# 0043. Harness OpenCode: безкоштовні моделі через CLI OpenCode
+
+Дата: 2026-11-14 · Статус: прийнято, у роботі (ядро, сервер, вибір у UI; від імені агента на Mac mini ще не перевірено).
+
+**Контекст.** Безкоштовні моделі OpenCode Zen (`opencode/big-pickle`, `opencode/*-free`) через провайдера моделей Mastra-harness не працюють: Zen API з ключем `OPENCODE_API_KEY` відповідає 429 `FreeUsageLimitError` («Free models work in OpenCode; subscribe to OpenCode Go»). Сам CLI OpenCode ті самі моделі виконує без ключа й без входу (перевірено на `opencode-ai@1.19.5`: `opencode run -m opencode/big-pickle`, також з порожніми `XDG_*`). Готове рішення є в t3code (`packages/provider-opencode`, ~5 тис. рядків на Effect). Його перенесено за змістом, не як залежність: третій turn-based harness поруч із Claude Code і Codex.
+
+**Рішення.**
+- **Пакет `@factory/harness-opencode`** (`packages/harness-opencode-core`) за контрактами Codex: `OpenCodeSession` (черга, follow-up, сповіщення, план-гейт, дозволи й питання як людські гейти, handoff), `createOpenCodeHarness`, файлове сховище записів сесій, модельний фасет. Сервер — `packages/server/src/opencode/`, у `factory.ts` той самий шлях, що й у Codex: реєстр моделей, чат-UI сесій, маршрутизація, старт карток (`ClaudeStartCoordinator`), особисті сесії, перемикання harness.
+- **Процес.** Один `opencode serve` на запуск (як app-server Codex): петля `127.0.0.1` на вільному порту (`--port=0` у CLI означає типовий 4096, тож порт обирає harness), власний пароль (`OPENCODE_SERVER_PASSWORD`, Basic auth), тека сесії як робоча. Сервер зупиняється з запуском, крім паркування на дозволі чи питанні: тоді він чекає відповідь до 30 хв. Протокол — HTTP і SSE (`/event`) за OpenAPI самого CLI (`/doc`), простий `fetch` без SDK. Мінімальна версія — 1.14.19 (маршрути `/permission/{id}/reply`, `/question/{id}/reply`).
+- **Ізоляція стану.** Кожна сесія має власні `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME` під `~/.mastracode/web/opencode-sessions-home/<сесія>`; спільний лише кеш завантажень (`.cache`). `~/.config/opencode` і `~/.local/share/opencode` людини (її вхід і сесії) не читаються ніколи. Оточення — за білим списком (без ключів провайдерів і `OPENCODE_API_KEY`), плюс `OPENCODE_DISABLE_CLAUDE_CODE` (не читати `~/.claude`), `OPENCODE_DISABLE_EXTERNAL_SKILLS`, `OPENCODE_DISABLE_AUTOUPDATE`, `OPENCODE_DISABLE_LSP_DOWNLOAD`, `OPENCODE_ENABLE_QUESTION_TOOL`. Конфіг Factory — через `OPENCODE_CONFIG_CONTENT` (`share: disabled`, `autoupdate: false`, дозволи, MCP Factory з токеном запуску). Для недовіреного чекауту (PR ззовні) — `OPENCODE_DISABLE_PROJECT_CONFIG`.
+- **Дозволи.** Режиму «дозволити все» немає. Правила з налаштувань Factory (Поведінка → Дозволи): `edit` — категорія `edit`, `bash` — категорія `execute` (без налаштування — `ask`); вихід за межі чекауту (`external_directory`) і зациклення (`doom_loop`) питають завжди. Автопідтвердження Factory (`yolo`) тут не діє: OpenCode виконує команди без власної пісочниці. `permission.asked` паркує хід як дозвіл у чаті; відповідь іде в той самий живий хід (`once`/`always`/`reject`). Дозволений на сесію інструмент далі не питає. Запуск картки без людини: що питало б, те відхиляється (`deny` у правилах), або паркується на дошці, як у Codex. Інструменти чату Factory, що змінюють дані, питають щоразу.
+- **Питання.** `question.asked` — картка `AskUserQuestion`, відповідь — `question.reply`; кілька питань в одній картці розділяються назад.
+- **Планування** — вбудований агент OpenCode `plan` (лише читання); останній текст ходу — план для `submit_plan`.
+- **Моделі.** Каталог — `GET /provider` пробного сервера в окремій теці: лише моделі провайдера `opencode` з нульовою ціною й не застарілі, кожна з позначкою `free` (новий варіант `badge` у контракті моделей). Типова — `opencode/big-pickle`. Варіанти моделі (low/high/…) — опція «Reasoning». Платні моделі Zen не пропонуються: ключів у harness немає.
+- **Помилки** класифікуються як у Claude Code і Codex (`rate_limit`, `auth`, `model_unavailable`, `context`, `overloaded`). Статус `retry` з вичерпаним безкоштовним лімітом зупиняє хід одразу, а не крутить повтори. Паркування до скидання ліміту немає: OpenCode не каже, коли ліміт повернеться.
+- **Відновлення.** Сесія OpenCode зберігається в записі нитки; якщо її бази вже немає, починається нова з історією нитки (handoff `resume_failed`).
+
+**Безкоштовні моделі й дані клієнтів.** Постачальники безкоштовних моделей можуть використовувати надіслане для покращення моделей. Тому:
+- у виборі моделей кожна така модель позначена «Безкоштовно» з підказкою;
+- **на реальних репозиторіях клієнтів (Syncta, PostAirborne, book_fate) безкоштовні моделі — лише зі згоди клієнта.** Factory з OpenCode для клієнтського репозиторію без такої згоди не створюємо; для внутрішніх і експериментальних карток — можна.
+
+**Що лишається** (див. `changes/backlog.md`): перевірка від імені агента на Mac mini (`FACTORY_AGENT_USER`, Seatbelt дозволяє слухати порт, але не перевірено); MCP-інструменти з «ask» (хаб) для OpenCode вимкнено, як для Codex; steer (повідомлення в хід, що йде) — зупинка й новий хід; ліміти використання не показуються; платні моделі Zen з ключем організації; вкладення-зображення.
+
+**Альтернативи.**
+- Провайдер Zen у Mastra-harness з ключем: безкоштовні моделі відмовляють (`FreeUsageLimitError`), лишаються лише платні з підпискою OpenCode Go.
+- `opencode run` на кожен хід (як `claude -p`): немає зворотного каналу для дозволів і питань.
+- `@opencode-ai/sdk` як залежність: зайвий шар над кількома маршрутами; версію CLI все одно треба перевіряти.
+- t3code як залежність: Effect і власні контракти t3code, несумісні з `@factory/harness`.
