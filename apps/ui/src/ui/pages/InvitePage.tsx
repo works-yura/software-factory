@@ -84,7 +84,7 @@ function InvitationProblem({ error, email }: { error: unknown; email: string }) 
 /**
  * `/invite/:invitationId` — the link an owner or admin copied and sent. Signed-out visitors are
  * sent to sign in first (the route's guard keeps this path as `returnTo`). Accepting joins the
- * organization as a member; better-auth makes it the session's active organization in the same
+ * organization with the invitation's role; better-auth makes it the session's active organization in the same
  * call, and the app opens afresh in it.
  */
 export function InvitePage() {
@@ -136,7 +136,11 @@ export function InvitePage() {
         ) : details ? (
           <>
             <Txt as="p" variant="body">
-              {t('invite.description', { inviter: details.inviterEmail, organization: details.organizationName })}
+              {t('invite.description', {
+                inviter: details.inviterEmail,
+                organization: details.organizationName,
+                role: t(`roles.${details.role === 'owner' ? 'admin' : details.role}`),
+              })}
             </Txt>
             <Txt as="p" variant="caption" tone="muted">
               {t('invite.signedInAs', { email })}

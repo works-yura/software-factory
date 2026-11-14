@@ -22,7 +22,8 @@
     "skills": "Skills",
     "behavior": "Behavior",
     "memory": "Memory",
-    "debug": "Debug"
+    "debug": "Debug",
+    "team": "Team"
   },
   "groups": {
     "account": "Account",
@@ -464,7 +465,7 @@
     "notProvided": "Not provided",
     "profile": {
       "title": "Profile",
-      "description": "Your signed-in identity for this Factory deployment."
+      "description": "How you appear across Factory."
     },
     "accountId": {
       "label": "Account ID",
@@ -492,7 +493,29 @@
     },
     "fromProvider": "From your sign-in provider.",
     "howSignedIn": "How you signed in.",
-    "loading": "Loading your account"
+    "loading": "Loading your account",
+    "avatar": "Avatar",
+    "avatarDescription": "Shown next to your name.",
+    "nameDescription": "Shown in invitations and activity.",
+    "editName": "Edit name",
+    "saveName": "Save",
+    "cancelEdit": "Cancel",
+    "nameLabel": "Your name",
+    "emailDescription": "Managed by your sign-in provider.",
+    "sessions": {
+      "title": "Sessions",
+      "description": "Where you are signed in.",
+      "current": "Current session",
+      "unknownDevice": "Unknown device",
+      "unknownIp": "unknown IP",
+      "signedIn": "{{ip}}, signed in {{when}}",
+      "revoke": "Sign out",
+      "revokeNamed": "Sign out of {{device}}",
+      "revokeOthers": "Sign out everywhere else",
+      "loadFailed": "Could not load your sessions: {{message}}",
+      "failed": "That did not work: {{message}}",
+      "device": "{{browser}} on {{os}}"
+    }
   },
   "panel": {
     "label": "Settings",
@@ -1559,16 +1582,27 @@
       "title": "Organization",
       "description": "Factories, boards and connections belong to the organization you are working in.",
       "name": "Name",
-      "yourRole": "Your role"
+      "yourRole": "Your role",
+      "nameDescription": "Shown across Factory and in invitations.",
+      "save": "Save",
+      "saving": "Saving…",
+      "nameLabel": "Organization name",
+      "id": "Organization ID",
+      "idDescription": "Use it when you call the API or contact support.",
+      "copyId": "Copy organization ID",
+      "avatar": "Avatar",
+      "avatarDescription": "Shown next to the organization name."
     },
     "roles": {
-      "owner": "Owner",
+      "owner": "Admin",
       "admin": "Admin",
-      "member": "Member"
+      "member": "Member",
+      "ownerNote": "owner",
+      "viewer": "Viewer"
     },
     "members": {
       "title": "Members",
-      "description": "Owners and admins invite and remove people; members cannot.",
+      "description": "Admins invite people, change roles and remove members.",
       "you": "{{name}} (you)",
       "remove": "Remove",
       "removeNamed": "Remove {{name}}",
@@ -1601,7 +1635,24 @@
       "switch": "Switch",
       "switchNamed": "Switch to {{name}}",
       "loadFailed": "Could not load your organizations: {{message}}"
-    }
+    },
+    "roleDescriptions": {
+      "viewer": "Sees boards, cards and chats; changes nothing.",
+      "member": "Works on cards, runs agents and chats.",
+      "admin": "Also manages members, roles, invitations and the organization."
+    },
+    "danger": {
+      "title": "Danger zone",
+      "leave": "Leave organization",
+      "leaveTitle": "Leave this organization",
+      "leaveDescription": "You lose access to its factories at once.",
+      "ownerCannotLeave": "You created this organization and stay its owner, so you cannot leave it.",
+      "confirmTitle": "Leave {{organization}}?",
+      "confirmDescription": "You lose access to its factories at once. An admin can invite you again.",
+      "cancel": "Cancel",
+      "leaving": "Leaving…"
+    },
+    "viewerNote": "You are a viewer here: you can look at everything but change nothing. Ask an admin for the Member role."
   },
   "connections": {
     "contractUpdate": {
@@ -1922,6 +1973,82 @@
     "repositoryFormats": {
       "github": "GitHub repositories are owner/repo, such as acme/app.",
       "gitlab": "GitLab projects are group/project, such as acme/platform/api."
+    }
+  },
+  "avatar": {
+    "add": "Add avatar",
+    "change": "Change avatar",
+    "remove": "Remove",
+    "uploading": "Uploading…",
+    "unsupported": "Choose a PNG, JPEG or WebP image.",
+    "failed": "Could not use that image: {{message}}",
+    "alt": "Avatar of {{name}}"
+  },
+  "team": {
+    "members": {
+      "title": "Members",
+      "count_one": "{{count}} member",
+      "count_other": "{{count}} members",
+      "roleOf": "Role of {{name}}",
+      "roleFailed": "Could not change the role: {{message}}"
+    },
+    "invite": {
+      "button": "Invite member",
+      "title": "Invite member",
+      "description": "Factory sends no email: copy the link and send it yourself. It works for 7 days and only for that email.",
+      "email": "Email",
+      "role": "Role",
+      "create": "Create link",
+      "creating": "Creating…",
+      "created": "Invitation link for {{email}} ({{role}})",
+      "copy": "Copy invitation link",
+      "close": "Close"
+    },
+    "pending": {
+      "role": "{{role}} · expires {{date}}"
+    },
+    "joinLinks": {
+      "title": "Join links",
+      "description": "Whoever opens the link and signs in with Google using an allowed email joins with its role.",
+      "empty": "No join links.",
+      "create": "Create join link",
+      "dialogTitle": "Create join link",
+      "name": "Name",
+      "namePlaceholder": "e.g. Engineering onboarding",
+      "joinAs": "Join as",
+      "domains": "Allowed email domains",
+      "domainsHint": "Separated by commas. Empty lets any Google account in.",
+      "domainsPlaceholder": "acme.com, research.acme.com",
+      "expires": "Expires",
+      "expiry": {
+        "never": "Never",
+        "1": "1 day",
+        "7": "7 days",
+        "30": "30 days",
+        "custom": "Custom"
+      },
+      "customDate": "Expiry date",
+      "maxUses": "Maximum uses",
+      "maxUsesHint": "Empty for no limit.",
+      "cancel": "Cancel",
+      "creating": "Creating…",
+      "uses_limited": "{{uses}} of {{max}} used",
+      "uses_unlimited": "{{uses}} used",
+      "expiresOn": "expires {{date}}",
+      "neverExpires": "never expires",
+      "anyDomain": "any email",
+      "domainsList": "{{domains}}",
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked",
+        "used_up": "Used up"
+      },
+      "copy": "Copy link",
+      "copyNamed": "Copy join link {{name}}",
+      "revoke": "Revoke",
+      "revokeNamed": "Revoke join link {{name}}",
+      "loadFailed": "Could not load the join links: {{message}}"
     }
   }
 }

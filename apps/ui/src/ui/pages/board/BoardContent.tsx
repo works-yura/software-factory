@@ -37,6 +37,7 @@ import { LoadMoreSentinel } from '../../domains/factory/components/LoadMoreSenti
 import { SKELETON_ROW_CLASS } from '../../domains/factory/boardLayout';
 import { SkeletonRows } from '../../ui/SkeletonRows';
 import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
+import { useIsViewer } from '../../../hooks/useIsViewer';
 import { useBoardDeepLink } from '../../domains/factory/hooks/useBoardDeepLink';
 import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStages';
 import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
@@ -196,6 +197,8 @@ export function BoardContent({
     return positions;
   }, [runQueue.data]);
   const composer = useBoardComposer(factoryProjectId, definition, currentUserId);
+  // A viewer reads the board; making cards is for members (ADR-0045).
+  const viewer = useIsViewer();
   const filterOptions = useWorkItemFilterOptionsQuery(factoryProjectId).data;
   const activity = useRecentAuditEvents(
     factoryProjectId,
@@ -288,6 +291,7 @@ export function BoardContent({
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
+      !viewer &&
       !pullRequestsOnly &&
       !loading &&
       stage.kind !== 'terminal' &&

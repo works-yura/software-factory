@@ -27,6 +27,7 @@ import { CardMovesPage } from './pages/CardMovesPage';
 import { NewBoardPage } from './pages/NewBoardPage';
 import { ConnectAccountPage } from './pages/ConnectAccountPage';
 import { InvitePage } from './pages/InvitePage';
+import { JoinPage } from './pages/JoinPage';
 import { OAuthConsentPage } from './pages/OAuthConsentPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -241,6 +242,8 @@ export function createAppRoutes(): RouteObject[] {
     },
     // An invitation link: sign-in required, onboarding not (the invited person may have no Factory yet).
     { path: '/invite/:invitationId', element: <SignedInOnly />, children: [{ index: true, element: <InvitePage /> }] },
+    // An organization's join link (ADR-0045): sign-in required, onboarding not.
+    { path: '/join/:token', element: <SignedInOnly />, children: [{ index: true, element: <JoinPage /> }] },
     // An MCP client (Claude Code, Cursor) asks to act as the signed-in person: Factory's OAuth consent.
     { path: '/oauth/consent', element: <SignedInOnly />, children: [{ index: true, element: <OAuthConsentPage /> }] },
     { path: '/signin', element: <SignInPage /> },

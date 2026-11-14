@@ -23,6 +23,7 @@ import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
 import { ConnectionsSection } from './connections/ConnectionsSection';
 import { OrganizationSection } from './OrganizationSection';
+import { TeamSection } from './TeamSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
@@ -71,6 +72,7 @@ export function SettingsPanel() {
     <>
       {section === 'account' && <AccountSettingsSection />}
       {section === 'organization' && <OrganizationSection />}
+      {section === 'team' && <TeamSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'analytics' && <AnalyticsSection />}
       {section === 'factory' && <FactoryManagementSection />}

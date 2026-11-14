@@ -36,7 +36,15 @@ export interface FactoryAuthState {
   authenticated: boolean;
   /** Explicit server capability; absent on older servers. */
   telemetryEnabled?: boolean;
-  user?: { userId?: string; email?: string; name?: string; avatarUrl?: string; organizationId?: string };
+  user?: {
+    userId?: string;
+    email?: string;
+    name?: string;
+    avatarUrl?: string;
+    organizationId?: string;
+    /** Role in `organizationId` (`owner`, `admin`, `member`, `viewer`) when the provider reports roles. */
+    organizationRole?: string;
+  };
   /** Active identity provider: 'better-auth' (Google) or a custom adapter's name. */
   provider?: string;
 }

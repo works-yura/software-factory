@@ -85,8 +85,16 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         get label() {
           return SETTINGS_SECTION_LABELS.organization;
         },
+        icon: Building2,
+        searchText: 'organization name avatar logo id switch organizations leave danger zone',
+      },
+      {
+        id: 'team',
+        get label() {
+          return SETTINGS_SECTION_LABELS.team;
+        },
         icon: Users,
-        searchText: 'organization team members invite invitation link roles owner admin remove switch organizations',
+        searchText: 'team members invite invitation join link roles viewer member admin owner remove domains expiry',
       },
       {
         id: 'integrations',

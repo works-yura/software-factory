@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useUploadAttachment } from '../../../../../hooks/useAttachments';
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
+import { useIsViewer } from '../../../../../hooks/useIsViewer';
 import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
 import { attachmentMessageLines, formatAttachmentSize } from '../../services/attachments';
 import { mentionLabel } from './mentions';
@@ -22,7 +23,22 @@ import { useMentionResolver } from './useMentionResolver';
 import { useMentionAutocomplete } from './useMentionAutocomplete';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-export function CommentComposer({
+type CommentComposerProps = {
+  workItemId: string;
+  factoryProjectId: string | undefined;
+  variant: 'panel' | 'thread';
+  quote?: CommentQuoteDraft;
+  onDismissQuote: () => void;
+};
+
+/** The comment box; a viewer reads comments but writes none (ADR-0045), so they get no box. */
+export function CommentComposer(props: CommentComposerProps) {
+  const viewer = useIsViewer();
+  if (viewer) return null;
+  return <CommentComposerForm {...props} />;
+}
+
+function CommentComposerForm({
   workItemId,
   factoryProjectId,
   variant,

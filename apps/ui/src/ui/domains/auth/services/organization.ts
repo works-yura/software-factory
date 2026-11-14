@@ -9,12 +9,18 @@ const tk = translator('auth');
  * for the email it was made for.
  */
 
-export type OrganizationRole = 'owner' | 'admin' | 'member';
+export type OrganizationRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+/** Roles a person can be given (an invitation, a join link, a role change); `owner` is the creator's alone. */
+export type AssignableRole = Exclude<OrganizationRole, 'owner'>;
+export const ASSIGNABLE_ROLES: readonly AssignableRole[] = ['viewer', 'member', 'admin'];
 
 export interface OrganizationSummary {
   id: string;
   name: string;
   slug: string;
+  /** Avatar URL (`/auth/api/factory/avatars/<id>`), when one was set. */
+  logo?: string | null;
 }
 
 export interface OrganizationMember {
@@ -56,8 +62,9 @@ export class OrganizationRequestError extends Error {
   }
 }
 
-async function organizationRequest<T>(baseUrl: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${baseUrl}/auth/api/organization/${path}`, {
+/** A better-auth call under `/auth/api/<path>`: GET without a body, POST with one. */
+export async function authApiRequest<T>(baseUrl: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${baseUrl}/auth/api/${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       Accept: 'application/json',
@@ -86,6 +93,10 @@ async function organizationRequest<T>(baseUrl: string, path: string, body?: unkn
   return data as T;
 }
 
+function organizationRequest<T>(baseUrl: string, path: string, body?: unknown): Promise<T> {
+  return authApiRequest<T>(baseUrl, `organization/${path}`, body);
+}
+
 export function listOrganizations(baseUrl: string): Promise<OrganizationSummary[]> {
   return organizationRequest(baseUrl, 'list');
 }
@@ -98,9 +109,37 @@ export function setActiveOrganization(baseUrl: string, organizationId: string): 
   return organizationRequest(baseUrl, 'set-active', { organizationId });
 }
 
-/** Invitations are always for the `member` role; fine-grained roles come later. */
-export function inviteMember(baseUrl: string, organizationId: string, email: string): Promise<OrganizationInvitation> {
-  return organizationRequest(baseUrl, 'invite-member', { email, role: 'member', organizationId });
+export function inviteMember(
+  baseUrl: string,
+  organizationId: string,
+  email: string,
+  role: AssignableRole,
+): Promise<OrganizationInvitation> {
+  return organizationRequest(baseUrl, 'invite-member', { email, role, organizationId });
+}
+
+/** Admins only; better-auth and the server refuse anything else, and the owner's role never changes. */
+export function updateMemberRole(
+  baseUrl: string,
+  organizationId: string,
+  memberId: string,
+  role: AssignableRole,
+): Promise<OrganizationMember> {
+  return organizationRequest(baseUrl, 'update-member-role', { memberId, role, organizationId });
+}
+
+/** The organization's name and avatar (admins only). */
+export function updateOrganization(
+  baseUrl: string,
+  organizationId: string,
+  data: { name?: string; logo?: string | null },
+): Promise<OrganizationSummary> {
+  return organizationRequest(baseUrl, 'update', { organizationId, data });
+}
+
+/** Leaves the organization; the owner cannot (better-auth keeps one owner). */
+export function leaveOrganization(baseUrl: string, organizationId: string): Promise<unknown> {
+  return organizationRequest(baseUrl, 'leave', { organizationId });
 }
 
 export function cancelInvitation(baseUrl: string, invitationId: string): Promise<unknown> {
@@ -133,8 +172,13 @@ export function isOpenInvitation(invitation: OrganizationInvitation, now = Date.
   return invitation.status === 'pending' && new Date(invitation.expiresAt).getTime() > now;
 }
 
-export function canManageMembers(role: OrganizationRole | undefined): boolean {
+export function canManageMembers(role: OrganizationRole | string | undefined): boolean {
   return role === 'owner' || role === 'admin';
+}
+
+/** Whether the role only reads: the server refuses a viewer's writes (403 `viewer_read_only`). */
+export function isViewerRole(role: OrganizationRole | string | undefined): boolean {
+  return role === 'viewer';
 }
 
 /**
