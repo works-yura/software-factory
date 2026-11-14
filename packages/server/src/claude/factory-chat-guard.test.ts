@@ -1,3 +1,4 @@
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS } from '@factory/contracts';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
@@ -14,6 +15,7 @@ function app() {
     '*',
     createClaudeFactoryChatGuard({
       controllerId: 'code',
+      harnesses: [CLAUDE_CODE_HARNESS, CODEX_HARNESS],
       factoryHarness: async id =>
         id === CLAUDE_FACTORY ? 'claude-code' : id === CODEX_FACTORY ? 'codex' : id === MASTRA_FACTORY ? 'mastra' : undefined,
     }),

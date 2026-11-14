@@ -6,7 +6,8 @@ import { FACTORY_OPEN_RUNS_SETTING } from '@factory/runtime';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { SignInOAuth, SourceControlSession } from '@factory/store';
 
-import { CLAUDE_OAUTH_USAGE_URL, CODEX_USAGE_URL, codexWhamUsageToLimits, createClaudeHarnessUsage, createCodexHarnessUsage } from './probes.ts';
+import { CLAUDE_OAUTH_USAGE_URL, createClaudeHarnessUsage } from '../claude/usage.ts';
+import { CODEX_USAGE_URL, codexWhamUsageToLimits, createCodexHarnessUsage } from '../codex/usage.ts';
 import { observeSessionUsage } from './recorder.ts';
 
 function fakeSession(settings: Record<string, unknown> = {}) {

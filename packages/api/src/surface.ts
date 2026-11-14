@@ -83,10 +83,7 @@ import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
 import type { HarnessExecutableReport } from '@factory/harness/executable';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
-import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES, OPENCODE_HARNESS } from '@factory/contracts';
-import { createAgentAccountsConnections } from './agent-connections.ts';
-import { SIGN_IN_ACCOUNT_PROVIDERS } from './credential-accounts.ts';
-import type { AccountSignInFlows } from './credential-accounts.ts';
+import type { HarnessApiModule } from './harness-modules.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
 import type { LocalCheckoutAttacher } from './fs.ts';
@@ -101,10 +98,6 @@ import { BoardRoutes } from './boards.ts';
 import { SkillRoutes } from './skills.ts';
 import { AttachmentRoutes } from './attachments.ts';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
-import { buildOpenCodeLocalSessionRoutes } from './opencode-local-sessions.ts';
-import type { OpenCodeLocalSessionsService } from './opencode-local-sessions.ts';
-import { createOpenCodeAccountsConnections } from './opencode-connections.ts';
-import type { OpenCodeKeyCheck } from './opencode-connections.ts';
 import type { ClaudeCodeUserSessions } from './source-control-sessions.ts';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
 import { invalidateTenantCredentialSnapshots } from '@factory/credentials';
@@ -188,29 +181,17 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** The Factory MCP endpoint is mounted; surfaced so the UI can show its URL. */
   mcpEnabled: boolean;
-  /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
-  claudeCodeEnabled?: boolean;
-  /** The Codex harness runs here (the `codex` CLI is installed), so factories may pick `harness: 'codex'`. */
-  codexEnabled?: boolean;
-  /** The OpenCode harness is configured here, so factories may pick `harness: 'opencode'` (ADR-0043). */
-  openCodeEnabled?: boolean;
-  /** Checks an OpenCode key with OpenCode before Settings › Connections keeps it (the OpenCode accounts connector). */
-  checkOpenCodeKey?: (apiKey: string) => Promise<OpenCodeKeyCheck>;
   /**
-   * The person's own OpenCode sessions, continued in the Factory (ADR-0043, amendment): only where
-   * the server is the person's own machine.
+   * Every harness module the server knows (ADR-0044), each with what it adds while it runs here: its
+   * `/web/config/features` flags, its connectors, its own routes. Absent: Mastra alone.
    */
-  opencodeLocalSessions?: OpenCodeLocalSessionsService;
+  harnesses?: readonly HarnessApiModule[];
   /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
   harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession' | 'forInstance'> | undefined;
   /** The CLIs the turn-based harnesses spawn, for `/web/config/versions` (ADR-0038). */
   harnessExecutables?: () => Promise<HarnessExecutableReport[]>;
   /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
   deviceEnabled?: boolean;
-  /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
-  claudeSignIn?: AccountSignInFlows;
-  /** Codex sign-in on this host (local development): `codex login`, kept as the person's account. */
-  codexSignIn?: AccountSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** With a local sandbox: attaches a session's checkout on disk without starting it (file panels, sandbox start). */
@@ -842,72 +823,6 @@ function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
  *   - every registered integration's `routes()` surface (full set when ready,
  *     disabled-status stub otherwise), plus stubs for absent known ids
  */
-/**
- * One connector per harness this server runs whose sessions run on members' sign-ins (ADR-0036):
- * its id is the descriptor's `setup.accounts.connector`.
- */
-function agentAccountConnectors(deps: FactoryApiRoutesDeps): ConnectorRegistration[] {
-  const running = HARNESSES.filter(
-    harness =>
-      (harness.id !== CLAUDE_CODE_HARNESS.id || deps.claudeCodeEnabled === true) && (harness.id !== CODEX_HARNESS.id || deps.codexEnabled === true),
-  );
-  const signIns: Record<string, AccountSignInFlows | undefined> = {
-    [CLAUDE_CODE_HARNESS.id]: deps.claudeSignIn,
-    [CODEX_HARNESS.id]: deps.codexSignIn,
-  };
-  const users = deps.users;
-  return running.flatMap(harness => {
-    const accounts = harness.setup.accounts;
-    const provider = accounts ? SIGN_IN_ACCOUNT_PROVIDERS[accounts.provider] : undefined;
-    if (!accounts || !provider) return [];
-    const signIn = signIns[harness.id];
-    const facet = deps.usage?.harnesses.forHarness(harness.id);
-    return [
-      {
-        id: accounts.connector,
-        connections: createAgentAccountsConnections({
-          harness,
-          kind: provider.kind,
-          signInName: provider.name,
-          credentials: deps.domains.modelCredentials,
-          ...(signIn ? { signIn } : {}),
-          ...(deps.usage ? { usage: { storage: deps.usage.usage, ...(facet ? { facet } : {}) } } : {}),
-          projects: deps.domains.projects,
-          ...(users
-            ? {
-                userName: async (userId: string) => {
-                  const user = await users.getUser(userId);
-                  return user?.name?.trim() || user?.email?.trim() || undefined;
-                },
-              }
-            : {}),
-        }),
-      },
-    ];
-  });
-}
-
-/**
- * OpenCode's accounts connector (ADR-0043, amendment): the organization's OpenCode keys, which
- * OpenCode runs sign in with. Present when the OpenCode harness runs here.
- */
-function openCodeAccountConnector(deps: FactoryApiRoutesDeps): ConnectorRegistration[] {
-  const accounts = OPENCODE_HARNESS.setup.accounts;
-  if (!deps.openCodeEnabled || !accounts || !deps.checkOpenCodeKey) return [];
-  const facet = deps.usage?.harnesses.forHarness(OPENCODE_HARNESS.id);
-  return [
-    {
-      id: accounts.connector,
-      connections: createOpenCodeAccountsConnections({
-        harness: OPENCODE_HARNESS,
-        credentials: deps.domains.modelCredentials,
-        checkKey: deps.checkOpenCodeKey,
-        ...(deps.usage ? { usage: { storage: deps.usage.usage, ...(facet ? { facet } : {}) } } : {}),
-      }),
-    },
-  ];
-}
-
 export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[] {
   const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
   const registrations = deps.integrations ?? [];
@@ -920,6 +835,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   ];
   const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
+  // The harness modules' own connectors and routes (ADR-0044).
+  const harnessApiModules = deps.harnesses ?? [];
+  const harnessContext = { deps, sourceControls };
 
   const connectors: ConnectorRegistration[] = [];
   const integrationRoutes = registrations.flatMap(registration => {
@@ -975,6 +893,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
+          ...(deps.harnesses ? { harnesses: deps.harnesses.map(harness => harness.descriptor) } : {}),
           ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
           ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
           ...(deps.createLocalCheckout ? { createLocalCheckout: deps.createLocalCheckout } : {}),
@@ -1083,14 +1002,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       features: {
         knowledge: deps.knowledgeEnabled,
         mcp: deps.mcpEnabled,
-        claudeCode: deps.claudeCodeEnabled ?? false,
-        codex: deps.codexEnabled ?? false,
-        opencode: deps.openCodeEnabled ?? false,
         device: deps.deviceEnabled ?? false,
-        claudeSignIn: deps.claudeSignIn !== undefined,
-        codexSignIn: deps.codexSignIn !== undefined,
-        opencodeLocalSessions: deps.opencodeLocalSessions !== undefined,
       },
+      ...(deps.harnesses ? { harnesses: deps.harnesses } : {}),
       deploymentProviders: deps.deploymentModelProviders,
       ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
       ...(deps.harnessExecutables ? { harnessExecutables: deps.harnessExecutables } : {}),
@@ -1123,17 +1037,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
-    // The person's own OpenCode sessions, continued here: only on their own machine (ADR-0043).
-    ...(deps.opencodeLocalSessions && sourceControls.length > 0
-      ? buildOpenCodeLocalSessionRoutes({
-          auth: deps.auth,
-          sourceControls,
-          projects: deps.domains.projects,
-          memorySettings: deps.domains.memorySettings,
-          ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
-          opencodeLocalSessions: deps.opencodeLocalSessions,
-        })
-      : []),
+    // Routes only one harness has (OpenCode's own sessions, continued here; ADR-0043).
+    ...harnessApiModules.flatMap(module => module.running?.routes?.(harnessContext) ?? []),
     ...(sourceControls.length === 0
       ? []
       : buildSourceControlSettingsRoutes({
@@ -1146,7 +1051,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     // the accounts each turn-based harness runs on (ADR-0036).
     ...buildConnectionRoutes({
       auth: deps.auth,
-      connectors: [...connectors, ...agentAccountConnectors(deps), ...openCodeAccountConnector(deps), ...(deps.connectors ?? [])],
+      connectors: [
+        ...connectors,
+        ...harnessApiModules.flatMap(module => module.running?.connectors?.(harnessContext) ?? []),
+        ...(deps.connectors ?? []),
+      ],
       emitAudit,
     }),
     ...absentStubs,

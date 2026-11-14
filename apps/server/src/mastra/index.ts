@@ -34,6 +34,7 @@ import {
   LocalFileBlobStore,
   MastraFactory,
   agentUserRuntimeFromEnv,
+  harnessConfigsFromEnv,
 } from '@factory/server';
 import { GithubIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
@@ -422,46 +423,14 @@ export const factory = new MastraFactory({
   // MCP clients (Claude Code, Cursor) sign in with OAuth on this server itself (Google sign-in).
   ...(googleAuthEnabled ? { mcp: googleMcpConfig() } : {}),
   sandbox,
-  // Factories created with `harness: 'claude-code'` run their agents on the
-  // `claude` CLI, each session in its own config dir, signed in only with the
-  // organization's Claude accounts (a development server adds "Sign in with Claude").
-  claudeCode: {
-    storeDir:
-      process.env.FACTORY_CLAUDE_CODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'claude-code-sessions'),
-    localDevelopment: ownMachine,
-    ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
-    // As the agent user: its own `claude` on its PATH, config dirs and turn files where it can read them.
-    ...(agentUser ? agentUser.claudeCode() : {}),
-  },
-  // Factories created with `harness: 'codex'` run their agents on this machine's `codex` CLI (its
-  // app-server), each session in its own CODEX_HOME beside the store, signed in only with the
-  // members' ChatGPT sign-ins (Settings → Models → Codex accounts; a development server adds "Sign in
-  // with ChatGPT", a `codex login` in a throwaway home). The machine's own `codex login`
-  // (`~/.codex`) is never read: there is no setting for a shared home any more (FACTORY_CODEX_HOME
-  // is gone), so no deployment runs every Factory on one person's login. Without the CLI, Settings
-  // lists Codex as needing setup.
-  codex: {
-    storeDir: process.env.FACTORY_CODEX_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'codex-sessions'),
-    localDevelopment: ownMachine,
-    ...(process.env.FACTORY_CODEX_COMMAND?.trim() ? { command: process.env.FACTORY_CODEX_COMMAND.trim() } : {}),
-    // As the agent user: its own `codex`, session homes and the Factory chat's folders where it can reach them.
-    ...(agentUser ? agentUser.codex() : {}),
-  },
-  // Factories created with `harness: 'opencode'` run their agents on this machine's `opencode` CLI (its
-  // server, one per run) on OpenCode's own free models, or signed in with one of the organization's
-  // OpenCode accounts (Settings → Connections → OpenCode) (ADR-0043). Each session keeps OpenCode's
-  // state in its own folders beside the store; agents never read this machine's own OpenCode (its
-  // `~/.config/opencode`, `~/.local/share/opencode`); on the person's own machine the server reads
-  // their sessions read-only when they ask to continue one. Without the CLI, Settings lists OpenCode as
-  // needing setup.
-  opencode: {
-    storeDir: process.env.FACTORY_OPENCODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'opencode-sessions'),
-    // On the person's own machine their own OpenCode sessions can be continued here (read-only, at their request).
-    localDevelopment: ownMachine,
-    ...(process.env.FACTORY_OPENCODE_COMMAND?.trim() ? { command: process.env.FACTORY_OPENCODE_COMMAND.trim() } : {}),
-    // As the agent user: its own `opencode`, session state and the Factory chat's folders where it can reach them.
-    ...(agentUser ? agentUser.opencode() : {}),
-  },
+  // The turn harnesses (ADR-0044): Factories created with `harness: 'claude-code'`, `'codex'` or
+  // `'opencode'` run their agents on this machine's CLI, each session in its own folders beside its
+  // store (FACTORY_CLAUDE_CODE_STORE_DIR, FACTORY_CODEX_STORE_DIR, FACTORY_OPENCODE_STORE_DIR), the CLI
+  // FACTORY_<HARNESS>_COMMAND names, signed in only with the organization's accounts (a development
+  // server adds the CLIs' sign-ins and continuing the person's own OpenCode sessions), as the agent
+  // user when one is configured. Each harness module reads its own settings (`configFromEnv`).
+  // Without a CLI, Settings lists that harness as needing setup.
+  ...harnessConfigsFromEnv({ env: process.env, home: homedir(), ownMachine, ...(agentUser ? { agentUser } : {}) }),
   ...(browser ? { browser } : {}),
   // Device preview drives simulators and emulators on this machine, so only a local development
   // server (the person's own machine) offers it. State and the device tools sit next to the database.

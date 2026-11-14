@@ -33,7 +33,9 @@ import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { MASTRA_INSTANCE_ID, mastraModelInstance } from '@factory/credentials/mastra-models';
 import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import type { ModelCatalog, ModelCatalogEntry } from '@factory/credentials';
-import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES, OPENCODE_HARNESS } from '@factory/contracts';
+import { MASTRA_HARNESS } from '@factory/contracts';
+import { harnessFeatureFlags, runningHarnessDescriptors } from './harness-modules.ts';
+import type { HarnessApiModule } from './harness-modules.ts';
 
 import { readRunningPackages } from './running-packages.ts';
 import type { RunningPackage } from './running-packages.ts';
@@ -301,24 +303,19 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
   /**
    * `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server).
-   * `claudeSignIn`: a person can sign in to Claude from the settings, the CLI's browser page opening on
-   * this machine (see `CredentialAccountRoutes`).
-   * `codexSignIn`: a person can sign in to ChatGPT for Codex from the settings, the CLI's browser page
-   * opening on this machine, as for `claudeSignIn`.
+   * Each harness's own flags (`claudeCode`, `claudeSignIn`, `codex`, `codexSignIn`,
+   * `opencodeLocalSessions`) come from {@link ConfigRoutesDeps.harnesses}.
    */
   features?: {
     knowledge: boolean;
     mcp?: boolean;
-    claudeCode?: boolean;
-    claudeSignIn?: boolean;
-    codex?: boolean;
-    codexSignIn?: boolean;
-    /** The OpenCode harness runs here: factories may pick `harness: 'opencode'` (ADR-0043). Only filters `harnesses`. */
-    opencode?: boolean;
-    /** The person's own OpenCode sessions can be continued here (the server is their own machine). */
-    opencodeLocalSessions?: boolean;
     device?: boolean;
   };
+  /**
+   * Every harness module the server knows (ADR-0044): `/web/config/features` serves the flags each
+   * owns (false while it does not run here) and lists the running ones' descriptors. Absent: Mastra alone.
+   */
+  harnesses?: readonly HarnessApiModule[];
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
   readPackages?: () => Promise<RunningPackage[]>;
   /** The CLIs the turn-based harnesses spawn: path, source and version, or where it looked (ADR-0038). */
@@ -457,6 +454,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }
     };
 
+    // Mastra, the base harness, always runs; a server that names no modules runs it alone.
+    const harnessModules: readonly HarnessApiModule[] = options.harnesses ?? [{ descriptor: MASTRA_HARNESS, running: {} }];
+
     return [
       registerApiRoute('/web/config/features', {
         method: 'GET',
@@ -465,19 +465,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           c.json({
             knowledge: options.features?.knowledge ?? false,
             mcp: options.features?.mcp ?? false,
-            claudeCode: options.features?.claudeCode ?? false,
-            claudeSignIn: (options.features?.claudeCode ?? false) && (options.features?.claudeSignIn ?? false),
-            codex: options.features?.codex ?? false,
-            codexSignIn: (options.features?.codex ?? false) && (options.features?.codexSignIn ?? false),
-            opencodeLocalSessions: (options.features?.opencode ?? false) && (options.features?.opencodeLocalSessions ?? false),
+            ...harnessFeatureFlags(harnessModules),
             device: options.features?.device ?? false,
             // What each harness this server runs can do; the UI asks these instead of checking ids.
-            harnesses: HARNESSES.filter(
-              harness =>
-                (harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true) &&
-                (harness.id !== CODEX_HARNESS.id || options.features?.codex === true) &&
-                (harness.id !== OPENCODE_HARNESS.id || options.features?.opencode === true),
-            ),
+            harnesses: runningHarnessDescriptors(harnessModules),
           }),
       }),
 

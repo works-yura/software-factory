@@ -56,7 +56,12 @@ import {
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem, REVIEW_CONTEXT } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import { factoryBootMigrations } from './migrations/factory-migrations.ts';
-import { CLAUDE_CODE_EXECUTABLE, CODEX_EXECUTABLE, OPENCODE_EXECUTABLE, harnessExecutableFor, reportHarnessExecutables } from './harness-executables.ts';
+import { reportHarnessExecutables } from './harness-executables.ts';
+import type { ServerHarnessModule, TurnHarnessEngine, TurnHarnessHost, TurnHarnessSession } from './harnesses/module.ts';
+import { SERVER_HARNESS_MODULES } from './harnesses/registry.ts';
+import type { HarnessModuleConfigs } from './harnesses/registry.ts';
+import { createTurnHarnesses, harnessApiModules, prepareTurnHarnesses, preparedExecutables, preparedUsageFacets } from './harnesses/runtime.ts';
+import type { TurnHarnesses } from './harnesses/runtime.ts';
 import { runBootMigrations } from './migrations/run.ts';
 import { intakeTriggerRouteRepository, writeFireCardBack } from './intake/repository.ts';
 import { canonicalizeProjectRoutes } from './intake/canonical-routes.ts';
@@ -74,26 +79,17 @@ import {
   workItemSource,
 } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
-import { ClaudeCodeSession } from '@factory/harness-claude-code';
 import { createHarnessModelRegistry, createRoutingHarness } from '@factory/harness';
 import { createMemoryHistorySource, createSessionHandoffs, threadReadSourceFromHistory } from '@factory/harness-handoff';
 import { FactoryContextHandoffProcessor } from '@factory/harness-handoff/mastra';
 import { createHarnessSwitch, turnHandoffHook } from './handoff/harness-switch.ts';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
 import {
-  ClaudeStartCoordinator,
   createClaudeBoundTools,
   createClaudeSessionTools,
   createClaudePlanApproval,
   createClaudeCheckoutResolver,
   createLocalCheckoutAttacher,
-  CLAUDE_CODE_NEEDS_ACCOUNT_REASON,
-  createClaudeCodeCredentials,
-  claudeFactorySkillDirectories,
-  createClaudeFactoryHarness,
-  createClaudeSignInService,
-  createClaudeUserSessions,
-  createClaudeSupervisorSessions,
   claudeLiveSession,
   claudeSupervisorProjectId,
   boundRunRequestContext,
@@ -106,38 +102,8 @@ import {
   createFactoryToolPermissions,
   observeClaudeThreadTitle,
 } from './claude/index.ts';
-import type {
-  ClaudeCodeCredentialFailureHook,
-  ClaudeCodeCredentialsHook,
-  ClaudeFactoryHarness,
-  ClaudeFactoryHarnessOptions,
-} from './claude/index.ts';
-import type { ChatTranscriptSession, ClaudeSessionUi } from '@factory/harness-claude-code-ui';
-import type { ModelSelection } from '@factory/harness/models/contracts';
-import { harnessCommandAvailable, type HarnessExecutable } from '@factory/harness/executable';
-import { withConnectionAvailability, withExecutableAvailability } from '@factory/harness/models/facet';
-import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
-import { chainSessionResolvers, codexAwareModelSelectionReader } from '@factory/harness-codex-ui';
-import { CODEX_NOT_INSTALLED_REASON } from '@factory/harness-codex';
-import type { CodexSession, CodexSessionMode } from '@factory/harness-codex';
-import {
-  combineTurnHarnessUserSessions,
-  createCodexCredentials,
-  createCodexFactoryHarness,
-  createCodexSignInService,
-  createCodexUserSessions,
-  codexGeneratedImageKeeper,
-  type AgentFileOpener,
-  codexLiveWebForProductCards,
-} from './codex/index.ts';
-import type { CodexCredentials, CodexFactoryHarness, CodexFactoryHarnessOptions } from './codex/index.ts';
-import { OPENCODE_NOT_INSTALLED_REASON, OpenCodeSession } from '@factory/harness-opencode';
-import type { OpenCodeSessionMode } from '@factory/harness-opencode';
-import { createOpenCodeFactoryHarness, createOpenCodeUserSessions } from './opencode/index.ts';
-import { createOpenCodeAccounts, createOpenCodeHarnessUsage } from './opencode/accounts.ts';
-import { createOpenCodeLocalSessions } from './opencode/local-import.ts';
-import { readOpenCodeAccountLimits } from '@factory/harness-opencode';
-import type { OpenCodeFactoryHarness, OpenCodeFactoryHarnessOptions } from './opencode/index.ts';
+import type { ClaudeSessionUi } from '@factory/harness-claude-code-ui';
+import type { HarnessExecutable } from '@factory/harness/executable';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID, selfReviewedHeadFor } from '@factory/harness-mastra';
 import { publishBoardChange, subscribeBoardChanges, touchFeed } from '@factory/feed';
@@ -327,7 +293,7 @@ type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage
 /** Constructor args for the `new Mastra(...)` literal in the deploy entry. */
 export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
-export interface MastraFactoryConfig {
+export interface MastraFactoryConfig extends HarnessModuleConfigs {
   /**
    * Auth provider instance — `MastraAuthBetterAuth`
    * (`@mastra/auth-better-auth`), the local dev provider, or any custom
@@ -421,23 +387,14 @@ export interface MastraFactoryConfig {
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
-   * The Claude Code harness, for factories created with `harness: 'claude-code'`.
-   * Omitted → such factories cannot start runs; Mastra factories are unaffected.
+   * The harness modules this server knows (ADR-0044); `SERVER_HARNESS_MODULES` by default. A turn
+   * harness runs when its `configKey` names a config: `claudeCode`, `codex`, `opencode` above (each
+   * omitted → that harness does not run; given without its CLI installed, Settings lists it as
+   * needing setup and its new sessions are refused), or `harnessConfigs` for a module of its own.
    */
-  claudeCode?: MastraFactoryClaudeCodeConfig;
-  /**
-   * The Codex harness, for factories created with `harness: 'codex'`: sessions run on this host's
-   * `codex` CLI (its app-server), signed in with the members' ChatGPT sign-ins (never this host's `codex login`). Omitted → no Codex harness; given
-   * without the CLI installed, Settings lists Codex as needing setup and new Codex sessions are refused.
-   */
-  codex?: MastraFactoryCodexConfig;
-  /**
-   * The OpenCode harness, for factories created with `harness: 'opencode'`: sessions run on this
-   * host's `opencode` CLI (its server), on OpenCode's own free models, with no key and no login
-   * (ADR-0043). Omitted → no OpenCode harness; given without the CLI installed, Settings lists
-   * OpenCode as needing setup and new OpenCode sessions are refused.
-   */
-  opencode?: MastraFactoryOpenCodeConfig;
+  harnessModules?: readonly ServerHarnessModule[];
+  /** Configs of harness modules beyond the built-in ones, by their `configKey`. */
+  harnessConfigs?: Readonly<Record<string, unknown>>;
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -549,87 +506,9 @@ export interface MastraFactoryConfig {
 /** Read-only web tools a Product card's Claude Code run may use without asking (Brief: providers' pricing pages). */
 export const PRODUCT_WEB_READ_TOOLS = ['WebFetch', 'WebSearch'] as const;
 
-/** How this server runs Claude Code sessions (see `createClaudeFactoryHarness`). */
-export interface MastraFactoryClaudeCodeConfig
-  extends Pick<
-    ClaudeFactoryHarnessOptions,
-    | 'configDir'
-    | 'sessionConfigRoot'
-    | 'allowedTools'
-    | 'approvedPermissionMode'
-    | 'turnTimeoutMs'
-    | 'skillsDir'
-    | 'command'
-    | 'spawn'
-    | 'env'
-    | 'tempDir'
-    | 'gateNode'
-    | 'supervisorWorkdirRoot'
-  > {
-  /** Where session records live; required unless `store` is given. */
-  storeDir?: string;
-  store?: ClaudeFactoryHarnessOptions['store'];
-  /**
-   * Local development: the server and the person's browser share a machine, so Claude sign-in
-   * (which opens the CLI's browser page here) is offered. Turns still use only the stored accounts.
-   */
-  localDevelopment?: boolean;
-  /** Replaces the default credentials (`createClaudeCodeCredentials`: the organization's Anthropic accounts). */
-  credentials?: ClaudeCodeCredentialsHook;
-  /** Goes with a replaced `credentials` hook: told when a turn's account ran out of usage or was refused. */
-  onCredentialFailure?: ClaudeCodeCredentialFailureHook;
-  /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
-  cwdFor?: (sessionId: string) => string | Promise<string>;
-  /** The origin the CLI reaches this server's MCP endpoint at; `publicUrl` by default. */
-  mcpOrigin?: string;
-  /** Secret for MCP session tokens; `stateSecret` by default, else a per-process key. */
-  sessionTokenSecret?: string;
-}
-
-/** How this server runs Codex sessions (see `createCodexFactoryHarness`). */
-export interface MastraFactoryCodexConfig
-  extends Pick<
-    CodexFactoryHarnessOptions,
-    'store' | 'command' | 'launchArgs' | 'sessionHomeRoot' | 'supervisorWorkdirRoot' | 'spawn' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'
-  > {
-  /** Where session records live (and, beside them, each session's own `CODEX_HOME`); required unless `store` is given. */
-  storeDir?: string;
-  /** Opens a file the CLI names (a generated image) with the agent's rights, when agents run as their own user. */
-  openAgentFile?: AgentFileOpener;
-  /**
-   * Local development: the server and the person's browser share a machine, so ChatGPT sign-in
-   * (`codex login`, which opens the CLI's browser page here) is offered. Runs still use only the
-   * stored accounts.
-   */
-  localDevelopment?: boolean;
-  /** Replaces the default credentials (`createCodexCredentials`: the members' ChatGPT sign-ins). */
-  credentials?: CodexCredentials;
-  /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
-  cwdFor?: (sessionId: string) => string | Promise<string>;
-  /** The origin Codex reaches this server's MCP endpoint at; `publicUrl` by default. */
-  mcpOrigin?: string;
-}
-
-/** How this server runs OpenCode sessions (see `createOpenCodeFactoryHarness`). */
-export interface MastraFactoryOpenCodeConfig
-  extends Pick<
-    OpenCodeFactoryHarnessOptions,
-    'store' | 'command' | 'sessionHomeRoot' | 'supervisorWorkdirRoot' | 'spawn' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'
-  > {
-  /** Where session records live (and, beside them, each session's own OpenCode state); required unless `store` is given. */
-  storeDir?: string;
-  /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
-  cwdFor?: (sessionId: string) => string | Promise<string>;
-  /** The origin OpenCode reaches this server's MCP endpoint at; `publicUrl` by default. */
-  mcpOrigin?: string;
-  /**
-   * The server runs on the person's own machine: their own OpenCode sessions can be continued in
-   * the Factory (read-only from their OpenCode database, at their request; ADR-0043).
-   */
-  localDevelopment?: boolean;
-  /** The person's OpenCode database; where OpenCode keeps it for this server's user by default. */
-  localSessionsDatabase?: string;
-}
+export type { MastraFactoryClaudeCodeConfig } from './claude/module.ts';
+export type { MastraFactoryCodexConfig } from './codex/module.ts';
+export type { MastraFactoryOpenCodeConfig } from './opencode/module.ts';
 
 export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from '@factory/sandbox';
 export type { FactorySandboxStart } from '@factory/harness-mastra';
@@ -724,6 +603,9 @@ export class MastraFactory {
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   /** The CLIs the turn-based harnesses spawn (ADR-0038), for the boot log and `/web/config/versions`. */
   #harnessExecutables: HarnessExecutable[] = [];
+  /** The harness modules this server knows, and their configs by `configKey` (ADR-0044). */
+  readonly #harnessModules: readonly ServerHarnessModule[];
+  readonly #harnessConfigs: Readonly<Record<string, unknown>>;
   #device: FactoryDevice | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
@@ -780,6 +662,8 @@ export class MastraFactory {
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
+    this.#harnessModules = config.harnessModules ?? SERVER_HARNESS_MODULES;
+    this.#harnessConfigs = { ...(config as unknown as Record<string, unknown>), ...config.harnessConfigs };
     this.#claudeSessionUi = createClaudeSessionUi({
       controllerId: CONTROLLER_ID,
       // Read per call: the Mastra store is only ready once the factory is prepared.
@@ -1315,7 +1199,7 @@ export class MastraFactory {
       reservedIds: [
         ...integrations.map(integration => integration.id),
         'mcp',
-        ...HARNESSES.flatMap(harness => (harness.setup.accounts ? [harness.setup.accounts.connector] : [])),
+        ...this.#harnessModules.flatMap(({ descriptor }) => (descriptor.setup.accounts ? [descriptor.setup.accounts.connector] : [])),
       ],
     });
 
@@ -1416,20 +1300,13 @@ export class MastraFactory {
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     );
     const workItemsReady = storage.isDomainReady('work-items');
-    // Set once the Claude Code harness exists (below): a deleted session's CLI config dir goes with it.
-    // A deleted session's own CLI state (Claude Code's config dir, Codex's home), whichever harness ran it.
-    let removeClaudeSessionConfig: ((sessionId: string) => Promise<void>) | undefined;
-    let removeCodexSessionHome: ((sessionId: string) => Promise<void>) | undefined;
-    let removeOpenCodeSessionHome: ((sessionId: string) => Promise<void>) | undefined;
+    // The running turn harnesses, set once they exist (below; ADR-0044). A deleted session's own CLI state
+    // (config dir, home) goes with it, whichever harness ran it; a side session of a Factory on a turn
+    // harness is that harness's session.
+    let turnHarnessesRef: TurnHarnesses | undefined;
     const removeTurnSessionFiles = async (sessionId: string) => {
-      await Promise.all([removeClaudeSessionConfig?.(sessionId), removeCodexSessionHome?.(sessionId), removeOpenCodeSessionHome?.(sessionId)]);
+      await turnHarnessesRef?.removeSessionFiles(sessionId);
     };
-    // Set with it too: a side session of a Claude Code Factory is a Claude Code session.
-    let createClaudeSideSession: FactoryToolDependencies['createHarnessSession'];
-    // And of a Codex Factory, a Codex session.
-    let createCodexSideSession: FactoryToolDependencies['createHarnessSession'];
-    // And of an OpenCode Factory, an OpenCode session.
-    let createOpenCodeSideSession: FactoryToolDependencies['createHarnessSession'];
     // Every harness's model facet: `/web/config/models`, the chat's `POST …/sessions/:id/model` and the
     // agent's `factory_switch_session_model` go to the harness that runs the session through it.
     // Mastra's is the fallback (registered with the tool dependencies, below); others register as they start.
@@ -1887,8 +1764,7 @@ export class MastraFactory {
           : {}),
       },
       startCoordinator: () => this.#startCoordinator,
-      createHarnessSession: async input =>
-        (await createClaudeSideSession?.(input)) ?? (await createCodexSideSession?.(input)) ?? (await createOpenCodeSideSession?.(input)),
+      createHarnessSession: async input => turnHarnessesRef?.createSideSession(input),
       harnessModels: () => harnessModels,
       threadHistory: () => threadHistory,
       messaging: factoryMessaging,
@@ -2323,93 +2199,45 @@ export class MastraFactory {
       );
     };
 
-    // Claude Code factories: their sessions live in the Claude harness, reach the
-    // Factory's tools over MCP with per-turn session tokens, and show in the chat
-    // through `claudeSessionUi`. Everything else stays on Mastra.
-    const claudeCodeConfig = this.#config.claudeCode;
-    const codexConfig = this.#config.codex;
-    const openCodeConfig = this.#config.opencode;
-    // The CLIs they spawn, resolved once for the server (configured command, PATH, then where the CLIs
-    // install; ADR-0038) and logged at boot: a launchd service's bare PATH no longer hides them, and one
-    // installed later is found on the next run without a restart.
-    const claudeExecutable = claudeCodeConfig ? harnessExecutableFor(claudeCodeConfig, CLAUDE_CODE_EXECUTABLE) : undefined;
-    const codexExecutable = codexConfig ? harnessExecutableFor(codexConfig, CODEX_EXECUTABLE) : undefined;
-    const openCodeExecutable = openCodeConfig ? harnessExecutableFor(openCodeConfig, OPENCODE_EXECUTABLE) : undefined;
-    this.#harnessExecutables = [claudeExecutable, codexExecutable, openCodeExecutable].filter(
-      (executable): executable is HarnessExecutable => executable !== undefined,
-    );
+    // The turn harnesses (ADR-0044): every harness module the config names, booted (its CLI resolved
+    // once for the server and logged — ADR-0038 —, its accounts' usage facet), then given what it needs
+    // to run sessions. Everything else stays on Mastra.
+    const harnessModules = this.#harnessModules;
+    const preparedHarnesses = prepareTurnHarnesses(harnessModules, this.#harnessConfigs, { credentials: modelCredentialsStorage });
+    this.#harnessExecutables = preparedExecutables(preparedHarnesses);
     void reportHarnessExecutables(this.#harnessExecutables).catch(error =>
       console.warn('[factory] Could not report the harness executables.', error),
     );
     const sessionTokens =
-      claudeCodeConfig || codexConfig || openCodeConfig
-        ? createFactorySessionTokenSigner(claudeCodeConfig?.sessionTokenSecret ?? this.#config.stateSecret)
+      preparedHarnesses.length > 0
+        ? createFactorySessionTokenSigner(
+            preparedHarnesses.find(entry => entry.prepared.sessionTokenSecret)?.prepared.sessionTokenSecret ?? this.#config.stateSecret,
+          )
         : undefined;
-    const claudeCodeCredentials = claudeCodeConfig?.credentials
-      ? {
-          credentials: claudeCodeConfig.credentials,
-          ...(claudeCodeConfig.onCredentialFailure ? { onCredentialFailure: claudeCodeConfig.onCredentialFailure } : {}),
-        }
-      : createClaudeCodeCredentials({ credentials: modelCredentialsStorage });
-    const codexCredentials = codexConfig
-      ? (codexConfig.credentials ?? createCodexCredentials({ credentials: modelCredentialsStorage }))
-      : undefined;
-    // A card's run belongs to the Factory (`factoryPrincipalId`): on Claude Code and Codex it runs only on the
-    // sign-ins their owners shared with the Factory's card runs, and its start says so when there is none.
-    const factoryRunAccounts = async (project: { id: string; orgId: string; harness: string }) => {
-      const tenant = { orgId: project.orgId, userId: factoryPrincipalId(project.id) };
-      if (project.harness === 'claude-code') {
-        const usable = 'usable' in claudeCodeCredentials ? claudeCodeCredentials.usable : undefined;
-        return usable && !(await usable(tenant)) ? factoryRunsNeedSharedSignIn('Claude') : undefined;
-      }
-      if (project.harness === 'codex' && codexCredentials) {
-        return (await codexCredentials.usable(tenant)) ? undefined : factoryRunsNeedSharedSignIn('Codex');
-      }
-      return undefined;
-    };
-    factoryRunAccountsCheck = factoryRunAccounts;
     // Every session's token usage, and the turn harnesses' accounts' allowances (`./usage`).
-    // The organization's OpenCode accounts (Settings → Connections → OpenCode): runs sign in with one; none runs the free models.
-    const openCodeAccounts = openCodeConfig ? createOpenCodeAccounts({ credentials: modelCredentialsStorage }) : undefined;
     const factoryUsage = createFactoryUsage({
       storage: usageStorage,
       sessions: sourceControlSessions,
-      ...(openCodeAccounts ? { extraFacets: [createOpenCodeHarnessUsage(openCodeAccounts)] } : {}),
-      ...(claudeCodeConfig ? { claudeSignIn: createClaudeCodeCredentials({ credentials: modelCredentialsStorage }).signIn } : {}),
-      ...(codexConfig ? { codexSignIn: createCodexCredentials({ credentials: modelCredentialsStorage }).signIn } : {}),
+      facets: preparedUsageFacets(preparedHarnesses),
     });
     // One checkout per session for every turn-based harness: the repository on the session's branch, on this host.
     const turnCheckout =
-      claudeCodeConfig || codexConfig || openCodeConfig
+      preparedHarnesses.length > 0
         ? createClaudeCheckoutResolver({
             workspaces: context => sessionWorkspaces(context as never) as never,
             sessions: sourceControlSessions,
           })
         : undefined;
-    const claudeCheckout = claudeCodeConfig ? (claudeCodeConfig.cwdFor ?? turnCheckout) : undefined;
-    const codexCheckout = codexConfig ? (codexConfig.cwdFor ?? turnCheckout) : undefined;
-    const openCodeCheckout = openCodeConfig ? (openCodeConfig.cwdFor ?? turnCheckout) : undefined;
-    // The sandbox a Claude Code session's checkout lives in, for the tools that run git there on its behalf.
+    // The sandbox a turn harness session's checkout lives in, for the tools that run git there on its behalf.
     // After a restart the memo is empty until the session's checkout is resolved again.
     // The memo is keyed by the session's source-control row, as the checkout files it.
     const claudeSessionSandbox = async (sessionId: string) => {
       const row = await sourceControlSessions.getBySessionId(sessionId);
       if (!row) return undefined;
-      const checkout = claudeCheckout ?? codexCheckout ?? openCodeCheckout;
+      const checkout = turnHarnesses.running[0]?.checkout;
       if (!peekSessionSandbox(row.id) && checkout) await checkout(sessionId);
       return peekSessionSandbox(row.id)?.sandbox;
     };
-    // After a restart a Claude Code session's checkout is still on this host's disk, but its sandbox is not in the
-    // memo until its next turn. The file panels and its sandbox start attach it from disk without starting it
-    // (no clone, no setup, no network). Only for the Factory's own local sandbox, never a custom `cwdFor`.
-    const localCheckoutAttacher =
-      ((claudeCodeConfig && !claudeCodeConfig.cwdFor) || (codexConfig && !codexConfig.cwdFor) || (openCodeConfig && !openCodeConfig.cwdFor)) &&
-      sandboxConfig?.provider === 'local'
-        ? createLocalCheckoutAttacher({
-            workspaces: context => sessionWorkspaces(context as never) as never,
-            sessions: sourceControlSessions,
-          })
-        : undefined;
     // What every turn-based session (Claude Code's, Codex's) gets as the harness builds it: the chat
     // channel, the run bookkeeping a Mastra session gets, its thread title, the board's tool-result
     // rules, approval notices and its live-session entry.
@@ -2423,12 +2251,12 @@ export class MastraFactory {
     const parkedSessionSources: ParkedSessionSource[] = [];
     const usageLimitResumer = createUsageLimitResumer({ sources: parkedSessionSources, handledElsewhere: boundToCardRun });
     this.#usageLimitResumer = usageLimitResumer;
-    const observeTurnSession = (session: ClaudeCodeSession | CodexSession | OpenCodeSession) => {
-      const channel = this.#claudeSessionUi.attach(session);
-      usageLimitResumer.observe(session);
+    const observeTurnSession = (session: TurnHarnessSession, harnessId: string) => {
+      const channel = this.#claudeSessionUi.attach(session as never);
+      usageLimitResumer.observe(session as never);
       // The same run bookkeeping a Mastra session gets when it is created.
-      observeSessionRunEnd(session, { audit: auditDomain });
-      factoryUsage.observe(session, { sessionId: session.id, harnessId: (session as { harness?: string }).harness ?? 'claude-code' });
+      observeSessionRunEnd(session as never, { audit: auditDomain });
+      factoryUsage.observe(session as never, { sessionId: session.id, harnessId });
       // Through the chat channel: its events name parked tools as a Mastra session does (`ask_user`,
       // `submit_plan`) and mark a permission request as an approval, which the report tells apart.
       observeSessionRunReports(channel, (outcome, since) =>
@@ -2500,110 +2328,6 @@ export class MastraFactory {
         })
         .catch(error => console.warn('[factory] Could not register a Claude Code session as live', error));
     };
-    const claudeCode: ClaudeFactoryHarness | undefined = claudeCodeConfig
-      ? createClaudeFactoryHarness({
-          ...claudeCodeConfig,
-          ...(claudeExecutable ? { command: claudeExecutable } : {}),
-          // A move from another harness left the thread's history pending, or the CLI lost the conversation.
-          handoffContextFor: turnHandoffHook('claude-code', { handoffs: () => sessionHandoffs, memory: handoffMemory }),
-          sessions: sourceControlSessions,
-          projects: factoryProjectsStorage,
-          // Settings → Behavior → Tool permissions: the Factory's own session keeps them.
-          permissions: createFactoryToolPermissions(
-            async sessionId => this.#prepared?.base.controller.getSession(sessionId),
-            factoryProjectsStorage,
-          ),
-          // External MCP tools set to «ask» (Settings › MCP-сервери) wait for a person on Claude Code too.
-          mcpAskToolsFor: async ({ orgId, factoryProjectId, sessionId }) => {
-            if (!storage.isDomainReady('mcp-servers')) return [];
-            const scope = await resolveMcpSessionScope({ orgId, factoryProjectId, sessionId }, workItemsStorage);
-            return scope ? mcpServerHub.askToolNames(scope) : [];
-          },
-          // A session that ever ran a card's role is a card run: nobody is there to answer a permission prompt.
-          cardRun: ({ orgId, factoryProjectId, sessionId }) =>
-            workItemsReady
-              ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId })
-              : false,
-          // The factory-phase signal a bound Mastra run gets, so the skills read the same stage and revision.
-          ...(workItemsReady
-            ? {
-                // A Product card's Brief reads providers' pricing pages: reading the web needs no person.
-                allowToolsFor: async ({ orgId, sessionId, threadId, resourceId }) => {
-                  const binding = await workItemsStorage.findActiveRunBindingByThread({
-                    orgId,
-                    threadId,
-                    resourceId,
-                    sessionId,
-                  });
-                  if (!binding) return undefined;
-                  const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                  return item?.board === 'product' ? [...PRODUCT_WEB_READ_TOOLS] : undefined;
-                },
-                phaseFor: async ({ orgId, factoryProjectId, sessionId, threadId, resourceId }) => {
-                  const binding = await workItemsStorage.findActiveRunBindingByThread({
-                    orgId,
-                    threadId,
-                    resourceId,
-                    sessionId,
-                  });
-                  if (!binding) return undefined;
-                  const described = await describeFactoryPhase({
-                    storage: workItemsStorage,
-                    boards,
-                    configVersion,
-                    binding,
-                    // What the session's next turn runs on: its own pick, else its Factory's Claude Code default.
-                    runtime: async () => {
-                      const selection =
-                        (await claudeCode?.models?.getSelection(sessionId, { viewer: { userId: '', orgId } })) ?? null;
-                      const effort = selection?.options?.find(option => option.id === 'effort')?.value;
-                      return {
-                        modelId: `claude-code/${selection?.model ?? 'default'}`,
-                        thinkingLevel: typeof effort === 'string' ? effort : 'claude-code-default',
-                      };
-                    },
-                  });
-                  return described?.contents;
-                },
-                workItemFor: async ({ orgId, threadId, resourceId, sessionId }) => {
-                  const binding = await workItemsStorage.findActiveRunBindingByThread({
-                    orgId,
-                    threadId,
-                    resourceId,
-                    sessionId,
-                  });
-                  if (!binding) return undefined;
-                  const described = await describeFactoryWorkItem({
-                    storage: workItemsStorage,
-                    boards,
-                    binding,
-                  });
-                  return described?.contents;
-                },
-              }
-            : {}),
-          // The factory-sessions signal a Mastra run gets, read as the session's own tools see it.
-          sessionsFor: async coordinates => {
-            const processor = factorySessionsProcessor();
-            if (!processor) return undefined;
-            const signal = await processor.computeStateSignal({
-              requestContext: boundRunRequestContext({ ...coordinates, kind: 'user', interactive: false }),
-              contextWindow: { hasSnapshot: false },
-              activeStateSignals: [],
-            } as never);
-            return typeof signal?.contents === 'string' ? signal.contents : undefined;
-          },
-          ...claudeCodeCredentials,
-          cwdFor: claudeCheckout!,
-          mcp: {
-            url: factoryProjectId =>
-              `${(claudeCodeConfig.mcpOrigin ?? publicOrigin).replace(/\/+$/, '')}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/mcp`,
-            tokens: sessionTokens!,
-          },
-          onSession: observeTurnSession,
-          parkOnUsageLimit,
-        })
-      : undefined;
     // A person's message or answer in a turn-based session's chat (Claude Code's, Codex's): the turn that carries it is
     // theirs (interactive), and the Factory chat, shared by the Factory's organization, runs its next turn as them.
     const turnPersonInput = async (c: unknown, session: { id: string; thread: { setSetting(input: { key: string; value: unknown }): Promise<void> } }) => {
@@ -2612,314 +2336,141 @@ export class MastraFactory {
       const userId = routeAuth.tenant(c as never)?.userId;
       if (userId) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId, value: userId });
     };
-    let claudeResolveSession: ((sessionId: string) => Promise<ChatTranscriptSession | undefined>) | undefined;
-    let claudeModelSelection: ((session: ChatTranscriptSession) => Promise<ModelSelection | null>) | undefined;
-    if (claudeCode) {
-      // The Factory chat (supervisor) of a Claude Code Factory is a Claude session too, created when the chat first reaches it.
-      const supervisorSessions = createClaudeSupervisorSessions({
-        harness: claudeCode.harness,
-        projects: {
-          getById: async args => {
-            if (!storage.isDomainReady('projects')) return null;
-            await factoryProjectsStorage.ensureReady();
-            return factoryProjectsStorage.getById(args);
-          },
-        },
-      });
-      claudeResolveSession = sessionId => supervisorSessions.resolve(sessionId);
-      this.#claudeSessionUi.setSessionResolver(claudeResolveSession);
-      removeClaudeSessionConfig = sessionId => claudeCode.removeSessionConfig(sessionId);
-      // The chat's model picker and the agent's `factory_switch_session_model` reach a Claude Code session's
-      // model through its harness's facet; its next turn passes the pick to the CLI (`--model`, `--effort`, `--settings`).
-      const claudeModels = claudeCode.models;
-      if (claudeModels) {
-        // Offered only to whoever has a Claude sign-in to run on (ADR-0036); otherwise the UI points at its connector.
-        const claudeUsable = 'usable' in claudeCodeCredentials ? claudeCodeCredentials.usable : undefined;
-        harnessModels.register(
-          // Without its CLI on this server it is offered to nobody, whatever their sign-ins (ADR-0038).
-          withConnectionAvailability(claudeExecutable ? withExecutableAvailability(claudeModels, claudeExecutable) : claudeModels, {
-            connector: CLAUDE_CODE_HARNESS.setup.accounts!.connector,
-            ...(claudeUsable
-              ? {
-                  missing: async ctx =>
-                    (await claudeUsable({ orgId: ctx.viewer.orgId, userId: ctx.viewer.userId })) ? undefined : CLAUDE_CODE_NEEDS_ACCOUNT_REASON,
-                }
-              : {}),
-          }),
-        );
-        claudeModelSelection = async session => (session instanceof ClaudeCodeSession ? claudeModels.effectiveSelection(session) : null);
-        this.#claudeSessionUi.setModelSelectionReader(claudeModelSelection);
-      }
-      createClaudeSideSession = async ({ harness, sessionId, resourceId, title }) => {
-        if (harness !== 'claude-code') return undefined;
-        // The Factory's thread convention, as a card's or a chat's Claude Code session: the thread is the session id.
-        const session =
-          (await claudeCode.harness.getSession(sessionId)) ??
-          (await claudeCode.harness.createSession({ sessionId, threadId: sessionId, resourceId }));
-        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
-        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: title });
-        return session;
-      };
+    const turnHarnessHost: TurnHarnessHost = {
+      sessions: sourceControlSessions,
+      projects: factoryProjectsStorage,
+      credentials: modelCredentialsStorage,
+      sandboxProvider: sandboxConfig?.provider,
+      checkout: sessionId => turnCheckout!(sessionId),
+      mcpUrl: origin => factoryProjectId =>
+        `${(origin ?? publicOrigin).replace(/\/+$/, '')}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/mcp`,
+      sessionTokens: sessionTokens!,
+      // Settings → Behavior → Tool permissions, read before each turn.
+      permissions: () =>
+        createFactoryToolPermissions(async sessionId => this.#prepared?.base.controller.getSession(sessionId), factoryProjectsStorage),
+      cardRun: ({ orgId, factoryProjectId, sessionId }) =>
+        workItemsReady ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId }) : false,
+      // The factory-phase and work-item signals a bound Mastra run gets, so the skills read the same stage and revision.
+      ...(workItemsReady
+        ? {
+            signals: {
+              phaseFor: runtime => async session => {
+                const { orgId, sessionId, threadId, resourceId } = session;
+                const binding = await workItemsStorage.findActiveRunBindingByThread({ orgId, threadId, resourceId, sessionId });
+                if (!binding) return undefined;
+                const described = await describeFactoryPhase({
+                  storage: workItemsStorage,
+                  boards,
+                  configVersion,
+                  binding,
+                  runtime: () => runtime(session),
+                });
+                return described?.contents;
+              },
+              workItemFor: async ({ orgId, threadId, resourceId, sessionId }) => {
+                const binding = await workItemsStorage.findActiveRunBindingByThread({ orgId, threadId, resourceId, sessionId });
+                if (!binding) return undefined;
+                const described = await describeFactoryWorkItem({ storage: workItemsStorage, boards, binding });
+                return described?.contents;
+              },
+              // A Product card's Brief reads providers' pricing pages: reading the web needs no person.
+              productWebTools: async ({ orgId, sessionId, threadId, resourceId }) => {
+                const binding = await workItemsStorage.findActiveRunBindingByThread({ orgId, threadId, resourceId, sessionId });
+                if (!binding) return undefined;
+                const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                return item?.board === 'product' ? [...PRODUCT_WEB_READ_TOOLS] : undefined;
+              },
+            },
+          }
+        : {}),
+      // The factory-sessions signal a Mastra run gets, read as the session's own tools see it.
+      sessionsFor: async coordinates => {
+        const processor = factorySessionsProcessor();
+        if (!processor) return undefined;
+        const signal = await processor.computeStateSignal({
+          requestContext: boundRunRequestContext({ ...coordinates, kind: 'user', interactive: false }),
+          contextWindow: { hasSnapshot: false },
+          activeStateSignals: [],
+        } as never);
+        return typeof signal?.contents === 'string' ? signal.contents : undefined;
+      },
+      projectById: async args => {
+        if (!storage.isDomainReady('projects')) return null;
+        await factoryProjectsStorage.ensureReady();
+        return factoryProjectsStorage.getById(args);
+      },
+      // External MCP tools set to «ask» (Settings › MCP-сервери).
+      mcpAskToolsFor: async ({ orgId, factoryProjectId, sessionId }) => {
+        if (!storage.isDomainReady('mcp-servers')) return [];
+        const scope = await resolveMcpSessionScope({ orgId, factoryProjectId, sessionId }, workItemsStorage);
+        return scope ? mcpServerHub.askToolNames(scope) : [];
+      },
+      handoffContextFor: harnessId => turnHandoffHook(harnessId, { handoffs: () => sessionHandoffs, memory: handoffMemory }),
+      prepareHandoff: async input => {
+        await sessionHandoffs.prepare(input);
+      },
+      onSession: observeTurnSession,
+      parkOnUsageLimit,
+      chatFlushed: async sessionId => {
+        await this.#claudeSessionUi.channel(sessionId)?.flushed();
+      },
+      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
+      ...(attachmentService ? { attachments: attachmentService } : {}),
+      ...(transitionService
+        ? {
+            starts: {
+              storage: workItemsStorage,
+              transitionService,
+              boards,
+              sourceControl: request =>
+                sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
+            },
+          }
+        : {}),
+    };
+    const turnHarnesses = createTurnHarnesses(preparedHarnesses, turnHarnessHost);
+    turnHarnessesRef = turnHarnesses;
+    // The per-session Factory tools a turn harness reaches over MCP (Claude Code's module serves them).
+    const mcpSessionTools = turnHarnesses.running.find(running => running.mcpSessionTools)?.mcpSessionTools;
+    for (const running of turnHarnesses.running) {
+      // Its models in the picker, Settings and `factory_switch_session_model`, through its facet.
+      harnessModels.register(running.models);
+      parkedSessionSources.push(running.parked);
+    }
+    // A card's run belongs to the Factory (`factoryPrincipalId`): on a harness that runs on sign-ins it runs only on the
+    // sign-ins their owners shared with the Factory's card runs, and its start says so when there is none.
+    const factoryRunAccounts = async (project: { id: string; orgId: string; harness: string }) =>
+      turnHarnesses.byId(project.harness)?.factoryRunAccounts?.({ orgId: project.orgId, userId: factoryPrincipalId(project.id) });
+    factoryRunAccountsCheck = factoryRunAccounts;
+    // After a restart a turn harness session's checkout is still on this host's disk, but its sandbox is not in the
+    // memo until its next turn. The file panels and its sandbox start attach it from disk without starting it
+    // (no clone, no setup, no network). Only for the Factory's own local sandbox, never a custom `cwdFor`.
+    const localCheckoutAttacher =
+      turnHarnesses.running.some(running => !running.customCheckout) && sandboxConfig?.provider === 'local'
+        ? createLocalCheckoutAttacher({
+            workspaces: context => sessionWorkspaces(context as never) as never,
+            sessions: sourceControlSessions,
+          })
+        : undefined;
+
+    if (turnHarnesses.running.length > 0) {
+      // Their sessions (and each Factory chat, created when the chat first reaches it) in the chat, with the model each runs.
+      this.#claudeSessionUi.setSessionResolver(sessionId => turnHarnesses.resolveChatSession(sessionId));
+      this.#claudeSessionUi.setModelSelectionReader(session => turnHarnesses.modelSelection(session));
       // The Factory chat is shared by the Factory's organization: its next turn runs as whoever wrote or answered.
       this.#claudeSessionUi.setPersonInputHook(turnPersonInput);
       // A person approving a card's plan in the chat moves the card on, as an approved Mastra plan does
       // (`advanceApprovedPlan`); the next stage then starts the session, which takes the answer first.
       if (workItemsReady && transitionService) {
         const approvePlan = createClaudePlanApproval({ sessions: sourceControlSessions, workItems: workItemsStorage, transitionService });
-        this.#claudeSessionUi.setPlanDecisionHook((c, session, answer) =>
-          approvePlan(session, { ...answer, userId: routeAuth.tenant(c)?.userId }),
-        );
+        this.#claudeSessionUi.setPlanDecisionHook((c, session, answer) => approvePlan(session, { ...answer, userId: routeAuth.tenant(c)?.userId }));
       }
-    }
 
-    // Codex factories: their sessions live in the Codex harness (the `codex` CLI's app-server on this host),
-    // reach the Factory's tools over MCP with a token minted per run, and show in the chat through the
-    // same session UI as Claude Code's. Each run signs in with its owner's ChatGPT sign-in (the members'
-    // `openai-codex` accounts), never with this host's `codex login`. Without the CLI, or without a
-    // sign-in the person may use, the facet lists Codex as needing setup.
-    // Asked each time: a CLI installed after boot makes Codex available without a restart.
-    const codexInstalled = (): boolean =>
-      codexConfig !== undefined && harnessCommandAvailable(codexExecutable ?? codexConfig.command, 'codex', codexConfig.env ?? process.env);
-    const codex: CodexFactoryHarness | undefined = codexConfig
-      ? createCodexFactoryHarness({
-          handoffContextFor: turnHandoffHook('codex', { handoffs: () => sessionHandoffs, memory: handoffMemory }),
-          ...(codexConfig.store ? { store: codexConfig.store } : {}),
-          ...(codexConfig.storeDir ? { storeDir: codexConfig.storeDir } : {}),
-          ...((codexExecutable ?? codexConfig.command) ? { command: codexExecutable ?? codexConfig.command } : {}),
-          ...(codexConfig.launchArgs ? { launchArgs: codexConfig.launchArgs } : {}),
-          ...(codexConfig.sessionHomeRoot ? { sessionHomeRoot: codexConfig.sessionHomeRoot } : {}),
-          ...(codexConfig.supervisorWorkdirRoot ? { supervisorWorkdirRoot: codexConfig.supervisorWorkdirRoot } : {}),
-          credentials: codexCredentials!,
-          ...(codexConfig.spawn ? { spawn: codexConfig.spawn } : {}),
-          ...(codexConfig.env ? { env: codexConfig.env } : {}),
-          ...(codexConfig.skillsDir ? { skillsDir: codexConfig.skillsDir } : {}),
-          ...(codexConfig.turnTimeoutMs ? { turnTimeoutMs: codexConfig.turnTimeoutMs } : {}),
-          ...(codexConfig.catalog ? { catalog: codexConfig.catalog } : {}),
-          sessions: sourceControlSessions,
-          projects: factoryProjectsStorage,
-          cwdFor: codexCheckout!,
-          // Settings → Behavior → Tool permissions, as Codex's sandbox and approval policy.
-          permissions: createFactoryToolPermissions(
-            async sessionId => this.#prepared?.base.controller.getSession(sessionId),
-            factoryProjectsStorage,
-          ),
-          cardRun: ({ orgId, factoryProjectId, sessionId }) =>
-            workItemsReady ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId }) : false,
-          // A Product card reads the web live, as a Claude Code session there runs `WebFetch`/`WebSearch` unasked;
-          // images Codex generates are kept as the card's (or the session's) attachments.
-          ...(workItemsReady ? { liveWebFor: codexLiveWebForProductCards(workItemsStorage) } : {}),
-          ...(attachmentService
-            ? { keepGeneratedImage: codexGeneratedImageKeeper({ attachments: attachmentService, ...(workItemsReady ? { workItems: workItemsStorage } : {}), ...(codexConfig.openAgentFile ? { open: codexConfig.openAgentFile } : {}) }) }
-            : {}),
-          ...(workItemsReady
-            ? {
-                phaseFor: async ({ orgId, sessionId, threadId, resourceId }) => {
-                  const binding = await workItemsStorage.findActiveRunBindingByThread({ orgId, threadId, resourceId, sessionId });
-                  if (!binding) return undefined;
-                  const described = await describeFactoryPhase({
-                    storage: workItemsStorage,
-                    boards,
-                    configVersion,
-                    binding,
-                    runtime: async () => {
-                      const selection = (await codex?.models.getSelection(sessionId, { viewer: { userId: '', orgId } })) ?? null;
-                      const effort = selection?.options?.find(option => option.id === 'effort')?.value;
-                      return {
-                        modelId: `codex/${selection?.model ?? 'default'}`,
-                        thinkingLevel: typeof effort === 'string' ? effort : 'codex-default',
-                      };
-                    },
-                  });
-                  return described?.contents;
-                },
-                workItemFor: async ({ orgId, threadId, resourceId, sessionId }) => {
-                  const binding = await workItemsStorage.findActiveRunBindingByThread({ orgId, threadId, resourceId, sessionId });
-                  if (!binding) return undefined;
-                  const described = await describeFactoryWorkItem({ storage: workItemsStorage, boards, binding });
-                  return described?.contents;
-                },
-              }
-            : {}),
-          sessionsFor: async coordinates => {
-            const processor = factorySessionsProcessor();
-            if (!processor) return undefined;
-            const signal = await processor.computeStateSignal({
-              requestContext: boundRunRequestContext({ ...coordinates, kind: 'user', interactive: false }),
-              contextWindow: { hasSnapshot: false },
-              activeStateSignals: [],
-            } as never);
-            return typeof signal?.contents === 'string' ? signal.contents : undefined;
-          },
-          mcp: {
-            url: factoryProjectId =>
-              `${(codexConfig.mcpOrigin ?? publicOrigin).replace(/\/+$/, '')}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/mcp`,
-            tokens: sessionTokens!,
-          },
-          onSession: observeTurnSession,
-          parkOnUsageLimit,
-        })
-      : undefined;
-    if (codex) {
-      removeCodexSessionHome = sessionId => codex.removeSessionHome(sessionId);
-      // Its models in the picker, Settings and `factory_switch_session_model`, through its facet: `model/list`
-      // of the installed CLI, its next turn's `turn/start` carrying the pick (model, effort, service tier).
-      // Its facet already asks for a ChatGPT sign-in of the viewer's; the connector names where to add one (ADR-0036).
-      harnessModels.register(
-        withConnectionAvailability(codexExecutable ? withExecutableAvailability(codex.models, codexExecutable) : codex.models, {
-          connector: CODEX_HARNESS.setup.accounts!.connector,
-        }),
-      );
-      // Its Factory chat is a Codex session too, created when the chat first reaches it (as a Claude Code Factory's).
-      const codexSessions = (sessionId: string) => codex.resolveSession(sessionId);
-      this.#claudeSessionUi.setSessionResolver(chainSessionResolvers(claudeResolveSession, codexSessions));
-      this.#claudeSessionUi.setModelSelectionReader(codexAwareModelSelectionReader(codex.models, claudeModelSelection));
-      createCodexSideSession = async ({ harness, sessionId, resourceId, title }) => {
-        if (harness !== 'codex') return undefined;
-        const session =
-          (await codex.harness.getSession(sessionId)) ??
-          (await codex.harness.createSession({ sessionId, threadId: sessionId, resourceId }));
-        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
-        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: title });
-        return session;
-      };
-      if (!claudeCode) {
-        // The hooks the Claude Code block sets otherwise: whose turn a person's input makes it, and a card's plan approval.
-        this.#claudeSessionUi.setPersonInputHook(turnPersonInput);
-        if (workItemsReady && transitionService) {
-          const approvePlan = createClaudePlanApproval({ sessions: sourceControlSessions, workItems: workItemsStorage, transitionService });
-          this.#claudeSessionUi.setPlanDecisionHook((c, session, answer) => approvePlan(session, { ...answer, userId: routeAuth.tenant(c)?.userId }));
-        }
-      }
-    }
-
-    // OpenCode factories: their sessions live in the OpenCode harness (the `opencode` CLI's server on this
-    // host, one per run), reach the Factory's tools over MCP with a token minted per run, and show in the
-    // chat through the same session UI as Claude Code's and Codex's. They run on OpenCode's own free
-    // models with no key or login (ADR-0043). Without the CLI, the facet lists OpenCode as needing setup.
-    // Asked each time: a CLI installed after boot makes OpenCode available without a restart.
-    const openCodeInstalled = (): boolean =>
-      openCodeConfig !== undefined &&
-      harnessCommandAvailable(openCodeExecutable ?? openCodeConfig.command, 'opencode', openCodeConfig.env ?? process.env);
-    const opencode: OpenCodeFactoryHarness | undefined = openCodeConfig
-      ? createOpenCodeFactoryHarness({
-          handoffContextFor: turnHandoffHook('opencode', { handoffs: () => sessionHandoffs, memory: handoffMemory }),
-          ...(openCodeConfig.store ? { store: openCodeConfig.store } : {}),
-          ...(openCodeConfig.storeDir ? { storeDir: openCodeConfig.storeDir } : {}),
-          ...((openCodeExecutable ?? openCodeConfig.command) ? { command: openCodeExecutable ?? openCodeConfig.command } : {}),
-          ...(openCodeConfig.sessionHomeRoot ? { sessionHomeRoot: openCodeConfig.sessionHomeRoot } : {}),
-          ...(openCodeConfig.supervisorWorkdirRoot ? { supervisorWorkdirRoot: openCodeConfig.supervisorWorkdirRoot } : {}),
-          ...(openCodeConfig.spawn ? { spawn: openCodeConfig.spawn } : {}),
-          ...(openCodeConfig.env ? { env: openCodeConfig.env } : {}),
-          ...(openCodeConfig.skillsDir ? { skillsDir: openCodeConfig.skillsDir } : {}),
-          ...(openCodeConfig.turnTimeoutMs ? { turnTimeoutMs: openCodeConfig.turnTimeoutMs } : {}),
-          ...(openCodeConfig.catalog ? { catalog: openCodeConfig.catalog } : {}),
-          sessions: sourceControlSessions,
-          projects: factoryProjectsStorage,
-          cwdFor: openCodeCheckout!,
-          // Settings → Behavior → Tool permissions, as OpenCode's permission rules.
-          permissions: createFactoryToolPermissions(
-            async sessionId => this.#prepared?.base.controller.getSession(sessionId),
-            factoryProjectsStorage,
-          ),
-          cardRun: ({ orgId, factoryProjectId, sessionId }) =>
-            workItemsReady ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId }) : false,
-          ...(workItemsReady
-            ? {
-                phaseFor: async ({ orgId, sessionId, threadId, resourceId }) => {
-                  const binding = await workItemsStorage.findActiveRunBindingByThread({ orgId, threadId, resourceId, sessionId });
-                  if (!binding) return undefined;
-                  const described = await describeFactoryPhase({
-                    storage: workItemsStorage,
-                    boards,
-                    configVersion,
-                    binding,
-                    runtime: async () => {
-                      const selection = (await opencode?.models.getSelection(sessionId, { viewer: { userId: '', orgId } })) ?? null;
-                      const effort = selection?.options?.find(option => option.id === 'effort')?.value;
-                      return {
-                        modelId: selection?.model ?? 'opencode/default',
-                        thinkingLevel: typeof effort === 'string' ? effort : 'opencode-default',
-                      };
-                    },
-                  });
-                  return described?.contents;
-                },
-                workItemFor: async ({ orgId, threadId, resourceId, sessionId }) => {
-                  const binding = await workItemsStorage.findActiveRunBindingByThread({ orgId, threadId, resourceId, sessionId });
-                  if (!binding) return undefined;
-                  const described = await describeFactoryWorkItem({ storage: workItemsStorage, boards, binding });
-                  return described?.contents;
-                },
-              }
-            : {}),
-          sessionsFor: async coordinates => {
-            const processor = factorySessionsProcessor();
-            if (!processor) return undefined;
-            const signal = await processor.computeStateSignal({
-              requestContext: boundRunRequestContext({ ...coordinates, kind: 'user', interactive: false }),
-              contextWindow: { hasSnapshot: false },
-              activeStateSignals: [],
-            } as never);
-            return typeof signal?.contents === 'string' ? signal.contents : undefined;
-          },
-          mcp: {
-            url: factoryProjectId =>
-              `${(openCodeConfig.mcpOrigin ?? publicOrigin).replace(/\/+$/, '')}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/mcp`,
-            tokens: sessionTokens!,
-          },
-          onSession: observeTurnSession,
-          ...(openCodeAccounts ? { accounts: openCodeAccounts } : {}),
-          parkOnUsageLimit,
-        })
-      : undefined;
-    if (opencode) {
-      parkedSessionSources.push({ parked: storeParkedSessions(opencode.store), get: sessionId => opencode.harness.getSession(sessionId) });
-      removeOpenCodeSessionHome = sessionId => opencode.removeSessionHome(sessionId);
-      // Its free models in the picker, Settings and `factory_switch_session_model`, through its facet.
-      harnessModels.register(openCodeExecutable ? withExecutableAvailability(opencode.models, openCodeExecutable) : opencode.models);
-      const openCodeSessions = (sessionId: string) => opencode.resolveSession(sessionId);
-      const codexSessions = codex ? (sessionId: string) => codex.resolveSession(sessionId) : undefined;
-      this.#claudeSessionUi.setSessionResolver(chainSessionResolvers(claudeResolveSession, codexSessions, openCodeSessions));
-      const otherModelSelection = codex ? codexAwareModelSelectionReader(codex.models, claudeModelSelection) : claudeModelSelection;
-      this.#claudeSessionUi.setModelSelectionReader(async session =>
-        session instanceof OpenCodeSession ? opencode.models.effectiveSelection(session) : (otherModelSelection?.(session) ?? null),
-      );
-      createOpenCodeSideSession = async ({ harness, sessionId, resourceId, title }) => {
-        if (harness !== 'opencode') return undefined;
-        const session =
-          (await opencode.harness.getSession(sessionId)) ??
-          (await opencode.harness.createSession({ sessionId, threadId: sessionId, resourceId }));
-        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
-        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: title });
-        return session;
-      };
-      if (!claudeCode && !codex) {
-        this.#claudeSessionUi.setPersonInputHook(turnPersonInput);
-        if (workItemsReady && transitionService) {
-          const approvePlan = createClaudePlanApproval({ sessions: sourceControlSessions, workItems: workItemsStorage, transitionService });
-          this.#claudeSessionUi.setPlanDecisionHook((c, session, answer) => approvePlan(session, { ...answer, userId: routeAuth.tenant(c)?.userId }));
-        }
-      }
-    }
-
-    // A model pick on another harness moves the session there (same id, chat and thread) with a context
-    // handoff: the source gives it up, the target takes it with no native conversation, and the target's
-    // first turn gets the thread's real history (`createHarnessSwitch`).
-    if (claudeCode) {
-      parkedSessionSources.push({ parked: storeParkedSessions(claudeCode.store), get: sessionId => claudeCode.harness.getSession(sessionId) });
-    }
-    if (codex) {
-      parkedSessionSources.push({ parked: storeParkedSessions(codex.store), get: sessionId => codex.harness.getSession(sessionId) });
-    }
-
-    if (claudeCode || codex || opencode) {
+      // A model pick on another harness moves the session there (same id, chat and thread) with a context
+      // handoff: the source gives it up, the target takes it with no native conversation, and the target's
+      // first turn gets the thread's real history (`createHarnessSwitch`).
       const sessionUi = this.#claudeSessionUi;
-      const turnHarnessBinding = (harness: {
-        createSession(input: { sessionId: string; threadId: string; resourceId?: string }): Promise<{
-          thread: { setSetting(input: { key: string; value: unknown }): Promise<void> };
-        }>;
-        releaseSession(sessionId: string): Promise<void>;
-      }) => ({
+      const turnHarnessBinding = (harness: TurnHarnessEngine) => ({
         async adopt({ sessionId, threadId, resourceId, title }: { sessionId: string; threadId: string; resourceId: string; title?: string | null }) {
           const session = await harness.createSession({ sessionId, threadId, resourceId });
           await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
@@ -2939,19 +2490,10 @@ export class MastraFactory {
           bindings: {
             // Mastra holds every session no other harness does: taking one on is the other's release.
             mastra: { adopt: async () => {}, release: async () => {} },
-            ...(claudeCode ? { 'claude-code': turnHarnessBinding(claudeCode.harness) } : {}),
-            ...(codex ? { codex: turnHarnessBinding(codex.harness) } : {}),
-            ...(opencode ? { opencode: turnHarnessBinding(opencode.harness) } : {}),
+            ...Object.fromEntries(turnHarnesses.running.map(running => [running.descriptor.id, turnHarnessBinding(running.harness)])),
           },
           // A harness whose CLI is not on this server takes no session (ADR-0038); asked each time, so an install shows up.
-          available: instanceId =>
-            instanceId === 'codex'
-              ? codexInstalled()
-              : instanceId === 'opencode'
-                ? openCodeInstalled()
-                : instanceId === 'claude-code'
-                  ? claudeExecutable?.unavailableReason() === undefined
-                  : true,
+          available: instanceId => turnHarnesses.byId(instanceId)?.available() ?? true,
         }),
       );
     }
@@ -2987,12 +2529,8 @@ export class MastraFactory {
       if (storage.isDomainReady('mcp-servers')) {
         const mcpScope = await resolveMcpSessionScope(mcpSessionCoordinates(requestContext), workItemsStorage);
         if (mcpScope) {
-          // Codex has no way to ask a person mid-turn: its «ask» tools are left out rather than run unasked.
-          // OpenCode's mid-call asks are not wired to the hub either: the same rule.
-          const askSupported = !(
-            (codex && (await codex.harness.getSession(mcpScope.sessionId))) ||
-            (opencode && (await opencode.harness.getSession(mcpScope.sessionId)))
-          );
+          // A harness that cannot ask a person mid-call (`asksMidCall`) gets its «ask» tools left out rather than run unasked.
+          const askSupported = !(await turnHarnesses.holding(mcpScope.sessionId, running => !running.asksMidCall));
           mergeTools('mcp-servers', await mcpServerHub.toolsFor(mcpScope, { askSupported }));
         }
       }
@@ -3096,13 +2634,13 @@ export class MastraFactory {
               'factory-supervisor-write',
               supervisorWriteTools(supervisorScope, userId, ({ sessionId, message, delivery }) =>
                 messageWorkerSession({
-                  // A worker on Claude Code is not the Mastra controller's; its own session takes the message.
+                  // A worker on a turn harness is not the Mastra controller's; its own session takes the message.
                   controller: {
                     getSession: async (id, context) => {
                       const mastra = await prepared.base.controller.getSession(id, context);
                       if (mastra) return mastra;
-                      const claude = (await claudeCode?.harness.getSession(id)) ?? (await codex?.harness.getSession(id));
-                      return claude ? claudeWorkerSession(claude) : undefined;
+                      const held = await turnHarnesses.holding(id, running => running.joinsSessionRouting);
+                      return held ? claudeWorkerSession(held.session) : undefined;
                     },
                   },
                   sessionId,
@@ -3201,9 +2739,8 @@ export class MastraFactory {
                   return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['organization-unresolved']);
                 }
                 if (await controller.getSession(sessionId)) return;
-                // A Claude Code session wakes itself; a Mastra session on its thread would be a second agent.
-                if (await claudeCode?.harness.getSession(sessionId)) return;
-                if (await codex?.harness.getSession(sessionId)) return;
+                // A turn harness session wakes itself; a Mastra session on its thread would be a second agent.
+                if (await turnHarnesses.holding(sessionId, running => running.joinsSessionRouting)) return;
                 await createSessionAsRowOwner(controller, {
                   sessionId,
                   ownerResourceId: resourceId,
@@ -3379,14 +2916,14 @@ export class MastraFactory {
                   // The harness types its tools loosely (`ToolLike`); they are Mastra tools.
                   create: scope =>
                     createFactoryTools({ scope, deps: factoryToolDeps }) as Record<string, Tool<any, any, any, any>>,
-                  ...(claudeCode
+                  ...(mcpSessionTools
                     ? {
                         createSession: scope =>
                           createClaudeSessionTools(scope, {
                             sessionTools: requestContext => sessionExtraTools(requestContext),
                             sandboxFor: claudeSessionSandbox,
                             observe: postToolObserver,
-                            skillDirectories: claudeFactorySkillDirectories(claudeCodeConfig?.skillsDir),
+                            skillDirectories: mcpSessionTools.skillDirectories,
                           }) as Promise<Record<string, Tool<any, any, any, any>>>,
                       }
                     : {}),
@@ -3414,11 +2951,10 @@ export class MastraFactory {
                           return {
                             ...supervisorReadTools(project),
                             ...supervisorWriteTools(project, scope.userId, async ({ sessionId, message, delivery }) => {
-                              // A worker on Claude Code takes the message as a person's input; a Mastra one through its controller.
-                              const claudeSession =
-                                (await claudeCode?.harness.getSession(sessionId)) ?? (await codex?.harness.getSession(sessionId));
-                              if (claudeSession) {
-                                const worker = claudeWorkerSession(claudeSession);
+                              // A worker on a turn harness takes the message as a person's input; a Mastra one through its controller.
+                              const held = await turnHarnesses.holding(sessionId, running => running.joinsSessionRouting);
+                              if (held) {
+                                const worker = claudeWorkerSession(held.session);
                                 await (delivery === 'queue' ? worker.queueMessage : worker.sendMessage)({ content: message });
                                 return;
                               }
@@ -3505,115 +3041,25 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             mcpEnabled,
-            claudeCodeEnabled: claudeCode !== undefined,
-            // Factories may pick Codex where its CLI is installed; while it is not, its facet says why (ADR-0038).
-            codexEnabled: codex !== undefined,
-            // Factories may pick OpenCode where it is configured; while its CLI is missing, its facet says why (ADR-0043).
-            openCodeEnabled: opencode !== undefined,
-            // An OpenCode key is checked with OpenCode before Settings › Connections keeps it.
-            checkOpenCodeKey: async apiKey => {
-              const limits = await readOpenCodeAccountLimits(apiKey);
-              if (limits.unavailable?.reason === 'signed_out') return { ok: false, message: limits.unavailable.message ?? 'refused' };
-              if (limits.unavailable?.reason === 'failed') return { ok: false, message: limits.unavailable.message ?? 'OpenCode did not answer.' };
-              return { ok: true, go: limits.windows.length > 0 };
-            },
-            // The person's own OpenCode sessions, continued here: only on their own machine (ADR-0043).
-            ...(opencode && openCodeConfig?.localDevelopment === true
-              ? {
-                  opencodeLocalSessions: createOpenCodeLocalSessions({
-                    harness: opencode.harness,
-                    ...(openCodeConfig.localSessionsDatabase ? { databasePath: openCodeConfig.localSessionsDatabase } : {}),
-                    flushed: async sessionId => {
-                      await this.#claudeSessionUi.channel(sessionId)?.flushed();
-                    },
-                    // The first turn starts a new OpenCode conversation that carries the imported history.
-                    handOff: async ({ threadId, resourceId }) => {
-                      await sessionHandoffs.prepare({ threadId, resourceId, fromInstanceId: 'opencode', toInstanceId: 'opencode', reason: 'resume_failed' });
-                    },
-                  }),
-                }
-              : {}),
+            // Every harness this server knows, with what each adds while it runs here (ADR-0044).
+            harnesses: harnessApiModules(harnessModules, turnHarnesses.running),
             harnessModels: () => harnessModels,
             harnessExecutables: () => Promise.all(this.#harnessExecutables.map(executable => executable.report())),
             deviceEnabled: device !== undefined,
-            // New chats of a Claude Code Factory are Claude Code sessions, checked out like a card's.
-            ...(claudeCode || codex || opencode
-              ? {
-                  claudeCodeUserSessions: combineTurnHarnessUserSessions({
-                    ...(claudeCode
-                      ? {
-                          'claude-code': createClaudeUserSessions({
-                            harness: claudeCode.harness,
-                            checkout: claudeCodeConfig?.cwdFor
-                              ? { custom: true }
-                              : { custom: false, sandboxProvider: sandboxConfig?.provider },
-                          }),
-                        }
-                      : {}),
-                    ...(codex
-                      ? {
-                          codex: createCodexUserSessions({
-                            harness: codex.harness,
-                            checkout: codexConfig?.cwdFor ? { custom: true } : { custom: false, sandboxProvider: sandboxConfig?.provider },
-                            unavailable: () =>
-                              codexExecutable?.unavailableReason() ?? (codexInstalled() ? undefined : CODEX_NOT_INSTALLED_REASON),
-                          }),
-                        }
-                      : {}),
-                    ...(opencode
-                      ? {
-                          opencode: createOpenCodeUserSessions({
-                            harness: opencode.harness,
-                            checkout: openCodeConfig?.cwdFor ? { custom: true } : { custom: false, sandboxProvider: sandboxConfig?.provider },
-                            unavailable: () =>
-                              openCodeExecutable?.unavailableReason() ?? (openCodeInstalled() ? undefined : OPENCODE_NOT_INSTALLED_REASON),
-                          }),
-                        }
-                      : {}),
-                  }),
-                }
-              : {}),
-            // Only a session Claude Code runs is attached: a Mastra session's own turn builds its sandbox.
-            ...((claudeCode || codex || opencode) && localCheckoutAttacher
+            // New chats of a Factory on a turn harness are that harness's sessions, checked out like a card's.
+            ...(turnHarnesses.userSessions() ? { claudeCodeUserSessions: turnHarnesses.userSessions() } : {}),
+            // Only a session a turn harness runs is attached: a Mastra session's own turn builds its sandbox.
+            ...(localCheckoutAttacher
               ? {
                   attachLocalCheckout: async (session: { id: string; sessionId: string }) =>
-                    (await claudeCode?.harness.getSession(session.sessionId)) ||
-                    (await codex?.harness.getSession(session.sessionId)) ||
-                    (await opencode?.harness.getSession(session.sessionId))
-                      ? localCheckoutAttacher(session)
-                      : false,
+                    (await turnHarnesses.holding(session.sessionId)) ? localCheckoutAttacher(session) : false,
                   // No checkout on disk: set it up through the same resolver its next turn uses.
                   createLocalCheckout: async (session: { id: string; sessionId: string }) => {
-                    const checkout = (await claudeCode?.harness.getSession(session.sessionId))
-                      ? claudeCheckout
-                      : (await codex?.harness.getSession(session.sessionId))
-                        ? codexCheckout
-                        : (await opencode?.harness.getSession(session.sessionId))
-                          ? openCodeCheckout
-                          : undefined;
-                    if (!checkout) return false;
-                    await checkout(session.sessionId);
+                    const held = await turnHarnesses.holding(session.sessionId);
+                    if (!held) return false;
+                    await held.harness.checkout(session.sessionId);
                     return localCheckoutAttacher(session);
                   },
-                }
-              : {}),
-            // Signing in (`claude auth login`, `codex login`) opens the CLI's browser page on this
-            // machine: only where it is the person's own.
-            ...(claudeCode !== undefined && claudeCodeConfig?.localDevelopment === true && modelCredentialsStorage
-              ? {
-                  claudeSignIn: createClaudeSignInService({
-                    credentials: modelCredentialsStorage,
-                    ...((claudeExecutable ?? claudeCodeConfig.command) ? { command: claudeExecutable ?? claudeCodeConfig.command } : {}),
-                  }),
-                }
-              : {}),
-            ...(codex !== undefined && codexConfig?.localDevelopment === true && modelCredentialsStorage
-              ? {
-                  codexSignIn: createCodexSignInService({
-                    credentials: modelCredentialsStorage,
-                    ...((codexExecutable ?? codexConfig.command) ? { command: codexExecutable ?? codexConfig.command } : {}),
-                    ...(codexConfig.env ? { env: codexConfig.env } : {}),
-                  }),
                 }
               : {}),
             deploymentModelProviders,
@@ -3625,67 +3071,8 @@ export class MastraFactory {
               ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
               : {}),
             factoryTransitionService: transitionService,
-            ...((claudeCode || codex || opencode) && transitionService
-              ? {
-                  harnessStartCoordinators: {
-                    ...(opencode
-                      ? {
-                          // `owns` keeps a card that started on OpenCode there after the Factory switches harness.
-                          opencode: Object.assign(
-                            new ClaudeStartCoordinator<OpenCodeSessionMode>({
-                              harness: opencode.harness,
-                              storage: workItemsStorage,
-                              transitionService,
-                              sourceControl: request =>
-                                sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
-                              boards,
-                              projects: factoryProjectsStorage,
-                              approvedPermissionMode: 'default',
-                            }),
-                            { owns: opencode.route.owns },
-                          ),
-                        }
-                      : {}),
-                    ...(codex
-                      ? {
-                          // `owns` keeps a card that started on Codex there after the Factory switches harness.
-                          codex: Object.assign(
-                            new ClaudeStartCoordinator<CodexSessionMode>({
-                              harness: codex.harness,
-                              storage: workItemsStorage,
-                              transitionService,
-                              sourceControl: request =>
-                                sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
-                              boards,
-                              projects: factoryProjectsStorage,
-                              approvedPermissionMode: 'default',
-                            }),
-                            { owns: codex.route.owns },
-                          ),
-                        }
-                      : {}),
-                    ...(claudeCode
-                      ? {
-                          // `owns` keeps a card that started on Claude Code there after the Factory switches to Mastra.
-                          'claude-code': Object.assign(
-                            new ClaudeStartCoordinator({
-                              harness: claudeCode.harness,
-                              storage: workItemsStorage,
-                              transitionService,
-                              sourceControl: request =>
-                                sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
-                              boards,
-                              projects: factoryProjectsStorage,
-                              ...(claudeCodeConfig?.approvedPermissionMode
-                                ? { approvedPermissionMode: claudeCodeConfig.approvedPermissionMode }
-                                : {}),
-                            }),
-                            { owns: claudeCode.route.owns },
-                          ),
-                        }
-                      : {}),
-                  },
-                }
+            ...(turnHarnesses.running.length > 0 && transitionService
+              ? { harnessStartCoordinators: turnHarnesses.startCoordinators() }
               : {}),
             runSlots: () => this.#dispatcher?.runSlots(),
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
@@ -3693,9 +3080,9 @@ export class MastraFactory {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 // Each session runs on the harness that owns it: Claude Code sessions are in its store.
                 harness:
-                  claudeCode || codex || opencode
+                  turnHarnesses.running.length > 0
                     ? createRoutingHarness({
-                        routes: [...(claudeCode ? [claudeCode.route] : []), ...(codex ? [codex.route] : []), ...(opencode ? [opencode.route] : [])],
+                        routes: turnHarnesses.running.map(running => running.route),
                         fallback: createMastraHarness(controller, { models: mastraHarnessModels }),
                       })
                     : createMastraHarness(controller, { models: mastraHarnessModels }),
@@ -3822,11 +3209,13 @@ export class MastraFactory {
           const uiDist = resolveUiDistDir();
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
-          // A Claude Code or Codex Factory's own id never becomes a Mastra chat (see `createClaudeFactoryChatGuard`).
-          const claudeFactoryChat = claudeCode || codex
+          // A turn harness Factory's own id never becomes a Mastra chat (see `createClaudeFactoryChatGuard`).
+          const routedHarnesses = turnHarnesses.running.filter(running => running.joinsSessionRouting);
+          const claudeFactoryChat = routedHarnesses.length > 0
             ? [
                 createClaudeFactoryChatGuard({
                   controllerId: CONTROLLER_ID,
+                  harnesses: routedHarnesses.map(running => running.descriptor),
                   factoryHarness: async id => {
                     if (!storage.isDomainReady('projects')) return undefined;
                     await factoryProjectsStorage.ensureReady();
@@ -3910,14 +3299,13 @@ export class MastraFactory {
       }),
     );
 
-    if (claudeCode || codex) {
-      // Webhook subscriptions and Factory notices deliver through the Mastra controller; a Claude Code or
-      // Codex session takes them itself, and woken as a Mastra one would be, instead of a Mastra run on its thread.
+    if (turnHarnesses.running.some(running => running.joinsSessionRouting)) {
+      // Webhook subscriptions and Factory notices deliver through the Mastra controller; a turn harness session
+      // takes them itself, and woken as a Mastra one would be, instead of a Mastra run on its thread.
       routeExternalSessions(prepared.base.controller, async sessionId => {
-        const claudeSession = await claudeCode?.harness.getSession(sessionId);
-        const session = claudeSession ?? (await codex?.harness.getSession(sessionId));
-        if (!session) return undefined;
-        const owner = claudeSession ? claudeCode!.harness : codex!.harness;
+        const held = await turnHarnesses.holding(sessionId, running => running.joinsSessionRouting);
+        if (!held) return undefined;
+        const { session, harness: owner } = held;
         return {
           sendNotificationSignal: (input, options) =>
             session.sendNotificationSignal(input, { ifIdle: { behavior: options?.ifIdle?.behavior ?? 'wake' } }),
@@ -3925,7 +3313,7 @@ export class MastraFactory {
           abort: () => session.abort(),
           agentSession: session,
           deleteSession: async () => {
-            await owner.deleteSession(sessionId);
+            await owner.harness.deleteSession(sessionId);
             this.#claudeSessionUi.channel(sessionId)?.detach();
           },
           answerToolApproval: async ({ toolCallId, approved }) => {

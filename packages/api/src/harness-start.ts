@@ -1,7 +1,7 @@
 import { FactoryStartCoordinator } from '@factory/harness-mastra';
 import type { FactoryStartPreparedResult, FactoryStartRequest } from '@factory/harness-mastra';
 import { FactoryDispatchError } from '@factory/store';
-import type { FactoryHarnessKind, FactoryProjectsStorage } from '@factory/store';
+import type { FactoryProjectsStorage } from '@factory/store';
 
 /** The start path of a harness other than Mastra. */
 export interface HarnessStartCoordinator extends Pick<FactoryStartCoordinator, 'prepare'> {
@@ -14,7 +14,7 @@ export interface HarnessStartCoordinator extends Pick<FactoryStartCoordinator, '
 }
 
 /** The start paths of harnesses other than Mastra, keyed by harness. */
-export type HarnessStartCoordinators = Partial<Record<Exclude<FactoryHarnessKind, 'mastra'>, HarnessStartCoordinator>>;
+export type HarnessStartCoordinators = Readonly<Partial<Record<string, HarnessStartCoordinator>>>;
 
 type MastraThreadLookup = Pick<ConstructorParameters<typeof FactoryStartCoordinator>[0], 'queryThreadById'>;
 
@@ -49,9 +49,9 @@ export class HarnessRoutingStartCoordinator extends FactoryStartCoordinator {
   }
 
   /** The harness that already holds this session, if any. */
-  async #owner(sessionId: string): Promise<FactoryHarnessKind | undefined> {
+  async #owner(sessionId: string): Promise<string | undefined> {
     for (const [harness, coordinator] of Object.entries(this.#others) as Array<
-      [Exclude<FactoryHarnessKind, 'mastra'>, HarnessStartCoordinator | undefined]
+      [string, HarnessStartCoordinator | undefined]
     >) {
       if (coordinator?.owns && (await coordinator.owns(sessionId))) return harness;
     }

@@ -10,9 +10,6 @@ const decode = (value: string) => {
   }
 };
 
-/** The turn-based harnesses, by id, as the refusal names them. */
-const TURN_HARNESS_LABELS: Readonly<Record<string, string>> = { 'claude-code': 'Claude Code', codex: 'Codex' };
-
 /**
  * Keeps a turn-based harness's Factory (Claude Code's, Codex's) own id from becoming a Mastra chat. Outside any
  * session the chat addresses the Factory itself (session id = Factory id); on a
@@ -25,6 +22,8 @@ const TURN_HARNESS_LABELS: Readonly<Record<string, string>> = { 'claude-code': '
  */
 export function createClaudeFactoryChatGuard(options: {
   controllerId: string;
+  /** The turn harnesses whose Factories it guards, as the refusal names them (those that join the session routing). */
+  harnesses: readonly { id: string; label: string }[];
   /** The harness of the Factory with this id; `undefined` when the id names no Factory. */
   factoryHarness: (factoryProjectId: string) => Promise<string | undefined>;
 }): MiddlewareHandler {
@@ -42,7 +41,7 @@ export function createClaudeFactoryChatGuard(options: {
       sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
     }
     const harness = sessionId ? await options.factoryHarness(sessionId) : undefined;
-    const label = harness ? TURN_HARNESS_LABELS[harness] : undefined;
+    const label = harness ? options.harnesses.find(candidate => candidate.id === harness)?.label : undefined;
     if (!label) return next();
     return c.json(
       {
