@@ -176,6 +176,11 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
     return undefined;
   }
 
+  async hasSaved(checkout: SessionCheckout, branch: string): Promise<boolean> {
+    const ref = await runGitIn(checkout.sandbox, this.#cache.mirrorPath(checkout.cloneUrl), ['rev-parse', '--verify', '--quiet', headRef(branch)]);
+    return ref.exitCode === 0;
+  }
+
   /** Whether the mirror's last fetch brought in the work published to the remote, so asking the remote adds nothing. */
   async coversPublished(checkout: Pick<SessionCheckout, 'cloneUrl'>): Promise<boolean> {
     const meta = await this.#cache.readMeta(this.#cache.mirrorPath(checkout.cloneUrl));

@@ -76,6 +76,49 @@ export interface RepositoryCache {
   maintain(cloneUrl: string): Promise<void>;
   /** Remove entries outside `keep` (clone URLs) that are idle and hold no session work; returns what was removed. */
   prune(keep: Iterable<string>, options?: { idleMs?: number }): Promise<string[]>;
+  /** The owner recorded beside the entry ({@link CachedRepository.owner}), so housekeeping can mint credentials; `undefined` when none is. */
+  ownerOf(cloneUrl: string): Promise<CachedRepository['owner']>;
+}
+
+/**
+ * Capability: the cache keeps every repository as a bare git repository on the
+ * server's own disk (the local mirror store). What needs one asks for it with
+ * {@link localRepositoriesOf} and fails at construction when the configured
+ * cache has none (ADR-0045), never falling back to the network:
+ * - environment builds clone the template copy from it (`git clone --local`);
+ * - the template's housekeeping reads and drops the session work refs kept in
+ *   it (`refs/factory/trash`, `wip/superseded`, `wip/conflict`) and the view of
+ *   the remote's hidden refs its fetch brings (`refs/factory/origin-wip`).
+ * Git runs in it through the caller's executor (the agent user, ADR-0041).
+ */
+export interface LocalRepositories {
+  /** The local bare repository of `cloneUrl`, whether or not it exists yet. */
+  localRepositoryPath(cloneUrl: string): string;
+  /** The clone URL of every local repository on disk. */
+  listLocalRepositories(): Promise<string[]>;
+  /** Run `fn` with the repository's path as its reader, so maintenance never packs under it. */
+  withLocalRepository<T>(cloneUrl: string, fn: (repository: string) => Promise<T>): Promise<T>;
+}
+
+/** The cache's {@link LocalRepositories}, if it keeps them. */
+export function localRepositoriesOf(cache: RepositoryCache): (RepositoryCache & LocalRepositories) | undefined {
+  const candidate = cache as RepositoryCache & Partial<LocalRepositories>;
+  return typeof candidate.localRepositoryPath === 'function' &&
+    typeof candidate.listLocalRepositories === 'function' &&
+    typeof candidate.withLocalRepository === 'function'
+    ? (candidate as RepositoryCache & LocalRepositories)
+    : undefined;
+}
+
+/** {@link localRepositoriesOf}, or a clear error naming who needs them and which cache lacks them. */
+export function requireLocalRepositories(cache: RepositoryCache, who: string): RepositoryCache & LocalRepositories {
+  const local = localRepositoriesOf(cache);
+  if (!local) {
+    throw new Error(
+      `${who} needs a repository cache that keeps local repositories (LocalRepositories); the configured cache '${cache.kind}' has none`,
+    );
+  }
+  return local;
 }
 
 /** The no-cache adapter: every checkout is the caller's network clone. */
@@ -98,5 +141,9 @@ export class NetworkRepositoryCache implements RepositoryCache {
 
   async prune(): Promise<string[]> {
     return [];
+  }
+
+  async ownerOf(): Promise<undefined> {
+    return undefined;
   }
 }

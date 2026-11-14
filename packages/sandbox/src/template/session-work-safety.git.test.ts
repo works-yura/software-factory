@@ -8,7 +8,7 @@ import { ENV_FILES_MANIFEST } from '../sandbox-env-files.ts';
 import { withFileLock } from './file-lock.ts';
 import { hostExecutor } from './host-exec.ts';
 import { LocalEnvironmentTemplate, probeRepositoryVisibility, SessionWorkNotSavedError } from './local-template.ts';
-import { gitFixture } from './test-git.ts';
+import { gitFixture, mirrorsOf } from './test-git.ts';
 import type { GitFixture } from './test-git.ts';
 
 const silent = { info() {}, warn() {} };
@@ -24,7 +24,7 @@ describe('session work safety, with real git', () => {
     const folder = path.join(fx.root, 'sandboxes', folderName);
     const dir = path.join(folder, repoName);
     await mkdir(dir, { recursive: true });
-    const result = await template.repositoryCache.checkout(fx.host, { cloneUrl: cloneUrl ?? fx.origin }, { workdir: dir, branch: 'main' });
+    const result = await mirrorsOf(template).checkout(fx.host, { cloneUrl: cloneUrl ?? fx.origin }, { workdir: dir, branch: 'main' });
     expect(result.source).toBe('mirror');
     fx.git(dir, 'config', 'factory.orgId', 'org-1');
     fx.git(dir, 'config', 'factory.repositoryId', 'repo-1');
@@ -42,11 +42,11 @@ describe('session work safety, with real git', () => {
       isPublicRepository: async () => isPublic,
     });
     template.setRepositoryAccess(async () => ({ cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer', token: 't' } }));
-    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    await mirrorsOf(template).refresh({ cloneUrl: fx.origin });
   });
 
   afterEach(async () => {
-    await template.repositoryCache.settled();
+    await mirrorsOf(template).settled();
     await rm(fx.root, { recursive: true, force: true });
   });
 
@@ -55,7 +55,7 @@ describe('session work safety, with real git', () => {
     fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-1');
     await fx.commit(dir, 'a.txt', 'a\n');
     await writeFile(path.join(dir, 'wip.txt'), 'wip\n');
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     let racing: Promise<unknown> | undefined;
     await template.removeFolder(folder, {
       remove: async () => {
@@ -77,7 +77,7 @@ describe('session work safety, with real git', () => {
     const { folder, dir } = await freshCheckout();
     fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-30');
     await writeFile(path.join(dir, 'keep.txt'), 'keep\n');
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     // Removal starts, and a run ends in the same tick: its save is queued before the removal's own.
     const removing = template.removeFolder(folder, {
       remove: async () => {
@@ -92,7 +92,7 @@ describe('session work safety, with real git', () => {
 
   it('an amend or a rebase that keeps every change sets nothing aside; a dropped commit does', async () => {
     const { folder, dir } = await freshCheckout();
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-31');
     await fx.commit(dir, 'one.txt', 'one\n', 'one');
     await fx.commit(dir, 'two.txt', 'two\n', 'two');
@@ -113,7 +113,7 @@ describe('session work safety, with real git', () => {
   });
 
   it('drops forgotten work after the retention, and set-aside work only the retention after its card closed', async () => {
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     const main = fx.git(mirror, 'rev-parse', 'refs/heads/main');
     const day = 24 * 60 * 60_000;
     const old = Date.now() - 40 * day;
@@ -177,7 +177,7 @@ describe('session work safety, with real git', () => {
     fx.git(fx.origin, 'update-ref', '-d', 'refs/heads/factory/item-2');
     await template.sleepFolder(folder, { publish: true });
     expect(fx.git(fx.origin, 'rev-parse', 'refs/factory/wip/heads/factory/item-2')).toBe(head);
-    expect(fx.git(template.repositoryCache.mirrorPath(fx.origin), 'rev-parse', 'refs/factory/wip/heads/factory/item-2')).toBe(head);
+    expect(fx.git(mirrorsOf(template).mirrorPath(fx.origin), 'rev-parse', 'refs/factory/wip/heads/factory/item-2')).toBe(head);
   });
 
   it('never publishes to a public repository: the mirror keeps it and the caller hears why', async () => {
@@ -188,7 +188,7 @@ describe('session work safety, with real git', () => {
     const notices = await template.sleepFolder(folder, { publish: true });
     expect(notices.join('\n')).toMatch(/public repository/);
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-3').status).not.toBe(0);
-    expect(fx.tryGit(template.repositoryCache.mirrorPath(fx.origin), 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-3').status).toBe(0);
+    expect(fx.tryGit(mirrorsOf(template).mirrorPath(fx.origin), 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-3').status).toBe(0);
   });
 
   it('keeps env files, secrets and huge files out of the saved work, even staged by hand', async () => {
@@ -213,7 +213,7 @@ describe('session work safety, with real git', () => {
     }
     const saved = await template.saveFolder(folder);
     expect(saved.saved[0]?.snapshot?.skipped).toEqual(['huge.bin']);
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     const files = fx.git(mirror, 'ls-tree', '-r', '--name-only', 'refs/factory/wip/tree/factory/item-4');
     expect(files).toContain('kept.txt');
     for (const secret of [
@@ -249,14 +249,14 @@ describe('session work safety, with real git', () => {
     fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-5');
     await fx.commit(dir, 'e.txt', 'e\n');
     await template.saveFolder(folder);
-    const meta = JSON.parse(await readFile(path.join(template.repositoryCache.mirrorPath(elsewhere), 'factory-mirror.json'), 'utf8'));
+    const meta = JSON.parse(await readFile(path.join(mirrorsOf(template).mirrorPath(elsewhere), 'factory-mirror.json'), 'utf8'));
     expect(meta.owner).toEqual({ orgId: 'org-9', repositoryId: 'repo-9' });
   });
 
   it('a session never waits behind a mirror being created: no mirror yet answers network at once', async () => {
     const other = path.join(fx.root, 'other.git');
     fx.git(fx.root, 'clone', '--quiet', '--bare', fx.origin, other);
-    const mirror = template.repositoryCache.mirrorPath(other);
+    const mirror = mirrorsOf(template).mirrorPath(other);
     await mkdir(path.dirname(mirror), { recursive: true });
     let release!: () => void;
     // A build holds the lock while it creates the mirror.
@@ -265,7 +265,7 @@ describe('session work safety, with real git', () => {
     const workdir = path.join(fx.root, 'sandboxes', 'waiting', 'repo');
     await mkdir(workdir, { recursive: true });
     const started = Date.now();
-    const result = await template.repositoryCache.checkout(fx.host, { cloneUrl: other }, { workdir, branch: 'main' });
+    const result = await mirrorsOf(template).checkout(fx.host, { cloneUrl: other }, { workdir, branch: 'main' });
     expect(result).toEqual({ source: 'network', reason: 'missing' });
     expect(Date.now() - started).toBeLessThan(2_000);
     release();
@@ -275,7 +275,7 @@ describe('session work safety, with real git', () => {
   it('saves every repository of the folder when a run ends, whichever checkout the session names', async () => {
     const second = path.join(fx.root, 'second.git');
     fx.git(fx.root, 'clone', '--quiet', '--bare', fx.origin, second);
-    await template.repositoryCache.refresh({ cloneUrl: second });
+    await mirrorsOf(template).refresh({ cloneUrl: second });
     const sandboxRoot = path.join(fx.root, 'sandboxes');
     const sandbox = new LocalFactorySandbox({ root: sandboxRoot, template });
     const one = await freshCheckout('work-items/f/card-1'.replaceAll('/', path.sep), 'api');
@@ -287,7 +287,7 @@ describe('session work safety, with real git', () => {
     expect(sandbox.folderRootOf(one.dir)).toBe(path.join(sandboxRoot, 'work-items', 'f', 'card-1'));
     await sandbox.saveSessionWork(one.dir);
     for (const url of [fx.origin, second]) {
-      expect(fx.tryGit(template.repositoryCache.mirrorPath(url), 'rev-parse', '--verify', 'refs/factory/wip/tree/factory/item-6').status).toBe(0);
+      expect(fx.tryGit(mirrorsOf(template).mirrorPath(url), 'rev-parse', '--verify', 'refs/factory/wip/tree/factory/item-6').status).toBe(0);
     }
   });
 });
@@ -309,11 +309,11 @@ describe('repository visibility for publishing, with real git', () => {
       // Unknown: the commits are published, uncommitted work is not, and the person hears why.
       const template = new LocalEnvironmentTemplate({ root: path.join(fx.root, 'template'), env: { ...fx.env, GIT_CONFIG_GLOBAL: config }, logger: silent, freshnessMs: 0 });
       template.setRepositoryAccess(async () => ({ cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer', token: 't' } }));
-      await template.repositoryCache.refresh({ cloneUrl: PRIVATE_URL });
+      await mirrorsOf(template).refresh({ cloneUrl: PRIVATE_URL });
       const folder = path.join(fx.root, 'sandboxes', 'card');
       const dir = path.join(folder, 'repo');
       await mkdir(dir, { recursive: true });
-      expect((await template.repositoryCache.checkout(host, { cloneUrl: PRIVATE_URL }, { workdir: dir, branch: 'main' })).source).toBe('mirror');
+      expect((await mirrorsOf(template).checkout(host, { cloneUrl: PRIVATE_URL }, { workdir: dir, branch: 'main' })).source).toBe('mirror');
       fx.git(dir, 'config', 'factory.orgId', 'org-1');
       fx.git(dir, 'config', 'factory.repositoryId', 'repo-1');
       fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-40');

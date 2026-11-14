@@ -30,7 +30,9 @@ import { gitAuthenticationEnvironment, normalizedRemoteUrl, runSandboxCommand, r
 import { buildEnvOf, maskSandboxEnvValues } from '../sandbox-env.ts';
 import { repositoryDirectoryName, sanitizeSegment } from '../workdir.ts';
 import { hiddenRefRetentionMsOf } from './local-sandbox-settings.ts';
-import type { LocalMirrorLogger, LocalMirrorRepositoryCache } from './local-mirror-cache.ts';
+import type { LocalMirrorLogger } from './local-mirror-cache.ts';
+import { requireLocalRepositories } from './repository-cache.ts';
+import type { LocalRepositories, RepositoryCache } from './repository-cache.ts';
 
 const BUILD_SESSION_PREFIX = 'environment-build:';
 const HISTORY = 20;
@@ -45,7 +47,12 @@ interface BuildRecord extends FactorySandboxBuild {
 export interface LocalEnvironmentBuildsOptions {
   /** The template root: records under `builds/`, template copies under `templates/`. */
   root: string;
-  cache: LocalMirrorRepositoryCache;
+  /**
+   * Refreshed and checked per repository; the template copy is cloned from its
+   * local repository, so the cache must keep them ({@link LocalRepositories}):
+   * construction fails otherwise.
+   */
+  cache: RepositoryCache;
   /**
    * Runs setup commands and template git, with the sandbox environment and package stores: on the
    * server host, or as the agent user (ADR-0041), since both touch folders the agent can write.
@@ -76,11 +83,13 @@ function seconds(ms: number): string {
 
 export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<string, never>> {
   readonly #options: LocalEnvironmentBuildsOptions;
+  readonly #cache: RepositoryCache & LocalRepositories;
   readonly #running = new Map<string, Promise<void>>();
   readonly #now: () => number;
 
   constructor(options: LocalEnvironmentBuildsOptions) {
     this.#options = options;
+    this.#cache = requireLocalRepositories(options.cache, 'Local environment builds (the template copy is cloned from it)');
     this.#now = options.now ?? Date.now;
   }
 
@@ -175,7 +184,8 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
   }
 
   async #run(ctx: FactorySandboxContext, project: string, record: BuildRecord, retentionMs: number): Promise<void> {
-    const { cache, host, logger } = this.#options;
+    const { host, logger } = this.#options;
+    const cache = this.#cache;
     const logs: string[] = [];
     const mask = (text: string) => maskSandboxEnvValues(text, buildEnvOf(ctx));
     const log = (line: string) => {
@@ -228,7 +238,7 @@ export class LocalEnvironmentBuilds implements FactorySandboxBuilds<Record<strin
             continue;
           }
           const dir = path.join(templateRoot, repositoryDirectoryName(slug));
-          await cache.withReader(cloneUrl, () => this.#checkoutTemplate(cache.mirrorPath(cloneUrl), dir, head));
+          await cache.withLocalRepository(cloneUrl, repository => this.#checkoutTemplate(repository, dir, head));
           const commands = repo.setupCommand === undefined ? [] : Array.isArray(repo.setupCommand) ? repo.setupCommand : [repo.setupCommand];
           for (const command of commands.filter(command => command.trim())) {
             const setupStarted = this.#now();

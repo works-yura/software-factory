@@ -127,6 +127,12 @@ export interface SessionWorkStore {
   keepConflict?(checkout: SessionCheckout, branch: string, tree: string): Promise<string>;
   /** True when this store already sees what the sleep store published, so restore need not ask it. */
   coversPublished?(checkout: Pick<SessionCheckout, 'cloneUrl'>): Promise<boolean>;
+  /**
+   * True when the store holds saved commits for the branch. The local
+   * template's run-end save needs it (a branch already saved keeps being
+   * saved even once the remote holds its tip) and refuses a store without it.
+   */
+  hasSaved?(checkout: SessionCheckout, branch: string): Promise<boolean>;
 }
 
 /** Saves into every store (all must succeed) and loads from the first that has the branch. */
