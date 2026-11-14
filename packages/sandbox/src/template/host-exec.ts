@@ -5,8 +5,9 @@
  * sandbox (hang guard, stall abort, read-only retries) run here unchanged.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn as nodeSpawn } from 'node:child_process';
 
+import type { AgentProcesses } from '../agent-processes.ts';
 import type { ExecutableSandbox, SandboxCommandResult } from '../materialization.ts';
 
 /** Output kept per stream; git's progress and a failing install can run long. */
@@ -17,6 +18,8 @@ export interface HostExecutorOptions {
   env?: Record<string, string>;
   /** Default working directory. */
   cwd?: string;
+  /** Commands run as the agent user instead of the server (repository code: setup commands; ADR-0041). */
+  agent?: Pick<AgentProcesses, 'spawn'>;
 }
 
 function keepTail(current: string, chunk: string): string {
@@ -47,31 +50,35 @@ export function hostExecutor(options: HostExecutorOptions = {}): ExecutableSandb
         let stdout = '';
         let stderr = '';
         let timedOut = false;
-        const child = spawn(command, args, {
-          cwd: commandOptions.cwd ?? options.cwd ?? process.cwd(),
-          env,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: true,
-        });
+        const cwd = commandOptions.cwd ?? options.cwd ?? process.cwd();
+        const child = options.agent
+          ? options.agent.spawn(command, args, { cwd, env })
+          : nodeSpawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+        // The agent's stdin is a pipe: closed at once, as `ignore` would leave it.
+        child.stdin?.end();
         const timeout = commandOptions.timeout;
         const timer =
           timeout && timeout > 0
             ? setTimeout(() => {
                 timedOut = true;
-                try {
-                  if (child.pid) process.kill(-child.pid, 'SIGKILL');
-                } catch {
-                  child.kill('SIGKILL');
+                // The agent's spawn stops its whole group (as the agent too) through `kill`.
+                if (options.agent) child.kill('SIGKILL');
+                else {
+                  try {
+                    if (child.pid) process.kill(-child.pid, 'SIGKILL');
+                  } catch {
+                    child.kill('SIGKILL');
+                  }
                 }
               }, timeout)
             : undefined;
         timer?.unref?.();
-        child.stdout.setEncoding('utf8');
-        child.stderr.setEncoding('utf8');
-        child.stdout.on('data', (chunk: string) => {
+        child.stdout!.setEncoding('utf8');
+        child.stderr!.setEncoding('utf8');
+        child.stdout!.on('data', (chunk: string) => {
           stdout = keepTail(stdout, chunk);
         });
-        child.stderr.on('data', (chunk: string) => {
+        child.stderr!.on('data', (chunk: string) => {
           stderr = keepTail(stderr, chunk);
           commandOptions.onStderr?.(chunk);
         });

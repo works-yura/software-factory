@@ -546,6 +546,7 @@ export interface MastraFactoryClaudeCodeConfig
     | 'env'
     | 'tempDir'
     | 'gateNode'
+    | 'supervisorWorkdirRoot'
   > {
   /** Where session records live; required unless `store` is given. */
   storeDir?: string;
@@ -571,7 +572,7 @@ export interface MastraFactoryClaudeCodeConfig
 export interface MastraFactoryCodexConfig
   extends Pick<
     CodexFactoryHarnessOptions,
-    'store' | 'command' | 'launchArgs' | 'sessionHomeRoot' | 'spawn' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'
+    'store' | 'command' | 'launchArgs' | 'sessionHomeRoot' | 'supervisorWorkdirRoot' | 'spawn' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'
   > {
   /** Where session records live (and, beside them, each session's own `CODEX_HOME`); required unless `store` is given. */
   storeDir?: string;
@@ -2562,6 +2563,7 @@ export class MastraFactory {
           ...((codexExecutable ?? codexConfig.command) ? { command: codexExecutable ?? codexConfig.command } : {}),
           ...(codexConfig.launchArgs ? { launchArgs: codexConfig.launchArgs } : {}),
           ...(codexConfig.sessionHomeRoot ? { sessionHomeRoot: codexConfig.sessionHomeRoot } : {}),
+          ...(codexConfig.supervisorWorkdirRoot ? { supervisorWorkdirRoot: codexConfig.supervisorWorkdirRoot } : {}),
           credentials: codexConfig.credentials ?? createCodexCredentials({ credentials: modelCredentialsStorage }),
           ...(codexConfig.spawn ? { spawn: codexConfig.spawn } : {}),
           ...(codexConfig.env ? { env: codexConfig.env } : {}),

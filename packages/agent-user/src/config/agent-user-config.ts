@@ -10,6 +10,12 @@ export interface AgentUserConfig {
   readonly writableRoots: readonly string[];
   /** Folders put first on the agent's PATH: its own node, claude, codex. */
   readonly toolPath: readonly string[];
+  /**
+   * Whether agent commands run under the Seatbelt profile (the default). `false` leaves the user as
+   * the only boundary: what Xcode and SwiftPM need, since they start sandboxes of their own and macOS
+   * cannot start one inside another.
+   */
+  readonly seatbelt?: boolean;
 }
 
 export class AgentUserConfigError extends Error {

@@ -7,13 +7,16 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 
 import { describe, expect, it } from 'vitest';
 
 import { agentUserFromEnv } from '../config/from-env.ts';
+import { createAgentUserLauncher } from '../launch/agent-user-launcher.ts';
+import { PrivateFileStash } from '../shell/input-stash.ts';
+import { ShellCommandBridge } from '../shell/shell-command-bridge.ts';
 import { createProcessSpawner } from '../spawn/create-spawner.ts';
 
 const user = process.env.FACTORY_AGENT_USER_TEST?.trim();
@@ -49,6 +52,16 @@ describe.runIf(ready)('as the agent user, for real', () => {
     const { out } = await asAgent('printf %s "$TOKEN"; echo; env', { TOKEN: value });
     expect(out.split('\n')[0]).toBe(value);
     expect(out).not.toContain(`USER=${process.env.USER}\n`);
+  });
+
+  it('runs a shell bridge program (Mastra sandbox commands) as the agent, its environment off every command line', () => {
+    const inputs = mkdtempSync(join(tmpdir(), 'agent-inputs-'));
+    const program = new ShellCommandBridge(createAgentUserLauncher(config!), new PrivateFileStash(inputs)).commandLine('id -un; printf %s "$TOKEN"', { TOKEN: 'bridged' });
+    expect(program).not.toContain('bridged');
+    const result = spawnSync('/bin/sh', ['-c', program], { cwd: sandboxRoot, env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
+    expect(result.stdout).toBe(`${config?.user}\nbridged`);
+    expect(readdirSync(inputs)).toEqual([]);
+    rmSync(inputs, { recursive: true });
   });
 
   it('writes in its card folders', async () => {

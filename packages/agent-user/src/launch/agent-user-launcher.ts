@@ -16,6 +16,8 @@ export interface AgentUserLauncherOptions {
  *
  *   sudo -n -C 4 -u <user> -- env -i HOME=… USER=… PATH=… sh -c <loader> factory-agent \
  *     sandbox-exec -f <profile> <command> <args…>        (environment on fd 3)
+ *
+ * Without `sandbox-exec` when the configuration turns Seatbelt off.
  */
 export function createAgentUserLauncher(config: AgentUserConfig, options: AgentUserLauncherOptions = {}): WrappingLauncher {
   const identity = agentIdentity(config);
@@ -24,7 +26,7 @@ export function createAgentUserLauncher(config: AgentUserConfig, options: AgentU
       new SudoWrapper(config.user),
       new ClearEnvWrapper({ HOME: identity.HOME, USER: identity.USER, PATH: identity.PATH }),
       new EnvLoaderWrapper(options.transport ?? new PipeEnvTransport()),
-      new SeatbeltWrapper(config.profilePath),
+      ...(config.seatbelt === false ? [] : [new SeatbeltWrapper(config.profilePath)]),
     ],
     // Card folders are the server's clones: git as the agent must trust them.
     env => withGitTrust(agentEnvironment(config, env), config.writableRoots),

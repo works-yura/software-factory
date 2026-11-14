@@ -16,7 +16,8 @@ export interface AgentUserEnvContext {
  *
  * `FACTORY_AGENT_USER` (required to turn it on), `FACTORY_AGENT_HOME` (`/Users/<user>`),
  * `FACTORY_AGENT_PROFILE` (`/var/factory/agent-<user>.sb`), `FACTORY_AGENT_WRITABLE` (more writable
- * folders, `:`-separated), `FACTORY_AGENT_PATH` (its tools; `<home>/.local/bin:<home>/.local/node/bin`).
+ * folders, `:`-separated), `FACTORY_AGENT_PATH` (its tools; `<home>/.local/bin:<home>/.local/node/bin`),
+ * `FACTORY_AGENT_SEATBELT` (`on` by default; `off`: the user is the only boundary).
  */
 export function agentUserFromEnv(env: Record<string, string | undefined>, context: AgentUserEnvContext): AgentUserConfig | undefined {
   const user = env.FACTORY_AGENT_USER?.trim();
@@ -33,11 +34,16 @@ export function agentUserFromEnv(env: Record<string, string | undefined>, contex
   ];
   if (writableRoots.length === 0) throw new AgentUserConfigError('The agent user needs a folder to work in (MASTRACODE_LOCAL_SANDBOX_ROOT).');
   const toolPath = parsePathList(env.FACTORY_AGENT_PATH, 'FACTORY_AGENT_PATH');
+  const seatbelt = env.FACTORY_AGENT_SEATBELT?.trim().toLowerCase() || 'on';
+  if (seatbelt !== 'on' && seatbelt !== 'off') {
+    throw new AgentUserConfigError(`FACTORY_AGENT_SEATBELT must be on or off, got ${JSON.stringify(env.FACTORY_AGENT_SEATBELT)}.`);
+  }
   return {
     user,
     home,
     profilePath,
     writableRoots: [...new Set(writableRoots)],
     toolPath: toolPath.length > 0 ? toolPath : [`${home}/.local/bin`, `${home}/.local/node/bin`],
+    seatbelt: seatbelt === 'on',
   };
 }
