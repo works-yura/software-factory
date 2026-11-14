@@ -2,6 +2,7 @@ export * from './base.ts';
 export * from './closing-references.ts';
 export * from './issue-reconcile-worker.ts';
 export * from './issue-reconciler.ts';
+export * from './kept-cards.ts';
 export * from './platform-api-client.ts';
 export * from './platform-connect-routes.ts';
 export * from './pull-request-head.ts';

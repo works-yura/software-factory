@@ -18,6 +18,7 @@ import {
 } from '@factory/core';
 import type { BoardRegistry, InstalledBoard, IntakeRoutesReader } from '@factory/core';
 import { buildConnectionRoutes } from '@factory/integrations';
+import type { CardSource } from '@factory/integrations';
 import type {
   ConnectorRegistration,
   FactoryIntegration,
@@ -655,6 +656,8 @@ export function buildIntegrationContext(
     /** The project's intake routes and boards, so integrations filing cards themselves apply the routes. */
     intakeRoutes?: IntakeRoutesReader;
     projectBoards?: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
+    /** Passed for the workers' context only: routes do not sweep. */
+    keptCards?: CardSource;
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
     feed: CommentsDomain;
@@ -702,6 +705,7 @@ export function buildIntegrationContext(
             boards: deps.boardRegistry,
             ...(deps.intakeRoutes ? { intakeRoutes: deps.intakeRoutes } : {}),
             ...(deps.projectBoards ? { projectBoards: deps.projectBoards } : {}),
+            ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
           },
         }
       : {}),

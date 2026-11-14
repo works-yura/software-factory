@@ -6,3 +6,4 @@ export * from './comments/parse.ts';
 export * from './comments/routes.ts';
 export * from './comments/wire.ts';
 export * from './feed-events.ts';
+export * from './board-changes.ts';

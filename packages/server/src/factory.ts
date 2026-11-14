@@ -132,8 +132,9 @@ import {
 import type { CodexCredentials, CodexFactoryHarness, CodexFactoryHarnessOptions } from './codex/index.ts';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID, selfReviewedHeadFor } from '@factory/harness-mastra';
-import { touchFeed } from '@factory/feed';
+import { publishBoardChange, subscribeBoardChanges, touchFeed } from '@factory/feed';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from '@factory/integrations';
+import { KeptCards } from '@factory/integrations';
 import { reconcileGithubAcceptanceLabels } from '@factory/integration-github';
 import type { GithubRuleOverrides } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
@@ -688,6 +689,8 @@ export class MastraFactory {
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeBoardChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #keptCards: KeptCards | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeSandboxSetupProgress: (() => void) | undefined;
   /** Puts idle local sandboxes to sleep (ADR-0039); undefined without a sandbox template. */
@@ -951,7 +954,6 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onBoardChanged(scope => touchFeed(eventBus, scope));
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
     workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
@@ -988,6 +990,36 @@ export class MastraFactory {
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage(secretEncryption));
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
+    // Background sweeps read their cards from memory until a board changes;
+    // the bus carries this replica's changes to the others.
+    const keptCards = new KeptCards({ projects: factoryProjectsStorage, workItems: workItemsStorage });
+    this.#keptCards = keptCards;
+    const boardChangeOrigin = globalThis.crypto.randomUUID();
+    workItemsStorage.onBoardChanged(scope => {
+      touchFeed(eventBus, scope);
+      keptCards.changed(scope);
+      publishBoardChange(eventBus, boardChangeOrigin, scope);
+    });
+    // Deleting a project leaves its cards behind, so the sweeps hear of it separately.
+    factoryProjectsStorage.onDeleted(project => {
+      const scope = { orgId: project.orgId, factoryProjectId: project.id };
+      keptCards.changed(scope);
+      publishBoardChange(eventBus, boardChangeOrigin, scope);
+    });
+    this.#unsubscribeBoardChanges = subscribeBoardChanges(eventBus, boardChangeOrigin, scope =>
+      keptCards.changed(scope),
+    ).then(
+      unsubscribe => {
+        keptCards.trustAnnouncements();
+        return unsubscribe;
+      },
+      error => {
+        console.warn(
+          `[factory] subscribing to board changes failed; background sweeps read every board from the database: ${error instanceof Error ? error.message : error}`,
+        );
+        return undefined;
+      },
+    );
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
@@ -3813,6 +3845,7 @@ export class MastraFactory {
       integrations: integrationRegistrations,
       configVersion,
       boardRegistry: this.#projectBoards ?? this.#boards,
+      ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
       // Trackers that import tasks place them through the stored intake routes (ClickUp requires them).
       ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
       factoryReady,
@@ -3947,6 +3980,9 @@ export class MastraFactory {
     this.#unsubscribeDispatchWakes = undefined;
     const unsubscribeSandboxEnvChanges = this.#unsubscribeSandboxEnvChanges;
     this.#unsubscribeSandboxEnvChanges = undefined;
+    const unsubscribeBoardChanges = this.#unsubscribeBoardChanges;
+    this.#unsubscribeBoardChanges = undefined;
+    await unsubscribeBoardChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
     await unsubscribeSandboxEnvChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
     await unsubscribeDispatchWakes
       ?.then(unsubscribe => unsubscribe?.())

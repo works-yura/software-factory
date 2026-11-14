@@ -4,7 +4,7 @@ import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerDeps } from '@mastra/core/worker';
 
-import type { IntegrationStorageHandle } from '@factory/store';
+import type { ExternalRepositoryProjectTarget, IntegrationStorageHandle } from '@factory/store';
 import type { GithubRepositoryPermission } from '../integration.ts';
 import type { GithubIssueReconciler } from '../issue-reconciler.ts';
 import { DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS } from '../reconcile-worker.ts';
@@ -71,7 +71,12 @@ type EventLogEntry = {
   payload: unknown;
 };
 
-type Repository = { id: number; fullName?: string; installationId: number };
+type Repository = {
+  id: number;
+  fullName?: string;
+  installationId: number;
+  projects: ExternalRepositoryProjectTarget[];
+};
 
 export type PlatformGithubEventDispatchIntegration = GithubWebhookDispatchIntegration;
 
@@ -377,7 +382,11 @@ export class PlatformGithubEventWorker extends MastraWorker {
     if (discoverPullRequests && this.#discoverPullRequests && this.#hasLease) {
       const startedAt = Date.now();
       try {
-        const { errors, ...counts } = await this.#discoverPullRequests(targets);
+        // With the projects it already read, so discovery doesn't read the links again.
+        const linked = new Map(repositories.map(repository => [repository.id, repository.projects]));
+        const { errors, ...counts } = await this.#discoverPullRequests(
+          targets.map(target => ({ ...target, projects: linked.get(target.id) ?? [] })),
+        );
         const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
         if (counts.failed > 0) {
           this.deps?.logger.warn('Platform GitHub pull request discovery completed with failures', {
@@ -461,6 +470,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
         id: repositoryId,
         installationId,
         fullName: repository?.slug,
+        projects,
       });
     }
     return [...repositories.values()];

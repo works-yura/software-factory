@@ -54,7 +54,8 @@ import { primarySource } from '@factory/store';
 import { cardOwnsBranch, newestOwnedOpenPullRequestNumber, workItemBranch } from '@factory/pipelines';
 import { workItemSource as workItemBranchSource } from '@factory/core';
 import type { IntegrationContext, IntegrationHooks } from '@factory/integrations';
-import { closingIssueNumbers, recordPullRequestHead } from '@factory/integrations';
+import { closingIssueNumbers, recordPullRequestHead, storageCards } from '@factory/integrations';
+import type { CardSource } from '@factory/integrations';
 import type { GithubAppIdentity } from './app-identity.ts';
 import type { GithubEventRules } from './default-rules.ts';
 import type { GithubRepositoryPermission } from './integration.ts';
@@ -1582,6 +1583,8 @@ export interface ReconcileRepository {
   id: number;
   fullName: string;
   installationId: number;
+  /** The projects linked to it, when the caller already read them. */
+  projects?: readonly ExternalRepositoryProjectTarget[];
 }
 
 export interface ReconcileSweepSummary {
@@ -2170,6 +2173,7 @@ async function linkedRepositories(
 export function createGithubPullRequestDiscovery(
   options: GithubRulesOptions,
   listOpenPullRequests: GithubOpenPullRequestLister,
+  cards: CardSource = storageCards({ projects: options.projects, workItems: options.storage }),
 ): GithubPullRequestDiscovery {
   const rules = new GithubRules(options);
   const boards = toBoardSource(options.boards);
@@ -2192,7 +2196,10 @@ export function createGithubPullRequestDiscovery(
         });
       }
     };
-    const scoped = await linkedRepositories(options, repositories);
+    // The caller names each repository's projects once it read them: then they are all linked.
+    const scoped = repositories.every(repository => repository.projects)
+      ? repositories
+      : await linkedRepositories(options, repositories);
     summary.repositories = scoped.length;
     for (const repository of scoped) {
       // Every pull request some card holds, terminal cards included, so discovery never re-mints one.
@@ -2200,17 +2207,20 @@ export function createGithubPullRequestDiscovery(
       const unmarked = new Map<number, Card[]>();
       let linkedAt: number;
       try {
-        const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
-          installationExternalId: String(repository.installationId),
-          repositoryExternalId: String(repository.id),
-        });
+        const projects =
+          repository.projects ??
+          (await options.sourceControl.projectRepositories.listByExternalRepository({
+            installationExternalId: String(repository.installationId),
+            repositoryExternalId: String(repository.id),
+          }));
         if (projects.length === 0) continue;
         linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
         const items: Readonly<Card>[] = [];
         for (const project of projects) {
-          await rules.loadBoards(project);
-          items.push(...(await options.storage.listShared({ orgId: project.orgId, factoryProjectId: project.factoryProjectId })));
+          items.push(...(await cards.cards({ orgId: project.orgId, factoryProjectId: project.factoryProjectId })));
         }
+        // Whether a card is terminal is decided once a pull request needs it:
+        // that takes the project's boards, which are read from storage.
         const authoring = (item: Card | undefined) =>
           item !== undefined &&
           item.externalSource?.type !== 'pull-request' &&
@@ -2218,8 +2228,7 @@ export function createGithubPullRequestDiscovery(
           // it has none out in this repository, whatever it has out elsewhere.
           !openChangeRequests(item.metadata ?? null).some(
             entry => entry.repository === '' || entry.repository.toLowerCase() === repository.fullName.toLowerCase(),
-          ) &&
-          !isTerminalWorkItem(boards.forProject(item), item);
+          );
         const byId = new Map(items.map(item => [item.id, item]));
         for (const item of items) {
           for (const source of pullRequestSources(item)) {
@@ -2267,11 +2276,13 @@ export function createGithubPullRequestDiscovery(
             if (result.status === 'committed') summary.created += 1;
             continue;
           }
+          const unrestored = (unmarked.get(pullRequest.number) ?? []).filter(card => !restored.has(card.id));
+          for (const card of unrestored) await rules.loadBoards(card);
           const candidate = await ownedUnmarkedCard(
             options,
             repository,
             pullRequest,
-            (unmarked.get(pullRequest.number) ?? []).filter(card => !restored.has(card.id)),
+            unrestored.filter(card => !isTerminalWorkItem(boards.forProject(card), card)),
           );
           if (!candidate) continue;
           restored.add(candidate.id);
@@ -2323,7 +2334,7 @@ export function attachGithubPullRequestDiscovery(
 ): GithubPullRequestDiscovery | undefined {
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
-  return createGithubPullRequestDiscovery(options, listOpenPullRequests);
+  return createGithubPullRequestDiscovery(options, listOpenPullRequests, context.runtime?.keptCards);
 }
 
 export function githubRulesOptions(

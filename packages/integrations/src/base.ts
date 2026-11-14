@@ -36,6 +36,7 @@ import type { StateSigner } from '@factory/auth';
 import type { AuditEventRow } from '@factory/store';
 import type { AuditEmitter } from '@factory/feed';
 import type { IntegrationConnections } from './connections.ts';
+import type { CardSource } from './kept-cards.ts';
 import type { ChannelIdentityStorage } from '@factory/store';
 import type { CommentsDomain } from '@factory/feed';
 import type { WorkItemFeedPublisher } from '@factory/feed';
@@ -171,6 +172,12 @@ export interface IntegrationContext {
     intakeRoutes?: IntakeRoutesReader;
     /** A project's boards, stored ones included, which an intake route may name. */
     projectBoards?: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
+    /**
+     * Every project's provider-backed cards, kept in memory between background
+     * sweeps so a sweep with nothing to change reads nothing from storage.
+     * Absent where no sweep runs (route contexts, tests).
+     */
+    keptCards?: CardSource;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
