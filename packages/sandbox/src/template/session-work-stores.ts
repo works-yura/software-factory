@@ -27,6 +27,9 @@ import type {
   SessionWorkStore,
 } from './session-work.ts';
 
+/** Git credentials for filling a mirror from the remote (`gitAuthenticationEnvironment`), when the checkout carries none. */
+export type MirrorFillCredentials = (checkout: SessionCheckout) => Promise<Record<string, string> | undefined>;
+
 /** Where the mirror keeps work published to the remote (its fetch maps `refs/factory/wip/*` here). */
 const PUBLISHED_PREFIX = 'refs/factory/origin-wip/';
 const SAVE_ATTEMPTS = 3;
@@ -60,10 +63,59 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
   readonly kind = 'mirror';
   readonly #cache: LocalMirrorRepositoryCache;
   readonly #now: () => number;
+  readonly #credentials: MirrorFillCredentials | undefined;
 
-  constructor(cache: LocalMirrorRepositoryCache, options: { now?: () => number } = {}) {
+  constructor(cache: LocalMirrorRepositoryCache, options: { now?: () => number; credentials?: MirrorFillCredentials } = {}) {
     this.#cache = cache;
     this.#now = options.now ?? Date.now;
+    this.#credentials = options.credentials;
+  }
+
+  /**
+   * A shallow checkout can only be pushed into a mirror that already holds the
+   * history under its cut: git refuses to make the mirror shallow ("shallow
+   * update not allowed"). Sessions cloned with `--depth=1`, and mirrors a save
+   * created empty, meet here; the mirror is filled from the remote first, the
+   * way a build would have. Fails loudly when it cannot be.
+   */
+  async #holdHistoryUnder(checkout: SessionCheckout): Promise<void> {
+    const shallow = await runGitIn(checkout.sandbox, checkout.dir, ['rev-parse', '--is-shallow-repository']);
+    if (shallow.exitCode !== 0 || shallow.stdout.trim() !== 'true') return;
+    const cuts = await this.#shallowCuts(checkout);
+    if (!(await this.#missingFromMirror(checkout, cuts)).length) return;
+    try {
+      const authEnv = checkout.authEnv ?? (await this.#credentials?.(checkout));
+      await this.#cache.refresh({
+        cloneUrl: checkout.cloneUrl,
+        ...(authEnv ? { authEnv } : {}),
+        ...(checkout.owner ? { owner: checkout.owner } : {}),
+      });
+    } catch (error) {
+      throw new SessionWorkError(
+        `the checkout is shallow and the mirror lacks the history under it; filling the mirror from the remote failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const missing = await this.#missingFromMirror(checkout, cuts);
+    if (missing.length) {
+      throw new SessionWorkError(`the checkout is shallow and the mirror still lacks ${missing.join(', ')} after a fetch from the remote`);
+    }
+  }
+
+  /** The commits a shallow checkout's history stops at (its `shallow` file). */
+  async #shallowCuts(checkout: SessionCheckout): Promise<string[]> {
+    const file = await runGitIn(checkout.sandbox, checkout.dir, ['rev-parse', '--path-format=absolute', '--git-path', 'shallow']);
+    if (file.exitCode !== 0) throw new SessionWorkError(`could not find the checkout's shallow file: ${(file.stderr || file.stdout).trim()}`);
+    const read = await runSandboxCommand(checkout.sandbox, 'sh', ['-c', 'cat "$1" 2>/dev/null || true', 'sh', file.stdout.trim()]);
+    return read.stdout
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+  }
+
+  async #missingFromMirror(checkout: SessionCheckout, commits: string[]): Promise<string[]> {
+    const missing: string[] = [];
+    for (const commit of commits) if (!(await this.#cache.hasCommit(checkout.cloneUrl, commit))) missing.push(commit);
+    return missing;
   }
 
   /** The mirror to keep work in; made (empty, no network) when there is none, owner recorded. */
@@ -73,6 +125,7 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
 
   /** Copy commits from the checkout into the mirror under one temporary ref each; answers their names. */
   async #pushTemporary(checkout: SessionCheckout, mirror: string, commits: string[]): Promise<string[]> {
+    await this.#holdHistoryUnder(checkout);
     const id = randomUUID();
     const refs = commits.map((_, index) => `refs/factory/tmp/${id}/${index}`);
     const pushed = await runGitIn(checkout.sandbox, checkout.dir, [
