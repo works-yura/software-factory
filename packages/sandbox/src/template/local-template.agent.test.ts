@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentProcesses } from '../agent-processes.ts';
 
 import { LocalEnvironmentTemplate } from './local-template.ts';
+import { mirrorsOf } from './test-git.ts';
 
 describe('LocalEnvironmentTemplate with an agent user', () => {
   const roots: string[] = [];
@@ -28,7 +29,7 @@ describe('LocalEnvironmentTemplate with an agent user', () => {
     };
     const template = new LocalEnvironmentTemplate({ root, agentProcesses, env: { PATH: process.env.PATH ?? '/usr/bin:/bin' } });
 
-    await template.repositoryCache.ensureExists({ cloneUrl: 'https://github.com/example/repo.git' });
+    await mirrorsOf(template).ensureExists({ cloneUrl: 'https://github.com/example/repo.git' });
 
     expect(cwds.length).toBeGreaterThan(0);
     expect(cwds.every(cwd => cwd === root)).toBe(true);

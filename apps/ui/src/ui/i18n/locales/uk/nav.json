@@ -65,8 +65,7 @@
   "user": {
     "checkingSignIn": "Перевірка входу",
     "fallbackName": "Користувач",
-    "settings": "Налаштування",
-    "settingsFor": "Налаштування: {{name}}"
+    "settings": "Налаштування"
   },
   "newSession": "Нова сесія",
   "searchAndNavigate": "Пошук і навігація",
@@ -75,5 +74,21 @@
   "backToBoard": "Назад до «{{name}}»",
   "backToBoardFallback": "Назад до дошки",
   "configureBoard": "Налаштувати дошку",
-  "configureNamedBoard": "Налаштувати «{{name}}»"
+  "configureNamedBoard": "Налаштувати «{{name}}»",
+  "organization": {
+    "fallbackName": "Організація",
+    "subtitle": "Організація",
+    "list": "Організації",
+    "settings": "Налаштування організації",
+    "loadFailed": "Не вдалося завантажити організації: {{message}}",
+    "switchFailed": "Не вдалося перейти в організацію: {{message}}",
+    "current": "Поточна організація: {{name}}",
+    "switchFrom": "Змінити організацію, зараз {{name}}"
+  },
+  "account": {
+    "menuFor": "Меню акаунта: {{name}}",
+    "theme": "Тема",
+    "profileSettings": "Налаштування профілю",
+    "logOut": "Вийти"
+  }
 }

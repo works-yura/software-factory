@@ -17,12 +17,11 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useCan } from '../../../../hooks/useCan';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useOrganizationsQuery, useSwitchOrganizationMutation } from '../../../../hooks/useOrganizations';
 import {
   getOrganization,
   leaveOrganization,
-  listOrganizations,
   reloadIntoOrganization,
-  setActiveOrganization,
   updateOrganization,
 } from '../../auth/services/organization';
 import type { FullOrganization } from '../../auth/services/organization';
@@ -156,15 +155,8 @@ function LeaveOrganization({ organization, isOwner }: { organization: FullOrgani
 
 function OrganizationSwitcher({ activeId }: { activeId: string }) {
   const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
-  const organizations = useQuery({
-    queryKey: queryKeys.organizations(),
-    queryFn: () => listOrganizations(baseUrl),
-  });
-  const switchTo = useMutation({
-    mutationFn: (organizationId: string) => setActiveOrganization(baseUrl, organizationId),
-    onSuccess: () => reloadIntoOrganization(),
-  });
+  const organizations = useOrganizationsQuery();
+  const switchTo = useSwitchOrganizationMutation();
 
   if (organizations.isError) {
     return (

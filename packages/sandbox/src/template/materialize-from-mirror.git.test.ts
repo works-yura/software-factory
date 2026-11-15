@@ -7,7 +7,7 @@ import { createSandboxSetupReporter, onSandboxSetupProgress } from '../setup-pro
 import type { SandboxSetupProgressEvent } from '../setup-progress.ts';
 import { hostExecutor } from './host-exec.ts';
 import { LocalEnvironmentTemplate } from './local-template.ts';
-import { gitFixture } from './test-git.ts';
+import { gitFixture, mirrorsOf } from './test-git.ts';
 import type { GitFixture } from './test-git.ts';
 
 const silent = { info() {}, warn() {} };
@@ -60,7 +60,7 @@ describe('materializing a session from the mirror, with real git', () => {
   });
 
   afterEach(async () => {
-    await template.repositoryCache.settled();
+    await mirrorsOf(template).settled();
     await rm(fx.root, { recursive: true, force: true });
   });
 
@@ -68,7 +68,7 @@ describe('materializing a session from the mirror, with real git', () => {
     const first = await materialize();
     expect(first.result).toMatchObject({ cloned: true, source: 'network', fallbackReason: 'missing' });
     expect(first.events.some(event => event.phase === 'clone' && event.source === 'network')).toBe(true);
-    await template.repositoryCache.settled();
+    await mirrorsOf(template).settled();
 
     const second = await materialize();
     expect(second.result).toMatchObject({ cloned: true, source: 'mirror' });
@@ -80,7 +80,7 @@ describe('materializing a session from the mirror, with real git', () => {
   });
 
   it('still resumes a session branch the remote already has (b770b10a) after a mirror clone', async () => {
-    await template.repositoryCache.refresh({ cloneUrl: CLONE_URL });
+    await mirrorsOf(template).refresh({ cloneUrl: CLONE_URL });
     fx.git(fx.seed, 'checkout', '--quiet', '-b', 'user/session-1');
     const pushed = await fx.commit(fx.seed, 'pushed.txt', 'pushed\n');
     fx.git(fx.seed, 'push', '--quiet', 'origin', 'user/session-1');
@@ -95,7 +95,7 @@ describe('materializing a session from the mirror, with real git', () => {
   });
 
   it('round trip: commit, folder removed, re-materialized from the mirror with the commit and uncommitted work back', async () => {
-    await template.repositoryCache.refresh({ cloneUrl: CLONE_URL });
+    await mirrorsOf(template).refresh({ cloneUrl: CLONE_URL });
     const first = await materialize();
     await checkout(first.dir, 'factory/item-42');
     const committed = await fx.commit(first.dir, 'work.txt', 'work\n');

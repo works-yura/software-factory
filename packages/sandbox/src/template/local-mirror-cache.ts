@@ -33,6 +33,7 @@ import type { FileLockOptions } from './file-lock.ts';
 import { hostExecutor } from './host-exec.ts';
 import type {
   CachedRepository,
+  LocalRepositories,
   RepositoryCache,
   RepositoryCheckoutOptions,
   RepositoryCheckoutResult,
@@ -141,7 +142,7 @@ function failure(result: SandboxCommandResult): string {
   return (withoutGitProgress(result.stderr) || result.stdout || `exit ${result.exitCode}`).trim().slice(-1000);
 }
 
-export class LocalMirrorRepositoryCache implements RepositoryCache {
+export class LocalMirrorRepositoryCache implements RepositoryCache, LocalRepositories {
   readonly kind = 'local-mirror';
   readonly root: string;
   readonly #host: ExecutableSandbox;
@@ -649,6 +650,28 @@ export class LocalMirrorRepositoryCache implements RepositoryCache {
       if (this.#now() - Number(created) * 1000 < TEMPORARY_MAX_AGE_MS) continue;
       await this.#git(['-C', mirror, 'update-ref', '-d', ref, sha]);
     }
+  }
+
+  async ownerOf(cloneUrl: string): Promise<CachedRepository['owner']> {
+    return (await this.readMeta(this.mirrorPath(cloneUrl)))?.owner;
+  }
+
+  localRepositoryPath(cloneUrl: string): string {
+    return this.mirrorPath(cloneUrl);
+  }
+
+  /** The clone URL recorded in every mirror on disk (a mirror without one is skipped). */
+  async listLocalRepositories(): Promise<string[]> {
+    const urls: string[] = [];
+    for (const mirror of await this.listMirrors()) {
+      const meta = await this.readMeta(mirror);
+      if (meta?.cloneUrl) urls.push(meta.cloneUrl);
+    }
+    return urls;
+  }
+
+  withLocalRepository<T>(cloneUrl: string, fn: (repository: string) => Promise<T>): Promise<T> {
+    return this.withReader(cloneUrl, () => fn(this.mirrorPath(cloneUrl)));
   }
 
   /** Every mirror directory on disk. */

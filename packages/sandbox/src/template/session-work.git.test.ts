@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LocalEnvironmentTemplate, SessionWorkNotSavedError } from './local-template.ts';
 import { updateRefsAtomically } from './session-work.ts';
-import { gitFixture } from './test-git.ts';
+import { gitFixture, mirrorsOf } from './test-git.ts';
 import type { GitFixture } from './test-git.ts';
 
 const silent = { info() {}, warn() {} };
@@ -19,7 +19,7 @@ describe('session work kept in the mirror, with real git', () => {
     const folder = path.join(fx.root, 'sandboxes', `session-${++sessions}`);
     const dir = path.join(folder, 'repo');
     await mkdir(dir, { recursive: true });
-    const result = await template.repositoryCache.checkout(fx.host, { cloneUrl: fx.origin }, { workdir: dir, branch: 'main' });
+    const result = await mirrorsOf(template).checkout(fx.host, { cloneUrl: fx.origin }, { workdir: dir, branch: 'main' });
     expect(result.source).toBe('mirror');
     // As materialization records it: who the repository belongs to.
     fx.git(dir, 'config', 'factory.orgId', 'org-1');
@@ -37,11 +37,11 @@ describe('session work kept in the mirror, with real git', () => {
       isPublicRepository: async () => false,
     });
     template.setRepositoryAccess(async () => ({ cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer', token: 't' } }));
-    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    await mirrorsOf(template).refresh({ cloneUrl: fx.origin });
   });
 
   afterEach(async () => {
-    await template.repositoryCache.settled();
+    await mirrorsOf(template).settled();
     await rm(fx.root, { recursive: true, force: true });
   });
 
@@ -138,7 +138,7 @@ describe('session work kept in the mirror, with real git', () => {
     expect(restored.conflictRef).toMatch(/^refs\/factory\/wip\/conflict\/factory\/item-4\/\d+$/);
     expect(fx.git(second.dir, 'status', '--porcelain')).toBe('');
     // The work that did not apply is set aside, and the next save (a clean tree) never drops it.
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     const kept = fx.git(mirror, 'rev-parse', restored.conflictRef!);
     await template.saveFolder(second.folder);
     expect(fx.git(mirror, 'rev-parse', restored.conflictRef!)).toBe(kept);
@@ -146,7 +146,7 @@ describe('session work kept in the mirror, with real git', () => {
   });
 
   it('saves atomically: a concurrent writer is detected by the old value, and a crashed save leaves only temporary refs', async () => {
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     const main = fx.git(mirror, 'rev-parse', 'refs/heads/main');
     // Expecting a ref to be absent fails when it exists: nothing is changed.
     fx.git(mirror, 'update-ref', 'refs/factory/wip/heads/b', main);
@@ -190,8 +190,8 @@ describe('session work kept in the mirror, with real git', () => {
     await rm(first.folder, { recursive: true, force: true });
 
     // The server's disk loses the mirror; a new one fetches the published work.
-    await rm(template.repositoryCache.mirrorPath(fx.origin), { recursive: true, force: true });
-    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    await rm(mirrorsOf(template).mirrorPath(fx.origin), { recursive: true, force: true });
+    await mirrorsOf(template).refresh({ cloneUrl: fx.origin });
     const second = await freshCheckout();
     const restored = await template.sessionWork.restore(second.checkout, 'factory/item-6');
     expect(restored).toMatchObject({ outcome: 'restored', from: 'mirror-published', tree: 'restored' });
@@ -203,7 +203,7 @@ describe('session work kept in the mirror, with real git', () => {
     const first = await freshCheckout();
     fx.git(first.dir, 'checkout', '--quiet', '-b', 'factory/item-7');
     await fx.commit(first.dir, 'seven.txt', '7\n');
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     // The mirror cannot be written (a full or read-only disk).
     await chmod(path.join(mirror, 'objects'), 0o555);
     await chmod(path.join(mirror, 'refs'), 0o555);
@@ -223,7 +223,7 @@ describe('session work kept in the mirror, with real git', () => {
     fx.git(first.dir, 'checkout', '--quiet', '-b', 'factory/item-8');
     await fx.commit(first.dir, 'eight.txt', '8\n');
     await template.saveFolder(first.folder);
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     expect(fx.tryGit(mirror, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-8').status).toBe(0);
     fx.git(first.dir, 'push', '--quiet', 'origin', 'factory/item-8');
     await template.sleepFolder(first.folder, { publish: true });
@@ -263,7 +263,7 @@ describe('session work kept in the mirror, with real git', () => {
   it('keeps nothing for an untouched default-branch checkout', async () => {
     const first = await freshCheckout();
     await template.saveFolder(first.folder);
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     expect(fx.git(mirror, 'for-each-ref', 'refs/factory/wip')).toBe('');
   });
 });

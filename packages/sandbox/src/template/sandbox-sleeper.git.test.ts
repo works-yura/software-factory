@@ -10,7 +10,7 @@ import { sleepPolicyOf } from './local-sandbox-settings.ts';
 import { LocalEnvironmentTemplate } from './local-template.ts';
 import { SandboxSleeper } from './sandbox-sleeper.ts';
 import { chooseSandboxesToSleep } from './sleep-policy.ts';
-import { gitFixture } from './test-git.ts';
+import { gitFixture, mirrorsOf } from './test-git.ts';
 import type { GitFixture } from './test-git.ts';
 
 const silent = { info() {}, warn() {} };
@@ -134,7 +134,7 @@ describe('putting sandboxes to sleep, with real git', () => {
   const folder = async (key: string, sessionId: string, branch: string) => {
     const dir = path.join(sandboxRoot, ...key.split('/'), 'repo');
     await mkdir(dir, { recursive: true });
-    expect((await template.repositoryCache.checkout(fx.host, { cloneUrl: fx.origin }, { workdir: dir, branch: 'main' })).source).toBe('mirror');
+    expect((await mirrorsOf(template).checkout(fx.host, { cloneUrl: fx.origin }, { workdir: dir, branch: 'main' })).source).toBe('mirror');
     fx.git(dir, 'config', 'factory.orgId', 'org-1');
     fx.git(dir, 'config', 'factory.repositoryId', 'repo-1');
     fx.git(dir, 'checkout', '--quiet', '-b', branch);
@@ -161,7 +161,7 @@ describe('putting sandboxes to sleep, with real git', () => {
     });
     template.setRepositoryAccess(async () => ({ cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer', token: 't' } }));
     sandbox = new LocalFactorySandbox({ root: sandboxRoot, template });
-    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    await mirrorsOf(template).refresh({ cloneUrl: fx.origin });
     running.clear();
     startsOnRelease.clear();
     queuesStartOnRelease.clear();
@@ -173,7 +173,7 @@ describe('putting sandboxes to sleep, with real git', () => {
   });
 
   afterEach(async () => {
-    await template.repositoryCache.settled();
+    await mirrorsOf(template).settled();
     await chmod(path.join(sandboxRoot, '.factory-template', 'mirrors'), 0o755).catch(() => {});
     await rm(fx.root, { recursive: true, force: true });
   });
@@ -267,7 +267,7 @@ describe('putting sandboxes to sleep, with real git', () => {
     await folder('work-items/f/card-12', 'agent-12', 'factory/item-12');
     await sandbox.removeWorkItemFolder('work-items/f/card-12');
 
-    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    await mirrorsOf(template).refresh({ cloneUrl: fx.origin });
     expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day })).toEqual(['factory/item-10']);
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-10').status).not.toBe(0);
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-11').status).toBe(0);
@@ -279,7 +279,7 @@ describe('putting sandboxes to sleep, with real git', () => {
     await template.saveFolder(reopened.path);
     expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later })).toEqual([]);
     await sandbox.removeWorkItemFolder('work-items/f/card-13');
-    await template.repositoryCache.refresh({ cloneUrl: fx.origin });
+    await mirrorsOf(template).refresh({ cloneUrl: fx.origin });
     expect(await template.pruneHiddenRefs({ cloneUrl: fx.origin, retentionMs: 30 * day, now: later + 31 * day })).toEqual(['factory/item-12']);
     expect(fx.tryGit(fx.origin, 'rev-parse', '--verify', 'refs/factory/wip/heads/factory/item-11').status).toBe(0);
   }, 30_000);

@@ -9,6 +9,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { hostExecutor } from './host-exec.ts';
+import { LocalMirrorRepositoryCache } from './local-mirror-cache.ts';
+import type { RepositoryCache } from './repository-cache.ts';
 
 export function isolatedGitEnv(home: string): Record<string, string> {
   return {
@@ -65,4 +67,11 @@ export async function gitFixture(prefix = 'factory-template-'): Promise<GitFixtu
   await commit(seed, 'src.txt', 'a\nb\nc\n', 'second');
   git(seed, 'push', '--quiet', 'origin', 'main');
   return { root, env, origin, seed, git, tryGit, commit, host: hostExecutor({ env }) };
+}
+
+/** The template's default cache, the local mirrors; tests that look inside a mirror reach it through this. */
+export function mirrorsOf(template: { repositoryCache: RepositoryCache }): LocalMirrorRepositoryCache {
+  const cache = template.repositoryCache;
+  if (!(cache instanceof LocalMirrorRepositoryCache)) throw new Error(`expected the local mirror cache, got '${cache.kind}'`);
+  return cache;
 }

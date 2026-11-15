@@ -33,6 +33,17 @@ const SAVE_ATTEMPTS = 3;
 const TRANSFER_TIMEOUT_MS = 5 * 60_000;
 const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null'];
 
+/**
+ * The receiving side of a push into the mirror, trusting the mirror. Git starts it for a local
+ * path with the repository-local variables cleared, `GIT_CONFIG_COUNT` among them, so the trust the
+ * agent user's environment carries (ADR-0041) does not reach it, and a mirror the server owns is
+ * then refused as "dubious ownership".
+ */
+export function trustedReceivePack(mirror: string): string {
+  const trusted = `safe.directory=${mirror}`.replaceAll("'", `'\\''`);
+  return `--receive-pack=git -c '${trusted}' receive-pack`;
+}
+
 function headRef(branch: string, prefix = 'refs/factory/wip/') {
   return `${prefix}heads/${branch}`;
 }
@@ -69,6 +80,7 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
       'push',
       '--no-verify',
       '--quiet',
+      trustedReceivePack(mirror),
       mirror,
       ...commits.map((commit, index) => `${commit}:${refs[index]}`),
     ]);
@@ -174,6 +186,11 @@ export class MirrorSessionWorkStore implements SessionWorkStore {
       return { from, head, ...(tree ? { tree } : {}) };
     }
     return undefined;
+  }
+
+  async hasSaved(checkout: SessionCheckout, branch: string): Promise<boolean> {
+    const ref = await runGitIn(checkout.sandbox, this.#cache.mirrorPath(checkout.cloneUrl), ['rev-parse', '--verify', '--quiet', headRef(branch)]);
+    return ref.exitCode === 0;
   }
 
   /** Whether the mirror's last fetch brought in the work published to the remote, so asking the remote adds nothing. */

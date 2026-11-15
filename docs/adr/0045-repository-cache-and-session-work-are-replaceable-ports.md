@@ -1,0 +1,22 @@
+# 0045. Кеш репозиторіїв і сховище роботи сесій — замінні порти шаблону; локальні репозиторії — явна можливість
+
+Дата: 2026-11-15 · Статус: прийнято, зроблено · Продовжує [ADR-0039](0039-local-environment-template-mirrors-and-session-work.md) (порти `RepositoryCache`, `SessionWorkStore`), враховує [ADR-0041](0041-agents-run-as-a-separate-macos-user.md) (git у дзеркалах — від імені агента)
+
+**Контекст.** ADR-0039 описав `RepositoryCache` і `SessionWorkStore` як порти з адаптерами, але `LocalEnvironmentTemplate` сам створював `LocalMirrorRepositoryCache` і `MirrorSessionWorkStore`, тримав поле як конкретний клас і кликав методи, яких у порту немає: `mirrorPath` (5 місць), `readMeta` (3), `host` (3), `listMirrors` (1); `LocalEnvironmentBuilds` теж брав конкретний клас (`withReader` + `mirrorPath`). Інший кеш (віддалений хост дзеркал, лише мережа, S3…) не підставити без правок цих місць.
+
+**Що насправді потрібно кожному місцю.**
+- `host` — виконавець git у чекаутах сесій і дзеркалах. Це виконавець шаблону, не кешу: шаблон створює його сам (той самий `hostExecutor` з env і агентом, ADR-0041) і передає типовому кешу.
+- `readMeta(mirrorPath(url)).owner` (публікація: облікові дані; видимість репозиторію) — власник, записаний біля запису кешу. → `RepositoryCache.ownerOf(cloneUrl)` (обов'язковий; `NetworkRepositoryCache` відповідає `undefined`, і публікація тоді голосно падає «owner is unknown», як і раніше без запису).
+- `#hasSaved` (чи є збережена робота гілки — run-end зберігає гілку, яку вже зберігали, навіть коли її голова на remote) — це питання до сховища роботи. → `SessionWorkStore.hasSaved?(checkout, branch)`; `MirrorSessionWorkStore` відповідає тим самим `rev-parse refs/factory/wip/heads/<гілка>` у дзеркалі. Шаблон вимагає його на старті.
+- Збірки (шаблонна копія `git clone --local` з дзеркала), прибирання прихованих refs (`refs/factory/origin-wip` у дзеркалі) і збережених refs (`trash`, `wip/superseded`, `wip/conflict`) — потрібен **локальний bare-репозиторій** на диску сервера. → можливість `LocalRepositories`: `localRepositoryPath(cloneUrl)`, `listLocalRepositories()` (clone URL з кожного дзеркала), `withLocalRepository(cloneUrl, fn)` (як читач — обслуговування не пакує під ним). `localRepositoriesOf(cache)` перевіряє її явно, `requireLocalRepositories(cache, хто)` кидає зрозумілу помилку.
+
+**Рішення.**
+- `LocalEnvironmentTemplateOptions` отримує `repositoryCache`, `sessionWorkStore`, `sessionWorkSleepStore`, `builds`. Типово — рівно те, що було: `LocalMirrorRepositoryCache` під `<root>/mirrors` з тим самим виконавцем (агент, корінь шаблону як cwd) і `freshnessMs`, `MirrorSessionWorkStore` над ним, `RemoteHiddenRefSessionWorkStore` для сну, збірки ввімкнені. Поля шаблону типізовані портами (`repositoryCache: RepositoryCache`, `builds: LocalEnvironmentBuilds | undefined`).
+- **Без тихих запасних шляхів — помилка на старті:** інший кеш без `sessionWorkStore` (типове сховище живе в локальних дзеркалах); сховище без `hasSaved`; збірки з кешем без `LocalRepositories` (треба явно `builds: false` — тоді пісочниця не пропонує збірок, UI це вже показує); `freshnessMs` разом з іншим кешем (налаштування типового кешу не ігнорується мовчки). `LocalEnvironmentBuilds` сам вимагає `LocalRepositories` у конструкторі. `pruneHiddenRefs`/`pruneKeptRefs`/`pruneKeptRefsEverywhere` без цієї можливості кидають помилку з назвою кешу.
+- Поведінка не змінилась: ті самі теки, ті самі команди git, ті самі дані на диску, ті самі env і конфіг. `apps/server` і `packages/server` не змінювались.
+
+**Що потрібно іншій реалізації кешу.** Мінімум — `RepositoryCache` (`kind`, `checkout`, `refresh`, `hasCommit`, `maintain`, `prune`, `ownerOf`) плюс `SessionWorkStore` з `hasSaved` (і `builds: false`). Зі збірками й прибиранням refs — ще `LocalRepositories` (локальний bare-репозиторій, у якому git шаблону виконується від імені агента). Віддалений провайдер, що віддає `FactorySandboxCheckoutServices`, як і раніше потребує лише `checkout`.
+
+**Альтернативи.** Мережевий клон для шаблонної копії, коли локального репозиторію немає, — відкинуто: тихий запасний шлях. Перенести прибирання збережених refs у `MirrorSessionWorkStore` — доречно згодом (це його refs), але воно читає записи шаблону про закриті картки; зараз воно лишається в шаблоні за явною можливістю.
+
+Тести: `packages/sandbox/src/template/local-template-ports.git.test.ts` — шаблон з фейковим кешем і сховищем (жодного дзеркала: збереження, сон з публікацією, власник із кешу), кеш з локальними репозиторіями під іншим коренем, помилки старту, типові адаптери.

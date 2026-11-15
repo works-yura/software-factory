@@ -5,6 +5,11 @@
  * mirrors and, when a folder goes to sleep, on the remote
  * ({@link SessionWork}). `LocalFactorySandbox` owns one and hands its ports to
  * materialization through {@link FactorySandboxCheckoutServices}.
+ *
+ * The cache and the session work stores are ports (ADR-0045): the options can
+ * replace them; by default they are the local mirrors. What needs the cache to
+ * keep local repositories (builds, kept-ref housekeeping) asks for the
+ * {@link LocalRepositories} capability and fails loudly without it.
  */
 
 import { mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -21,9 +26,11 @@ import { hostExecutor } from './host-exec.ts';
 import { LocalEnvironmentBuilds } from './local-builds.ts';
 import { LocalMirrorRepositoryCache } from './local-mirror-cache.ts';
 import type { LocalMirrorLogger } from './local-mirror-cache.ts';
-import type { RepositoryCache } from './repository-cache.ts';
+import { localRepositoriesOf, requireLocalRepositories } from './repository-cache.ts';
+import type { LocalRepositories, RepositoryCache } from './repository-cache.ts';
 import { SessionWork, runGitIn } from './session-work.ts';
-import type { SessionCheckout, SessionWorkSaveResult, SessionWorkSnapshot } from './session-work.ts';
+import type { SessionCheckout, SessionWorkSaveResult, SessionWorkSnapshot, SessionWorkStore } from './session-work.ts';
+import type { ExecutableSandbox } from '../materialization.ts';
 import { MirrorSessionWorkStore, RemoteHiddenRefSessionWorkStore } from './session-work-stores.ts';
 import { SandboxRegistry } from './sandbox-registry.ts';
 
@@ -94,8 +101,28 @@ export interface LocalEnvironmentTemplateOptions {
   logger?: LocalMirrorLogger;
   /** Mirrors no project names are removed after this long unused. */
   pruneIdleMs?: number;
-  /** A mirror fetched this recently is not fetched again for a session. */
+  /** A mirror fetched this recently is not fetched again for a session (the default cache only). */
   freshnessMs?: number;
+  /**
+   * Where checkouts come from before the network. Default: the local mirrors
+   * under `<root>/mirrors`, their git run by the same executor as the
+   * template's (the agent user, ADR-0041). Another cache brings its own
+   * settings: `freshnessMs` is then refused.
+   */
+  repositoryCache?: RepositoryCache;
+  /**
+   * Keeps every save (run end, sleep). Must answer `hasSaved`. Default: the
+   * mirror store over the default cache; required with any other cache.
+   */
+  sessionWorkStore?: SessionWorkStore;
+  /** Also keeps the work when a folder goes to sleep with `publish`. Default: the remote's hidden refs. */
+  sessionWorkSleepStore?: SessionWorkStore;
+  /**
+   * Environment builds (`FactorySandbox.builds`). On by default; they need a
+   * cache with {@link LocalRepositories}, so with a cache that has none they
+   * must be turned off here (`false`), and then the sandbox offers no builds.
+   */
+  builds?: boolean;
   /** Whether a repository is public (then uncommitted work is never published); probes it anonymously by default. */
   isPublicRepository?: (checkout: SessionCheckout) => Promise<boolean>;
   /** Setup commands (repository code) run as the agent user, not as the server (ADR-0041). */
@@ -137,13 +164,17 @@ export class SessionWorkNotSavedError extends Error {
 
 export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices {
   readonly root: string;
-  readonly repositoryCache: LocalMirrorRepositoryCache;
+  readonly repositoryCache: RepositoryCache;
   readonly sessionWork: SessionWork;
-  readonly builds: LocalEnvironmentBuilds;
+  /** Absent only when the options turned builds off. */
+  readonly builds: LocalEnvironmentBuilds | undefined;
   /** What the server knows about each sandbox folder: owner, activity, sleep, problems. */
   readonly sandboxes: SandboxRegistry;
   readonly #packageStores: boolean;
   readonly #logger: LocalMirrorLogger;
+  /** Runs git in checkouts and local repositories (as the agent user when there is one). */
+  readonly #host: ExecutableSandbox;
+  readonly #hasSaved: (checkout: SessionCheckout, branch: string) => Promise<boolean>;
   readonly #queues = new Map<string, Promise<unknown>>();
   /** Folders (real paths) being put to sleep and removed right now. */
   readonly #removing = new Map<string, number>();
@@ -164,27 +195,61 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     // They start in the template root, not the server's folder: the agent cannot enter that one, and
     // git there fails before it reads a byte ("Unable to read current working directory").
     const agent = options.agentProcesses ? { agent: options.agentProcesses, cwd: this.root } : {};
-    this.repositoryCache = new LocalMirrorRepositoryCache({
-      root: this.root,
-      logger: this.#logger,
-      host: hostExecutor({ ...(options.env ? { env: options.env } : {}), ...agent }),
-      ...(options.freshnessMs !== undefined ? { freshnessMs: options.freshnessMs } : {}),
-    });
+    this.#host = hostExecutor({ ...(options.env ? { env: options.env } : {}), ...agent });
+    if (options.repositoryCache && options.freshnessMs !== undefined) {
+      throw new Error('LocalEnvironmentTemplate: freshnessMs configures the default mirror cache; set it on the repositoryCache given instead');
+    }
+    const cache =
+      options.repositoryCache ??
+      new LocalMirrorRepositoryCache({
+        root: this.root,
+        logger: this.#logger,
+        host: this.#host,
+        ...(options.freshnessMs !== undefined ? { freshnessMs: options.freshnessMs } : {}),
+      });
+    this.repositoryCache = cache;
+    let store = options.sessionWorkStore;
+    if (!store) {
+      if (!(cache instanceof LocalMirrorRepositoryCache)) {
+        throw new Error(
+          `LocalEnvironmentTemplate: the default session work store keeps work in local mirrors; the repository cache '${cache.kind}' is not one, so pass sessionWorkStore`,
+        );
+      }
+      store = new MirrorSessionWorkStore(cache);
+    }
+    if (!store.hasSaved) {
+      throw new Error(`LocalEnvironmentTemplate: the session work store '${store.kind}' cannot tell whether a branch has saved work (hasSaved)`);
+    }
+    this.#hasSaved = store.hasSaved.bind(store);
     this.sandboxes = new SandboxRegistry({ root: this.root });
     this.sessionWork = new SessionWork({
-      store: new MirrorSessionWorkStore(this.repositoryCache),
-      sleepStore: new RemoteHiddenRefSessionWorkStore(),
+      store,
+      sleepStore: options.sessionWorkSleepStore ?? new RemoteHiddenRefSessionWorkStore(),
       logger: this.#logger,
     });
-    this.builds = new LocalEnvironmentBuilds({
-      root: this.root,
-      cache: this.repositoryCache,
-      host: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() }, ...agent }),
-      logger: this.#logger,
-      ...(options.pruneIdleMs !== undefined ? { pruneIdleMs: options.pruneIdleMs } : {}),
-      pruneHiddenRefs: input => this.pruneHiddenRefs(input),
-      pruneKeptRefs: input => this.pruneKeptRefs(input),
-    });
+    if (options.builds === false) {
+      this.builds = undefined;
+    } else {
+      if (!localRepositoriesOf(cache)) {
+        throw new Error(
+          `LocalEnvironmentTemplate: environment builds clone the template copy from a local repository, and the repository cache '${cache.kind}' keeps none; pass builds: false to run without builds`,
+        );
+      }
+      this.builds = new LocalEnvironmentBuilds({
+        root: this.root,
+        cache,
+        host: hostExecutor({ env: { ...options.env, ...this.packageStoreEnv() }, ...agent }),
+        logger: this.#logger,
+        ...(options.pruneIdleMs !== undefined ? { pruneIdleMs: options.pruneIdleMs } : {}),
+        pruneHiddenRefs: input => this.pruneHiddenRefs(input),
+        pruneKeptRefs: input => this.pruneKeptRefs(input),
+      });
+    }
+  }
+
+  /** The cache's local repositories, or a clear error naming what needed them. */
+  #local(who: string): RepositoryCache & LocalRepositories {
+    return requireLocalRepositories(this.repositoryCache, `LocalEnvironmentTemplate.${who}`);
   }
 
   get checkoutServices(): FactorySandboxCheckoutServices {
@@ -242,7 +307,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
 
   /** The checkout as a {@link SessionCheckout}; `undefined` when its origin is missing or carries credentials. */
   async #checkout(dir: string): Promise<SessionCheckout | undefined> {
-    const host = this.repositoryCache.host;
+    const host = this.#host;
     // The configured URL, not `remote get-url`, which applies `insteadOf` rewrites.
     const origin = await runGitIn(host, dir, ['config', '--get', 'remote.origin.url']);
     const cloneUrl = origin.exitCode === 0 ? origin.stdout.trim() : '';
@@ -254,7 +319,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   /** Credentials to publish with: the owner recorded on the checkout, else on its mirror. */
   async #withCredentials(checkout: SessionCheckout): Promise<SessionCheckout> {
     const owner =
-      checkout.owner ?? (await this.repositoryCache.readMeta(this.repositoryCache.mirrorPath(checkout.cloneUrl)))?.owner;
+      checkout.owner ?? (await this.repositoryCache.ownerOf(checkout.cloneUrl));
     if (!owner || !this.#repositoryAccess) throw new Error(`no credentials to publish ${checkout.cloneUrl}: the repository's owner is unknown`);
     const access = await this.#repositoryAccess(owner);
     const token = access.authorization?.token;
@@ -297,7 +362,7 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
   async #visibility(checkout: SessionCheckout): Promise<RepositoryVisibility> {
     if (this.#isPublicRepository) return (await this.#isPublicRepository(checkout)) ? 'public' : 'private';
     const owner =
-      checkout.owner ?? (await this.repositoryCache.readMeta(this.repositoryCache.mirrorPath(checkout.cloneUrl)))?.owner;
+      checkout.owner ?? (await this.repositoryCache.ownerOf(checkout.cloneUrl));
     if (owner && this.#repositoryVisibility) {
       const answer = await this.#repositoryVisibility(owner).catch(() => 'unknown' as const);
       if (answer !== 'unknown') return answer;
@@ -398,12 +463,6 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
     if (snapshot.skipped?.length) {
       this.#logger.warn('files over the size limit were left out of the saved work', { ...context, dir, files: snapshot.skipped });
     }
-  }
-
-  async #hasSaved(checkout: SessionCheckout, branch: string): Promise<boolean> {
-    const mirror = this.repositoryCache.mirrorPath(checkout.cloneUrl);
-    const ref = await runGitIn(checkout.sandbox, mirror, ['rev-parse', '--verify', '--quiet', `refs/factory/wip/heads/${branch}`]);
-    return ref.exitCode === 0;
   }
 
   /**
@@ -584,8 +643,8 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
    * ref guarded by the value it judged; answers the branches it dropped.
    */
   async pruneHiddenRefs(input: { cloneUrl: string; authEnv?: Record<string, string>; retentionMs: number; now?: number }): Promise<string[]> {
-    const host = this.repositoryCache.host;
-    const mirror = this.repositoryCache.mirrorPath(input.cloneUrl);
+    const host = this.#host;
+    const mirror = this.#local('pruneHiddenRefs').localRepositoryPath(input.cloneUrl);
     const now = input.now ?? Date.now();
     const listed = await runGitIn(host, mirror, ['for-each-ref', '--format=%(refname) %(objectname) %(committerdate:unix)', 'refs/factory/origin-wip/heads']);
     if (listed.exitCode !== 0) return [];
@@ -645,8 +704,8 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
    * Answers the refs dropped.
    */
   async pruneKeptRefs(input: { cloneUrl: string; retentionMs: number; now?: number }): Promise<string[]> {
-    const host = this.repositoryCache.host;
-    const mirror = this.repositoryCache.mirrorPath(input.cloneUrl);
+    const host = this.#host;
+    const mirror = this.#local('pruneKeptRefs').localRepositoryPath(input.cloneUrl);
     const now = input.now ?? Date.now();
     const listed = await runGitIn(host, mirror, [
       'for-each-ref',
@@ -678,9 +737,8 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
 
   /** Kept refs past the retention in every mirror (the sweep runs it daily). */
   async pruneKeptRefsEverywhere(retentionMs: number): Promise<void> {
-    for (const mirror of await this.repositoryCache.listMirrors()) {
-      const meta = await this.repositoryCache.readMeta(mirror);
-      if (meta?.cloneUrl) await this.pruneKeptRefs({ cloneUrl: meta.cloneUrl, retentionMs }).catch(() => []);
+    for (const cloneUrl of await this.#local('pruneKeptRefsEverywhere').listLocalRepositories()) {
+      await this.pruneKeptRefs({ cloneUrl, retentionMs }).catch(() => []);
     }
   }
 

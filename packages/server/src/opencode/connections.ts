@@ -24,7 +24,7 @@ import type {
 } from '@factory/integrations';
 import type { CredentialAccount, ModelCredentialsStorage, UsageStorage } from '@factory/store';
 
-import { readAccountUsage } from './usage.ts';
+import { readAccountUsage } from '@factory/api';
 
 /** The connect method: a key from OpenCode's console. */
 const KEY_METHOD = 'api-key';

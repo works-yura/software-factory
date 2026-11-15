@@ -127,6 +127,12 @@ export interface SessionWorkStore {
   keepConflict?(checkout: SessionCheckout, branch: string, tree: string): Promise<string>;
   /** True when this store already sees what the sleep store published, so restore need not ask it. */
   coversPublished?(checkout: Pick<SessionCheckout, 'cloneUrl'>): Promise<boolean>;
+  /**
+   * True when the store holds saved commits for the branch. The local
+   * template's run-end save needs it (a branch already saved keeps being
+   * saved even once the remote holds its tip) and refuses a store without it.
+   */
+  hasSaved?(checkout: SessionCheckout, branch: string): Promise<boolean>;
 }
 
 /** Saves into every store (all must succeed) and loads from the first that has the branch. */
@@ -280,13 +286,12 @@ export class SessionWork {
       const seeded = await runSandboxCommand(sandbox, 'sh', ['-c', 'if [ -f "$1" ]; then cp "$1" "$2"; fi', 'sh', indexPath, scratch]);
       if (seeded.exitCode !== 0) throw new SessionWorkError(`could not copy the index: ${output(seeded)}`);
       const env = { GIT_INDEX_FILE: scratch };
-      const envFiles = await this.#envFilePaths(checkout);
       const large = await this.#largeFiles(checkout);
-      const excluded = [
-        ...SNAPSHOT_SECRET_PATHSPECS,
-        ...envFiles.map(file => `:(literal)${file}`),
-        ...large.map(file => `:(literal)${file}`),
-      ];
+      const named = [...(await this.#envFilePaths(checkout)), ...large];
+      // Ignored files are never added; naming one in an exclude pathspec makes `git add` fail
+      // ("The following paths are ignored"), so only the ones git would add are named.
+      const ignored = await this.#ignoredPaths(checkout, named);
+      const excluded = [...SNAPSHOT_SECRET_PATHSPECS, ...named.filter(file => !ignored.has(file)).map(file => `:(literal)${file}`)];
       await gitOk(sandbox, dir, ['add', '--all', '--', '.', ...excluded.map(spec => spec.replace(/^:\(/, ':(exclude,'))], env);
       // Staged by hand into the real index: put back to the tip, so a secret never rides along.
       await runGitIn(sandbox, dir, ['reset', '--quiet', head, '--', ...excluded], env);
@@ -315,6 +320,14 @@ export class SessionWork {
       .split('\n')
       .map(line => line.trim())
       .filter(Boolean);
+  }
+
+  /** Which of `paths` (relative to the checkout) the checkout's ignore rules leave out. */
+  async #ignoredPaths(checkout: Pick<SessionCheckout, 'sandbox' | 'dir'>, paths: readonly string[]): Promise<Set<string>> {
+    if (!paths.length) return new Set();
+    // Exit 1 just means none is ignored.
+    const result = await runGitIn(checkout.sandbox, checkout.dir, ['check-ignore', '--no-index', '--', ...paths]);
+    return new Set(result.stdout.split('\n').map(line => line.trim()).filter(Boolean));
   }
 
   /** Files over the size limit outside `.git` and `node_modules`, relative paths. */

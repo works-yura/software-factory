@@ -18,6 +18,8 @@ import { factoryMemorySettingsUserId } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { createHarnessModelRegistry } from '@factory/harness/models/registry';
 import { codexStubModels } from '@factory/harness/models/registry.testFixtures';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, MASTRA_HARNESS, OPENCODE_HARNESS } from '@factory/contracts';
+import type { HarnessApiModule } from './harness-modules.ts';
 import type { FactoryStorageTestSeed } from '@factory/testing';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
@@ -39,6 +41,35 @@ function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): 
 
 function makeAgentController(models: { provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }[]) {
   return { listAvailableModels: async () => models.map(model => ({ modelName: `${model.provider}-model`, ...model })) };
+}
+
+/** The harness modules as a server that runs these passes them (each built-in module's flags, ADR-0044). */
+function harnessModules(running: {
+  claudeCode?: boolean;
+  claudeSignIn?: boolean;
+  codex?: boolean;
+  codexSignIn?: boolean;
+  opencode?: boolean;
+  opencodeLocalSessions?: boolean;
+}): HarnessApiModule[] {
+  return [
+    { descriptor: MASTRA_HARNESS, running: {} },
+    {
+      descriptor: CLAUDE_CODE_HARNESS,
+      featureFlags: ['claudeCode', 'claudeSignIn'],
+      ...(running.claudeCode ? { running: { features: { claudeCode: true, claudeSignIn: running.claudeSignIn === true } } } : {}),
+    },
+    {
+      descriptor: CODEX_HARNESS,
+      featureFlags: ['codex', 'codexSignIn'],
+      ...(running.codex ? { running: { features: { codex: true, codexSignIn: running.codexSignIn === true } } } : {}),
+    },
+    {
+      descriptor: OPENCODE_HARNESS,
+      featureFlags: ['opencodeLocalSessions'],
+      ...(running.opencode ? { running: { features: { opencodeLocalSessions: running.opencodeLocalSessions === true } } } : {}),
+    },
+  ];
 }
 
 describe('GET /web/config/features', () => {
@@ -102,7 +133,16 @@ describe('GET /web/config/features', () => {
       new ConfigRoutes({
         auth: fakeRouteAuth({ enabled: false }),
         controller: makeAgentController([]),
-        features,
+        ...(features
+          ? {
+              features: {
+                knowledge: features.knowledge,
+                ...('mcp' in features ? { mcp: features.mcp } : {}),
+                ...('device' in features ? { device: features.device } : {}),
+              },
+            }
+          : {}),
+        harnesses: harnessModules(features ?? {}),
       }).routes(),
     );
 
@@ -128,7 +168,8 @@ describe('GET /web/config/features', () => {
       new ConfigRoutes({
         auth: fakeRouteAuth({ enabled: false }),
         controller: makeAgentController([]),
-        features: { knowledge: true, claudeCode: true },
+        features: { knowledge: true },
+        harnesses: harnessModules({ claudeCode: true }),
       }).routes(),
     );
     const { harnesses } = (await (await app.request('/web/config/features')).json()) as {
