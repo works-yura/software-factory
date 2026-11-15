@@ -135,20 +135,16 @@ function AccountMenu({ factoryId, account }: { factoryId: string; account: Facto
           <DropdownMenu.Trigger
             id={TRIGGER_ID}
             render={<button type="button" />}
+            className="has-[[data-slot=sidebar-nav-description]]:items-center"
             aria-label={t('account.menuFor', { name: triggerName })}
           >
             <Avatar src={triggerImage} name={triggerName} size="inline" />
-            <Sidebar.NavLabel>
-              <span className="flex min-w-0 flex-col text-left">
-                <Txt as="span" variant="label" tone="ink" className="truncate">
-                  {triggerName}
-                </Txt>
-                {triggerSubtitle ? (
-                  <Txt as="span" variant="caption" tone="muted" className="truncate">
-                    {triggerSubtitle}
-                  </Txt>
-                ) : null}
-              </span>
+            {/* `description` grows the row to hold the second line, with the row's own padding;
+                the switcher centres its avatar and chevron on both lines, like Mastra's. */}
+            <Sidebar.NavLabel description={triggerSubtitle || undefined}>
+              <Txt as="span" variant="label" tone="ink">
+                {triggerName}
+              </Txt>
             </Sidebar.NavLabel>
             {sidebarState !== 'collapsed' && <ChevronsUpDown aria-hidden="true" className="ml-auto" />}
           </DropdownMenu.Trigger>
