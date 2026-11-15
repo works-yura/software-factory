@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@factory/api": "workspace:*",
+    "@factory/assistant-ui": "workspace:*",
     "@factory/auth": "workspace:*",
     "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",

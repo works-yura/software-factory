@@ -46,6 +46,12 @@ export const server = setupServer(
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   http.get('*/web/status', () => HttpResponse.json({ problems: [] })),
+  // Ambient assistant (ADR-0051): an empty desk, nothing allowed yet. Assistant tests override these.
+  http.get('*/web/assistant/requests', () => HttpResponse.json({ requests: [] })),
+  http.get('*/web/assistant/notes', () => HttpResponse.json({ notes: [] })),
+  http.get('*/web/assistant/settings', () => HttpResponse.json({ settings: { modelId: null, retentionDays: 30 } })),
+  http.get('*/web/assistant/models', () => HttpResponse.json({ models: [] })),
+  http.get('*/web/assistant/factories', () => HttpResponse.json({ connected: false, pending: false, factories: [] })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),

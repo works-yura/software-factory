@@ -23,7 +23,7 @@ export default defineConfig({
   root: pkgRoot,
   plugins: [react()],
   resolve: {
-    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+    dedupe: ['react', 'react-dom', '@tanstack/react-query', 'i18next', 'react-i18next'],
   },
   test: {
     name: 'msw:factory-ui',

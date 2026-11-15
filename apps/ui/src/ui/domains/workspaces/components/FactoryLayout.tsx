@@ -19,6 +19,11 @@ export function useActiveFactory(): FactoryProject {
   return factory;
 }
 
+/** The routed factory, or `null` outside a factory's pages (overlays that show everywhere). */
+export function useOptionalActiveFactory(): FactoryProject | null {
+  return useContext(ActiveFactoryContext);
+}
+
 /**
  * Route element for `factories/:factoryId`. Validates the route param against
  * the factories list; the URL is the single source of truth for the active factory.
