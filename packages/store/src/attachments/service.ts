@@ -58,7 +58,15 @@ export class AttachmentService {
   readonly blobs: AttachmentBlobStore;
   readonly maxBytes: number;
 
-  constructor(options: { records: AttachmentsStorage; blobs: AttachmentBlobStore; maxBytes?: number }) {
+  /** Others naming bytes in the same blob store (the assistant's files, ADR-0051): a blob goes only once none does. */
+  readonly #otherReferences: ReadonlyArray<(sha256: string) => Promise<boolean>>;
+
+  constructor(options: {
+    records: AttachmentsStorage;
+    blobs: AttachmentBlobStore;
+    maxBytes?: number;
+    otherReferences?: ReadonlyArray<(sha256: string) => Promise<boolean>>;
+  }) {
     const maxBytes = options.maxBytes ?? DEFAULT_ATTACHMENT_MAX_BYTES;
     if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
       throw new Error(`Attachment size limit must be a positive integer of bytes, got ${maxBytes}.`);
@@ -66,6 +74,7 @@ export class AttachmentService {
     this.records = options.records;
     this.blobs = options.blobs;
     this.maxBytes = maxBytes;
+    this.#otherReferences = options.otherReferences ?? [];
   }
 
   /** Stores the bytes (rejecting past `maxBytes`) and records the attachment. */
@@ -114,6 +123,8 @@ export class AttachmentService {
   }
 
   async #dropBlobIfUnreferenced(sha256: string): Promise<void> {
-    if (!(await this.records.isBlobReferenced(sha256))) await this.blobs.delete(sha256);
+    if (await this.records.isBlobReferenced(sha256)) return;
+    for (const referenced of this.#otherReferences) if (await referenced(sha256)) return;
+    await this.blobs.delete(sha256);
   }
 }

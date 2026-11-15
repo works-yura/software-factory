@@ -276,7 +276,7 @@ export default defineConfig(({ mode }) => {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single
       // copy from here.
-      dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+      dedupe: ['react', 'react-dom', '@tanstack/react-query', 'i18next', 'react-i18next'],
     },
     build: {
       outDir: process.env.MASTRACODE_OUT_DIR ?? resolve(here, '../dist'),

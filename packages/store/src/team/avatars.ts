@@ -61,6 +61,11 @@ export class AvatarsStorage extends FactoryStorageDomain implements AvatarStore 
     return { id: row.id };
   }
 
+  /** Whether an avatar names these bytes (others sharing the blob store keep them while one does). */
+  async isBlobReferenced(sha256: string): Promise<boolean> {
+    return (await this.ops.findOne('factory_avatars', { sha256 })) !== null;
+  }
+
   async get(id: string): Promise<{ type: AvatarType; bytes: Uint8Array } | null> {
     if (!/^[0-9a-f-]{36}$/.test(id)) return null;
     const row = await this.ops.findOne<AvatarDbRow>('factory_avatars', { id });

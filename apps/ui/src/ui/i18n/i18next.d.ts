@@ -3,6 +3,7 @@ import 'i18next';
 import type activity from './locales/en/activity.json';
 import type analytics from './locales/en/analytics.json';
 import type app from './locales/en/app.json';
+import type assistant from './locales/en/assistant.json';
 import type auth from './locales/en/auth.json';
 import type board from './locales/en/board.json';
 import type boards from './locales/en/boards.json';
@@ -25,6 +26,7 @@ declare module 'i18next' {
       activity: typeof activity;
       analytics: typeof analytics;
       app: typeof app;
+      assistant: typeof assistant;
       auth: typeof auth;
       board: typeof board;
       boards: typeof boards;

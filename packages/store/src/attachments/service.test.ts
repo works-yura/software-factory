@@ -12,7 +12,7 @@ import { attachmentSandboxPath, AttachmentService } from './service.ts';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
-async function makeService(maxBytes?: number) {
+async function makeService(maxBytes?: number, otherReferences?: ReadonlyArray<(sha256: string) => Promise<boolean>>) {
   const root = await mkdtemp(join(tmpdir(), 'factory-attachments-'));
   onTestFinished(() => rm(root, { recursive: true, force: true }));
   const blobs = new LocalFileBlobStore({ root });
@@ -21,7 +21,11 @@ async function makeService(maxBytes?: number) {
   const records = storage.registerDomain(new AttachmentsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
-  return { service: new AttachmentService({ records, blobs, ...(maxBytes ? { maxBytes } : {}) }), blobs, records };
+  return {
+    service: new AttachmentService({ records, blobs, ...(maxBytes ? { maxBytes } : {}), ...(otherReferences ? { otherReferences } : {}) }),
+    blobs,
+    records,
+  };
 }
 
 const card = { workItemId: 'card-1', factoryProjectId: 'project-1' };
@@ -56,6 +60,20 @@ describe('AttachmentService', () => {
     expect(await blobs.head(first.sha256)).not.toBeNull();
     await service.remove({ orgId: 'org-1', id: second.id });
     expect(await blobs.head(first.sha256)).toBeNull();
+  });
+
+  it('keeps bytes another owner of the blob store still names (the assistant’s files)', async () => {
+    const named = new Set<string>();
+    const { service, blobs } = await makeService(undefined, [async sha256 => named.has(sha256)]);
+    const record = await service.ingest({ orgId: 'org-1', owner: card, name: 'a.png', body: PNG, source: 'upload', addedBy: 'u' });
+    named.add(record.sha256);
+    await service.remove({ orgId: 'org-1', id: record.id });
+    expect(await blobs.head(record.sha256)).not.toBeNull();
+
+    const again = await service.ingest({ orgId: 'org-1', owner: card, name: 'a.png', body: PNG, source: 'upload', addedBy: 'u' });
+    named.clear();
+    await service.remove({ orgId: 'org-1', id: again.id });
+    expect(await blobs.head(record.sha256)).toBeNull();
   });
 
   it('keeps nothing when a file is over the limit', async () => {

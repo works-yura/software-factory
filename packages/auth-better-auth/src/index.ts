@@ -278,6 +278,17 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
       // `overrideUserInfoOnSignIn` stays off).
       accountLinking: { enabled: true, trustedProviders: ['google'], updateUserInfoOnLink: true },
     },
+    // Factory has no account deletion yet (better-auth's `deleteUser` stays off); whatever deletes a
+    // user row through better-auth reaches the relay, which erases what was only theirs (ADR-0051).
+    databaseHooks: {
+      user: {
+        delete: {
+          after: async user => {
+            await events.userDeleted(user.id);
+          },
+        },
+      },
+    },
     hooks: {
       ...(config.publicUrl ? { before: loopbackClientsAreNative } : {}),
       // Role changes, removals, invitations and organization edits go to the audit log.
@@ -553,6 +564,16 @@ export class MastraAuthBetterAuth
    */
   setOrganizationEventHandler(handler: OrganizationEventHandler | undefined): void {
     this.#events.setHandler(handler);
+  }
+
+  /** Called once a person left or was removed from an organization (after better-auth removed the membership). */
+  onMemberRemoved(listener: (organizationId: string, userId: string) => Promise<void>): void {
+    this.#events.onMemberRemoved(listener);
+  }
+
+  /** Called once a person's account was deleted through better-auth. */
+  onUserDeleted(listener: (userId: string) => Promise<void>): void {
+    this.#events.onUserDeleted(listener);
   }
 
   /**
@@ -955,6 +976,7 @@ export class MastraAuthBetterAuth
     if (row.role === OWNER_ROLE) throw new Error('The owner cannot be removed.');
     await ctx.adapter.delete({ model: 'member', where: [{ field: 'id', value: memberId }] });
     this.#events.membershipChanged(organizationId, row.userId);
+    await this.#events.memberRemoved(organizationId, row.userId);
   }
 
   async leave(organizationId: string, userId: string): Promise<void> {
@@ -964,6 +986,7 @@ export class MastraAuthBetterAuth
     if (row.role === OWNER_ROLE) throw new Error('The owner cannot leave their organization.');
     await ctx.adapter.delete({ model: 'member', where: [{ field: 'id', value: row.id }] });
     this.#events.membershipChanged(organizationId, userId);
+    await this.#events.memberRemoved(organizationId, userId);
   }
 
   async person(userId: string): Promise<Person | null> {

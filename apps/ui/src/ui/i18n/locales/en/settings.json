@@ -518,6 +518,10 @@
       "device": "{{browser}} on {{os}}",
       "count_one": "{{count}} session",
       "count_other": "{{count}} sessions"
+    },
+    "assistant": {
+      "title": "Assistant",
+      "description": "Your own requests desk in this organization: what colleagues and clients send you, sorted by an assistant that reports only to you. Factories and admins do not see it."
     }
   },
   "panel": {

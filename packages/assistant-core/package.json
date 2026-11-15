@@ -1,0 +1,32 @@
+{
+  "name": "@factory/assistant-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "«Помічник» (ADR-0051): a person's requests desk in an organization — requests, threads, notes, settings, files, the per-person agent, Factory reached only through its MCP with the person's own OAuth grant, and cleanup.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/http": "workspace:*",
+    "@mastra/core": "1.83.0",
+    "@mastra/memory": "1.41.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "hono": "4.13.13",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@factory/access": "workspace:*",
+    "@factory/auth": "workspace:*",
+    "@factory/auth-better-auth": "workspace:*",
+    "@mastra/libsql": "1.30.0",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
