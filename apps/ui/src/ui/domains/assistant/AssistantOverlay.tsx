@@ -1,4 +1,4 @@
-import { AssistantApiProvider, AssistantLauncher, AssistantSettings } from '@factory/assistant-ui';
+import { AssistantApiProvider, AssistantLauncher, AssistantSettings, AssistantSources } from '@factory/assistant-ui';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../api/config';
@@ -25,6 +25,15 @@ export function AssistantOverlay({ factory }: { factory?: { id: string; name: st
   return (
     <AssistantApi>
       <AssistantLauncher {...(factory ? { hint: factory } : {})} />
+    </AssistantApi>
+  );
+}
+
+/** Account › «Помічник» › «Джерела»: the person's own source connections (ClickUp Chat), invisible to Factories. */
+export function AssistantAccountSources() {
+  return (
+    <AssistantApi>
+      <AssistantSources />
     </AssistantApi>
   );
 }
