@@ -121,6 +121,13 @@ export class McpFactoryClient implements FactoryClient {
     const started = await this.#callTool(owner, input.factoryId, 'factory_start_session', {
       prompt: input.question,
       ...(input.title ? { title: input.title } : {}),
+    }).catch(error => {
+      // The endpoint hides the tool from a person's client while the Factory has nowhere to file a
+      // side session (no repository): ADR-0051 (д) is not there yet. Say so instead of "unknown tool".
+      if (error instanceof Error && /factory_start_session/.test(error.message) && /not found|unknown/i.test(error.message)) {
+        throw new Error('This Factory cannot take questions from the assistant yet: it has no repository to start a side session in.');
+      }
+      throw error;
     });
     const sessionId = typeof started.sessionId === 'string' ? started.sessionId : undefined;
     if (!sessionId) throw new Error('Factory started no session for the question.');

@@ -21,10 +21,11 @@ let uploads: Array<{ workItemId: string; name: string; type: string | undefined;
 let started: Array<{ prompt: string; title?: string }>;
 let threadItems: Array<Record<string, unknown>>;
 let client: McpFactoryClient;
+let withoutRepository: boolean;
 
 function mcpServer() {
   const server = new McpServer({ name: 'Factory', version: '1.0.0' });
-  server.registerTool(
+  if (!withoutRepository) server.registerTool(
     'factory_start_session',
     { inputSchema: { prompt: z.string(), title: z.string().optional() } },
     async input => {
@@ -55,6 +56,7 @@ beforeEach(() => {
   uploads = [];
   started = [];
   threadItems = [];
+  withoutRepository = false;
   const app = new Hono();
   app.use('*', async (c, next) => {
     seen.push({ path: c.req.path, authorization: c.req.header('authorization'), org: c.req.header('x-mastra-organization-id') });
@@ -121,6 +123,13 @@ describe('Factory over MCP, as the person', () => {
       'Your role cannot file work items.',
     );
     await expect(client.ask(ADA, { factoryId: 'missing', question: 'x', title: 'x' })).rejects.toThrow(/not one you can reach/);
+  });
+});
+
+describe('a Factory without a repository', () => {
+  it('says it cannot take questions yet, instead of an unknown tool', async () => {
+    withoutRepository = true;
+    await expect(client.ask(ADA, { factoryId: 'f-1', question: 'Why?', title: 'x' })).rejects.toThrow(/has no repository/);
   });
 });
 
