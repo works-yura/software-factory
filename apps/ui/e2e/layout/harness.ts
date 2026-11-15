@@ -53,35 +53,90 @@ export function screenshotPath(testInfo: TestInfo, name: string): string {
 }
 
 /**
- * The page never scrolls sideways and no visible element ends past the viewport's right edge
- * (fixed overlays and elements inside a horizontal scroller excepted: those scroll on purpose).
+ * The page never scrolls sideways: the document is no wider than the viewport, no visible element
+ * ends past the viewport's right edge, and no inner scroller (the settings pane, a card) scrolls
+ * sideways either. Fixed overlays are left out; so are scrollers that scroll sideways on purpose
+ * (`pre`, code views, tab strips, anything marked `data-scroll-x`, and tables below 640 px).
  */
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   const result = await page.evaluate(() => {
     const viewport = window.innerWidth;
-    const scrollsSideways = (element: Element | null): boolean => {
-      for (let node = element?.parentElement; node && node !== document.body; node = node.parentElement) {
-        const style = getComputedStyle(node);
-        if ((style.overflowX === 'auto' || style.overflowX === 'scroll' || style.overflowX === 'hidden' || style.overflowX === 'clip') && node.scrollWidth > node.clientWidth) return true;
-        if (style.position === 'fixed') return true;
+    const describe = (element: Element) => {
+      const label = (element.getAttribute('data-slot') ?? element.getAttribute('aria-label') ?? element.textContent ?? '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .slice(0, 60);
+      return `<${element.tagName.toLowerCase()} class="${element.className.toString().slice(0, 60)}"> "${label}"`;
+    };
+    // Tab strips scroll on purpose; a table may scroll sideways on a phone, never wider.
+    const intendedSelector = [
+      'pre',
+      '.cm-editor',
+      '[data-scroll-x]',
+      '[data-slot="tabs-list-scroll"]',
+      ...(viewport < 640 ? ['table', '[role="table"]', '[role="grid"]', '[data-slot="table-scroll"]'] : []),
+    ].join(', ');
+    const intended = (element: Element) => element.closest(intendedSelector) !== null;
+    const inFixed = (element: Element) => {
+      for (let node: Element | null = element; node && node !== document.body; node = node.parentElement) {
+        if (getComputedStyle(node).position === 'fixed') return true;
       }
       return false;
     };
-    const offenders: string[] = [];
+    // Text cut with an ellipsis (`truncate`) may run past its box on purpose; anything else a
+    // clipping ancestor hides past the viewport's edge is content the person cannot reach.
+    const ellipsized = (element: Element) => {
+      for (let node: Element | null = element; node && node !== document.body; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.overflowX === 'hidden' || style.overflowX === 'clip') return style.textOverflow === 'ellipsis';
+      }
+      return false;
+    };
+    const pastEdge: string[] = [];
+    const sideways: string[] = [];
     for (const element of document.querySelectorAll<HTMLElement>('body *')) {
-      const rect = element.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0 || rect.right <= viewport + 1) continue;
       const style = getComputedStyle(element);
-      if (style.visibility === 'hidden' || style.position === 'fixed') continue;
-      if (scrollsSideways(element)) continue;
-      const label = (element.getAttribute('data-slot') ?? element.getAttribute('aria-label') ?? element.textContent ?? '').trim().slice(0, 60);
-      offenders.push(`<${element.tagName.toLowerCase()}> right=${Math.round(rect.right)} "${label}"`);
-      if (offenders.length >= 8) break;
+      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (inFixed(element) || intended(element)) continue;
+      if (rect.right > viewport + 1 && !ellipsized(element) && pastEdge.length < 8) {
+        pastEdge.push(`${describe(element)} right=${Math.round(rect.right)}`);
+      }
+      if (
+        (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+        element.scrollWidth > element.clientWidth + 1 &&
+        sideways.length < 8
+      ) {
+        sideways.push(`${describe(element)} scrollWidth=${element.scrollWidth} clientWidth=${element.clientWidth}`);
+      }
     }
-    return { scrollWidth: document.documentElement.scrollWidth, viewport, offenders };
+    return { scrollWidth: document.documentElement.scrollWidth, viewport, pastEdge, sideways };
   });
-  expect(result.offenders, `elements past the right edge (${result.viewport}px):\n${result.offenders.join('\n')}`).toEqual([]);
+  expect(result.pastEdge, `elements past the right edge (${result.viewport}px):\n${result.pastEdge.join('\n')}`).toEqual([]);
+  expect(result.sideways, `inner scrollers that scroll sideways:\n${result.sideways.join('\n')}`).toEqual([]);
   expect(result.scrollWidth, 'document scrolls sideways').toBeLessThanOrEqual(result.viewport);
+}
+
+/**
+ * A screenshot of the whole page: the app scrolls inside its own pane (not the document), so the
+ * viewport is made as tall as the tallest vertical scroller's content first, then put back.
+ */
+async function screenshotWhole(page: Page, file: string): Promise<void> {
+  const viewport = page.viewportSize();
+  const extra = await page.evaluate(() => {
+    let most = 0;
+    for (const element of document.querySelectorAll<HTMLElement>('body *')) {
+      const overflow = getComputedStyle(element).overflowY;
+      if ((overflow === 'auto' || overflow === 'scroll') && element.scrollHeight > element.clientHeight) {
+        most = Math.max(most, element.scrollHeight - element.clientHeight);
+      }
+    }
+    return most;
+  });
+  if (viewport && extra > 0) await page.setViewportSize({ width: viewport.width, height: Math.min(viewport.height + extra, 12_000) });
+  await page.screenshot({ path: file, fullPage: true });
+  if (viewport && extra > 0) await page.setViewportSize(viewport);
 }
 
 /**
@@ -114,7 +169,7 @@ export async function checkPage(
   await page.waitForLoadState('networkidle');
   // Skeletons and fade-ins settle before the picture is taken.
   await page.waitForTimeout(300);
-  await page.screenshot({ path: screenshotPath(testInfo, name), fullPage: true });
+  await screenshotWhole(page, screenshotPath(testInfo, name));
   if (unhandled.length > 0) {
     const calls = [...new Set(unhandled)].join(', ');
     testInfo.annotations.push({ type: 'unmocked', description: calls });

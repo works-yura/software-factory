@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import type { RequestHandler } from 'msw';
 
 import { DEFAULT_CONNECTION_PERMISSIONS } from '@factory/contracts/connections';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, MASTRA_HARNESS } from '@factory/contracts/harnesses';
 import type { ConnectionView, ConnectorView } from '@factory/contracts';
 
 import { customProvidersResponse } from '../../../src/hooks/__tests__/fixtures/custom-providers';
@@ -282,7 +283,7 @@ export function settingsHandlers(): RequestHandler[] {
       }),
     ),
     http.get('*/web/factory/projects/fp-1', () =>
-      HttpResponse.json({ project: { id: 'fp-1', name: 'bookfate', harness: 'mastra', createdAt: NOW, updatedAt: NOW } }),
+      HttpResponse.json({ project: { id: 'fp-1', name: 'bookfate', harness: 'mastra', agentLanguage: 'uk', createdAt: NOW, updatedAt: NOW } }),
     ),
     http.get('*/web/factory/projects/fp-1/sessions', () => HttpResponse.json({ sessions: [] })),
     // No chat session for the Factory yet; its tool permissions are the defaults.
@@ -297,6 +298,9 @@ export function settingsHandlers(): RequestHandler[] {
       ]),
     ),
     http.get('*/web/org/join-links', () => HttpResponse.json({ joinLinks })),
+    http.get('*/web/config/features', () =>
+      HttpResponse.json({ knowledge: false, mcp: true, harnesses: [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS] }),
+    ),
     http.get('*/web/factory/projects/fp-1/intake-routes', () => HttpResponse.json({ intakeRoutes, canEdit: true })),
     http.get('*/web/connections', () =>
       HttpResponse.json({ connections: [githubConnection, sentryConnection], failures: [], copy: { organizationWide: 'Whole organization' } }),
@@ -309,7 +313,7 @@ export function settingsHandlers(): RequestHandler[] {
     http.get('*/web/github/pat', () => HttpResponse.json({ configured: true, reviewerConfigured: false })),
     http.get('*/web/factory/projects/fp-1/metrics', () => HttpResponse.json({ metrics })),
     http.get('*/web/usage/summary', () => HttpResponse.json(usageSummary)),
-    http.get('*/web/factory/projects/fp-1/environment', () => HttpResponse.json(environmentPayload())),
+    http.get('*/web/factory/projects/fp-1/environment', () => HttpResponse.json({ environment: environmentPayload() })),
     http.get('*/web/intake/config', () =>
       HttpResponse.json({
         config: { github: { enabled: true, sourceIds: null }, gitlab: { enabled: false, sourceIds: null }, clickup: { enabled: true, sourceIds: null } },
