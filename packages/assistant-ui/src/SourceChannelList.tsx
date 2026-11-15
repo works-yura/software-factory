@@ -100,11 +100,34 @@ function ModeSelect({ channel }: { channel: SourceChannel }) {
   );
 }
 
+/** Why ClickUp would not describe the chat (newer servers send it): its people, its path, its followers. */
+type DetailsError = { what: 'members' | 'path' | 'followers'; code: string };
+
+function detailsErrorOf(channel: SourceChannel): DetailsError | null {
+  return (channel as SourceChannel & { detailsError?: DetailsError | null }).detailsError ?? null;
+}
+
+/** The failed lookup, said on the second line instead of a silent blank. */
+function useDetailsFailure(channel: SourceChannel): string | null {
+  const { t } = useTranslation('assistant');
+  const failure = detailsErrorOf(channel);
+  if (!failure) return null;
+  if (failure.what === 'members') {
+    return t('sources.detailsFailed.members', { code: failure.code });
+  }
+  if (failure.what === 'path') {
+    return t('sources.detailsFailed.path', { code: failure.code });
+  }
+  return t('sources.detailsFailed.followers', { code: failure.code });
+}
+
 function ChannelItem({ channel }: { channel: SourceChannel }) {
   const { t } = useTranslation('assistant');
   const path = pathOf(channel);
+  const failure = useDetailsFailure(channel);
   const details = [
     t(`sources.kind.${kindKey(channel)}`),
+    ...(failure ? [failure] : []),
     ...(path ? [path] : []),
     ...(channel.visibility === 'PRIVATE' ? [t('sources.private')] : []),
     ...(channel.mode !== 'ignore' ? [t('sources.lastSync', { when: when(channel.lastSyncAt, t('sources.never')) })] : []),

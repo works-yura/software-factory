@@ -131,6 +131,16 @@ describe('/web/assistant routes', () => {
     expect((await json('/web/assistant/requests', 'POST', { text: 'hi' }, {})).status).toBe(401);
   });
 
+  it('list the organization’s models grouped, with the flat pickable list and the default with why', async () => {
+    const body = (await (await call('/web/assistant/models', { who: as('ada') })).json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      models: [{ id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5', free: false, groupId: 'mastra/anthropic' }],
+      groups: [{ id: 'mastra/anthropic', credential: 'api_key', availability: { state: 'ready' }, models: [{ selectable: true }] }],
+      default: { modelId: 'anthropic/claude-sonnet-4-5', source: 'factory_default' },
+      defaultReason: 'Test default.',
+    });
+  });
+
   it('keep notes and settings per person', async () => {
     const note = await json('/web/assistant/notes', 'POST', { text: 'call Olena' }, as('ada'));
     const { note: created } = (await note.json()) as { note: { id: string } };

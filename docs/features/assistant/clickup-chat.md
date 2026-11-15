@@ -41,10 +41,12 @@
   - Зберігається конвертом `secret-encryption` у `assistant_source_connections`, власник `(orgId, userId)`.
   - Жоден маршрут токена не повертає.
 - **Канали.** Канали, DM і групові DM усіх workspaces токена. Список оновлюється раз на годину і за кнопкою «Прочитати зараз».
-  - **Як у сайдбарі ClickUp.** Список читається двічі: усі канали, а потім `is_follower=true`, тобто те, що людина бачить у своєму сайдбарі. Типово показано лише сайдбар (канали, за якими людина стежить, і DM, які вона не сховала, `is_hidden`). Решта схована під «Показати всі (N)», а пошук шукає по всіх.
-  - **DM** API віддає без назви, тому імена людей беремо з `…/channels/{id}/members` (самої людини там немає), а аватар — з `profilePicture` учасника workspace. Груповий DM називається іменами учасників через кому.
+  - **Як у сайдбарі ClickUp.** Список читається двічі: усі канали (без `is_follower` — це фільтр, типово `false`; невідомі параметри ClickUp мовчки ігнорує, [див. відповідь ClickUp](https://feedback.clickup.com/public-api/p/clickup-chat-api-v3-channel-filtering-issue)), а потім `is_follower=true`. Крім того, для кожного каналу `…/channels/{id}/followers` ([getchatchannelfollowers](https://developer.clickup.com/reference/getchatchannelfollowers)): канал у сайдбарі, якщо його дав фільтр **або** людина є серед followers. Обидва джерела видно окремо в діагностиці. Рядки, збережені до того, як з'явилися ці факти (`following` = null), перечитуються на найближчому опитуванні, а не через годину. Типово показано лише сайдбар (канали, за якими людина стежить, і DM, які вона не сховала, `is_hidden`). Решта схована під «Показати всі (N)», а пошук шукає по всіх.
+  - **DM**: живий `name` — буквально «DM», тож імена людей беремо з `…/channels/{id}/members` (самої людини там немає), а аватар — з `profilePicture` учасника workspace. Обов'язкові в `ChatSimpleUser` лише `id` і `email` ([getchatchannelmembers](https://developer.clickup.com/reference/getchatchannelmembers)), тому ім'я без `name`/`username` береться з учасників v2 `/team`; приймаються також голі id і `{user:{…}}`. Груповий DM називається іменами учасників через кому.
   - **Канали розташувань.** Канали Space, Folder чи List мають `parent {id, type}`, де 4 — Space, 5 — Folder, 6 — List (так типи нумерує Docs API ClickUp; специфікація чату каже лише «number», на живих даних не перевірено). Шлях «Простір › Папка › Список» беремо з v2 `GET /list|folder|space/{id}`; приховану папку списку без папки пропускаємо. Тому однакові «#Bugs» різняться другим рядком і позначкою «Канал списку / папки / простору».
-  - **Ліміт.** Імена й шляхи беремо до `detailsPerListing` (15) викликів за одне читання списку, починаючи з сайдбару. Результат зберігається й оновлюється раз на добу.
+  - **Ліміт.** Людей, followers і шляхи беремо до `detailsPerListing` (15) каналів за **кожне** опитування (не лише при читанні списку): спершу ще не описані, потім сайдбар. Вдалий результат оновлюється раз на добу.
+  - **Невдача видима.** Якщо ClickUp не дав людей / шлях / followers (код HTTP, мережева причина або `empty`), код зберігається в `details_error` і рядок у налаштуваннях каже «Не вдалося отримати учасників (код 403)». Спроба повторюється через `detailsRetryMs` (10 хв).
+  - **Мережа.** `fetch failed` повторюється двічі з паузою 0,5 с і 1 с (так само 5xx). Якщо не вдалося, помилка — `ClickUp could not be reached (ECONNRESET) after 3 tries.` з `err.cause.code`.
   - «Усі DM: …» ставить один режим усім DM і груповим DM: `PUT /web/assistant/sources/clickup/dms {mode}`.
   - Типовий режим нового каналу — «вимкнено», DM і групового DM — «коли звертаються».
   - Режим людини зберігається; канал, який зник, позначається, а не видаляється.
@@ -98,6 +100,13 @@
 - `PUT …/channels/:workspaceId/:channelId {mode?, rule?}` — змінити режим і/або правило для нового звернення (фаза 3: `analyse` / `analyse_and_ask:<factoryId>` / `digest_only`, див. [design.md](design.md#фаза-3-інструменти-правила-дайджести)).
 
 Кожен запис — `self.write`.
+
+`GET /web/assistant/sources/clickup/diagnostics` — лише про власне підключення того, хто питає (інша людина чи інша організація отримує 409 `not_connected`). Відповідь `{ diagnostics: { connection, channels, lastRead } }`:
+
+- `channels` — лічильники зі збереженого списку: за типом, `followingByFilter` (фільтр `is_follower`), `followerByEndpoint` (`…/followers`), `inSidebar`, `dmsWithPeople` / `dmsWithoutPeople` / `dmsWithUnnamedPeople`, `locationsWithPath`, `neverDescribed`, `lookupFailures` за кодом (`members:403`…);
+- `lastRead` — останнє читання (`connect` / `poll` / `read`): по кожному виклику `endpoint` (без id), `status` (0 — мережа), `attempts`, `errorCode`, `count`, `nextCursor`, `keys`, `itemKeys`, `itemKinds`, `enums` (лише `type`, `visibility`, `parent.type`, `is_hidden`, `archived`, `channel_type`… і шаблони `links.*` з `{id}`).
+
+Імен, email, id, тексту повідомлень і токена там немає. Ті самі рядки (крім читання повідомлень) пишуться в лог як `[assistant] clickup.call {…}`, невдалі описи — `[assistant] clickup.details {…}`.
 
 ## UI
 

@@ -72,7 +72,11 @@ export const SOURCE_SCHEMAS: CollectionSchema[] = [
       // Looked up once (and again after a day): the location's names, outermost first; a DM's other people.
       location_path: { type: 'json', nullable: true },
       members: { type: 'json', nullable: true },
+      // The person is among the channel's followers (`…/followers`), as looked up; `null` until then.
+      follower: { type: 'boolean', nullable: true },
       details_at: { type: 'timestamp', nullable: true },
+      // Why the last lookup failed (`members:404`, `path:ECONNRESET` …); `null` when it worked.
+      details_error: { type: 'text', nullable: true },
       // Epoch ms of the newest top-level message taken; `null` until the first read after enabling.
       cursor_at: { type: 'bigint', nullable: true },
       last_sync_at: { type: 'timestamp', nullable: true },
@@ -133,6 +137,8 @@ export interface ChannelFacts {
   location: { kind: ChannelLocationKind; id: string } | null;
 }
 
+export type DetailsWhat = 'members' | 'path' | 'followers';
+
 export interface SourceConnection {
   owner: AssistantOwner;
   secret: string;
@@ -159,7 +165,13 @@ export interface SourceChannel {
   location: { kind: ChannelLocationKind; id: string; path: string[] | null } | null;
   /** A DM's or group DM's other people, once looked up; `null` until then. */
   members: ChannelMember[] | null;
+  /** The person is among the channel's followers (`…/followers`); `null` until looked up. */
+  follower: boolean | null;
+  /** Whether the listing ever said if the person follows it (`following` was stored); `false` on rows from before. */
+  factsKnown: boolean;
   detailsAt: Date | null;
+  /** Why the last lookup failed: `{ what: 'members' | 'path' | 'followers', code }`; `null` when it worked. */
+  detailsError: { what: DetailsWhat; code: string } | null;
   cursorAt: number | null;
   lastSyncAt: Date | null;
   lastError: string | null;
@@ -204,7 +216,9 @@ interface ChannelRow extends Record<string, unknown> {
   location_id: string | null;
   location_path: string[] | null;
   members: ChannelMember[] | null;
+  follower?: unknown;
   details_at: Date | null;
+  details_error?: string | null;
   cursor_at: number | string | null;
   last_sync_at: Date | null;
   last_error: string | null;
@@ -245,6 +259,12 @@ function toConnection(row: ConnectionRow): SourceConnection {
   };
 }
 
+function parseDetailsError(value: unknown): SourceChannel['detailsError'] {
+  if (typeof value !== 'string') return null;
+  const match = /^(members|path|followers):(.+)$/.exec(value);
+  return match ? { what: match[1] as DetailsWhat, code: match[2]! } : null;
+}
+
 function toChannel(row: ChannelRow): SourceChannel {
   return {
     workspaceId: row.workspace_id,
@@ -261,7 +281,10 @@ function toChannel(row: ChannelRow): SourceChannel {
         ? { kind: row.location_kind, id: row.location_id, path: Array.isArray(row.location_path) ? row.location_path : null }
         : null,
     members: Array.isArray(row.members) ? row.members : null,
+    follower: row.follower === null || row.follower === undefined ? null : bool(row.follower),
+    factsKnown: row.following !== null && row.following !== undefined,
     detailsAt: row.details_at ?? null,
+    detailsError: parseDetailsError(row.details_error),
     cursorAt: row.cursor_at === null || row.cursor_at === undefined ? null : Number(row.cursor_at),
     lastSyncAt: row.last_sync_at,
     lastError: row.last_error,
@@ -440,7 +463,9 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
           ...facts,
           location_path: null,
           members: null,
+          follower: null,
           details_at: null,
+          details_error: null,
           cursor_at: null,
           last_sync_at: null,
           last_error: null,
@@ -491,12 +516,14 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
     o: AssistantOwner,
     workspaceId: string,
     channelId: string,
-    details: { path?: string[]; members?: ChannelMember[] },
+    details: { path?: string[]; members?: ChannelMember[]; follower?: boolean; error?: { what: DetailsWhat; code: string } | null },
     now = new Date(),
   ): Promise<void> {
     await this.ops.updateAtomic<ChannelRow>(SOURCE_CHANNELS, { ...where(o), workspace_id: workspaceId, channel_id: channelId }, () => ({
       ...(details.path ? { location_path: details.path } : {}),
       ...(details.members ? { members: details.members } : {}),
+      ...(details.follower !== undefined ? { follower: details.follower } : {}),
+      details_error: details.error ? `${details.error.what}:${details.error.code}`.slice(0, 80) : null,
       details_at: now,
       updated_at: now,
     }));
