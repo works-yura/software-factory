@@ -122,18 +122,21 @@ export function createMastraAssistantBrain(options: {
         memory: options.memory,
         ...(turn.tools ? { tools: turn.tools as ToolsInput } : {}),
       });
-      let result: Awaited<ReturnType<typeof agent.generate>>;
+      // Streamed, then read whole: some providers take only streaming calls (the Codex backend behind a
+      // ChatGPT sign-in answers a plain call with «Stream must be set to true»).
+      let streamed: string | undefined;
       try {
-        result = await agent.generate([turnMessage(turn)] as never, {
+        const stream = await agent.stream([turnMessage(turn)] as never, {
           memory: { resource: assistantResourceId(turn.owner), thread: turn.request.id },
           ...(requestContext ? { requestContext } : {}),
           maxSteps: turn.maxSteps ?? 8,
         });
+        streamed = await stream.text;
       } catch (error) {
         // The thread names the model that failed; the cause stays as the detail.
         throw modelId ? new AssistantTurnError(modelId, error) : error;
       }
-      const text = result.text?.trim();
+      const text = streamed?.trim();
       if (!text) throw new Error('The model returned an empty answer.');
       const answer = turn.first && turn.input.author === 'source' ? splitTopic(text) : { text };
       return modelId ? { ...answer, modelId } : answer;
@@ -149,11 +152,12 @@ export function createMastraAssistantBrain(options: {
         model: resolved.model,
       });
       try {
-        const result = await agent.generate('Reply with the single word OK.', {
+        const stream = await agent.stream('Reply with the single word OK.', {
           ...(resolved.requestContext ? { requestContext: resolved.requestContext } : {}),
           maxSteps: 1,
         });
-        return { modelId: usedId ?? null, text: (result.text ?? '').trim().slice(0, 200) };
+        const text = await stream.text;
+        return { modelId: usedId ?? null, text: (text ?? '').trim().slice(0, 200) };
       } catch (error) {
         throw usedId ? new AssistantTurnError(usedId, error) : error;
       }
