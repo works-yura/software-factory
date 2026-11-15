@@ -18,7 +18,8 @@ export interface AgentUserEnvContext {
  * `FACTORY_AGENT_PROFILE` (`/var/factory/agent-<user>.sb`), `FACTORY_AGENT_WRITABLE` (more writable
  * folders, `:`-separated), `FACTORY_AGENT_PATH` (its tools; `<home>/.local/bin:<home>/.local/node/bin:<home>/.local/fvm:/opt/homebrew/bin`:
  * its own claude, node, codex and fvm (`2-system.sh agent-tools`, `agent-mobile-tools`), then Homebrew's CocoaPods and gh),
- * `FACTORY_AGENT_SEATBELT` (`on` by default; `off`: the user is the only boundary).
+ * `FACTORY_AGENT_XCODE_CONFIG` (`/var/factory/agent-<user>.xcconfig`, what `xcodebuild` applies under Seatbelt).
+ * Whether Seatbelt applies is a Factory setting, not an environment variable.
  */
 export function agentUserFromEnv(env: Record<string, string | undefined>, context: AgentUserEnvContext): AgentUserConfig | undefined {
   const user = env.FACTORY_AGENT_USER?.trim();
@@ -35,16 +36,19 @@ export function agentUserFromEnv(env: Record<string, string | undefined>, contex
   ];
   if (writableRoots.length === 0) throw new AgentUserConfigError('The agent user needs a folder to work in (MASTRACODE_LOCAL_SANDBOX_ROOT).');
   const toolPath = parsePathList(env.FACTORY_AGENT_PATH, 'FACTORY_AGENT_PATH');
-  const seatbelt = env.FACTORY_AGENT_SEATBELT?.trim().toLowerCase() || 'on';
-  if (seatbelt !== 'on' && seatbelt !== 'off') {
-    throw new AgentUserConfigError(`FACTORY_AGENT_SEATBELT must be on or off, got ${JSON.stringify(env.FACTORY_AGENT_SEATBELT)}.`);
+  if (env.FACTORY_AGENT_SEATBELT !== undefined) {
+    throw new AgentUserConfigError(
+      'FACTORY_AGENT_SEATBELT was removed: the Seatbelt profile is a Factory setting (Settings › Environment › Sandbox › Agent isolation). Remove it from the environment.',
+    );
   }
+  const xcodeConfigPath = parsePathList(env.FACTORY_AGENT_XCODE_CONFIG, 'FACTORY_AGENT_XCODE_CONFIG')[0] ?? `/var/factory/agent-${user}.xcconfig`;
   return {
     user,
     home,
     profilePath,
     writableRoots: [...new Set(writableRoots)],
     toolPath: toolPath.length > 0 ? toolPath : [`${home}/.local/bin`, `${home}/.local/node/bin`, `${home}/.local/fvm`, '/opt/homebrew/bin'],
-    seatbelt: seatbelt === 'on',
+    seatbelt: true,
+    xcodeConfigPath,
   };
 }

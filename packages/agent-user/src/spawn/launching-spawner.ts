@@ -26,7 +26,7 @@ export class LaunchingSpawner implements ProcessSpawner {
   }
 
   spawn(spec: ProcessSpec, { cwd }: { cwd: string }): ChildProcess {
-    const plan = this.launcher.plan(spec);
+    const plan = this.launcher.plan(spec.folder ? spec : { ...spec, folder: cwd });
     const extra = plan.inputs.length ? Math.max(...plan.inputs.map(input => input.fd)) - 2 : 0;
     const stdio = Array.from({ length: 3 + extra }, () => 'pipe' as const);
     const [command, ...args] = plan.argv;

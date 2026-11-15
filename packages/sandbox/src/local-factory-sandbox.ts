@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
 
 import type { AgentProcesses } from './agent-processes.ts';
 import { hostExecutor } from './template/host-exec.ts';
 import type { FactorySandboxCheckoutServices, LocalEnvironmentTemplate } from './template/local-template.ts';
+import { AgentIsolationSettings } from './agent-isolation.ts';
 import { localSandboxSettingsSchema } from './template/local-sandbox-settings.ts';
 import { WORK_ITEM_FOLDERS_DIR } from './work-item-folder.ts';
 import { resolveContainedLocalWorkdir } from './workdir.ts';
@@ -147,6 +148,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
   override readonly builds: FactorySandboxBuilds<Record<string, never>> | undefined;
   /** The Factory-tunable sleep limits and hidden-ref retention (Settings › Environment › Sandbox). */
   override readonly settings = localSandboxSettingsSchema as never;
+  /** Each Factory's agent isolation (Settings › Environment › Sandbox), read synchronously at every launch. */
+  readonly agentIsolation = new AgentIsolationSettings();
   /** Folders (keys) being put to sleep: their removal keeps the record, as asleep. */
   readonly #sleeping = new Set<string>();
 
@@ -344,6 +347,16 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     }
     if (ours.length) console.warn('[factory:sleep] stopped processes left in a sandbox folder', { directory, pids: ours, killed: stubborn });
     return { stopped: ours, left, unchecked: false };
+  }
+
+  /**
+   * Whether a process an agent starts runs under the Seatbelt profile, from its Factory's sandbox
+   * setting: `folder` is its working folder (an absolute path in a sandbox folder), `env` its
+   * environment, whose FACTORY_SANDBOX_FOLDER names the folder for a shell command line.
+   */
+  agentSeatbeltFor({ folder, env }: { folder?: string; env?: Record<string, string | undefined> }): boolean {
+    const key = (folder && isAbsolute(folder) ? this.folderKeyOf(folder) : undefined) ?? env?.[SANDBOX_MARKER_ENV];
+    return this.agentIsolation.forFolderKey(key) === 'seatbelt';
   }
 
   /** The folder key (`<session>` or `work-items/<factory>/<card>`) a path lies in. */

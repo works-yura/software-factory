@@ -29,8 +29,30 @@ describe('createAgentUserLauncher', () => {
 
   it('leaves sandbox-exec out when the configuration turns Seatbelt off', () => {
     const off = createAgentUserLauncher({ ...agentConfig, seatbelt: false });
-    expect(off.layers).toEqual(['sudo', 'clear-env', 'env-loader']);
     expect(off.plan({ command: 'xcodebuild', args: [], env: {} }).argv).not.toContain('/usr/bin/sandbox-exec');
+  });
+
+  it('asks the Seatbelt choice per launch with the folder, and a spec that opts out stays out', () => {
+    const asked: (string | undefined)[] = [];
+    const chosen = createAgentUserLauncher(agentConfig, {
+      seatbeltFor: spec => {
+        asked.push(spec.folder);
+        return spec.folder === '/w/ios' ? false : undefined;
+      },
+    });
+    expect(chosen.plan({ command: 'xcodebuild', args: [], env: {}, folder: '/w/ios' }).argv).not.toContain('/usr/bin/sandbox-exec');
+    expect(chosen.plan({ command: 'node', args: [], env: {}, folder: '/w/web' }).argv).toContain('/usr/bin/sandbox-exec');
+    expect(chosen.plan({ command: 'codex', args: [], env: {}, folder: '/w/web', seatbelt: false }).argv).not.toContain('/usr/bin/sandbox-exec');
+    expect(asked).toEqual(['/w/ios', '/w/web']);
+  });
+
+  it('tells Xcode and SwiftPM not to start their own sandbox under Seatbelt, and only there', () => {
+    const config = { ...agentConfig, xcodeConfigPath: '/var/factory/agent-factory.xcconfig' };
+    const payload = (seatbelt: boolean) => createAgentUserLauncher(config).plan({ command: 'xcodebuild', args: [], env: {}, seatbelt }).inputs[0]?.payload ?? '';
+    for (const line of ["SWIFTPM_DISABLE_SANDBOX='1'", "SWIFT_BUILD_USE_SANDBOX='0'", "XCODE_XCCONFIG_FILE='/var/factory/agent-factory.xcconfig'"]) {
+      expect(payload(true)).toContain(line);
+      expect(payload(false)).not.toContain(line);
+    }
   });
 
   it('is sudo → env -i → loader → sandbox-exec → command, in that order', () => {
@@ -74,8 +96,8 @@ describe('createAgentUserLauncher', () => {
     expect(out).not.toContain('/Users/yura');
   });
 
-  it('leaves sandbox-exec out for xcodebuild and swift', () => {
-    expect(launcher.plan({ command: '/usr/bin/xcodebuild', args: [], env: {}, seatbelt: false }).argv).not.toContain('/usr/bin/sandbox-exec');
+  it('leaves sandbox-exec out for a tool with its own sandbox (seatbelt: false)', () => {
+    expect(launcher.plan({ command: 'codex', args: [], env: {}, seatbelt: false }).argv).not.toContain('/usr/bin/sandbox-exec');
   });
 });
 

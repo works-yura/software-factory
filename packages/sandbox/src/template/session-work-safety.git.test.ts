@@ -249,7 +249,7 @@ describe('session work safety, with real git', () => {
 
     const saved = await template.saveFolder(folder);
     expect(saved.failures).toEqual([]);
-    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const mirror = mirrorsOf(template).mirrorPath(fx.origin);
     const files = fx.git(mirror, 'ls-tree', '-r', '--name-only', 'refs/factory/wip/tree/factory/item-ignored').split('\n');
     expect(files).toContain('kept.txt');
     expect(files).not.toContain('.secrets/factory-sa.json');

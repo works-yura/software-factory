@@ -20,12 +20,12 @@ describe('agentUserFromEnv', () => {
       writableRoots: ['/Volumes/dot/Project/factory/sandboxes'],
       toolPath: ['/Users/factory/.local/bin', '/Users/factory/.local/node/bin', '/Users/factory/.local/fvm', '/opt/homebrew/bin'],
       seatbelt: true,
+      xcodeConfigPath: '/var/factory/agent-factory.xcconfig',
     });
   });
 
-  it('turns the Seatbelt profile off only when told to', () => {
-    expect(agentUserFromEnv({ FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_SEATBELT: ' OFF ' }, context)?.seatbelt).toBe(false);
-    expect(agentUserFromEnv({ FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_SEATBELT: 'on' }, context)?.seatbelt).toBe(true);
+  it('refuses FACTORY_AGENT_SEATBELT: Seatbelt is a Factory setting now', () => {
+    expect(() => agentUserFromEnv({ FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_SEATBELT: 'off' }, context)).toThrow(/Settings › Environment › Sandbox/);
   });
 
   it('takes its own home, profile, extra folders and PATH, without duplicates', () => {
@@ -55,7 +55,6 @@ describe('agentUserFromEnv', () => {
     [{ FACTORY_AGENT_USER: 'factory' }, { ...context, sandboxRoot: '' }, /folder to work in/],
     [{ FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_HOME: 'relative' }, context, /absolute/],
     [{ FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_WRITABLE: '/ok:../up' }, context, /absolute/],
-    [{ FACTORY_AGENT_USER: 'factory', FACTORY_AGENT_SEATBELT: 'no' }, context, /on or off/],
   ])('refuses a configuration that would only look protected: %j', (env, ctx, message) => {
     expect(() => agentUserFromEnv(env, ctx)).toThrow(message);
   });

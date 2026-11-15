@@ -4,7 +4,7 @@ import type { ProcessLauncher } from './process-launcher.ts';
 import type { ProcessSpec } from './process-spec.ts';
 
 /** The command's final environment, from what the spec asks for. */
-export type EnvironmentFor = (env: ProcessSpec['env']) => Record<string, string>;
+export type EnvironmentFor = (env: ProcessSpec['env'], spec: ProcessSpec) => Record<string, string>;
 
 /**
  * A launcher made of wrappers. `environment` gives the command its final environment; the wrappers,
@@ -24,7 +24,7 @@ export class WrappingLauncher implements ProcessLauncher {
   }
 
   plan(spec: ProcessSpec): LaunchPlan {
-    const inner = planOf(spec.command, spec.args, this.environment(spec.env));
+    const inner = planOf(spec.command, spec.args, this.environment(spec.env, spec));
     return [...this.wrappers].reverse().reduce((plan, wrapper) => wrapper.wrap(plan, spec), inner);
   }
 }

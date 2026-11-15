@@ -1383,6 +1383,11 @@ export class MastraFactory {
       throw lastError instanceof Error ? lastError : new Error('No source-control integration knows this repository.');
     };
     localSandbox?.environmentTemplate?.setRepositoryAccess(repositoryAccessOf);
+    // Each Factory's agent isolation (Seatbelt or the separate user alone), read at every agent launch.
+    void localSandbox?.agentIsolation.attach({
+      all: async () => (await factoryProjectsStorage.listAll()).map(project => ({ id: project.id, sandboxSettings: project.sandboxSettings })),
+      one: async id => (await factoryProjectsStorage.getById({ id }))?.sandboxSettings ?? null,
+    });
     // Whether a repository is public comes from its host's API, never from this machine's git setup (H2).
     localSandbox?.environmentTemplate?.setRepositoryVisibility(async owner =>
       githubRepositoryVisibility(await repositoryAccessOf(owner)),

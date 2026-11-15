@@ -2,6 +2,7 @@ import { SbplProfileBuilder } from './profile-builder.ts';
 import {
   allowProcesses,
   allowReads,
+  allowVolumeTemporaryItems,
   allowWrites,
   DEFAULT_DENIED_LOCAL_PORTS,
   denyAllWrites,
@@ -49,6 +50,7 @@ export class SeatbeltAgentPolicy implements SandboxPolicy {
       .section(denyKeychains())
       .section(allowReads([home, ...writableRoots, ...readableRoots]))
       .section(allowWrites([home, ...writableRoots]))
+      .section(allowVolumeTemporaryItems(writableRoots))
       .section(denyRawDevices())
       .section(denyLocalPorts(deniedLocalPorts))
       .section(allowProcesses())

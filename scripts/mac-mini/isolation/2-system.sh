@@ -16,8 +16,10 @@
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-mobile-tools  # e5. the agent's own fvm and Flutter SDKs
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-firewall   # e6. the agent cannot reach 5874 / 9222
 #   sudo scripts/mac-mini/isolation/2-system.sh host-hardening   # e7. close what linPEAS found open to it
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-xcode      # e8. Xcode and SwiftPM build under Seatbelt
 #
 # Rollback, in reverse order:
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-xcode
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-host-hardening
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-firewall
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-mobile-tools
@@ -81,7 +83,7 @@
 #    e6. agent-firewall: a pf rule that refuses the agent's TCP connections to port 5874 (this
 #        server) and 9222 (Chrome's debugger: whoever reaches it drives your browser and its
 #        logins), on any address. The Seatbelt profile refuses the same; this keeps it when the
-#        profile is off (FACTORY_AGENT_SEATBELT=off, which Xcode and SwiftPM need). Loaded into the
+#        profile is off (a Factory set to "user" isolation, Settings › Environment › Sandbox). Loaded into the
 #        anchor com.apple/factory-agent now and by a LaunchDaemon at every boot. The Factory's MCP
 #        is reached through its public URL, not these ports.
 #    e7. host-hardening: what linPEAS, run as the agent, found open to it outside Factory:
@@ -91,6 +93,15 @@
 #        /dev/bpf* readable by everyone at boot, which lets any user capture the traffic; your
 #        own access comes from Wireshark's ChmodBPF (group access_bpf) and stays. The old modes
 #        and the daemon's plist are kept in /var/factory/host-hardening for the rollback.
+#    e8. agent-xcode: Xcode and SwiftPM start sandboxes of their own (package manifests, plugins,
+#        macros), and macOS refuses one inside our Seatbelt profile ("sandbox_apply: Operation not
+#        permitted"). As SandVault does, they are told not to, and our profile is their sandbox:
+#        a root-owned xcconfig (/var/factory/agent-<user>.xcconfig, OTHER_SWIFT_FLAGS -disable-sandbox)
+#        that the server points xcodebuild at (XCODE_XCCONFIG_FILE), and the agent's own Xcode
+#        defaults IDEPackageSupportDisableManifestSandbox / IDEPackageSupportDisablePackageSandbox.
+#        The server sets SWIFTPM_DISABLE_SANDBOX and SWIFT_BUILD_USE_SANDBOX itself. Rerun
+#        agent-profile with it: the profile now allows the data disk's .TemporaryItems, where
+#        macOS stages atomic saves (Xcode's build manifests, simctl screenshots).
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/common.sh"
 REPO="$(cd "$HERE/../../.." && pwd)"
@@ -110,6 +121,7 @@ FIREWALL_RULES="$PROFILE_DIR/agent-firewall.pf"
 FIREWALL_DAEMON="/Library/LaunchDaemons/ai.eclipt.factory-agent-firewall.plist"
 FIREWALL_PORTS="5874 9222"
 HARDENING_DIR="$PROFILE_DIR/host-hardening"
+XCODE_CONFIG="$PROFILE_DIR/agent-$AGENT_USER.xcconfig"
 ANYDESK_FILES="/private/etc/anydesk/system.conf /private/etc/anydesk/service.conf /private/etc/anydesk/system.conf.lock /private/etc/anydesk/service.conf.lock"
 BPF_DAEMON_LABEL="com.network_analyzer.bpf"
 BPF_DAEMON="/Library/LaunchDaemons/$BPF_DAEMON_LABEL.plist"
@@ -244,7 +256,47 @@ status() {
   local file
   for file in $ANYDESK_FILES; do [ -e "$file" ] && say "  $(stat -f '%Su:%Sg %Sp' "$file")  $file"; done
   [ -f "$BPF_DAEMON" ] && say "  $BPF_DAEMON: present (opens /dev/bpf* to everyone at boot)" || say "  $BPF_DAEMON: absent"
+  step "e8. Xcode under Seatbelt"
+  [ -f "$XCODE_CONFIG" ] && say "  $XCODE_CONFIG ($(stat -f '%Su %Sp' "$XCODE_CONFIG"))" || say "  $XCODE_CONFIG: missing"
+  user_exists && say "  agent's Xcode package sandbox off: $(agent_xcode_defaults)"
+  grep -q TemporaryItems "$PROFILE" 2>/dev/null && say "  profile allows .TemporaryItems: yes" || say "  profile allows .TemporaryItems: no (rerun agent-profile)"
   return 0
+}
+
+# The agent's two Xcode defaults, as `1 1` when both are on.
+agent_xcode_defaults() {
+  (cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="/Users/$AGENT_USER" /bin/sh -c \
+    'printf "%s %s" "$(defaults read com.apple.dt.Xcode IDEPackageSupportDisableManifestSandbox 2>/dev/null || echo 0)" "$(defaults read com.apple.dt.Xcode IDEPackageSupportDisablePackageSandbox 2>/dev/null || echo 0)"') 2>/dev/null
+}
+
+agent_xcode() {
+  need_root agent-xcode
+  user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s\n' \
+    '// Factory (ADR-0041): xcodebuild as the agent runs inside its Seatbelt profile, where the' \
+    '// Swift compiler cannot start a sandbox of its own for macros. Written by 2-system.sh agent-xcode.' \
+    'OTHER_SWIFT_FLAGS = $(inherited) -disable-sandbox' > "$tmp"
+  install -d -o root -g wheel -m 755 "$PROFILE_DIR"
+  install -o root -g wheel -m 644 "$tmp" "$XCODE_CONFIG"
+  rm -f "$tmp"
+  step "installed $XCODE_CONFIG"
+  (cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="/Users/$AGENT_USER" /bin/sh -c \
+    'defaults write com.apple.dt.Xcode IDEPackageSupportDisableManifestSandbox -bool YES && defaults write com.apple.dt.Xcode IDEPackageSupportDisablePackageSandbox -bool YES') \
+    || die "could not write the agent's Xcode defaults"
+  say "  agent's Xcode package sandbox off: $(agent_xcode_defaults)"
+  say "  now rerun: sudo $0 agent-profile   (the profile allows the data disk's .TemporaryItems)"
+}
+
+remove_agent_xcode() {
+  need_root remove-agent-xcode
+  rm -f "$XCODE_CONFIG"
+  if user_exists; then
+    (cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="/Users/$AGENT_USER" /bin/sh -c \
+      'defaults delete com.apple.dt.Xcode IDEPackageSupportDisableManifestSandbox; defaults delete com.apple.dt.Xcode IDEPackageSupportDisablePackageSandbox' 2>/dev/null) || true
+  fi
+  say "  removed $XCODE_CONFIG and the agent's Xcode defaults"
 }
 
 ownership_on() {
@@ -643,7 +695,9 @@ case "${1:-status}" in
   agent-firewall) agent_firewall ;;
   remove-agent-firewall) remove_agent_firewall ;;
   host-hardening) host_hardening ;;
+  agent-xcode) agent_xcode ;;
+  remove-agent-xcode) remove_agent_xcode ;;
   remove-host-hardening) remove_host_hardening ;;
   remove-agent-sudo) remove_agent_sudo ;;
-  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|agent-mobile-tools|agent-firewall|host-hardening|remove-host-hardening|remove-agent-firewall|remove-agent-mobile-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
+  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|agent-mobile-tools|agent-firewall|host-hardening|remove-host-hardening|agent-xcode|remove-agent-xcode|remove-agent-firewall|remove-agent-mobile-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
 esac

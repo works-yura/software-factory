@@ -375,8 +375,9 @@ if (sandboxProvider !== 'local' && !localDevelopmentMode) {
 
 const sandboxRoot = process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes');
 // FACTORY_AGENT_USER: agents run as that separate macOS user, under a Seatbelt profile (ADR-0041,
-// scripts/mac-mini/isolation). Unset: as this server's user, as before.
-const agentUser = agentUserRuntimeFromEnv({ sandboxRoot });
+// scripts/mac-mini/isolation). Unset: as this server's user, as before. Whether a launch runs under
+// Seatbelt is its Factory's sandbox setting (`sandbox`, declared below, answers it at launch time).
+const agentUser = agentUserRuntimeFromEnv({ sandboxRoot, seatbeltFor: spec => sandbox.agentSeatbeltFor(spec) });
 if (agentUser) console.info(`[factory] Agents run as ${agentUser.config.user} (profile ${agentUser.config.profilePath}).`);
 agentUser?.reaper?.start();
 // The local environment template (ADR-0039): repository mirrors, builds, shared package stores and session work

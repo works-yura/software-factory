@@ -20,10 +20,11 @@ export interface ShellResult {
 export const agentUserTest = process.env.FACTORY_AGENT_USER_TEST?.trim();
 export const sandboxRoot = process.env.FACTORY_AGENT_USER_TEST_ROOT ?? '/Volumes/dot/Project/factory/sandboxes';
 
-/** The agent user as the server would configure it; `seatbelt: 'off'` is how prod runs it. */
+/** The agent user as the server would configure it; `seatbelt: 'off'` is a Factory set to "separate user only". */
 export function agentConfig(seatbelt: 'on' | 'off' = 'on'): AgentUserConfig | undefined {
   if (!agentUserTest) return undefined;
-  return agentUserFromEnv({ FACTORY_AGENT_USER: agentUserTest, FACTORY_AGENT_SEATBELT: seatbelt }, { serverUser: process.env.USER ?? '', sandboxRoot });
+  const config = agentUserFromEnv({ FACTORY_AGENT_USER: agentUserTest }, { serverUser: process.env.USER ?? '', sandboxRoot });
+  return config && { ...config, seatbelt: seatbelt === 'on' };
 }
 
 /** The sudoers rule and the profile are installed (`scripts/mac-mini/isolation/2-system.sh`). */
