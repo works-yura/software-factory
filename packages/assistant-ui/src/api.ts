@@ -116,7 +116,7 @@ export function assistantUrl(api: AssistantApi, path: string): string {
   return `${api.baseUrl}${path}`;
 }
 
-async function call<T>(api: AssistantApi, path: string, init: RequestInit = {}): Promise<T> {
+export async function call<T>(api: AssistantApi, path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${api.baseUrl}/web/assistant${path}`, { credentials: 'include', ...init });
   const text = await response.text();
   const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
@@ -127,7 +127,7 @@ async function call<T>(api: AssistantApi, path: string, init: RequestInit = {}):
   return body as T;
 }
 
-function json(method: string, body: unknown): RequestInit {
+export function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
 }
 

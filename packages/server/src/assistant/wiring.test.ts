@@ -4,6 +4,7 @@
  * that carries no content; without a model in the organization the agent's turn fails loudly.
  */
 import { AssistantStorage } from '@factory/assistant-core';
+import { ClickUpSourceStorage } from '@factory/assistant-source-clickup';
 import { createFactoryStorageForTests } from '@factory/store/testing';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import { describe, expect, it } from 'vitest';
@@ -29,11 +30,15 @@ async function setup() {
   const seed = await createFactoryStorageForTests();
   const storage = seed.storage.registerDomain(new AssistantStorage());
   await storage.ensureReady();
+  const clickupStorage = seed.storage.registerDomain(new ClickUpSourceStorage());
+  await clickupStorage.ensureReady();
   // Mastra's own tables (memory threads), which the server's boot creates.
   await seed.storage.getMastraStorage().init();
   const provider = fakeProvider();
   const assistant = createFactoryAssistant({
     storage,
+    clickupStorage,
+    pollClickUp: false,
     mastraStorage: seed.storage.getMastraStorage(),
     secretEncryption: createPlaintextFactorySecretEncryption(),
     blobReferencedElsewhere: async () => false,
@@ -44,7 +49,7 @@ async function setup() {
     publicOrigin: 'http://localhost:4111',
     authProvider: provider,
   });
-  return { seed, storage, provider, assistant };
+  return { seed, storage, clickupStorage, provider, assistant };
 }
 
 describe('the assistant on the Factory server', () => {
@@ -75,6 +80,23 @@ describe('the assistant on the Factory server', () => {
       expect(JSON.stringify(page.events)).not.toContain('private client words');
       const other = await seed.audit.list({ orgId: 'org-b', actions: ['factory.assistant.cleared'] });
       expect(other.events[0]).toMatchObject({ metadata: { reason: 'account_deleted' } });
+    } finally {
+      assistant.stop();
+    }
+  });
+
+  it('erases the person’s ClickUp connection with their assistant, and mounts the sources routes', async () => {
+    const { clickupStorage, provider, assistant } = await setup();
+    try {
+      const ada = { orgId: 'org-a', userId: 'ada' };
+      const bob = { orgId: 'org-a', userId: 'bob' };
+      for (const owner of [ada, bob]) {
+        await clickupStorage.putConnection(owner, { secret: 'sealed', accountId: '42', accountName: 'ada' });
+      }
+      await provider.removeMember('org-a', 'ada');
+      expect(await clickupStorage.getConnection(ada)).toBeNull();
+      expect(await clickupStorage.getConnection(bob)).not.toBeNull();
+      expect(assistant.clickup).toBeDefined();
     } finally {
       assistant.stop();
     }

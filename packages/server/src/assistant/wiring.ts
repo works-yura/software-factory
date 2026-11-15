@@ -16,6 +16,8 @@ import {
   startAssistantRetention,
 } from '@factory/assistant-core';
 import type { AssistantModelResolver, AssistantModels, AssistantStorage, RetentionJob } from '@factory/assistant-core';
+import { buildClickUpSourceRoutes, ClickUpChatSource, startClickUpPolling } from '@factory/assistant-source-clickup';
+import type { ClickUpPolling, ClickUpSourceStorage } from '@factory/assistant-source-clickup';
 import {
   buildModelCatalog,
   listSessionScopedCredentials,
@@ -54,6 +56,10 @@ function authorizationServerOf(provider: unknown): ((request: Request) => Promis
 
 export interface FactoryAssistantOptions {
   storage: AssistantStorage;
+  /** The person's own ClickUp Chat connections (phase 2); without it ClickUp is not offered. */
+  clickupStorage?: ClickUpSourceStorage;
+  /** Polling of ClickUp; tests and servers without a background loop turn it off. */
+  pollClickUp?: boolean;
   mastraStorage: MastraCompositeStore;
   secretEncryption: FactorySecretEncryption;
   /** The attachment blob store; without one, requests take text only and say why files are refused. */
@@ -71,6 +77,8 @@ export interface FactoryAssistantOptions {
 
 export interface FactoryAssistant {
   service: AssistantService;
+  /** The ClickUp Chat source, when the server has its storage. */
+  clickup: ClickUpChatSource | undefined;
   /** The routes, once the server's model catalog (the agent controller) is known. */
   routes(input: { auth: RouteAuth; controller: ModelCatalog }): ApiRoute[];
   stop(): void;
@@ -144,8 +152,23 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     connected: async owner => (await access.status(owner)).connected,
   });
 
+  // ClickUp Chat, read with the person's own personal token (ADR-0051 phase 2). The core takes its
+  // messages in; the source is erased first when the assistant is.
+  let ingest: AssistantService | undefined;
+  const clickup = options.clickupStorage
+    ? new ClickUpChatSource({
+        storage: options.clickupStorage,
+        cipher: options.secretEncryption,
+        ingest: {
+          ingestSourceMessage: (owner, message) => ingest!.ingestSourceMessage(owner, message),
+          hasOpenSourceRequest: (owner, key) => ingest!.hasOpenSourceRequest(owner, key),
+        },
+      })
+    : undefined;
+
   const service = new AssistantService({
     storage: options.storage,
+    ...(clickup ? { sources: [clickup] } : {}),
     ...(options.blobs ? { blobs: options.blobs } : {}),
     brain: createMastraAssistantBrain({ memory: createAssistantMemory(options.mastraStorage), models: resolver }),
     memory: createAssistantMemoryEraser(options.mastraStorage),
@@ -178,16 +201,24 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     );
   }
 
+  ingest = service;
+
   const retention: RetentionJob = startAssistantRetention(service);
+  const polling: ClickUpPolling | undefined = clickup && options.pollClickUp !== false ? startClickUpPolling(clickup) : undefined;
 
   return {
     service,
+    clickup,
     routes({ auth, controller }) {
       catalog = controller;
-      return buildAssistantRoutes({ auth, service, access, models });
+      return [
+        ...buildAssistantRoutes({ auth, service, access, models }),
+        ...(clickup ? buildClickUpSourceRoutes({ auth, source: clickup }) : []),
+      ];
     },
     stop() {
       retention.stop();
+      polling?.stop();
     },
   };
 }

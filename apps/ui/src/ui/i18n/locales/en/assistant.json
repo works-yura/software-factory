@@ -91,7 +91,13 @@
     "openOriginal": "Open the original",
     "openInFactory": "Open in {{factory}}",
     "notConnected": "Factory not allowed",
-    "searchFactory": "Find a Factory…"
+    "searchFactory": "Find a Factory…",
+    "question": "Question",
+    "questionPlaceholder": "Leave empty to send the request as it is",
+    "title": "Card title",
+    "confirmAsk": "Ask",
+    "confirmHandOver": "Hand over",
+    "hint": "{{factory}}?"
   },
   "notes": {
     "empty": "No notes yet.",
@@ -161,5 +167,37 @@
     "sendAsk": "Ask {{factory}}",
     "sendHandOver": "Hand to {{factory}}",
     "actions": "Send"
+  },
+  "sources": {
+    "clickup": "ClickUp Chat",
+    "tokenHelp": "Paste your own personal API token: in ClickUp, avatar › Settings › Apps › API Token (starts with pk_). The assistant only reads the chats you turn on below and never writes to ClickUp. The token is stored encrypted and only you can use it.",
+    "connectForm": "Connect ClickUp",
+    "token": "Personal API token",
+    "connect": "Connect",
+    "connectedAs": "Connected as {{name}}",
+    "lastSync": "Last read: {{when}}",
+    "never": "not yet",
+    "syncNow": "Read now",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect ClickUp?",
+    "disconnectDescription": "The token, your channel modes and read positions are erased. Requests already made from ClickUp stay until you close and clear them.",
+    "rejected": "ClickUp no longer accepts this token, so reading stopped. Paste a new token to connect again.",
+    "syncFailed": "The last read failed: {{error}}. It is retried automatically.",
+    "modesHelp": "For each chat, choose what becomes a request. Only new messages are read from when you turn a chat on. Off: not read. When addressed: DMs, mentions of you, replies in threads you are in. Everything: every new thread.",
+    "channels": "ClickUp chats",
+    "noChannels": "No chats yet",
+    "noChannelsHint": "ClickUp listed no channels or DMs for this token. Press «Read now» after joining one.",
+    "modeFor": "What to read in {{channel}}",
+    "mode": {
+      "ignore": "Off",
+      "addressed": "When addressed",
+      "watch": "Everything"
+    },
+    "kind": {
+      "channel": "Channel",
+      "dm": "Direct message",
+      "group_dm": "Group DM"
+    },
+    "loading": "Loading sources…"
   }
 }

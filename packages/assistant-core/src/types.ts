@@ -37,8 +37,11 @@ export function isRequestStatus(value: unknown): value is RequestStatus {
   return typeof value === 'string' && (REQUEST_STATUSES as readonly string[]).includes(value);
 }
 
-/** Where a request came from. Phase 1 has only what the person brought into the panel themself. */
-export const REQUEST_SOURCES = ['manual'] as const;
+/**
+ * Where a request came from: what the person brought into the panel themself (`manual`), or a
+ * message the assistant read in one of the person's own source connections (ADR-0051 phase 2).
+ */
+export const REQUEST_SOURCES = ['manual', 'clickup'] as const;
 export type RequestSource = (typeof REQUEST_SOURCES)[number];
 
 /** A Factory the request was asked of or handed to, as the topic line shows it. */
@@ -63,6 +66,13 @@ export interface AssistantRequest {
   source: RequestSource;
   /** The original, when the person pasted a link to it. */
   sourceUrl: string | null;
+  /**
+   * The source thread the request is bound to (`platform:workspace:channel:thread`), for requests a
+   * source made; `null` for manual ones. A new message in that thread joins the open request.
+   */
+  sourceKey: string | null;
+  /** The closed request of the same source thread this one continues. */
+  previousRequestId: string | null;
   status: RequestStatus;
   factory: FactoryLink | null;
   /** The agent is working on the latest message now. */
@@ -76,8 +86,12 @@ export interface AssistantRequest {
   closedAt: Date | null;
 }
 
-/** Who wrote an entry in a request's thread. */
-export const MESSAGE_AUTHORS = ['person', 'agent', 'factory', 'event'] as const;
+/**
+ * Who wrote an entry in a request's thread: the person (to the agent), the agent, a Factory, an
+ * event line, or `source` — a message read from a source (a colleague's, or the person's own reply
+ * there), with its author's name in `fromName`.
+ */
+export const MESSAGE_AUTHORS = ['person', 'agent', 'factory', 'event', 'source'] as const;
 export type MessageAuthor = (typeof MESSAGE_AUTHORS)[number];
 
 /** One entry of a request's thread. */
@@ -85,6 +99,8 @@ export interface AssistantMessage {
   id: string;
   requestId: string;
   author: MessageAuthor;
+  /** Who wrote a `source` entry (as the source names them); `null` otherwise. */
+  fromName: string | null;
   text: string;
   fileIds: string[];
   createdAt: Date;
@@ -127,3 +143,15 @@ export interface AssistantFile {
 
 /** Why an assistant was erased, for the audit entry (never its content). */
 export type AssistantClearReason = 'member_removed' | 'account_deleted' | 'cleared_by_person';
+
+/**
+ * How the assistant reads one channel of a source (ADR-0051): `ignore` (the default for a channel),
+ * `addressed` — only what is addressed to the person: a direct message, a mention, a reply in a
+ * thread they are in (the default for DMs) — or `watch`, where every new thread becomes a request.
+ */
+export const CHANNEL_MODES = ['ignore', 'addressed', 'watch'] as const;
+export type ChannelMode = (typeof CHANNEL_MODES)[number];
+
+export function isChannelMode(value: unknown): value is ChannelMode {
+  return typeof value === 'string' && (CHANNEL_MODES as readonly string[]).includes(value);
+}

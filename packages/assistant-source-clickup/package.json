@@ -1,0 +1,28 @@
+{
+  "name": "@factory/assistant-source-clickup",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "«Помічник» source (ADR-0051 phase 2): ClickUp Chat read with the person's own personal API token — channels and DMs, a mode per channel, polling with cursors, requests from threads.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/assistant-core": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@mastra/core": "1.83.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@factory/auth": "workspace:*",
+    "@mastra/libsql": "1.30.0",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
