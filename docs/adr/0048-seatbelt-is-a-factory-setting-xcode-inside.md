@@ -1,0 +1,16 @@
+# 0048. Seatbelt — налаштування Фабрики; Xcode і SwiftPM збираються всередині профілю
+
+Дата: 2026-11-15 · Статус: прийнято · Змінює: [ADR-0041](0041-agents-run-as-a-separate-macos-user.md)
+
+**Контекст.** ADR-0041 дав агентам другий шар — профіль Seatbelt, — але `xcodebuild` і `swift` під ним падали (`sandbox_apply: Operation not permitted`: вони запускають власні пісочниці, а macOS їх не вкладає). Замість того щоб перенести прийом sandvault, профіль вимкнули для всіх змінною `FACTORY_AGENT_SEATBELT=off`, і на Mac mini межею лишився тільки користувач `factory`: Bash агента писав будь-куди, куди пускають права Unix, і досягав будь-якого порту, крім двох. Крім того, ізоляція — властивість пісочниці, а не машини: її має бути видно й змінювати в UI, як решту налаштувань пісочниці, а з іншими провайдерами (Docker, E2B) вона стане їхнім налаштуванням.
+
+**Рішення.**
+- **Xcode і SwiftPM — всередині профілю, як у sandvault** («Sandboxing xcodebuild and swift»): їм кажуть не запускати власну пісочницю, і нашa стає їхньою. Сервер дає агенту під Seatbelt `SWIFTPM_DISABLE_SANDBOX=1`, `SWIFT_BUILD_USE_SANDBOX=0` і `XCODE_XCCONFIG_FILE` — xcconfig від root (`/var/factory/agent-<user>.xcconfig`: `OTHER_SWIFT_FLAGS = $(inherited) -disable-sandbox`); у налаштуваннях Xcode агента вимкнено `IDEPackageSupportDisableManifestSandbox` і `IDEPackageSupportDisablePackageSandbox` (`2-system.sh agent-xcode`). Агенту нічого не треба знати: `xcodebuild`, `swift build`, `flutter build ios` працюють без прапорців.
+- **Профіль дозволяє `.TemporaryItems` диска з теками карток.** macOS атомарно зберігає файл через `/Volumes/<диск>/.TemporaryItems` (маніфести збірки Xcode, знімки `simctl`); без цього запис падав з «немає дозволу». Теки там — по одній на користувача, з правами Unix, як `/tmp`.
+- **Налаштування Фабрики «Agent isolation»** (Налаштування › Середовище › Пісочниця, поле схеми `localSandboxSettingsSchema`, форма будується зі схеми): `seatbelt` (типово) — користувач плюс профіль; `user` — лише окремий користувач. `FACTORY_AGENT_SEATBELT` прибрано: задана змінна зупиняє запуск з підказкою.
+- **Рішення на кожен запуск.** Лаунчер `@factory/agent-user` питає `seatbeltFor(spec)`; `spec.folder` — тека процесу (`cwd` CLI харнесу) або, для командного рядка Mastra, маркер `FACTORY_SANDBOX_FOLDER`. `LocalFactorySandbox.agentSeatbeltFor` знаходить за текою Фабрику (`work-items/<factory>/…`) і читає її налаштування з `AgentIsolationSettings`: усі Фабрики при старті, кожну знову не частіше ніж раз на 30 с. Невідома Фабрика, тека сесії без картки, збій читання — Seatbelt: суворіша відповідь, ніколи не м'якша.
+- **Codex** лишається поза нашим профілем (`seatbelt: false` у його запуску): він кладе свої команди у власну пісочницю Seatbelt. Чи вимкнути її і пускати Codex під наш профіль — окреме рішення.
+
+**Перевірено** від імені `factory` під профілем: `swift build` (native і swiftbuild), `xcodebuild` пакета під iOS-симулятор, завантаження й вимкнення симулятора, знімок екрана (у home агента).
+
+**Наслідки.** Після деплою всі Фабрики працюють під Seatbelt, доки в налаштуваннях не вибрано `user`. Мережа назовні під профілем поки відкрита: список дозволених доменів через локальний проксі — наступний крок. Пісочниці інших провайдерів (Docker, E2B з mastra-fork) матимуть своє поле ізоляції у своїй схемі.

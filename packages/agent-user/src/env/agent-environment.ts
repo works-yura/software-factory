@@ -34,3 +34,19 @@ export function agentEnvironment(config: AgentUserConfig, env: Record<string, st
   }
   return { ...result, ...agentIdentity(config) };
 }
+
+/**
+ * What Xcode and SwiftPM need under the Seatbelt profile (SandVault's "Sandboxing xcodebuild and
+ * swift"): they start sandboxes of their own for package manifests, plugins and macros, and macOS
+ * refuses one inside another (`sandbox_apply: Operation not permitted`). SwiftPM reads the two
+ * variables; `xcodebuild` applies the root-owned xcconfig (`OTHER_SWIFT_FLAGS = $(inherited)
+ * -disable-sandbox`) to every build, and its package sandbox is off in the agent's Xcode defaults
+ * (`2-system.sh agent-xcode`). Our profile is then the sandbox they run in.
+ */
+export function xcodeUnderSeatbelt(config: AgentUserConfig): Record<string, string> {
+  return {
+    SWIFTPM_DISABLE_SANDBOX: '1',
+    SWIFT_BUILD_USE_SANDBOX: '0',
+    ...(config.xcodeConfigPath ? { XCODE_XCCONFIG_FILE: config.xcodeConfigPath } : {}),
+  };
+}

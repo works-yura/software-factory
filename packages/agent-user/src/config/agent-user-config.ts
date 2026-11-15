@@ -11,11 +11,12 @@ export interface AgentUserConfig {
   /** Folders put first on the agent's PATH: its own node, claude, codex. */
   readonly toolPath: readonly string[];
   /**
-   * Whether agent commands run under the Seatbelt profile (the default). `false` leaves the user as
-   * the only boundary: what Xcode and SwiftPM need, since they start sandboxes of their own and macOS
-   * cannot start one inside another.
+   * Whether agent commands run under the Seatbelt profile when nothing more specific decides (the
+   * launcher's `seatbeltFor`: a Factory's sandbox setting). `true` unless set.
    */
   readonly seatbelt?: boolean;
+  /** The root-owned xcconfig `xcodebuild` applies under Seatbelt (`XCODE_XCCONFIG_FILE`). */
+  readonly xcodeConfigPath?: string;
 }
 
 export class AgentUserConfigError extends Error {

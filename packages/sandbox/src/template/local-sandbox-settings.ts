@@ -11,7 +11,25 @@ import type { SleepPolicy } from './sleep-policy.ts';
 
 export const DEFAULT_HIDDEN_REF_RETENTION_DAYS = 30;
 
+/**
+ * How agents of this Factory are kept from the rest of the machine (ADR-0041, ADR-0048):
+ * `seatbelt` — the separate macOS user plus the Seatbelt profile (writes only in the card folder and
+ * the agent's home, no other disk, no Factory port; Xcode and SwiftPM build inside it);
+ * `user` — the separate user alone. Only where agents run as a separate user (FACTORY_AGENT_USER).
+ */
+export const AGENT_ISOLATIONS = ['seatbelt', 'user'] as const;
+export type AgentIsolation = (typeof AGENT_ISOLATIONS)[number];
+export const DEFAULT_AGENT_ISOLATION: AgentIsolation = 'seatbelt';
+
 export const localSandboxSettingsSchema = z.object({
+  agentIsolation: z
+    .enum(AGENT_ISOLATIONS)
+    .default(DEFAULT_AGENT_ISOLATION)
+    .meta({
+      title: 'Agent isolation',
+      description:
+        'seatbelt: the separate user plus the Seatbelt sandbox (writes only in the card folder, Xcode builds inside it). user: the separate user alone. Applies to new commands within a minute.',
+    }),
   maxActiveSandboxes: z
     .number()
     .int()
@@ -57,4 +75,10 @@ export function sleepPolicyOf(settings: Record<string, unknown> | null | undefin
 /** How long published work is kept, from a Factory's stored settings. */
 export function hiddenRefRetentionMsOf(settings: Record<string, unknown> | null | undefined): number {
   return (positive(settings?.hiddenRefRetentionDays) ?? DEFAULT_HIDDEN_REF_RETENTION_DAYS) * 24 * 60 * 60_000;
+}
+
+/** The isolation a Factory's stored settings ask for; anything unknown is the default (Seatbelt). */
+export function agentIsolationOf(settings: Record<string, unknown> | null | undefined): AgentIsolation {
+  const value = settings?.agentIsolation;
+  return value === 'user' ? 'user' : DEFAULT_AGENT_ISOLATION;
 }

@@ -26,6 +26,7 @@ import {
   ShellCommandBridge,
   type AgentUserConfig,
   type ProcessSpawner,
+  type SeatbeltChoice,
 } from '@factory/agent-user';
 import type { AgentProcesses } from '@factory/sandbox';
 
@@ -85,6 +86,8 @@ export interface AgentUserRuntimeOptions {
   serverPid?: number;
   /** Where launch inputs wait for the shell that opens them: owner-only, the server's temp folder by default. */
   inputDir?: string;
+  /** Whether one launch runs under Seatbelt (its Factory's sandbox setting); the configuration's default without it. */
+  seatbeltFor?: SeatbeltChoice;
 }
 
 const makeDir = (path: string) => mkdirSync(path, { recursive: true, mode: 0o770 });
@@ -94,7 +97,8 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
   const env = options.env ?? process.env;
   const config = agentUserFromEnv(env, { serverUser: options.serverUser ?? userInfo().username, sandboxRoot: options.sandboxRoot });
   if (!config) return undefined;
-  const spawner = options.spawner ?? createProcessSpawner(config);
+  const choice = options.seatbeltFor ? { seatbeltFor: options.seatbeltFor } : {};
+  const spawner = options.spawner ?? createProcessSpawner(config, choice);
   const stateDir = env.FACTORY_AGENT_STATE_DIR?.trim() || join(options.sandboxRoot, '.agent-state');
   const mkdir = options.makeDirs ?? makeDir;
   const claudeConfigRoot = join(stateDir, 'claude-code-config');
@@ -110,7 +114,7 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
   }
   // Mastra runs command lines: they reach the agent as a program that reads its environment from a
   // private file on a descriptor (the same launch as a spawned CLI's).
-  const bridge = new ShellCommandBridge(createAgentUserLauncher(config), new PrivateFileStash(options.inputDir ?? join(tmpdir(), 'factory-agent-inputs')));
+  const bridge = new ShellCommandBridge(createAgentUserLauncher(config, choice), new PrivateFileStash(options.inputDir ?? join(tmpdir(), 'factory-agent-inputs')));
   const reapSetting = env.FACTORY_AGENT_REAP?.trim().toLowerCase() || 'on';
   if (reapSetting !== 'on' && reapSetting !== 'off') throw new Error(`FACTORY_AGENT_REAP must be on or off, got ${JSON.stringify(env.FACTORY_AGENT_REAP)}.`);
   const reaper =

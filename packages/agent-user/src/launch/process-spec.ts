@@ -4,6 +4,11 @@ export interface ProcessSpec {
   readonly args: readonly string[];
   /** Its environment as the server would give it; a launcher may replace parts. */
   readonly env: Record<string, string | undefined>;
-  /** `false` for tools that run their own sandbox (`xcodebuild`, `swift`): macOS cannot nest them. */
+  /**
+   * Whether it runs under the Seatbelt profile. `false` for a tool that starts its own sandbox
+   * (Codex): macOS cannot nest them. Left out, the launcher decides (`AgentUserLauncherOptions.seatbeltFor`).
+   */
   readonly seatbelt?: boolean;
+  /** The folder it works in (its cwd, or the card folder a shell command line belongs to): what the Seatbelt choice is made for. */
+  readonly folder?: string;
 }

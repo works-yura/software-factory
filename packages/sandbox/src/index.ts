@@ -28,3 +28,4 @@ export * from './template/sandbox-registry.ts';
 export * from './template/sleep-policy.ts';
 export * from './template/sandbox-sleeper.ts';
 export * from './template/local-sandbox-settings.ts';
+export * from './agent-isolation.ts';
