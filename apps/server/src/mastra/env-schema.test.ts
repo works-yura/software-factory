@@ -15,6 +15,18 @@ afterEach(() => {
 });
 
 describe('.env.schema', () => {
+  it('loads with mail over SMTP configured as on the Mac mini (SMTP_SECURE=true)', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'mastracode-web-env-'));
+    tempDirectories.push(cwd);
+    copyFileSync(join(packageRoot, '.env.schema'), join(cwd, '.env.schema'));
+
+    const env = { ...process.env, SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: '465', SMTP_SECURE: 'true', SMTP_USER: 'u@gmail.com', SMTP_PASS: 'app-password', FACTORY_NOTIFY_LOCALE: 'uk' };
+
+    expect(() =>
+      execFileSync(join(packageRoot, 'node_modules/.bin/varlock'), ['run', '--', process.execPath, '-e', ''], { cwd, env, stdio: 'pipe' }),
+    ).not.toThrow();
+  });
+
   it('loads with no integration configured, without a dependency cycle', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'mastracode-web-env-'));
     tempDirectories.push(cwd);
