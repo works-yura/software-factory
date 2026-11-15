@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 
+import type { InvitationNotifier } from '@factory/access';
 import { createClient } from '@libsql/client';
 import { LibsqlDialect } from '@libsql/kysely-libsql';
 import { betterAuth } from 'better-auth';
@@ -48,7 +49,7 @@ export interface TestGoogleAuth {
   events: OrganizationEvent[];
 }
 
-export async function createTestGoogleAuth(): Promise<TestGoogleAuth> {
+export async function createTestGoogleAuth(setup: { invitations?: InvitationNotifier } = {}): Promise<TestGoogleAuth> {
   const profiles = new Map<string, GoogleProfile>();
   const client = createClient({ url: ':memory:' });
   const relay = new OrganizationEventRelay();
@@ -63,6 +64,7 @@ export async function createTestGoogleAuth(): Promise<TestGoogleAuth> {
     secret: SECRET,
     google: { clientId: 'google-client', clientSecret: 'google-secret' },
     publicUrl: TEST_ORIGIN,
+    ...(setup.invitations ? { invitations: setup.invitations } : {}),
   });
   // factoryBetterAuthOptions sets the Google provider as a plain object.
   const google = base.socialProviders?.google as { clientId: string; clientSecret: string; prompt: 'select_account' } | undefined;

@@ -2,7 +2,7 @@
 
 Рішення: [ADR-0045](../../adr/0045-organization-roles-and-join-links.md). Вхід і організації загалом — [design.md](design.md).
 
-Зразок — налаштування Mastra Platform (Account, Organization › General, Team). Листів Factory не надсилає: запрошення й вступ — посиланням.
+Зразок — налаштування Mastra Platform (Account, Organization › General, Team). Запрошення Factory надсилає листом, коли на сервері налаштовано пошту (ADR-0047); посилання запрошення лишається для копіювання, вступ — посиланням.
 
 ## Карта пакетів
 
