@@ -197,7 +197,9 @@
       "sessions_only": "Runs only in Factory sessions",
       "unavailable": "Unavailable",
       "until": "until {{at}}"
-    }
+    },
+    "reasonFactoryDefault": "A new Factory chat in your organization starts on this model when the Factory sets none.",
+    "reasonOrgPreference": "The organization's first model that works right now."
   },
   "time": {
     "now": "now",
