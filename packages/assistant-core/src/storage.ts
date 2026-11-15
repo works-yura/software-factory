@@ -14,12 +14,14 @@ import type {
   AssistantOwner,
   AssistantRequest,
   AssistantSettings,
+  DigestFrequency,
   FactoryLink,
   MessageAuthor,
+  PendingAction,
   RequestSource,
   RequestStatus,
 } from './types.ts';
-import { assertOwner, DEFAULT_RETENTION_DAYS } from './types.ts';
+import { assertOwner, DEFAULT_DIGEST, DEFAULT_RETENTION_DAYS, DIGEST_FREQUENCIES } from './types.ts';
 import type { TurnFailure } from './turn-failure.ts';
 import { parseTurnFailure, serializeTurnFailure } from './turn-failure.ts';
 
@@ -52,6 +54,8 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
       analysing: { type: 'boolean' },
       last_error: { type: 'text', nullable: true },
       unread: { type: 'boolean' },
+      // A Factory action the agent proposed, waiting for the person's Confirm/Cancel (phase 3).
+      pending_action: { type: 'json', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
       closed_at: { type: 'timestamp', nullable: true },
@@ -98,6 +102,14 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
       ...owner,
       model_id: { type: 'text', nullable: true },
       retention_days: { type: 'integer' },
+      // Phase 3: the person's instructions and skills, and the digest schedule.
+      instructions: { type: 'text', nullable: true },
+      skills: { type: 'json', nullable: true },
+      digest_frequency: { type: 'text', nullable: true },
+      digest_hour: { type: 'integer', nullable: true },
+      digest_time_zone: { type: 'text', nullable: true },
+      digest_last_at: { type: 'timestamp', nullable: true },
+      digest_next_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -182,6 +194,7 @@ interface RequestRow extends Record<string, unknown> {
   analysing: boolean;
   last_error: string | null;
   unread: boolean;
+  pending_action: (Omit<PendingAction, 'proposedAt'> & { proposedAt: string }) | null;
   created_at: Date;
   updated_at: Date;
   closed_at: Date | null;
@@ -214,6 +227,38 @@ interface SettingsRow extends Record<string, unknown> {
   owner_user_id: string;
   model_id: string | null;
   retention_days: number;
+  instructions: string | null;
+  skills: string[] | null;
+  digest_frequency: string | null;
+  digest_hour: number | null;
+  digest_time_zone: string | null;
+  digest_last_at: Date | null;
+  digest_next_at: Date | null;
+}
+
+function toSettings(row: SettingsRow | null): AssistantSettings {
+  if (!row) return { modelId: null, retentionDays: DEFAULT_RETENTION_DAYS, instructions: '', skills: [], digest: { ...DEFAULT_DIGEST } };
+  const frequency = (DIGEST_FREQUENCIES as readonly string[]).includes(row.digest_frequency ?? '')
+    ? (row.digest_frequency as DigestFrequency)
+    : DEFAULT_DIGEST.frequency;
+  return {
+    modelId: row.model_id,
+    retentionDays: Number(row.retention_days),
+    instructions: row.instructions ?? '',
+    skills: Array.isArray(row.skills) ? row.skills.filter(name => typeof name === 'string') : [],
+    digest: {
+      frequency,
+      hour: row.digest_hour === null || row.digest_hour === undefined ? DEFAULT_DIGEST.hour : Number(row.digest_hour),
+      timeZone: row.digest_time_zone || DEFAULT_DIGEST.timeZone,
+    },
+  };
+}
+
+/** Where an owner's digest schedule stands. */
+export interface DigestState {
+  owner: AssistantOwner;
+  lastAt: Date | null;
+  nextAt: Date | null;
 }
 
 interface FileRow extends Record<string, unknown> {
@@ -256,6 +301,7 @@ function toRequest(row: RequestRow): AssistantRequest {
     analysing: bool(row.analysing),
     lastError: parseTurnFailure(row.last_error),
     unread: bool(row.unread),
+    pendingAction: row.pending_action ? { ...row.pending_action, proposedAt: new Date(row.pending_action.proposedAt) } : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     closedAt: row.closed_at,
@@ -307,6 +353,11 @@ export interface RequestPatch {
   lastError?: TurnFailure | null;
   unread?: boolean;
   closedAt?: Date | null;
+  pendingAction?: PendingAction | null;
+}
+
+function pendingRow(action: PendingAction | null): RequestRow['pending_action'] {
+  return action ? { ...action, proposedAt: action.proposedAt.toISOString() } : null;
 }
 
 export class AssistantStorage extends FactoryStorageDomain {
@@ -350,6 +401,7 @@ export class AssistantStorage extends FactoryStorageDomain {
       analysing: false,
       last_error: null,
       unread: false,
+      pending_action: null,
       created_at: now,
       updated_at: now,
       closed_at: null,
@@ -382,8 +434,23 @@ export class AssistantStorage extends FactoryStorageDomain {
     if (patch.lastError !== undefined) set.last_error = patch.lastError ? serializeTurnFailure(patch.lastError) : null;
     if (patch.unread !== undefined) set.unread = patch.unread;
     if (patch.closedAt !== undefined) set.closed_at = patch.closedAt;
+    if (patch.pendingAction !== undefined) set.pending_action = pendingRow(patch.pendingAction);
     const row = await this.ops.updateAtomic<RequestRow>(ASSISTANT_REQUESTS, { ...ownerWhere(o), id }, () => set);
     return row ? toRequest(row) : null;
+  }
+
+  /**
+   * Takes the request's pending action if it is still the one named: cleared in the same atomic
+   * write, so a double Confirm (or Confirm racing Cancel) runs it at most once.
+   */
+  async takePendingAction(o: AssistantOwner, id: string, actionId: string, now = new Date()): Promise<PendingAction | null> {
+    let taken: PendingAction | null = null;
+    await this.ops.updateAtomic<RequestRow>(ASSISTANT_REQUESTS, { ...ownerWhere(o), id }, row => {
+      if (!row.pending_action || row.pending_action.id !== actionId) return null;
+      taken = { ...row.pending_action, proposedAt: new Date(row.pending_action.proposedAt) };
+      return { pending_action: null, updated_at: now } as Partial<RequestRow>;
+    });
+    return taken;
   }
 
   /** The latest request bound to a source thread, open or closed; `null` when none is. */
@@ -527,17 +594,31 @@ export class AssistantStorage extends FactoryStorageDomain {
   // Settings
 
   async getSettings(o: AssistantOwner): Promise<AssistantSettings> {
-    const row = await this.ops.findOne<SettingsRow>(ASSISTANT_SETTINGS, ownerWhere(o));
-    return row
-      ? { modelId: row.model_id, retentionDays: Number(row.retention_days) }
-      : { modelId: null, retentionDays: DEFAULT_RETENTION_DAYS };
+    return toSettings(await this.ops.findOne<SettingsRow>(ASSISTANT_SETTINGS, ownerWhere(o)));
   }
 
-  async patchSettings(o: AssistantOwner, patch: Partial<AssistantSettings>, now = new Date()): Promise<AssistantSettings> {
+  /**
+   * Changes the settings given. A changed digest schedule passes `digestNextAt` too (when the
+   * next digest is due, `null` when off).
+   */
+  async patchSettings(
+    o: AssistantOwner,
+    patch: Partial<AssistantSettings> & { digestNextAt?: Date | null; digestLastAt?: Date | null },
+    now = new Date(),
+  ): Promise<AssistantSettings> {
     const where = ownerWhere(o);
     const set: Partial<SettingsRow> = { updated_at: now } as Partial<SettingsRow>;
     if (patch.modelId !== undefined) set.model_id = patch.modelId;
     if (patch.retentionDays !== undefined) set.retention_days = patch.retentionDays;
+    if (patch.instructions !== undefined) set.instructions = patch.instructions;
+    if (patch.skills !== undefined) set.skills = patch.skills;
+    if (patch.digest !== undefined) {
+      set.digest_frequency = patch.digest.frequency;
+      set.digest_hour = patch.digest.hour;
+      set.digest_time_zone = patch.digest.timeZone;
+    }
+    if (patch.digestNextAt !== undefined) set.digest_next_at = patch.digestNextAt;
+    if (patch.digestLastAt !== undefined) set.digest_last_at = patch.digestLastAt;
     const update = () => this.ops.updateAtomic<SettingsRow>(ASSISTANT_SETTINGS, where, () => set);
     if (!(await update())) {
       try {
@@ -554,6 +635,25 @@ export class AssistantStorage extends FactoryStorageDomain {
       }
     }
     return this.getSettings(o);
+  }
+
+  async getDigestState(o: AssistantOwner): Promise<DigestState> {
+    const row = await this.ops.findOne<SettingsRow>(ASSISTANT_SETTINGS, ownerWhere(o));
+    return { owner: o, lastAt: row?.digest_last_at ?? null, nextAt: row?.digest_next_at ?? null };
+  }
+
+  /** Owners whose digest is on and due, the most overdue first. */
+  async dueDigests(now: Date, limit: number): Promise<DigestState[]> {
+    const rows = await this.ops.findMany<SettingsRow>(ASSISTANT_SETTINGS, {}, { orderBy: [['digest_next_at', 'asc']] });
+    return rows
+      .filter(row => row.digest_frequency && row.digest_frequency !== 'off' && row.digest_next_at)
+      .filter(row => new Date(row.digest_next_at!).getTime() <= now.getTime())
+      .slice(0, limit)
+      .map(row => ({
+        owner: { orgId: row.owner_org_id, userId: row.owner_user_id },
+        lastAt: row.digest_last_at,
+        nextAt: row.digest_next_at,
+      }));
   }
 
   // Files

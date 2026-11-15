@@ -39,6 +39,7 @@ async function setup() {
     storage,
     clickupStorage,
     pollClickUp: false,
+    runDigests: false,
     mastraStorage: seed.storage.getMastraStorage(),
     secretEncryption: createPlaintextFactorySecretEncryption(),
     blobReferencedElsewhere: async () => false,
@@ -97,6 +98,24 @@ describe('the assistant on the Factory server', () => {
       expect(await clickupStorage.getConnection(ada)).toBeNull();
       expect(await clickupStorage.getConnection(bob)).not.toBeNull();
       expect(assistant.clickup).toBeDefined();
+    } finally {
+      assistant.stop();
+    }
+  });
+
+  it('offers the Factory skills catalogue (the loader sessions use) and only picked skills are read', async () => {
+    const { assistant } = await setup();
+    try {
+      const owner = { orgId: 'org-a', userId: 'ada' };
+      const catalogue = await assistant.service.skillsCatalogue(owner);
+      expect(catalogue.map(skill => skill.name)).toContain('factory-triage');
+      expect(catalogue.every(skill => typeof skill.description === 'string')).toBe(true);
+      expect(await assistant.service.readSkill(owner, 'factory-triage')).toBeNull();
+      await assistant.service.patchSettings(owner, { skills: ['factory-triage'], instructions: 'Be short.' });
+      const skill = await assistant.service.readSkill(owner, 'factory-triage');
+      expect(skill?.instructions.length).toBeGreaterThan(0);
+      expect(skill?.instructions.startsWith('---')).toBe(false);
+      await expect(assistant.service.patchSettings(owner, { skills: ['no-such-skill'] })).rejects.toMatchObject({ code: 'unknown_skill' });
     } finally {
       assistant.stop();
     }

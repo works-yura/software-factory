@@ -1,4 +1,5 @@
 export * from './agent.ts';
+export * from './digest.ts';
 export * from './errors.ts';
 export * from './factory-access.ts';
 export * from './factory-client.ts';
@@ -8,5 +9,6 @@ export * from './retention.ts';
 export * from './routes.ts';
 export * from './service.ts';
 export * from './storage.ts';
+export * from './tools.ts';
 export * from './turn-failure.ts';
 export * from './types.ts';

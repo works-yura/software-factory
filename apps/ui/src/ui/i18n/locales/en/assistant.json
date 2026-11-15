@@ -222,14 +222,31 @@
     "kind": {
       "channel": "Channel",
       "dm": "Direct message",
-      "group_dm": "Group DM"
+      "group_dm": "Group message",
+      "list_channel": "List channel",
+      "folder_channel": "Folder channel",
+      "space_channel": "Space channel"
     },
     "loading": "Loading sources…",
     "orgTitle": "Your organization's ClickUp connection",
     "orgHelp": "The organization's ClickUp connection uses your own ClickUp account ({{workspaces}}), so the assistant can read your chats with it — no second token. Only you see this option.",
     "useOrg": "Use the organization's connection (ClickUp: {{name}})",
     "viaOrg": "Through the organization's ClickUp connection",
-    "orgGone": "The organization's ClickUp connection was removed or no longer uses your account, so reading stopped. Connect your own personal token."
+    "orgGone": "The organization's ClickUp connection was removed or no longer uses your account, so reading stopped. Connect your own personal token.",
+    "private": "private",
+    "dms": "Direct messages",
+    "rooms": "Channels",
+    "count_one": "{{count}} chat",
+    "count_other": "{{count}} chats",
+    "showAll": "Show all ({{count}})",
+    "showSidebar": "Show only my sidebar",
+    "search": "Search chats",
+    "searchPlaceholder": "Name, person or location",
+    "nothingFound": "Nothing found",
+    "nothingFoundHint": "No chat, person or location matches «{{query}}».",
+    "allDms": "All DMs",
+    "allDmsPlaceholder": "All DMs…",
+    "allDmsTo": "All DMs: {{mode}}"
   },
   "failure": {
     "defaultModel": "The organization's default model",

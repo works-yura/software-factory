@@ -3,7 +3,15 @@
  * supplies them; nothing here reaches into Factory's cards, sessions or harnesses. Factory itself
  * is reached only through {@link FactoryClient}, which speaks Factory's MCP as the person.
  */
-import type { AssistantFile, AssistantMessage, AssistantOwner, AssistantRequest, FactoryLink } from './types.ts';
+import type {
+  AssistantFile,
+  AssistantMessage,
+  AssistantOwner,
+  AssistantRequest,
+  ChannelMode,
+  ChannelRule,
+  FactoryLink,
+} from './types.ts';
 
 /** Bytes by content hash: the server's `AttachmentBlobStore`, shared with Factory attachments. */
 export interface AssistantBlobStore {
@@ -36,11 +44,22 @@ export interface BrainTurn {
    * The new entry to look at: the person's text, a Factory's answer, or a message read from a
    * source (`fromName` wrote it there).
    */
-  input: { author: 'person' | 'factory' | 'source'; text: string; files: BrainFile[]; fromName?: string | null };
+  input: { author: 'person' | 'factory' | 'source' | 'digest'; text: string; files: BrainFile[]; fromName?: string | null };
   /** The request's first turn: for a request a source made, the agent also names its topic. */
   first?: boolean;
   /** The model the person chose, or `null` for the organization's default. */
   modelId: string | null;
+  /** The person's own instructions (settings), appended to the base instructions. */
+  instructions?: string;
+  /** The skills the person picked, by name and description; the agent loads one with a tool. */
+  skills?: SkillSummary[];
+  /**
+   * The agent's tools for this turn (Mastra tools), every one bound to this owner and this
+   * request: see `createAssistantTools`.
+   */
+  tools?: Record<string, unknown>;
+  /** Model steps (tool calls and answers) this turn may take. */
+  maxSteps?: number;
 }
 
 /**
@@ -96,6 +115,13 @@ export interface FactoryHandover {
 }
 
 /**
+ * The read-only tools of Factory's MCP the assistant's agent may call as the person. Everything
+ * else (create a card, start a session) goes through `ask`/`handOver`, after the person confirms.
+ */
+export const FACTORY_READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'] as const;
+export type FactoryReadTool = (typeof FACTORY_READ_TOOLS)[number];
+
+/**
  * Factory, reached only through its MCP endpoint with the person's own OAuth grant (ADR-0051).
  * The person's role decides what works: a viewer cannot hand a card over.
  */
@@ -105,6 +131,8 @@ export interface FactoryClient {
   listFactories(owner: AssistantOwner): Promise<FactoryRef[]>;
   ask(owner: AssistantOwner, input: { factoryId: string; question: string; title: string }): Promise<FactoryQuestion>;
   readAnswer(owner: AssistantOwner, input: { factoryId: string; sessionId: string }): Promise<FactoryAnswer>;
+  /** One read-only MCP tool of that Factory, with its own arguments and answer shape. */
+  read(owner: AssistantOwner, input: { factoryId: string; tool: FactoryReadTool; args: Record<string, unknown> }): Promise<Record<string, unknown>>;
   handOver(
     owner: AssistantOwner,
     input: {
@@ -132,6 +160,48 @@ export interface AssistantAuditEvent {
 
 export type AssistantAudit = (event: AssistantAuditEvent) => Promise<void>;
 
+/** A skill of the Factory skills catalogue, as the settings picker and the agent see it. */
+export interface SkillSummary {
+  name: string;
+  description: string;
+}
+
+/**
+ * The Factory skills catalogue (the same SKILL.md files Factory sessions load: bundled, the app's
+ * `factory-skills/`, `MastraFactory({ skills })`). The host supplies it; the assistant never reads
+ * Factory's files itself.
+ */
+export interface AssistantSkills {
+  list(owner: AssistantOwner): Promise<SkillSummary[]>;
+  /** The skill's instructions (SKILL.md without its frontmatter), or `null` when there is none. */
+  read(owner: AssistantOwner, name: string): Promise<(SkillSummary & { instructions: string }) | null>;
+}
+
+/** A channel the person turned on in a source, as the agent's tools list it. */
+export interface SourceChannelInfo {
+  /** `platform:workspace:channel`: what the agent passes back to read it. */
+  ref: string;
+  name: string;
+  kind: string;
+  mode: ChannelMode;
+  rule: ChannelRule;
+}
+
+/** Recent messages of a channel (or of one thread in it), read on demand with the person's connection. */
+export interface SourceChannelMessages {
+  channel: SourceChannelInfo;
+  messages: Array<{
+    id: string;
+    from: string | null;
+    text: string;
+    at: string;
+    /** Replies the message has (a thread root). */
+    replies: number;
+    /** The thread root it replies to, or `null` for a top-level message. */
+    threadId: string | null;
+  }>;
+}
+
 /**
  * A source the person connected personally (ADR-0051: ClickUp Chat, later e-mail). The core erases
  * it first when the assistant is erased; the source owns its connection, channels and cursors.
@@ -142,6 +212,13 @@ export interface AssistantSource {
   disconnect(owner: AssistantOwner): Promise<void>;
   /** Organizations a person has a connection of this source in (for erasing a deleted account). */
   organizationsOf(userId: string): Promise<string[]>;
+  /** The channels the person turned on (mode other than `ignore`), for the agent's tools. */
+  enabledChannels?(owner: AssistantOwner): Promise<SourceChannelInfo[]>;
+  /**
+   * Recent messages of one channel the person turned on (or one thread in it), read now with the
+   * person's own connection; a channel that is off or unknown is refused.
+   */
+  readChannel?(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages>;
 }
 
 /** One message a source read, as the core takes it in. */
@@ -164,6 +241,8 @@ export interface SourceMessage {
   analyse: boolean;
   /** Where the source thread lives, for the agent (`#general`, `DM`). */
   where?: string;
+  /** The channel's rule for a new request (phase 3); `analyse` when absent. */
+  rule?: ChannelRule;
 }
 
 export type IngestOutcome = 'duplicate' | 'skipped' | 'created' | 'appended' | 'reopened';

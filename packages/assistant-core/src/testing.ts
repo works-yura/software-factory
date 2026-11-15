@@ -98,6 +98,11 @@ export class FakeFactory implements FactoryClient, FactoryGrant {
   async readAnswer() {
     return { text: this.answer };
   }
+  readonly reads: Array<{ owner: string; factoryId: string; tool: string; args: Record<string, unknown> }> = [];
+  async read(owner: AssistantOwner, input: { factoryId: string; tool: string; args: Record<string, unknown> }) {
+    this.reads.push({ owner: FakeFactory.key(owner), ...input });
+    return { tool: input.tool, items: [{ id: 'card-9', title: 'Checkout bug' }] };
+  }
   async handOver(
     _owner: AssistantOwner,
     input: { factoryId: string; title: string; description: string; files: Array<{ name: string }> },

@@ -157,3 +157,108 @@ describe('Account › Assistant › Sources', () => {
     expect(screen.getByRole('form', { name: 'Connect ClickUp' })).toBeInTheDocument();
   });
 });
+
+describe('Account › Assistant › Sources: the chat list as the ClickUp sidebar shows it', () => {
+  /** The view the server sends for a workspace like the person's: DMs by person, location channels with equal names. */
+  function sidebarChannels() {
+    const row = (overrides: Record<string, unknown> & { kind: string }) => ({
+      workspaceId: '9001',
+      mode: 'ignore',
+      lastSyncAt: null,
+      lastError: null,
+      visibility: 'PUBLIC',
+      location: null,
+      members: [],
+      rule: 'analyse',
+      inSidebar: true,
+      ...overrides,
+    });
+    return [
+      row({ channelId: 'dm-olena', name: 'Olena', kind: 'dm', mode: 'addressed', members: [{ id: '7', name: 'Olena', avatarUrl: null }] }),
+      row({ channelId: 'dm-taras', name: 'Taras', kind: 'dm', mode: 'addressed', members: [{ id: '8', name: 'Taras', avatarUrl: null }] }),
+      row({ channelId: 'dm-old', name: 'Iryna', kind: 'dm', mode: 'addressed', inSidebar: false, members: [{ id: '9', name: 'Iryna', avatarUrl: null }] }),
+      row({
+        channelId: 'gdm-1',
+        name: 'Olena, Taras',
+        kind: 'group_dm',
+        mode: 'addressed',
+        members: [
+          { id: '7', name: 'Olena', avatarUrl: null },
+          { id: '8', name: 'Taras', avatarUrl: null },
+        ],
+      }),
+      row({ channelId: 'ch-albi', name: 'Albi', kind: 'channel', location: { kind: 'space', path: ['Albi'] } }),
+      row({ channelId: 'ch-bookfate', name: 'BookFate', kind: 'channel' }),
+      row({ channelId: 'ch-bugs-1', name: 'Bugs', kind: 'channel', location: { kind: 'list', path: ['Clients', 'Syncta', 'Bugs'] } }),
+      row({ channelId: 'ch-bugs-2', name: 'Bugs', kind: 'channel', inSidebar: false, location: { kind: 'list', path: ['Clients', 'KidNation', 'Bugs'] } }),
+      row({ channelId: 'ch-dev-1', name: 'Development', kind: 'channel', inSidebar: false, location: { kind: 'folder', path: ['Internal', 'Development'] } }),
+    ];
+  }
+
+  it('groups DMs (each by its person) and channels (each with its location), sidebar first', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/assistant/sources`, () => HttpResponse.json({ clickup: connected({ channels: sidebarChannels() }) })));
+    const user = userEvent.setup();
+    renderSources();
+
+    const dms = await screen.findByRole('group', { name: 'Direct messages' });
+    expect(within(dms).getAllByTestId('source-channel').map(item => item.textContent)).toEqual([
+      expect.stringContaining('Olena'),
+      expect.stringContaining('Taras'),
+      expect.stringContaining('Olena, Taras'),
+    ]);
+    expect(within(dms).queryByText('Iryna')).not.toBeInTheDocument();
+
+    const rooms = screen.getByRole('group', { name: 'Channels' });
+    expect(within(rooms).getByText(/List channel · Clients › Syncta › Bugs/)).toBeInTheDocument();
+    expect(within(rooms).getByText(/Space channel · Albi/)).toBeInTheDocument();
+    expect(within(rooms).queryByText(/KidNation/)).not.toBeInTheDocument();
+    expect(within(rooms).getByRole('combobox', { name: 'What to read in #Bugs — Clients › Syncta › Bugs' })).toBeInTheDocument();
+
+    await user.click(within(rooms).getByRole('button', { name: 'Show all (5)' }));
+    expect(within(rooms).getByText(/List channel · Clients › KidNation › Bugs/)).toBeInTheDocument();
+    expect(within(rooms).getByText(/Folder channel · Internal › Development/)).toBeInTheDocument();
+    // Equal names, never equal rows.
+    const names = within(rooms)
+      .getAllByRole('combobox')
+      .map(select => select.getAttribute('aria-label'));
+    expect(new Set(names).size).toBe(names.length);
+
+    await user.click(within(dms).getByRole('button', { name: 'Show all (4)' }));
+    expect(within(dms).getByText('Iryna')).toBeInTheDocument();
+  });
+
+  it('searches names, people and locations across everything, saying when nothing matches', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/assistant/sources`, () => HttpResponse.json({ clickup: connected({ channels: sidebarChannels() }) })));
+    const user = userEvent.setup();
+    renderSources();
+    const search = await screen.findByLabelText('Search chats');
+    await user.type(search, 'kidnation');
+    const rooms = await screen.findByRole('group', { name: 'Channels' });
+    expect(within(rooms).getAllByTestId('source-channel')).toHaveLength(1);
+    expect(screen.queryByRole('group', { name: 'Direct messages' })).not.toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'iryna');
+    expect(await screen.findByText('Iryna')).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'nowhere');
+    expect(await screen.findByText('Nothing found')).toBeInTheDocument();
+  });
+
+  it('sets every DM to one mode at once', async () => {
+    let put: unknown;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/sources`, () => HttpResponse.json({ clickup: connected({ channels: sidebarChannels() }) })),
+      http.put(`${TEST_BASE_URL}/web/assistant/sources/clickup/dms`, async ({ request }) => {
+        put = await request.json();
+        const channels = sidebarChannels().map(channel => (channel.kind === 'channel' ? channel : { ...channel, mode: 'watch' }));
+        return HttpResponse.json({ changed: 4, clickup: connected({ channels }) });
+      }),
+    );
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(await screen.findByRole('combobox', { name: 'All DMs' }));
+    await user.click(await screen.findByRole('option', { name: 'All DMs: Everything' }));
+    await waitFor(() => expect(put).toEqual({ mode: 'watch' }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'What to read in Olena' })).toHaveTextContent('Everything'));
+  });
+});
