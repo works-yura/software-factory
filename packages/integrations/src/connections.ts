@@ -717,6 +717,9 @@ function buildConnectionRoutesUndeclared(options: ConnectionRoutesOptions): ApiR
 /** What each route that changes something needs (ADR-0045, `@factory/access`). */
 const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'POST /web/connections': 'factory.configure',
+  // Finishing or stopping a sign-in the caller started with the route above.
+  'POST /web/connections/authorizations/:authId/code': 'factory.configure',
+  'DELETE /web/connections/authorizations/:authId': 'factory.configure',
   'POST /web/connections/:id/reconnect': 'factory.configure',
   'PATCH /web/connections/:id': 'factory.configure',
   'DELETE /web/connections/:id': 'factory.configure',
