@@ -198,6 +198,10 @@ log_to_file
   && log "note: the working tree has uncommitted changes; only commit ${SHA:0:8} is deployed"
 
 mkdir -p "$RELEASES"
+# The release this deploy removes when it is done (not the running one): its dependency folders are
+# moved into the new release when the lockfile is the same, so pnpm checks them instead of linking
+# ~1500 packages again (8 minutes on HFS+). A failed build moves them back.
+DONOR="$(list_releases | grep -vxF "$(active_release)" | tail -1)"
 NAME="$(date +%F_%H%M)-${SHA:0:8}"
 [ -e "$RELEASES/$NAME" ] && NAME="$(date +%F_%H%M%S)-${SHA:0:8}"
 DIR="$RELEASES/$NAME"
@@ -207,8 +211,49 @@ git -C "$REPO" worktree add --detach "$DIR" "$SHA" >/dev/null
 ln -sfn "$REPO/apps/server/.env" "$DIR/apps/server/.env"
 
 # `mastra build` installs the bundle's dependencies by running a bare `pnpm`; only corepack is on PATH.
+# Dependency folders of the donor release, relative to a release root (the server bundle's apart).
+donor_modules() {
+  ( cd "$RELEASES/$DONOR" && find . -path ./apps/server/.mastra -prune -o -name node_modules -type d -prune -print ) | sed 's#^\./##'
+}
+MOVED_MODULES=()
+BUNDLE_DONOR=""
+# Only when the donor goes at the end (FACTORY_KEEP_RELEASES=2); a kept release keeps its folders.
+if [ "$KEEP" -eq 2 ] && [ -n "$DONOR" ] && [ -f "$RELEASES/$DONOR/pnpm-lock.yaml" ] && cmp -s "$RELEASES/$DONOR/pnpm-lock.yaml" "$DIR/pnpm-lock.yaml"; then
+  while IFS= read -r rel; do
+    [ -n "$rel" ] && [ -d "$DIR/$(dirname "$rel")" ] && [ ! -e "$DIR/$rel" ] || continue
+    mv "$RELEASES/$DONOR/$rel" "$DIR/$rel" && MOVED_MODULES+=("$rel")
+  done < <(donor_modules)
+  log "reusing ${#MOVED_MODULES[@]} dependency folders of $DONOR (same pnpm-lock.yaml)"
+  [ -d "$RELEASES/$DONOR/apps/server/.mastra/output/node_modules" ] && BUNDLE_DONOR="$RELEASES/$DONOR/apps/server/.mastra/output"
+else
+  log "pnpm-lock.yaml changed since ${DONOR:-the last release} (or none to reuse): full install"
+fi
+# A failed build gives the donor its folders back, so --rollback to it still finds them.
+give_back_modules() {
+  local rel
+  for rel in ${MOVED_MODULES[@]+"${MOVED_MODULES[@]}"}; do
+    [ -e "$DIR/$rel" ] && [ ! -e "$RELEASES/$DONOR/$rel" ] && mv "$DIR/$rel" "$RELEASES/$DONOR/$rel"
+  done
+  [ -n "$BUNDLE_DONOR" ] && [ -f "$SHIM/bundle-moved" ] && [ -d "$DIR/apps/server/.mastra/output/node_modules" ] \
+    && [ ! -e "$BUNDLE_DONOR/node_modules" ] && mv "$DIR/apps/server/.mastra/output/node_modules" "$BUNDLE_DONOR/node_modules"
+  return 0
+}
+
 SHIM="$(mktemp -d)"
-printf '#!/bin/sh\nexec corepack pnpm "$@"\n' > "$SHIM/pnpm" && chmod +x "$SHIM/pnpm"
+# `mastra build` empties .mastra/output, then runs `pnpm install` there. When the bundle's package.json
+# and pnpm settings are the donor's (its lockfile pnpm rewrites, so it is not compared), its installed folder is moved in first, so that install only checks it.
+cat > "$SHIM/pnpm" <<EOF
+#!/bin/sh
+case "\$(pwd -P)" in
+  */apps/server/.mastra/output)
+    if [ "\$1" = install ] && [ -n "$BUNDLE_DONOR" ] && [ -d "$BUNDLE_DONOR/node_modules" ] && [ ! -e node_modules ] \\
+      && cmp -s "$BUNDLE_DONOR/package.json" package.json && cmp -s "$BUNDLE_DONOR/pnpm-workspace.yaml" pnpm-workspace.yaml; then
+      mv "$BUNDLE_DONOR/node_modules" node_modules && : > "$SHIM/bundle-moved" && echo "[deploy] reusing the server bundle's dependencies of $DONOR"
+    fi ;;
+esac
+exec corepack pnpm "\$@"
+EOF
+chmod +x "$SHIM/pnpm"
 
 # Chained with &&: `set -e` does not apply inside a subshell on the left of ||.
 (
@@ -217,7 +262,7 @@ printf '#!/bin/sh\nexec corepack pnpm "$@"\n' > "$SHIM/pnpm" && chmod +x "$SHIM/
     corepack pnpm --dir apps/ui build &&
     PATH="$SHIM:$PATH" corepack pnpm --dir apps/server build &&
     [ -f apps/server/.mastra/output/index.mjs ]
-) || { OUTCOME="failed: install or build of $NAME"; discard "$NAME"; log "install or build failed for $NAME: removed it, still on $(active_release)"; exit 1; }
+) || { OUTCOME="failed: install or build of $NAME"; give_back_modules; discard "$NAME"; log "install or build failed for $NAME: removed it, still on $(active_release)"; exit 1; }
 
 # The mode the server will start in (start-server.sh reads the same file).
 MODE="$( ( [ -f "$CONFIG" ] && . "$CONFIG"; echo "${FACTORY_SERVER_MODE:-prod}" ) )"
