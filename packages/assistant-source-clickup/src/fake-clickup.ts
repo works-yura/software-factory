@@ -1,9 +1,15 @@
 /**
  * A fake ClickUp for tests: answers the v2/v3 calls the source makes, in the response shapes the
- * official reference documents (developer.clickup.com, `ClickUp_PUBLIC_API_V3.yaml`): pagination
- * envelope `{ data, next_cursor }`, channels with `type` CHANNEL/DM/GROUP_DM, messages newest first
- * with epoch-ms `date`, `user_id`, `parent_channel`, `parent_message`, `replies_count`. No real token
- * and no network: it is a `fetch`.
+ * official reference documents (developer.clickup.com/reference/getchatchannels,
+ * …/getchatchannelmembers, …/getchatchannelfollowers, …/getauthorizedteams): pagination envelope
+ * `{ data, next_cursor }` (`next_cursor` always present, empty on the last page), channels with
+ * `type` CHANNEL/DM/GROUP_DM, the required `parent` `{ id, type }` on every room (DMs too: the
+ * workspace, type 7), `links.members`/`links.followers`, a DM's `name` the literal "DM" as live data
+ * shows; `is_follower=true` a filter, unknown parameters ignored; members/followers as
+ * `ChatSimpleUser` where only `id` and `email` are required (`memberShape: 'bare'`) or, to prove
+ * the parser, bare ids (`'ids'`); messages newest first with epoch-ms `date`, `user_id`,
+ * `parent_channel`, `parent_message`, `replies_count`. No real token and no network: it is a
+ * `fetch` (that can also fail like undici's «fetch failed»).
  */
 
 export interface FakeMessage {
@@ -27,6 +33,8 @@ export interface FakeChannel {
   is_canonical_channel?: boolean;
   /** User ids in the channel (`…/members`). */
   members?: string[];
+  /** User ids following it (`…/followers`); absent: the person (42) when `following`, else nobody. */
+  followers?: string[];
 }
 
 export class FakeClickUp {
@@ -65,11 +73,28 @@ export class FakeClickUp {
   readonly calls: string[] = [];
   /** Answer every call with this status instead (401, 429 …). */
   failWith: { status: number; reset?: number } | null = null;
+  /** Answer calls whose path matches with this status (e.g. `/\/members$/` → 403). */
+  failPaths: Array<{ path: RegExp; status: number }> = [];
+  /** The next this many calls throw like undici when the network fails (`TypeError: fetch failed`, `cause.code`). */
+  networkFailures = 0;
+  networkCode = 'ECONNRESET';
+  /**
+   * How `…/members` and `…/followers` items look: `full` (every `ChatSimpleUser` field), `bare` (only
+   * the required `id` and `email`), `ids` (bare user ids).
+   */
+  memberShape: 'full' | 'bare' | 'ids' = 'full';
   pageSize = 50;
 
   readonly fetch: typeof globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     this.calls.push(`${url.hostname === 'api.clickup.com' ? '' : url.hostname}${url.pathname}${url.search}`);
+    if (this.networkFailures > 0) {
+      this.networkFailures -= 1;
+      const cause = Object.assign(new Error(`read ${this.networkCode}`), { code: this.networkCode });
+      throw new TypeError('fetch failed', { cause });
+    }
+    const failing = this.failPaths.find(rule => rule.path.test(url.pathname));
+    if (failing) return Response.json({ status: failing.status, message: 'Forbidden', trace_id: 1, timestamp: 1 }, { status: failing.status });
     const auth = new Headers(init?.headers).get('authorization');
     if (this.failWith) {
       return new Response(JSON.stringify({ err: 'failed', ECODE: 'X' }), {
@@ -97,29 +122,38 @@ export class FakeClickUp {
         next_cursor: '',
         data: this.channels
           .filter(channel => !followingOnly || channel.following)
-          .map(({ following: _following, members: _members, ...channel }) => ({
+          .map(({ following: _following, members: _members, followers: _followers, ...channel }) => ({
             visibility: 'PUBLIC',
             parent: { id: match![1], type: 7 },
             ...channel,
-            // DMs carry no name in the documented shape.
-            name: channel.type === 'CHANNEL' ? channel.name : '',
-            creator: '7',
+            // A DM's name is no person's name: live data shows the literal "DM".
+            name: channel.type === 'CHANNEL' ? channel.name : channel.name || 'DM',
+            creator: '42',
             created_at: '1700000000000',
             updated_at: '1700000000000',
+            latest_comment_at: '1700000000000',
             workspace_id: match![1],
             archived: false,
-            links: { members: '', followers: '' },
+            links: {
+              members: `https://api.clickup.com/api/v3/workspaces/${match![1]}/chat/channels/${channel.id}/members`,
+              followers: `https://api.clickup.com/api/v3/workspaces/${match![1]}/chat/channels/${channel.id}/followers`,
+            },
           })),
       });
     }
-    match = /^\/api\/v3\/workspaces\/[^/]+\/chat\/channels\/([^/]+)\/members$/.exec(path);
+    match = /^\/api\/v3\/workspaces\/[^/]+\/chat\/channels\/([^/]+)\/(members|followers)$/.exec(path);
     if (match) {
       const channel = this.channels.find(candidate => candidate.id === match![1]);
+      if (!channel) return Response.json({ status: 404, message: 'Not found', trace_id: 1, timestamp: 1 }, { status: 404 });
+      const ids =
+        match[2] === 'members' ? (channel.members ?? []) : (channel.followers ?? (channel.following ? [String(this.me.id)] : []));
       const users = new Map(this.workspaces.flatMap(workspace => workspace.members.map(member => [String(member.user.id), member.user] as const)));
       return Response.json({
         next_cursor: '',
-        data: (channel?.members ?? []).map(id => {
+        data: ids.map(id => {
           const user = users.get(id);
+          if (this.memberShape === 'ids') return id;
+          if (this.memberShape === 'bare') return { id, email: user?.email ?? '' };
           return { id, email: user?.email ?? '', name: user?.username ?? '', username: user?.username ?? '', initials: '' };
         }),
       });

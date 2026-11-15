@@ -234,6 +234,11 @@
     "viaOrg": "Through the organization's ClickUp connection",
     "orgGone": "The organization's ClickUp connection was removed or no longer uses your account, so reading stopped. Connect your own personal token.",
     "private": "private",
+    "detailsFailed": {
+      "members": "Could not get the people (code {{code}})",
+      "path": "Could not get the location (code {{code}})",
+      "followers": "Could not check whether it is in your sidebar (code {{code}})"
+    },
     "dms": "Direct messages",
     "rooms": "Channels",
     "count_one": "{{count}} chat",

@@ -31,8 +31,10 @@ import {
   buildModelCatalog,
   listSessionScopedCredentials,
   primeTenantCredentialsForRequestContext,
+  MASTRA_INSTANCE_ID,
   resolveTenantProviderDefaultModel,
 } from '@factory/credentials';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import type { ModelCatalog } from '@factory/credentials';
 import type { RouteAuth } from '@factory/http';
 import { listFactorySkills } from '@factory/harness-mastra';
@@ -46,6 +48,13 @@ import type {
   ModelCredentialsStorage,
 } from '@factory/store';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
+import {
+  buildAssistantModelCatalog,
+  createAssistantHarnessRunners,
+  noOrgModelError,
+  resolveHarnessTurnModel,
+} from './models.ts';
+import type { AssistantHarnessRunner, AssistantModelCatalogDeps } from './models.ts';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
@@ -95,6 +104,8 @@ export interface FactoryAssistantOptions {
   publicOrigin: string;
   /** The auth provider: its authorization server for the assistant's OAuth grant, its removal hooks. */
   authProvider: unknown;
+  /** How harness models run here (tests); by default Claude Code, Codex and OpenCode on the sign-in and account pools. */
+  harnessRunners?: Readonly<Record<string, AssistantHarnessRunner>>;
 }
 
 /**
@@ -126,71 +137,82 @@ export interface FactoryAssistant {
   service: AssistantService;
   /** The ClickUp Chat source, when the server has its storage. */
   clickup: ClickUpChatSource | undefined;
-  /** The routes, once the server's model catalog (the agent controller) is known. */
-  routes(input: { auth: RouteAuth; controller: ModelCatalog }): ApiRoute[];
+  /** The organization's models as the assistant offers them (`GET /web/assistant/models`). */
+  models: AssistantModels;
+  /**
+   * The routes, once the server's model catalog (the agent controller) and its harness model registry
+   * (every harness's model facet, ADR-0044) are known.
+   */
+  routes(input: { auth: RouteAuth; controller: ModelCatalog; harnessModels?: () => Pick<HarnessModelRegistry, 'all'> | undefined }): ApiRoute[];
   stop(): void;
 }
 
 export function createFactoryAssistant(options: FactoryAssistantOptions): FactoryAssistant {
   let catalog: ModelCatalog | undefined;
 
-  const models: AssistantModels = {
-    async list(owner) {
-      if (!catalog) throw new AssistantError('models_unavailable', 'The model catalog is not ready yet.', 503);
-      const tenantCredentials = await listSessionScopedCredentials({
-        credentials: options.modelCredentials,
-        orgId: owner.orgId,
-        userId: owner.userId,
-      });
-      const entries = await buildModelCatalog({
-        controller: catalog,
-        tenantCredentials,
-        deploymentProviders: options.deploymentProviders,
-        ...(options.customProviders
-          ? { listCustomProviders: () => options.customProviders!.list({ orgId: owner.orgId }) }
-          : {}),
-      });
-      return entries.map(entry => ({ id: entry.id, provider: entry.provider, modelName: entry.modelName }));
-    },
+  let harnessModels: (() => Pick<HarnessModelRegistry, 'all'> | undefined) | undefined;
+
+  const mastraCatalog = async (owner: { orgId: string; userId: string }) => {
+    if (!catalog) throw new AssistantError('models_unavailable', 'The model catalog is not ready yet.', 503);
+    const credentials = await listSessionScopedCredentials({
+      credentials: options.modelCredentials,
+      orgId: owner.orgId,
+      userId: owner.userId,
+    });
+    const models = await buildModelCatalog({
+      controller: catalog,
+      tenantCredentials: credentials,
+      deploymentProviders: options.deploymentProviders,
+      ...(options.customProviders ? { listCustomProviders: () => options.customProviders!.list({ orgId: owner.orgId }) } : {}),
+    });
+    return { models, credentials };
   };
 
-  /**
-   * The model a person who has not chosen one runs on: the same pick a new Factory chat makes when
-   * its Factory has no default (Settings › Моделі «built-in default», `/web/config/models`) — the
-   * harness's default-mode model when the organization can run it, otherwise the default model of
-   * the first connected provider in `PROVIDER_DEFAULT_MODELS` order. There is no organization-wide
-   * default setting (defaults are per Factory), so this is the organization-level equivalent. A
-   * failing model is never swapped for another provider: the thread names it and the person picks.
-   */
-  async function organizationDefaultModel(owner: { orgId: string; userId: string }): Promise<string | undefined> {
-    const tenant = { orgId: owner.orgId, userId: owner.userId, credentialScope: 'factory' as const };
-    const modeModelId = catalog?.getDefaultMode?.().defaultModelId;
-    const providerDefault = await resolveTenantProviderDefaultModel(tenant, modeModelId);
-    if (providerDefault) return providerDefault;
-    if (!modeModelId) return undefined;
-    // `undefined` above means either "the mode's model is usable" or "nothing is connected".
-    const listed = await models.list(owner);
-    return listed.some(model => model.id === modeModelId) ? modeModelId : undefined;
-  }
+  // The organization's catalog from Factory's own builders (`/web/config/models`): Mastra's models on
+  // its model credentials, and every other harness's (Claude Code, Codex, OpenCode) from its facet,
+  // run here on the same sign-ins and accounts its sessions use (`./models.ts`).
+  const catalogDeps: AssistantModelCatalogDeps = {
+    mastra: mastraCatalog,
+    /**
+     * The model a new Factory chat starts on when its Factory sets no default (Settings › Моделі
+     * «built-in default», `/web/config/models` `fallbackModelId`): the harness's default-mode model
+     * when the organization can run it, otherwise the default model of the first connected provider in
+     * `PROVIDER_DEFAULT_MODELS` order. Defaults are per Factory; this is the organization-level one.
+     */
+    async factoryChatDefault(owner) {
+      const tenant = { orgId: owner.orgId, userId: owner.userId, credentialScope: 'factory' as const };
+      const modeModelId = catalog?.getDefaultMode?.().defaultModelId;
+      return (await resolveTenantProviderDefaultModel(tenant, modeModelId)) ?? modeModelId;
+    },
+    harnesses: () => (harnessModels?.()?.all() ?? []).filter(facet => facet.instanceId !== MASTRA_INSTANCE_ID),
+    runners: options.harnessRunners ?? createAssistantHarnessRunners({ credentials: options.modelCredentials }),
+  };
 
-  // The organization's credentials, as every Factory run bills them (ADR-0032): never personal ones,
-  // never the server's environment. No model at all is a loud refusal the thread shows.
+  const models: AssistantModels = {
+    catalog: owner => buildAssistantModelCatalog(catalogDeps, owner),
+  };
+
+  // The organization's credentials, as every Factory run bills them (ADR-0032): never the server's
+  // environment. A harness model runs on the person's sign-ins or the organization's accounts, picked
+  // from the pool Factory's runs use. No model at all, or a model that cannot run here, is a loud
+  // refusal the thread shows; a failing model is never swapped for another.
   const resolver: AssistantModelResolver = {
     async resolve(owner, modelId) {
-      const id = modelId ?? (await organizationDefaultModel(owner));
+      let id = modelId;
       if (!id) {
-        throw new AssistantError(
-          'no_org_model',
-          'Your organization has no model connected, so the assistant cannot answer. An admin connects one in Settings › Моделі.',
-          409,
-        );
+        const offered = await models.catalog(owner);
+        if (!offered.default) throw noOrgModelError(offered.defaultReason);
+        id = offered.default.modelId;
       }
+      const harnessModel = await resolveHarnessTurnModel(catalogDeps, owner, id);
+      if (harnessModel) return { model: harnessModel as never, modelId: id };
       const requestContext = new RequestContext();
       requestContext.set('user', { id: owner.userId, organizationId: owner.orgId });
       await primeTenantCredentialsForRequestContext(requestContext);
+      const mastraId = id;
       return {
         model: ({ requestContext: context }: { requestContext: RequestContext }) =>
-          resolveModel(id, { remapForCodexOAuth: true, requestContext: context }),
+          resolveModel(mastraId, { remapForCodexOAuth: true, requestContext: context }),
         requestContext,
         modelId: id,
       };
@@ -295,8 +317,10 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
   return {
     service,
     clickup,
-    routes({ auth, controller }) {
+    models,
+    routes({ auth, controller, harnessModels: registry }) {
       catalog = controller;
+      harnessModels = registry;
       return [
         ...buildAssistantRoutes({ auth, service, access, models }),
         ...(clickup ? buildClickUpSourceRoutes({ auth, source: clickup }) : []),

@@ -9,6 +9,9 @@ import { createFactoryStorageForTests } from '@factory/store/testing';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import { describe, expect, it } from 'vitest';
 
+import { claudeCodeCatalogDefault, claudeCodeModels } from '@factory/harness-claude-code';
+import type { HarnessModels } from '@factory/harness/models/facet';
+
 import { createFactoryAssistant, createOrgClickUpReader } from './wiring.ts';
 
 function fakeProvider() {
@@ -49,6 +52,20 @@ async function setup() {
     audit: seed.audit,
     publicOrigin: 'http://localhost:4111',
     authProvider: provider,
+  });
+  // The server hands the assistant its model catalog and harness registry with the routes: here no
+  // Mastra model, and Claude Code's facet (its bundled catalog) as the only other harness.
+  const claudeCode = {
+    instanceId: 'claude-code',
+    harnessId: 'claude-code',
+    displayName: 'Claude Code',
+    list: async () => claudeCodeModels(),
+    catalogDefault: async () => claudeCodeCatalogDefault(),
+  } as unknown as HarnessModels;
+  assistant.routes({
+    auth: {} as never,
+    controller: { listAvailableModels: async () => [] },
+    harnessModels: () => ({ all: () => [claudeCode] }),
   });
   return { seed, storage, clickupStorage, provider, assistant };
 }
@@ -134,6 +151,35 @@ describe('the assistant on the Factory server', () => {
       }
       expect(view.request.analysing).toBe(false);
       expect(view.request.lastError).toMatchObject({ kind: 'no_model', modelId: null, detail: expect.stringMatching(/no model connected/) });
+    } finally {
+      assistant.stop();
+    }
+  });
+
+  it('offers the organization’s Claude sign-ins as models: its owner picks one, another member is told why not', async () => {
+    const { seed, assistant } = await setup();
+    try {
+      await seed.credentials.addAccount({
+        orgId: 'org-a',
+        provider: 'anthropic',
+        label: 'ada@example.com',
+        kind: 'claude_login',
+        ownerUserId: 'ada',
+        secret: 'fake-access',
+        oauth: { accessToken: 'fake-access', refreshToken: 'fake-refresh', expiresAt: Date.now() + 3_600_000, scopes: [] },
+        createdBy: 'ada',
+      });
+      const ada = { orgId: 'org-a', userId: 'ada' };
+      const bob = { orgId: 'org-a', userId: 'bob' };
+      const catalog = await assistant.models.catalog(ada);
+      expect(catalog.default).toMatchObject({ modelId: 'claude-code:claude-opus-5-5', source: 'org_preference' });
+      expect(await assistant.service.patchSettings(ada, { modelId: 'claude-code:claude-sonnet-5-5' })).toMatchObject({
+        modelId: 'claude-code:claude-sonnet-5-5',
+      });
+      await expect(assistant.service.patchSettings(bob, { modelId: 'claude-code:claude-sonnet-5-5' })).rejects.toMatchObject({
+        code: 'model_not_runnable',
+      });
+      await expect(assistant.service.patchSettings(bob, { modelId: 'claude-code:no-such-model' })).rejects.toMatchObject({ code: 'unknown_model' });
     } finally {
       assistant.stop();
     }

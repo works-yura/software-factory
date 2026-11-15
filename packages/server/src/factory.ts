@@ -3269,7 +3269,8 @@ export class MastraFactory {
               })
             : []),
           // «Помічник» (ADR-0051): the person's own assistant, `/web/assistant/*` (self.write, owner's data only).
-          ...(this.#assistant ? this.#assistant.routes({ auth: routeAuth, controller }) : []),
+          // Its models are the organization's, as Factory offers them: every harness's facet with Mastra's catalog.
+          ...(this.#assistant ? this.#assistant.routes({ auth: routeAuth, controller, harnessModels: () => harnessModels }) : []),
           // Last: a JSON 404 for any `/web` or `/auth` path the routes above do not answer, before the
           // deployer's catch-all answers it with its HTML welcome page (see `buildUnknownServerRoutes`).
           ...buildUnknownServerRoutes(),

@@ -894,9 +894,17 @@ export class AssistantService {
       }
     }
     if (patch.modelId !== undefined && patch.modelId !== null) {
-      const models = await this.#deps.models.list(owner);
-      if (!models.some(model => model.id === patch.modelId)) {
+      const catalog = await this.#deps.models.catalog(owner);
+      const model = catalog.groups.flatMap(group => group.models).find(candidate => candidate.id === patch.modelId);
+      if (!model) {
         throw new AssistantError('unknown_model', `The organization has no model ${patch.modelId}.`, 400);
+      }
+      if (!model.selectable) {
+        throw new AssistantError(
+          'model_not_runnable',
+          `The assistant cannot run ${model.label}: ${model.availability.reason ?? model.availability.state}.`,
+          400,
+        );
       }
     }
     return this.#deps.storage.patchSettings(owner, stored, this.#now());
