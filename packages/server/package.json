@@ -19,6 +19,7 @@
     "@factory/agent-user": "workspace:*",
     "@factory/api": "workspace:*",
     "@factory/assistant-core": "workspace:*",
+    "@factory/assistant-source-clickup": "workspace:*",
     "@factory/auth": "workspace:*",
     "@factory/capabilities": "workspace:*",
     "@factory/contracts": "workspace:*",

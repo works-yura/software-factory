@@ -522,6 +522,10 @@
     "assistant": {
       "title": "Assistant",
       "description": "Your own requests desk in this organization: what colleagues and clients send you, sorted by an assistant that reports only to you. Factories and admins do not see it."
+    },
+    "assistantSources": {
+      "title": "Sources",
+      "description": "Where the assistant reads requests from, with your own connections. Nobody else in the organization sees them."
     }
   },
   "panel": {

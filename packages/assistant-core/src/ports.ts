@@ -32,8 +32,13 @@ export interface BrainFile {
 export interface BrainTurn {
   owner: AssistantOwner;
   request: AssistantRequest;
-  /** The new entry to look at: the person's text, a Factory's answer. */
-  input: { author: 'person' | 'factory'; text: string; files: BrainFile[] };
+  /**
+   * The new entry to look at: the person's text, a Factory's answer, or a message read from a
+   * source (`fromName` wrote it there).
+   */
+  input: { author: 'person' | 'factory' | 'source'; text: string; files: BrainFile[]; fromName?: string | null };
+  /** The request's first turn: for a request a source made, the agent also names its topic. */
+  first?: boolean;
   /** The model the person chose, or `null` for the organization's default. */
   modelId: string | null;
 }
@@ -43,7 +48,8 @@ export interface BrainTurn {
  * request. It reports to the person only.
  */
 export interface AssistantBrain {
-  respond(turn: BrainTurn): Promise<{ text: string }>;
+  /** The report, and — when asked on a source request's first turn — a short topic for it. */
+  respond(turn: BrainTurn): Promise<{ text: string; topic?: string }>;
 }
 
 /** The agent's memory: erased per owner. */
@@ -125,6 +131,42 @@ export interface AssistantAuditEvent {
 }
 
 export type AssistantAudit = (event: AssistantAuditEvent) => Promise<void>;
+
+/**
+ * A source the person connected personally (ADR-0051: ClickUp Chat, later e-mail). The core erases
+ * it first when the assistant is erased; the source owns its connection, channels and cursors.
+ */
+export interface AssistantSource {
+  readonly platform: string;
+  /** Forgets the person's connection (the encrypted token), channel modes and cursors. */
+  disconnect(owner: AssistantOwner): Promise<void>;
+  /** Organizations a person has a connection of this source in (for erasing a deleted account). */
+  organizationsOf(userId: string): Promise<string[]>;
+}
+
+/** One message a source read, as the core takes it in. */
+export interface SourceMessage {
+  platform: 'clickup';
+  /** The thread it belongs to: `platform:workspace:channel:thread` (thread = the root message id). */
+  sourceKey: string;
+  /** The message's own id at the source: `platform:workspace:message`. Taking it in twice is a no-op. */
+  messageKey: string;
+  text: string;
+  /** Who wrote it, as the source names them. */
+  fromName: string | null;
+  /** A link to the message at the source. */
+  sourceUrl: string | null;
+  /** Its attachments, already downloaded. */
+  files: Array<{ name: string; declaredMime: string | null; bytes: Uint8Array }>;
+  /** The person wrote it themself: it joins an open request as context, but never starts one or a turn. */
+  fromMe: boolean;
+  /** False when the person's limit on agent turns is spent: the message is kept, the agent skips it. */
+  analyse: boolean;
+  /** Where the source thread lives, for the agent (`#general`, `DM`). */
+  where?: string;
+}
+
+export type IngestOutcome = 'duplicate' | 'skipped' | 'created' | 'appended' | 'reopened';
 
 /** What a request and its thread look like to the panel. */
 export interface RequestView {
