@@ -8,7 +8,8 @@ import { ClickUpChatClient, fileLinks, isClickUpFileUrl } from './client.ts';
 import { FakeClickUp } from './fake-clickup.ts';
 import { startClickUpPolling } from './scheduler.ts';
 import type { ClickUpPollLimits } from './source.ts';
-import { ClickUpChatSource } from './source.ts';
+import type { OrgClickUpConnection, OrgClickUpReader } from './org-connection.ts';
+import { ClickUpChatSource, ORG_CONNECTION_GONE } from './source.ts';
 import { ClickUpSourceStorage, SOURCE_CONNECTIONS } from './storage.ts';
 
 const ADA: AssistantOwner = { orgId: 'org-a', userId: 'ada' };
@@ -28,8 +29,9 @@ let now: number;
 let service: AssistantService;
 let source: ClickUpChatSource;
 
-function build(limits: Partial<ClickUpPollLimits> = {}) {
+function build(limits: Partial<ClickUpPollLimits> = {}, orgClickUp?: OrgClickUpReader) {
   source = new ClickUpChatSource({
+    ...(orgClickUp ? { orgClickUp } : {}),
     storage,
     cipher: testCipher,
     ingest: { ingestSourceMessage: (o, m) => service.ingestSourceMessage(o, m), hasOpenSourceRequest: (o, k) => service.hasOpenSourceRequest(o, k) },
@@ -119,6 +121,76 @@ describe('connecting a personal token', () => {
       ['Olena', 'addressed'],
       ['general', 'watch'],
     ]);
+  });
+});
+
+describe('the organization’s ClickUp connection', () => {
+  /** Settings › Підключення › ClickUp: the org token (ClickUp user 42, «ada»), saved by someone, and ADR-0018 links. */
+  let org: OrgClickUpConnection | null;
+  let links: Array<{ clickUpUserId: string; userId: string }>;
+
+  beforeEach(() => {
+    org = { token: clickup.token, savedBy: 'ada', account: { id: '42', name: 'ada', workspaces: ['eclipt.ai'] } };
+    links = [];
+    build({}, {
+      connection: async orgId => (orgId === 'org-a' ? org : null),
+      linkedUsers: async (orgId, clickUpUserId) =>
+        orgId === 'org-a' ? links.filter(link => link.clickUpUserId === clickUpUserId).map(link => link.userId) : [],
+    });
+  });
+
+  it('is offered to the person who saved its token, and to nobody else in the organization', async () => {
+    expect((await source.view(ADA)).orgOffer).toEqual({ accountName: 'ada', workspaces: ['eclipt.ai'] });
+    expect((await source.view(BOB)).orgOffer).toBeNull();
+    expect((await source.view(ADA_ELSEWHERE)).orgOffer).toBeNull();
+    await expect(source.connectOrg(BOB)).rejects.toMatchObject({ code: 'org_connection_not_yours', status: 403 });
+    expect((await source.view(BOB)).connected).toBe(false);
+  });
+
+  it('follows an identity link (connect FCT-…) over who saved it: an admin pasting someone’s token gets nothing', async () => {
+    org = { ...org!, savedBy: 'bob' };
+    expect((await source.view(BOB)).orgOffer).not.toBeNull();
+    links = [{ clickUpUserId: '42', userId: 'ada' }];
+    expect((await source.view(ADA)).orgOffer).toEqual({ accountName: 'ada', workspaces: ['eclipt.ai'] });
+    expect((await source.view(BOB)).orgOffer).toBeNull();
+    // Two Factory people linked to one ClickUp account prove nothing.
+    links.push({ clickUpUserId: '42', userId: 'bob' });
+    expect((await source.view(ADA)).orgOffer).toBeNull();
+  });
+
+  it('reads with the organization’s token without copying it, and stops with a clear notice once the connection is removed', async () => {
+    const view = await source.connectOrg(ADA);
+    expect(view).toMatchObject({ connected: true, via: 'org', orgOffer: null, account: { id: '42', name: 'ada' } });
+    const stored = await storage.getConnection(ADA);
+    expect(stored?.secret).not.toContain(clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-general', mode: 'watch' });
+    now += 1000;
+    await poll();
+    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'Checkout fails', date: now + 5000 });
+    now += 60_000;
+    await poll();
+    expect(await core.listRequests(ADA)).toHaveLength(1);
+
+    org = null;
+    now += 60_000;
+    const result = await poll();
+    expect(result.error).toBe(ORG_CONNECTION_GONE);
+    expect(await source.view(ADA)).toMatchObject({ status: 'rejected', lastError: ORG_CONNECTION_GONE, via: 'org', nextPollAt: null });
+    // Stopped: no longer due a poll.
+    expect(await source.due(10)).toEqual([]);
+  });
+
+  it('stops too when the token is replaced by someone else’s account', async () => {
+    await source.connectOrg(ADA);
+    org = { ...org!, savedBy: 'bob', account: { id: '77', name: 'bob', workspaces: [] } };
+    now += 60_000;
+    await poll();
+    expect(await source.view(ADA)).toMatchObject({ status: 'rejected', lastError: ORG_CONNECTION_GONE });
+  });
+
+  it('keeps the personal-token path', async () => {
+    const view = await source.connect(BOB, clickup.token);
+    expect(view).toMatchObject({ connected: true, via: 'personal' });
   });
 });
 

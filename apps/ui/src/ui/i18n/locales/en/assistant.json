@@ -224,7 +224,12 @@
       "dm": "Direct message",
       "group_dm": "Group DM"
     },
-    "loading": "Loading sources…"
+    "loading": "Loading sources…",
+    "orgTitle": "Your organization's ClickUp connection",
+    "orgHelp": "The organization's ClickUp connection uses your own ClickUp account ({{workspaces}}), so the assistant can read your chats with it — no second token. Only you see this option.",
+    "useOrg": "Use the organization's connection (ClickUp: {{name}})",
+    "viaOrg": "Through the organization's ClickUp connection",
+    "orgGone": "The organization's ClickUp connection was removed or no longer uses your account, so reading stopped. Connect your own personal token."
   },
   "failure": {
     "defaultModel": "The organization's default model",

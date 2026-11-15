@@ -17,7 +17,8 @@ import {
 } from '@factory/assistant-core';
 import type { AssistantModelResolver, AssistantModels, AssistantStorage, RetentionJob } from '@factory/assistant-core';
 import { buildClickUpSourceRoutes, ClickUpChatSource, startClickUpPolling } from '@factory/assistant-source-clickup';
-import type { ClickUpPolling, ClickUpSourceStorage } from '@factory/assistant-source-clickup';
+import type { ClickUpPolling, ClickUpSourceStorage, OrgClickUpReader } from '@factory/assistant-source-clickup';
+import { clickUpMetadataOf, clickUpTokenOf } from '@factory/integration-clickup';
 import {
   buildModelCatalog,
   listSessionScopedCredentials,
@@ -28,6 +29,8 @@ import type { ModelCatalog } from '@factory/credentials';
 import type { RouteAuth } from '@factory/http';
 import type {
   AttachmentBlobStore,
+  ChannelIdentityStorage,
+  IntegrationStorageHandle,
   AuditStorage,
   CustomProvidersStorage,
   FactorySecretEncryption,
@@ -60,6 +63,8 @@ export interface FactoryAssistantOptions {
   clickupStorage?: ClickUpSourceStorage;
   /** Polling of ClickUp; tests and servers without a background loop turn it off. */
   pollClickUp?: boolean;
+  /** The organization's ClickUp connection, offered to the one person whose own account its token is. */
+  orgClickUp?: OrgClickUpReader;
   mastraStorage: MastraCompositeStore;
   secretEncryption: FactorySecretEncryption;
   /** The attachment blob store; without one, requests take text only and say why files are refused. */
@@ -73,6 +78,31 @@ export interface FactoryAssistantOptions {
   publicOrigin: string;
   /** The auth provider: its authorization server for the assistant's OAuth grant, its removal hooks. */
   authProvider: unknown;
+}
+
+/**
+ * The organization's ClickUp connection (`clickup:org`, Settings › Підключення) and the ADR-0018
+ * identity links, as the assistant's ClickUp source proves whose account the token is.
+ */
+export function createOrgClickUpReader(input: {
+  connections: Pick<IntegrationStorageHandle, 'connections'>;
+  links: Pick<ChannelIdentityStorage, 'listAccountLinksForOrg'>;
+}): OrgClickUpReader {
+  return {
+    async connection(orgId) {
+      const row = await input.connections.connections.get(orgId);
+      const token = clickUpTokenOf(row?.data);
+      const account = clickUpMetadataOf(row?.metadata);
+      if (!row || !token || !account) return null;
+      return { token, savedBy: row.userId, account: { id: account.userId, name: account.username, workspaces: account.workspaces } };
+    },
+    async linkedUsers(orgId, clickUpUserId) {
+      const links = await input.links.listAccountLinksForOrg(orgId, { limit: 1000 });
+      return links
+        .filter(link => link.platform === 'clickup' && link.externalUserId === clickUpUserId && link.orgId === orgId)
+        .map(link => link.userId);
+    },
+  };
 }
 
 export interface FactoryAssistant {
@@ -178,6 +208,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     ? new ClickUpChatSource({
         storage: options.clickupStorage,
         cipher: options.secretEncryption,
+        ...(options.orgClickUp ? { orgClickUp: options.orgClickUp } : {}),
         ingest: {
           ingestSourceMessage: (owner, message) => ingest!.ingestSourceMessage(owner, message),
           hasOpenSourceRequest: (owner, key) => ingest!.hasOpenSourceRequest(owner, key),
