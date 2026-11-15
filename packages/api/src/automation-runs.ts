@@ -29,8 +29,9 @@ import { auditRequestContext } from '@factory/feed';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import type { RouteDependencies } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -123,7 +124,7 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
         ),
       };
     }
-    if (!(await auth.isOrganizationAdmin(c, tenant.orgId))) {
+    if (!(await auth.can(c, 'factory.manage', tenant.orgId))) {
       return {
         response: c.json(
           { error: 'forbidden', message: 'Organization administrator access is required for automation ingress.' },
@@ -185,6 +186,10 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const { workItems, configVersion } = this.deps;
     const contract = FACTORY_ROUTE_CONTRACTS.workItemAutomationRun;
 
@@ -318,3 +323,8 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
 export function buildAutomationRunRoutes(deps: AutomationRunRoutesDeps): ApiRoute[] {
   return new AutomationRunRoutes(deps).routes();
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects/:id/work-items/:workItemId/automation-runs': 'run.start',
+};

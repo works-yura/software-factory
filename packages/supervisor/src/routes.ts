@@ -15,6 +15,8 @@ import type { WorkItemsStorage } from '@factory/store';
 import { runFactoryHealthCheck } from './health.ts';
 import { supervisorResourceId, supervisorThreadId } from '@factory/session';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 interface SupervisorRouteDependencies {
   workItems: WorkItemsStorage;
@@ -24,7 +26,11 @@ interface SupervisorRouteDependencies {
   ): Promise<{ orgId: string; userId: string; factoryProjectId: string } | { response: Response }>;
 }
 
-export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies): ApiRoute[] {
+export function buildSupervisorRoutes(...args: Parameters<typeof buildSupervisorRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildSupervisorRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildSupervisorRoutesUndeclared(dependencies: SupervisorRouteDependencies): ApiRoute[] {
   const { workItems, boards } = dependencies;
   return [
     // The session is addressed deterministically and created lazily by the
@@ -56,3 +62,8 @@ export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies)
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects/:id/supervisor/session': 'run.start',
+};

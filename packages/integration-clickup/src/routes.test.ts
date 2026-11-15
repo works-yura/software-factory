@@ -77,7 +77,7 @@ function setup(
   });
   const auth = fakeRouteAuth({
     enabled: options.authEnabled ?? true,
-    isOrganizationAdmin: options.isAdmin ?? (async (_orgId, userId) => userId.startsWith('admin')),
+    isAdmin: options.isAdmin ?? (async (_orgId, userId) => userId.startsWith('admin')),
   });
   const emitAudit = async ({ input }: { input: { action: string; metadata?: Record<string, unknown> } }) =>
     void audits.push({ action: input.action, ...(input.metadata ? { metadata: input.metadata } : {}) });

@@ -52,7 +52,7 @@ async function resolveOrg(
   if (!tenant.orgId) {
     return { response: c.json({ error: 'organization_required', message: 'ClickUp intake requires an organization.' }, 403) };
   }
-  const canManage = !auth.enabled() || (await auth.isOrganizationAdmin(c, tenant.orgId));
+  const canManage = !auth.enabled() || (await auth.can(c, 'connections.manage', tenant.orgId));
   return { orgId: tenant.orgId, userId: tenant.userId ?? null, canManage };
 }
 

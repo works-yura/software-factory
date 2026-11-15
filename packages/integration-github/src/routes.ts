@@ -87,6 +87,8 @@ function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): P
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.ts';
 import { handleGithubWebhook } from './webhook.ts';
 import type { ParsedGithubWebhook } from './webhook.ts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 /**
  * Loose Hono context accepted by the shared GitHub route helpers. The
@@ -445,7 +447,11 @@ async function handleMissingInstallation(
  * Build the GitHub routes as Mastra `apiRoutes`. When the feature is disabled,
  * returns only the `status` route so the SPA can detect the disabled state.
  */
-export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
+export function buildGithubRoutes(...args: Parameters<typeof buildGithubRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildGithubRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildGithubRoutesUndeclared(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
   const {
     auth,
@@ -501,7 +507,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const orgId = tenant.orgId;
         const rows = await github.sourceControlStorage.installations.list({ orgId });
         const views = await Promise.all(rows.map(row => describeInstallation(github, row)));
-        const canManage = !auth.enabled() || (await auth.isOrganizationAdmin(loose(c), orgId));
+        const canManage = !auth.enabled() || (await auth.can(loose(c), 'connections.manage', orgId));
 
         const connected = rows.length > 0;
         return c.json({
@@ -1044,7 +1050,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   // only whether each is configured. They are the organization's credentials:
   // only an organization admin sets or removes them.
   const patAdminRefusal = async (c: Context, orgId: string): Promise<Response | null> =>
-    auth.enabled() && !(await auth.isOrganizationAdmin(c, orgId))
+    auth.enabled() && !(await auth.can(c, 'connections.manage', orgId))
       ? c.json({ error: 'forbidden', message: 'Only organization admins can change the GitHub CLI tokens.' }, 403)
       : null;
   const parsePatKind = (value: unknown): GithubPatKind | null => {
@@ -1838,3 +1844,15 @@ async function resolveSessionWorkspace(
     sandbox: requireExec(entry.sandbox),
   };
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/github/webhook': 'public',
+  'POST /web/github/pat': 'connections.manage',
+  'DELETE /web/github/pat': 'connections.manage',
+  'POST /web/github/projects/:id/commit': 'session.write',
+  'POST /web/github/projects/:id/push': 'session.write',
+  'POST /web/github/projects/:id/pr': 'session.write',
+  'POST /web/github/projects/:id/sessions': 'session.write',
+  'POST /web/github/projects/:id/settings': 'factory.configure',
+};

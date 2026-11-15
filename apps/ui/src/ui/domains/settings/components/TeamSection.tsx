@@ -30,9 +30,9 @@ import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { useCan } from '../../../../hooks/useCan';
 import {
   cancelInvitation,
-  canManageMembers,
   invitationLink,
   inviteMember,
   isOpenInvitation,
@@ -299,7 +299,6 @@ function CreateJoinLinkDialog({ organizationId, onClose }: { organizationId: str
   const create = useMutation({
     mutationFn: () =>
       createJoinLink(baseUrl, {
-        organizationId,
         name: name.trim(),
         role,
         allowedDomains: parseDomainList(domains),
@@ -484,7 +483,7 @@ function JoinLinks({ organizationId }: { organizationId: string }) {
   const [creating, setCreating] = useState(false);
   const links = useQuery({
     queryKey: queryKeys.joinLinks(organizationId),
-    queryFn: () => listJoinLinks(baseUrl, organizationId),
+    queryFn: () => listJoinLinks(baseUrl),
   });
   const createButton = (
     <Button size="sm" onClick={() => setCreating(true)}>
@@ -525,8 +524,10 @@ function JoinLinks({ organizationId }: { organizationId: string }) {
  */
 export function TeamSection() {
   const { t } = useTranslation('settings');
-  const { auth, organization, available, userId, me } = useActiveOrganization();
+  const { auth, organization, available, userId } = useActiveOrganization();
   const [inviting, setInviting] = useState(false);
+  const manage = useCan('members.manage');
+  const manageJoinLinks = useCan('join-links.manage');
 
   if (auth.isPending || (available && organization.isPending)) {
     return (
@@ -547,7 +548,6 @@ export function TeamSection() {
   }
 
   const org = organization.data;
-  const manage = canManageMembers(me?.role);
   const pending = org.invitations.filter(invitation => isOpenInvitation(invitation));
 
   return (
@@ -583,9 +583,9 @@ export function TeamSection() {
               )}
             </SettingsContainer>
           </SettingsSubsection>
-          <JoinLinks organizationId={org.id} />
         </>
       ) : null}
+      {manageJoinLinks ? <JoinLinks organizationId={org.id} /> : null}
     </div>
   );
 }

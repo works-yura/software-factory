@@ -23,6 +23,8 @@ import type { McpServerHub } from './hub.ts';
 import { MCP_CATALOG, mcpCatalogEntryById } from './catalog.ts';
 import type { McpCredentials } from './credentials.ts';
 import type { ManagedMcpServers } from './managed.ts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 export interface McpServerRoutesOptions {
   auth: RouteAuth;
@@ -178,7 +180,7 @@ async function caller(c: Context, auth: RouteAuth, write: boolean): Promise<{ or
   const tenant = auth.tenant(c);
   if (!tenant) throw new Refusal(401, { error: 'unauthorized' });
   if (!tenant.orgId) throw new Refusal(403, { error: 'organization_required', message: 'MCP servers need an organization.' });
-  if (write && auth.enabled() && !(await auth.isOrganizationAdmin(c, tenant.orgId))) {
+  if (write && auth.enabled() && !(await auth.can(c, 'connections.manage', tenant.orgId))) {
     throw new Refusal(403, { error: 'forbidden', message: 'Only organization admins can change MCP servers.' });
   }
   return { orgId: tenant.orgId, userId: tenant.userId ?? 'local' };
@@ -260,7 +262,11 @@ function target(server: McpServerView) {
   return [{ type: 'mcp_server', id: server.id, name: server.label }];
 }
 
-export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[] {
+export function buildMcpServerRoutes(...args: Parameters<typeof buildMcpServerRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildMcpServerRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildMcpServerRoutesUndeclared(options: McpServerRoutesOptions): ApiRoute[] {
   const { auth, servers, hub, audit, credentials, managed, auditLog } = options;
   const now = options.now ?? (() => new Date());
   return [
@@ -269,7 +275,7 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
       handler: handle(async c => {
         const { orgId } = await caller(c, auth, false);
         await managed?.ensure(orgId);
-        const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
+        const canEdit = !auth.enabled() || (await auth.can(c, 'connections.manage', orgId));
         return c.json({ servers: await servers.list(orgId), catalog: MCP_CATALOG, credentials: await credentials.options(orgId), canEdit });
       }),
     }),
@@ -431,3 +437,15 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/mcp-servers/discover': 'board.read',
+  'POST /web/mcp-servers/check': 'connections.manage',
+  'POST /web/mcp-servers': 'connections.manage',
+  'PUT /web/mcp-servers/:id': 'connections.manage',
+  'DELETE /web/mcp-servers/:id': 'connections.manage',
+  'POST /web/mcp-servers/:id/status': 'board.read',
+  'POST /web/mcp-servers/:id/reconnect': 'connections.manage',
+  'POST /web/mcp-servers/:id/try': 'connections.manage',
+};

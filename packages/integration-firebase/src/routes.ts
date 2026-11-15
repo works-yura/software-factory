@@ -21,6 +21,8 @@ import type { FetchLike, ServiceAccountKey } from './service-account.ts';
 import { readFirebaseState, readsCrashes, readsDatabase, saveAccount } from './settings.ts';
 import type { FirebaseAccount, FirebaseBinding, FirebaseState } from './settings.ts';
 import { FirebaseObservabilitySource } from './source.ts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 export interface FirebaseRoutesOptions {
   auth: RouteAuth;
@@ -71,7 +73,7 @@ async function caller(c: Context, auth: RouteAuth, write: boolean): Promise<{ or
   const tenant = auth.tenant(c);
   if (!tenant) throw new Refusal(401, { error: 'unauthorized' });
   if (!tenant.orgId) throw new Refusal(403, { error: 'organization_required', message: 'Firebase needs an organization.' });
-  if (write && auth.enabled() && !(await auth.isOrganizationAdmin(c, tenant.orgId))) {
+  if (write && auth.enabled() && !(await auth.can(c, 'connections.manage', tenant.orgId))) {
     throw new Refusal(403, { error: 'forbidden', message: 'Only organization admins can change Firebase accounts and bindings.' });
   }
   return { orgId: tenant.orgId, userId: tenant.userId ?? null };
@@ -174,7 +176,11 @@ export function firestoreReader(key: ServiceAccountKey, fetch?: FetchLike): { li
   };
 }
 
-export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] {
+export function buildFirebaseRoutes(...args: Parameters<typeof buildFirebaseRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildFirebaseRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildFirebaseRoutesUndeclared(options: FirebaseRoutesOptions): ApiRoute[] {
   const { auth, storage, hooks } = options;
   const now = options.now ?? (() => new Date());
 
@@ -218,3 +224,8 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/firebase/accounts': 'connections.manage',
+};

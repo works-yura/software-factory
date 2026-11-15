@@ -114,7 +114,7 @@ export function describeConnectorContract(label: string, setup: () => Promise<Co
       const fixture = await setup();
       const responses: unknown[] = [];
       const routes = buildConnectionRoutes({
-        auth: fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => userId === fixture.admin }),
+        auth: fakeRouteAuth({ isAdmin: async (_org, userId) => userId === fixture.admin }),
         connectors: [fixture.registration, ...extra],
       });
       const send = async (userId: string, method: string, path: string, body?: unknown, language = 'en'): Promise<Sent> => {

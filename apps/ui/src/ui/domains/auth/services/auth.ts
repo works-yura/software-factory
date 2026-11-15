@@ -42,8 +42,10 @@ export interface FactoryAuthState {
     name?: string;
     avatarUrl?: string;
     organizationId?: string;
-    /** Role in `organizationId` (`owner`, `admin`, `member`, `viewer`) when the provider reports roles. */
+    /** Role in `organizationId` (`owner`, `admin`, `member`, `viewer`), for display only. */
     organizationRole?: string;
+    /** What the person may do here (`@factory/access` permissions); the UI checks these, never the role. */
+    permissions?: string[];
   };
   /** Active identity provider: 'better-auth' (Google) or a custom adapter's name. */
   provider?: string;

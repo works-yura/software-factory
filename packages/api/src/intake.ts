@@ -6,7 +6,8 @@ import type { Intake } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
 import type { IntakeConfig, IntakeStorage } from '@factory/store';
 import type { RouteDependencies } from '@factory/http';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 export interface IntakeIntegration {
   id: string;
@@ -135,6 +136,10 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const { audit, intake, integrations = [] } = this.deps;
     const integrationIds = [...integrations.map(integration => integration.id), ...(this.deps.switches ?? [])];
 
@@ -240,3 +245,9 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'PUT /web/intake/config': 'factory.configure',
+  'PUT /web/intake/label-routes': 'factory.configure',
+};

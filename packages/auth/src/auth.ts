@@ -12,6 +12,9 @@ import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/co
 import type { Context, Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
+import { can, permissionsFor } from '@factory/access';
+import type { MembershipDirectory, Permission, Role } from '@factory/access';
+import { forbiddenBody, isMutatingMethod, withAccess } from '@factory/http';
 import type { RouteAuth } from '@factory/http';
 import { actorFromAuthUser } from '@factory/store';
 import { isFactoryTelemetryEnabled } from '@factory/observability';
@@ -59,10 +62,10 @@ export interface FactoryAuthUser {
   /** Organization ids proven by the provider's authenticated membership response. */
   organizationMembershipIds?: string[];
   /**
-   * The person's role in `organizationId` (`owner`, `admin`, `member`, `viewer`), when the
-   * provider reports roles (better-auth). Set by the gate and `/auth/me`, never by the client.
+   * The person's role in `organizationId`, read from the provider once per request when something
+   * asks (`null`: not a member). Never set by the client.
    */
-  organizationRole?: string;
+  organizationRole?: Role | null;
 }
 
 /**
@@ -379,57 +382,41 @@ export function bearerTokenOrgClaim(token: string | undefined): string | undefin
   }
 }
 
-/** A provider that reports a person's role in an organization (better-auth, ADR-0045). */
-export interface OrganizationRoleProvider {
-  organizationRole(organizationId: string, userId: string): Promise<string | null>;
-}
-
-function isOrganizationRoleProvider(provider: IMastraAuthProvider): provider is IMastraAuthProvider & OrganizationRoleProvider {
-  return typeof (provider as Partial<OrganizationRoleProvider>).organizationRole === 'function';
-}
-
-/** The role that may read everything and change nothing (ADR-0045). */
-export const VIEWER_ROLE = 'viewer';
-
-/** What a viewer's write answers (403). */
-export const VIEWER_READ_ONLY_BODY = {
-  error: 'viewer_read_only',
-  message: 'Viewers can look but not change anything. Ask an admin of your organization for the Member role.',
-} as const;
-
-const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-
 /**
- * Writes a viewer may still make: marking their own attention items read,
- * archived or restored, and previewing an intake route without saving it.
- * Everything under `/auth/*` (their profile, sessions, leaving, invitations and
- * join links) never reaches the gate; better-auth checks those itself.
+ * A provider that is also the organization's membership directory (better-auth, ADR-0045): it
+ * answers each person's role. Other providers' roles come from `isOrganizationAdmin` (admin or
+ * member); a person without an organization owns their personal scope.
  */
-const VIEWER_WRITABLE_PATHS: readonly RegExp[] = [
-  /^\/web\/factory\/projects\/[^/]+\/attention\/read-all$/,
-  /^\/web\/factory\/projects\/[^/]+\/attention\/[^/]+\/[^/]+\/[^/]+\/(read|archive|restore)$/,
-  /^\/web\/factory\/projects\/[^/]+\/intake-routes\/preview$/,
-];
-
-/** Whether a viewer may make this request: every read, and the writes in {@link VIEWER_WRITABLE_PATHS}. */
-export function viewerMayRequest(method: string, path: string): boolean {
-  if (!MUTATING_METHODS.has(method.toUpperCase())) return true;
-  return VIEWER_WRITABLE_PATHS.some(pattern => pattern.test(path));
+function isMembershipDirectoryProvider(
+  provider: IMastraAuthProvider,
+): provider is IMastraAuthProvider & Pick<MembershipDirectory, 'role'> {
+  return typeof (provider as Partial<MembershipDirectory>).role === 'function';
 }
 
 /**
- * Reads the person's role in the request's organization onto the user, for
- * providers that report roles. A provider that throws could not check it: 503,
- * never a request run as if the role were known.
+ * Mastra's own API (`/api/*`: agents, workflows, memory) is one route group: writing to it is
+ * talking to agents, so it needs `run.start`.
  */
-async function applyOrganizationRole(provider: IMastraAuthProvider, user: FactoryAuthUser, raw: Request): Promise<void> {
-  if (!isOrganizationRoleProvider(provider)) return;
+export const MASTRA_API_ACCESS: Permission = 'run.start';
+
+/**
+ * The person's role in the request's organization, read once per request and kept on the user. A
+ * provider that cannot answer throws {@link AuthUnavailableError} (503); nothing guesses a role.
+ */
+async function resolveOrganizationRole(provider: IMastraAuthProvider, user: FactoryAuthUser, raw: Request): Promise<Role | null> {
+  if (user.organizationRole !== undefined) return user.organizationRole;
   const organizationId = getFactoryAuthOrgId(user);
   const userId = getFactoryAuthUserId(user);
-  if (!organizationId || !userId) return;
-  let role: string | null;
+  if (!userId) return null;
+  if (!organizationId) {
+    user.organizationRole = 'owner';
+    return 'owner';
+  }
+  let role: Role | null;
   try {
-    role = await provider.organizationRole(organizationId, userId);
+    if (isMembershipDirectoryProvider(provider)) role = await provider.role(organizationId, userId);
+    else if (isOrganizationsProvider(provider)) role = (await provider.isOrganizationAdmin(organizationId, userId)) ? 'admin' : 'member';
+    else role = 'member';
   } catch (error) {
     console.error(
       `[auth] Provider ${provider.name ?? 'unknown'} could not read the role of user ${userId} in organization ${organizationId} for ${describeRequest(raw)}; answering 503 auth_unavailable.`,
@@ -437,8 +424,8 @@ async function applyOrganizationRole(provider: IMastraAuthProvider, user: Factor
     );
     throw new AuthUnavailableError('Could not read the organization role', { cause: error });
   }
-  if (role) user.organizationRole = role;
-  else delete user.organizationRole;
+  user.organizationRole = role;
+  return role;
 }
 
 /**
@@ -482,29 +469,25 @@ function providerClearCookies(provider: IMastraAuthProvider): string[] {
 }
 
 /**
- * Fail-closed authorization for organization-level administrative mutations.
- * The caller must belong to the same active organization and the provider must
- * explicitly confirm an admin/owner role.
+ * Whether the caller's role holds the permission (`can()` of `@factory/access`). Fail-closed: no
+ * user, another organization than the one named, or no role is `false`; a provider that cannot read
+ * the role answers 503.
  */
-export async function isOrganizationAdmin(
+export async function canInOrganization(
   provider: IMastraAuthProvider | undefined,
   c: Context,
-  organizationId: string,
+  permission: Permission,
+  organizationId?: string,
 ): Promise<boolean> {
+  if (!provider) return false;
   const user = await ensureFactoryAuthUser(provider, c);
-  if (!user || user.organizationId !== organizationId || !provider || !isOrganizationsProvider(provider)) {
-    return false;
-  }
-  const userId = getFactoryAuthUserId(user);
-  if (!userId) return false;
+  if (!user) return false;
+  if (organizationId !== undefined && user.organizationId !== organizationId) return false;
   try {
-    return await provider.isOrganizationAdmin(organizationId, userId);
+    return can(await resolveOrganizationRole(provider, user, c.req.raw), permission);
   } catch (error) {
-    console.error(
-      `[auth] Provider ${provider.name ?? 'unknown'} could not check whether user ${userId} administers organization ${organizationId} (${describeRequest(c.req.raw)}); answering 503 auth_unavailable.`,
-      error,
-    );
-    throw authUnavailableException(new AuthUnavailableError('Could not check the organization role', { cause: error }));
+    if (error instanceof AuthUnavailableError) throw authUnavailableException(error);
+    throw error;
   }
 }
 
@@ -519,7 +502,7 @@ export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined
     enabled: () => provider !== undefined,
     ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
     tenant: (c: Context) => factoryAuthTenant(c),
-    isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
+    can: (c: Context, permission: Permission, organizationId?: string) => canInOrganization(provider, c, permission, organizationId),
   };
 }
 
@@ -566,7 +549,6 @@ export async function ensureFactoryAuthUser(
     forwardPendingResponseHeaders(provider, c);
     if (!user) return undefined;
     allowed = await applyRequestedOrganization(provider, c, token, user);
-    if (allowed) await applyOrganizationRole(provider, user, c.req.raw);
   } catch (error) {
     if (error instanceof AuthUnavailableError) throw authUnavailableException(error);
     throw error;
@@ -628,7 +610,7 @@ async function authMeResponse(provider: IMastraAuthProvider, c: Context): Promis
   // Resolve the org the same way gated requests do (providers cache, so this
   // is a lookup — not a create — after first bootstrap).
   await ensureUserOrg(provider, user, c.req.raw);
-  await applyOrganizationRole(provider, user, c.req.raw);
+  const role = await resolveOrganizationRole(provider, user, c.req.raw);
   return c.json({
     authenticated: true,
     telemetryEnabled: isFactoryTelemetryEnabled(provider.name),
@@ -638,7 +620,9 @@ async function authMeResponse(provider: IMastraAuthProvider, c: Context): Promis
       name: user.name,
       avatarUrl: user.avatarUrl,
       organizationId: user.organizationId,
-      ...(user.organizationRole ? { organizationRole: user.organizationRole } : {}),
+      ...(role ? { organizationRole: role } : {}),
+      // What the person may do here; the UI asks `can(permission)` of this list, never the role name.
+      permissions: permissionsFor(role),
     },
     ...meta,
   });
@@ -927,12 +911,17 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
     // which is structurally identical to (but nominally distinct from) the
     // local hono version the route handlers are typed against — cast across
     // the seam.
+    // Sign-in, callback, sign-out and the provider's own API: before anyone is signed in, and the
+    // provider checks its own endpoints.
     ...providerAuthRoutes(provider, options.publicUrl).map(route =>
-      registerApiRoute(route.path, {
-        method: route.method,
-        requiresAuth: false,
-        handler: c => route.handler(c as unknown as Context),
-      }),
+      withAccess(
+        'public',
+        registerApiRoute(route.path, {
+          method: route.method,
+          requiresAuth: false,
+          handler: c => route.handler(c as unknown as Context),
+        }),
+      ),
     ),
     registerApiRoute('/auth/me', {
       method: 'GET',
@@ -1093,7 +1082,11 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       // Without a requested org, no-org accounts get a bootstrapped personal org
       // so the org id resolves on this request (see ensureFactoryAuthUser).
       if (user) allowed = await applyRequestedOrganization(provider, c, token, user);
-      if (user && allowed) await applyOrganizationRole(provider, user, c.req.raw);
+      // Mastra's own API is one route group that needs `run.start` to write to (see MASTRA_API_ACCESS).
+      if (user && allowed && path.startsWith('/api/') && isMutatingMethod(c.req.method)) {
+        const role = await resolveOrganizationRole(provider, user, c.req.raw);
+        if (!can(role, MASTRA_API_ACCESS)) return c.json(forbiddenBody(MASTRA_API_ACCESS), 403);
+      }
     } catch (error) {
       if (!(error instanceof AuthUnavailableError)) throw error;
       // The provider could not answer: not "signed out", so no sign-in redirect.
@@ -1103,11 +1096,6 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (user) {
       if (!allowed) {
         return c.json({ error: 'organization_forbidden' }, 403);
-      }
-      // A viewer reads everything and changes nothing (ADR-0045); the UI hides
-      // the controls, this is what enforces it.
-      if (user.organizationRole === VIEWER_ROLE && !viewerMayRequest(c.req.method, path)) {
-        return c.json(VIEWER_READ_ONLY_BODY, 403);
       }
       c.set(FACTORY_AUTH_USER_KEY, user);
       const requestContext = c.get('requestContext');

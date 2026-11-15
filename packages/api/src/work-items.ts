@@ -53,7 +53,7 @@ import { buildAttentionRoutes, factoryDecisionType } from '@factory/activity';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RunQueueResponse } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import { buildSupervisorRoutes } from '@factory/supervisor';
 import {
   boardSnapshot,
@@ -78,6 +78,7 @@ import {
   cardsWithFailedRun,
   workItemStarters,
 } from './work-item-starters.ts';
+import type { RouteAccess } from '@factory/http';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -457,6 +458,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardCatalog.path, {
@@ -1110,3 +1115,15 @@ function catalogFlow(flow: FactoryRuleBoardFlow) {
     ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
   };
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects/:id/decisions/:decisionId/approve': 'run.start',
+  'POST /web/factory/projects/:id/decisions/:decisionId/dismiss': 'run.start',
+  'POST /web/factory/projects/:id/decisions/:decisionId/retry': 'run.start',
+  'POST /web/factory/projects/:id/work-items': 'card.write',
+  'POST /web/factory/projects/:id/work-items/:workItemId/transition': 'card.write',
+  'POST /web/factory/projects/:id/runs/start': 'run.start',
+  'PATCH /web/factory/work-items/:id': 'card.write',
+  'DELETE /web/factory/work-items/:id': 'card.write',
+};

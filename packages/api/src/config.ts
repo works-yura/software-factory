@@ -25,7 +25,7 @@ import {
   resolveTenantProviderDefaultModel,
   tenantOrgId,
 } from '@factory/credentials';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
 import type { HarnessExecutableReport } from '@factory/harness/executable';
 import type { HarnessModelContext, HarnessModelInstanceInfo } from '@factory/harness/models/facet';
@@ -37,6 +37,7 @@ import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES, OPENCODE_HARNESS } from 
 
 import { readRunningPackages } from './running-packages.ts';
 import type { RunningPackage } from './running-packages.ts';
+import type { RouteAccess } from '@factory/http';
 
 export { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, resolveDeploymentModelProviders, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 export type { ProviderCredentialSource, ProviderInfo, OMSession, ModelCatalog, ModelCredentialHolder, ModelCatalogEntry } from '@factory/credentials';
@@ -383,6 +384,10 @@ export interface ModelCatalogResponseBody {
  */
 export class ConfigRoutes extends Route<ConfigRoutesDeps> {
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const options = this.deps;
     const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
@@ -510,7 +515,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // Tenant mode also reports whether the caller may write the
             // organization's keys, so the settings UI can gate editing.
             const tenant = auth.tenant(loose(c));
-            const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
+            const orgKeyAdmin = tenant ? await auth.can(loose(c), 'org.manage', tenantOrgId(tenant)) : undefined;
             return c.json({
               providers: await listProviders({
                 controller,
@@ -557,7 +562,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 );
               }
               // Model keys belong to the organization; there are no personal keys.
-              if (!(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+              if (!(await auth.can(loose(c), 'org.manage', ctx.orgId))) {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
               const tenant = { orgId: ctx.orgId };
@@ -591,7 +596,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const provider = c.req.param('provider');
           try {
             if (ctx.mode === 'tenant') {
-              if (!(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+              if (!(await auth.can(loose(c), 'org.manage', ctx.orgId))) {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
               const tenant = { orgId: ctx.orgId };
@@ -1015,3 +1020,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'PUT /web/config/providers/:provider/key': 'org.manage',
+  'DELETE /web/config/providers/:provider/key': 'org.manage',
+  'POST /web/config/custom-providers': 'factory.configure',
+  'DELETE /web/config/custom-providers/:id': 'factory.configure',
+  'PUT /web/config/om/:role/model': 'factory.configure',
+  'PUT /web/config/om/thresholds': 'factory.configure',
+  'PUT /web/config/om/observe-attachments': 'factory.configure',
+};

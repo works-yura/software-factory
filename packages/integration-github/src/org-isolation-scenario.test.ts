@@ -49,7 +49,7 @@ const testAuth: RouteAuth = {
     const u = c.get('factoryAuthUser') as { id: string; organizationId?: string } | undefined;
     return u ? { orgId: u.organizationId, userId: u.id } : undefined;
   },
-  isOrganizationAdmin: async () => true,
+  can: async () => true,
 };
 
 interface Tables {

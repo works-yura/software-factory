@@ -176,7 +176,7 @@ import {
   primeCustomProvidersForRequestContext,
   registerCustomProvidersSource,
 } from '@factory/api';
-import { ProjectRoutes } from '@factory/api';
+import { buildTeamRoutes, ProjectRoutes } from '@factory/api';
 import { createModelSwitchRoute, createSessionAccessGuard } from '@factory/session';
 import { McpCredentials } from './mcp-servers/credentials.ts';
 import { McpServerHub } from './mcp-servers/hub.ts';
@@ -232,13 +232,14 @@ import { githubRepositoryVisibility } from './repository-visibility.ts';
 /** How often idle local sandboxes are looked for (ADR-0039); the grace period is twice this. */
 const SANDBOX_SWEEP_INTERVAL_MS = 5 * 60_000;
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
-import { auditActorProfile, backfillUntilDone, factoryPrincipalId, WorkItemSplitModeError } from '@factory/store';
+import { AvatarsStorage, JoinLinksStorage, auditActorProfile, backfillUntilDone, factoryPrincipalId, WorkItemSplitModeError } from '@factory/store';
 import { factoryRunsNeedSharedSignIn } from './accounts/pool.ts';
 import { createContextSandboxStops } from './context-sandboxes.ts';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
-import { handleServerError } from '@factory/http';
+import { enforceRouteAccess, handleServerError } from '@factory/http';
+import type { MembershipDirectory } from '@factory/access';
 import { FactoryChannelReplyProcessor } from '@factory/session';
 import { FactoryChannelSessionLinkProcessor } from '@factory/session';
 import { resolveFactoryCredentialTenant } from '@factory/session';
@@ -993,6 +994,12 @@ export class MastraFactory {
     // the same lifecycle as the backend connection.
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
+    // Join links and avatars (ADR-0045): their own collections; avatars keep their bytes in the
+    // attachment blob store, so without one there are none.
+    const joinLinksStorage = storage.registerDomain(new JoinLinksStorage());
+    const avatarsStorage = this.#config.attachments
+      ? storage.registerDomain(new AvatarsStorage(this.#config.attachments.store))
+      : undefined;
     // The auth provider's organization events (roles, removals, invitations, join links, the
     // organization's name and avatar; ADR-0045) go to the same audit log as everything else.
     if (auth && hasOrganizationEventHandler(auth)) {
@@ -3366,7 +3373,8 @@ export class MastraFactory {
         buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => {
           // The agent's model switch reads the same local credentials as the Settings picker.
           localAuthStorage = authStorage;
-          return [
+          // Every route says what it needs (ADR-0045); a write that declares nothing is refused.
+          return enforceRouteAccess([
           // Public `/auth/*` routes (login/callback/logout/me). Folded in as
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
           // Hono app the deployer generates. `requiresAuth: false`; the gate
@@ -3803,6 +3811,25 @@ export class MastraFactory {
           }).routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),
+          // Join links and avatars, on a provider that is the organization's membership directory.
+          ...(auth && isMembershipDirectory(auth)
+            ? buildTeamRoutes({
+                auth: routeAuth,
+                joinLinks: joinLinksStorage,
+                directory: auth,
+                ...(avatarsStorage ? { avatars: avatarsStorage } : {}),
+                audit: async event => {
+                  await auditStorage.record({
+                    orgId: event.organizationId,
+                    actorId: event.actorUserId,
+                    actorType: 'human',
+                    action: event.action,
+                    targets: event.targets,
+                    ...(event.metadata ? { metadata: event.metadata } : {}),
+                  });
+                },
+              })
+            : []),
           // Connect/reconnect session minting for Platform-managed providers.
           // Server-side because only the deploy holds Platform machine
           // credentials; the SPA runs the OAuth popup with the minted token.
@@ -3815,7 +3842,7 @@ export class MastraFactory {
           // Last: a JSON 404 for any `/web` or `/auth` path the routes above do not answer, before the
           // deployer's catch-all answers it with its HTML welcome page (see `buildUnknownServerRoutes`).
           ...buildUnknownServerRoutes(),
-          ];
+          ], routeAuth);
         },
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
@@ -4266,4 +4293,12 @@ interface OrganizationEventSource {
 
 function hasOrganizationEventHandler(provider: object): provider is OrganizationEventSource {
   return typeof (provider as Partial<OrganizationEventSource>).setOrganizationEventHandler === 'function';
+}
+
+/** The auth provider is also the organization's membership directory (`@factory/auth-better-auth`). */
+function isMembershipDirectory(provider: object): provider is IMastraAuthProvider & MembershipDirectory {
+  const candidate = provider as Partial<MembershipDirectory>;
+  return ['role', 'listMembers', 'addMember', 'person', 'organization'].every(
+    method => typeof (candidate as Record<string, unknown>)[method] === 'function',
+  );
 }

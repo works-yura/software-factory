@@ -3,6 +3,9 @@ import type { GoogleProfile, TestGoogleAuth } from '@factory/auth-better-auth/te
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { enforceRouteAccess, route } from '@factory/http';
+import { mountApiRoutes } from '@factory/http/testing';
+
 import { createFactoryRouteAuth, factoryAuthTenant, mountFactoryAuth } from './auth.ts';
 
 /**
@@ -25,9 +28,15 @@ beforeEach(async () => {
   app = new Hono();
   mountFactoryAuth(app, { provider: google.provider });
   app.get('/web/whoami', c => c.json(factoryAuthTenant(c) ?? null));
-  app.post('/web/factory/projects/:id/runs/start', c => c.json({ started: true }));
+  mountApiRoutes(
+    app,
+    enforceRouteAccess(
+      [route('/web/factory/projects/:id/runs/start', { method: 'POST', access: 'run.start', handler: async c => c.json({ started: true }) })],
+      routeAuth,
+    ),
+  );
   app.get('/web/admin/:organizationId', async c =>
-    c.json({ admin: await routeAuth.isOrganizationAdmin(c, c.req.param('organizationId')) }),
+    c.json({ admin: await routeAuth.can(c, 'factory.manage', c.req.param('organizationId')) }),
   );
 });
 
@@ -131,10 +140,9 @@ describe('Factory gate on the Google provider', () => {
     });
     expect(demoted.status).toBe(200);
 
-    expect(await tenant(carol)).toMatchObject({ orgId, role: 'viewer' });
     const refused = await start(carol);
     expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ error: 'viewer_read_only' });
+    expect(await refused.json()).toMatchObject({ error: 'forbidden', permission: 'run.start' });
 
     expect((await google.api('/organization/update-member-role', ada, { body: { memberId: carolMember.id, role: 'member', organizationId: orgId } })).status).toBe(200);
     expect((await start(carol)).status).toBe(200);

@@ -33,14 +33,18 @@ import { jwt, organization } from 'better-auth/plugins';
 import { verifyJwsAccessToken } from 'better-auth/oauth2';
 import { oauthProvider } from '@better-auth/oauth-provider';
 
-import {
-  factoryTeam,
-  isAssignableRole,
-  OrganizationEventRelay,
-  organizationAccessControl,
-  organizationEventsHook,
-  OWNER_ROLE,
-} from './team.ts';
+import { isAssignableRole, isRole } from '@factory/access';
+import type {
+  AssignableRole,
+  Invitation,
+  InvitationService,
+  Member,
+  MembershipDirectory,
+  Person,
+  Role,
+} from '@factory/access';
+
+import { OrganizationEventRelay, organizationAccessControl, organizationEventsHook, OWNER_ROLE } from './team.ts';
 import type { OrganizationEventHandler } from './team.ts';
 
 export * from './team.ts';
@@ -244,7 +248,6 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
     },
     plugins: [
       ...(config.publicUrl ? mcpAuthorizationServerPlugins(config.publicUrl) : []),
-      factoryTeam(events),
       organization({
         // Owner, admin, member and viewer (ADR-0045). better-auth's own `defaultAc`
         // does not satisfy its option type's generic parameters, hence the casts.
@@ -429,7 +432,13 @@ class ExpiringMap<V> {
  */
 export class MastraAuthBetterAuth
   extends MastraAuthProvider<BetterAuthUser>
-  implements IUserProvider<BetterAuthProfile>, IOrganizationsProvider, IAuthInit, IAuthHttpHandler
+  implements
+    IUserProvider<BetterAuthProfile>,
+    IOrganizationsProvider,
+    IAuthInit,
+    IAuthHttpHandler,
+    MembershipDirectory,
+    InvitationService
 {
   #auth: Auth | undefined;
   /** What `init()` builds the instance from; set exactly when no `auth` was passed. */
@@ -803,22 +812,179 @@ export class MastraAuthBetterAuth
     return membership?.role === OWNER_ROLE || membership?.role === 'admin';
   }
 
+  // ============================================
+  // MembershipDirectory and InvitationService (@factory/access, ADR-0045)
+  // ============================================
+
   /**
-   * The person's role in the organization (`owner`, `admin`, `member`,
-   * `viewer`), or `null` when they are not a member. Cached for
-   * {@link ROLE_CACHE_TTL_MS}; a role change, removal or join in this process
-   * clears the entry at once. A failed lookup throws; the gate answers 503.
+   * The person's role in the organization, or `null` when they are not a member. Cached for
+   * {@link ROLE_CACHE_TTL_MS}; a role change, removal or join in this process clears the entry at
+   * once. A failed lookup throws; the host answers 503.
    */
-  async organizationRole(organizationId: string, userId: string): Promise<string | null> {
+  async role(organizationId: string, userId: string): Promise<Role | null> {
     const key = `${userId}|${organizationId}`;
     const cached = this.#roleCache.get(key);
-    if (cached !== undefined) return cached;
-    await this.#ensureDbReady();
-    const ctx = await this.#requireAuthContext();
+    if (cached !== undefined) return cached as Role | null;
+    const ctx = await this.#directoryContext();
     const membership = await this.#findMember(ctx, organizationId, userId);
-    const role = membership?.role ?? null;
+    const role = membership?.role === undefined ? null : this.#readRole(membership.role, organizationId, userId);
     this.#roleCache.set(key, role);
     return role;
+  }
+
+  /** A stored role Factory does not know is a broken row, not a guess at "member". */
+  #readRole(stored: string, organizationId: string, userId: string): Role {
+    if (!isRole(stored)) {
+      throw new Error(`[BetterAuth] User ${userId} has the unknown role "${stored}" in organization ${organizationId}.`);
+    }
+    return stored;
+  }
+
+  async #directoryContext(): Promise<BetterAuthContext> {
+    await this.#ensureDbReady();
+    return this.#requireAuthContext();
+  }
+
+  async #memberView(ctx: BetterAuthContext, row: Required<MemberRow> & { id: string }): Promise<Member> {
+    const user = await ctx.internalAdapter.findUserById(row.userId);
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      role: this.#readRole(row.role, row.organizationId, row.userId),
+      name: user?.name ?? '',
+      email: user?.email ?? '',
+      image: user?.image ?? null,
+    };
+  }
+
+  async listMembers(organizationId: string): Promise<Member[]> {
+    const ctx = await this.#directoryContext();
+    const rows = await ctx.adapter.findMany<Required<MemberRow> & { id: string }>({
+      model: 'member',
+      where: [{ field: 'organizationId', value: organizationId }],
+      sortBy: { field: 'createdAt', direction: 'asc' },
+    });
+    return Promise.all(rows.map(row => this.#memberView(ctx, row)));
+  }
+
+  async addMember(organizationId: string, userId: string, role: AssignableRole): Promise<Member> {
+    if (!isAssignableRole(role)) throw new Error(`Cannot add a member with the role ${String(role)}.`);
+    const ctx = await this.#directoryContext();
+    const existing = (await this.#findMember(ctx, organizationId, userId)) as (Required<MemberRow> & { id: string }) | null;
+    if (existing) return this.#memberView(ctx, existing);
+    const created = await ctx.adapter.create<Record<string, unknown>, Required<MemberRow> & { id: string }>({
+      model: 'member',
+      data: { organizationId, userId, role, createdAt: new Date() },
+    });
+    this.#events.membershipChanged(organizationId, userId);
+    return this.#memberView(ctx, created);
+  }
+
+  async #memberById(ctx: BetterAuthContext, organizationId: string, memberId: string) {
+    const row = await ctx.adapter.findOne<Required<MemberRow> & { id: string }>({
+      model: 'member',
+      where: [
+        { field: 'id', value: memberId },
+        { field: 'organizationId', value: organizationId },
+      ],
+    });
+    if (!row) throw new Error(`No member ${memberId} in organization ${organizationId}.`);
+    return row;
+  }
+
+  async changeRole(organizationId: string, memberId: string, role: AssignableRole): Promise<Member> {
+    if (!isAssignableRole(role)) throw new Error(`Cannot give the role ${String(role)}.`);
+    const ctx = await this.#directoryContext();
+    const row = await this.#memberById(ctx, organizationId, memberId);
+    if (row.role === OWNER_ROLE) throw new Error('The owner keeps their role.');
+    await ctx.adapter.update({ model: 'member', where: [{ field: 'id', value: memberId }], update: { role } });
+    this.#events.membershipChanged(organizationId, row.userId);
+    return this.#memberView(ctx, { ...row, role });
+  }
+
+  async remove(organizationId: string, memberId: string): Promise<void> {
+    const ctx = await this.#directoryContext();
+    const row = await this.#memberById(ctx, organizationId, memberId);
+    if (row.role === OWNER_ROLE) throw new Error('The owner cannot be removed.');
+    await ctx.adapter.delete({ model: 'member', where: [{ field: 'id', value: memberId }] });
+    this.#events.membershipChanged(organizationId, row.userId);
+  }
+
+  async leave(organizationId: string, userId: string): Promise<void> {
+    const ctx = await this.#directoryContext();
+    const row = (await this.#findMember(ctx, organizationId, userId)) as (Required<MemberRow> & { id: string }) | null;
+    if (!row) return;
+    if (row.role === OWNER_ROLE) throw new Error('The owner cannot leave their organization.');
+    await ctx.adapter.delete({ model: 'member', where: [{ field: 'id', value: row.id }] });
+    this.#events.membershipChanged(organizationId, userId);
+  }
+
+  async person(userId: string): Promise<Person | null> {
+    const ctx = await this.#directoryContext();
+    const user = await ctx.internalAdapter.findUserById(userId);
+    return user ? { id: user.id, email: user.email, emailVerified: user.emailVerified, name: user.name } : null;
+  }
+
+  async organization(organizationId: string): Promise<{ id: string; name: string; logo: string | null } | null> {
+    const ctx = await this.#directoryContext();
+    const row = await ctx.adapter.findOne<{ id: string; name: string; logo?: string | null }>({
+      model: 'organization',
+      where: [{ field: 'id', value: organizationId }],
+    });
+    return row ? { id: row.id, name: row.name, logo: row.logo ?? null } : null;
+  }
+
+  async invite(organizationId: string, email: string, role: AssignableRole, inviterUserId: string): Promise<Invitation> {
+    if (!isAssignableRole(role)) throw new Error(`Cannot invite with the role ${String(role)}.`);
+    const ctx = await this.#directoryContext();
+    const row = await ctx.adapter.create<Record<string, unknown>, Record<string, unknown> & { id: string }>({
+      model: 'invitation',
+      data: {
+        organizationId,
+        email: email.trim().toLowerCase(),
+        role,
+        status: 'pending',
+        inviterId: inviterUserId,
+        expiresAt: new Date(Date.now() + INVITATION_EXPIRES_IN_SECONDS * 1000),
+        createdAt: new Date(),
+      },
+    });
+    return this.#invitationView(row);
+  }
+
+  async cancel(organizationId: string, invitationId: string): Promise<void> {
+    const ctx = await this.#directoryContext();
+    await ctx.adapter.update({
+      model: 'invitation',
+      where: [
+        { field: 'id', value: invitationId },
+        { field: 'organizationId', value: organizationId },
+      ],
+      update: { status: 'canceled' },
+    });
+  }
+
+  async list(organizationId: string): Promise<Invitation[]> {
+    const ctx = await this.#directoryContext();
+    const rows = await ctx.adapter.findMany<Record<string, unknown> & { id: string }>({
+      model: 'invitation',
+      where: [{ field: 'organizationId', value: organizationId }],
+    });
+    return rows.map(row => this.#invitationView(row));
+  }
+
+  #invitationView(row: Record<string, unknown> & { id: string }): Invitation {
+    const role = String(row.role);
+    if (!isAssignableRole(role)) throw new Error(`[BetterAuth] Invitation ${row.id} has the unknown role "${role}".`);
+    return {
+      id: row.id,
+      organizationId: String(row.organizationId),
+      email: String(row.email),
+      role,
+      status: String(row.status),
+      expiresAt: new Date(row.expiresAt as string | Date).toISOString(),
+    };
   }
 
   // ============================================

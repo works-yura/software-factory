@@ -50,7 +50,7 @@ async function setup(options: { admin?: boolean; reconnect?: { connected: boolea
     c.set('factoryAuthUser' as never, { id: 'u1', organizationId: 'org-1' } as never);
     await next();
   });
-  mountApiRoutes(app as never, buildConnectionRoutes({ auth: fakeRouteAuth({ isOrganizationAdmin: async () => options.admin ?? true }), connectors: [{ id: 'mcp', connections: facet }] }));
+  mountApiRoutes(app as never, buildConnectionRoutes({ auth: fakeRouteAuth({ isAdmin: async () => options.admin ?? true }), connectors: [{ id: 'mcp', connections: facet }] }));
   const call = async (method: string, path: string, body?: unknown) => {
     const res = await app.request(path, { method, ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
     return { status: res.status, body: (await res.json()) as any };

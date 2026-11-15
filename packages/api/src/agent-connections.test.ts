@@ -94,7 +94,7 @@ async function setup({ harness, kind, signInName }: HarnessCase, options: { sign
     now: () => now,
   });
   const routes = buildConnectionRoutes({
-    auth: fakeRouteAuth({ isOrganizationAdmin: async (_org, user) => user === 'admin' }),
+    auth: fakeRouteAuth({ isAdmin: async (_org, user) => user === 'admin' }),
     connectors: [{ id: connector, connections }],
   });
   const send = async (userId: string, method: string, path: string, body?: unknown, language = 'en') => {

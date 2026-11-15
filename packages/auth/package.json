@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@factory/access": "workspace:*",
     "@factory/http": "workspace:*",
     "@factory/observability": "workspace:*",
     "@factory/store": "workspace:*",

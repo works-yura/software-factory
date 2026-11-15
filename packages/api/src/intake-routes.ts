@@ -30,7 +30,7 @@ import type { BoardRegistry, IntakeErrorCode, IntakeLocale, StatusEvent } from '
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { IntakeRouteFire as IntakeRouteFireView, IntakeRouteTriggeredBody } from '@factory/contracts';
 import type { AuditEmitter } from '@factory/feed';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import type { RouteDependencies } from '@factory/http';
 import { intakeRouteCardSource } from '@factory/runtime';
 import type { IntakeTriggerEngine, ProjectBoardCache } from '@factory/runtime';
@@ -45,6 +45,7 @@ import type {
   StoredIntakeRouteRecord,
   WorkItemsStorage,
 } from '@factory/store';
+import type { RouteAccess } from '@factory/http';
 
 export interface IntakeRouteRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -131,7 +132,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
 
   async #requireAdmin(c: Context, scope: Resolved): Promise<void> {
     const { auth } = this.deps;
-    if (auth.enabled() && !(await auth.isOrganizationAdmin(c, scope.orgId))) {
+    if (auth.enabled() && !(await auth.can(c, 'factory.manage', scope.orgId))) {
       throw new Refusal(403, {
         error: 'organization_admin_required',
         message: 'Organization administrator access is required to change intake routes.',
@@ -240,7 +241,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     const registry = await this.#registry(scope);
     routes ??= await this.deps.storage.listIntakeRoutes(scope);
     const { auth } = this.deps;
-    const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, scope.orgId));
+    const canEdit = !auth.enabled() || (await auth.can(c, 'factory.manage', scope.orgId));
     const locale = this.#locale(c);
     const intakeRoutes = [];
     for (const route of routes) intakeRoutes.push(await this.#present(route, registry, locale));
@@ -323,6 +324,10 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const { storage } = this.deps;
     const contracts = FACTORY_ROUTE_CONTRACTS;
     return [
@@ -510,3 +515,14 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects/:id/intake-routes/preview': 'board.read',
+  'POST /web/factory/projects/:id/intake-routes/:routeId/fire': 'card.write',
+  'POST /web/factory/projects/:id/intake-routes/reroute': 'factory.manage',
+  'POST /web/factory/projects/:id/intake-routes/reorder': 'factory.manage',
+  'POST /web/factory/projects/:id/intake-routes': 'factory.manage',
+  'PATCH /web/factory/projects/:id/intake-routes/:routeId': 'factory.manage',
+  'DELETE /web/factory/projects/:id/intake-routes/:routeId': 'factory.manage',
+};

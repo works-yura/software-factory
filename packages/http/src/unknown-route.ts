@@ -17,6 +17,8 @@
  */
 
 import { registerApiRoute } from '@mastra/core/server';
+
+import { withAccess } from './access.ts';
 import type { ApiRoute } from '@mastra/core/server';
 
 /** Prefixes whose every path is the server's (API or auth), never the UI's. */
@@ -29,8 +31,9 @@ export interface UnknownServerRouteBody {
 
 /** The last routes of the server: any method, any path under {@link SERVER_ONLY_PREFIXES} nothing else answered. */
 export function buildUnknownServerRoutes(): ApiRoute[] {
+  // A 404 for anyone: it changes nothing and needs no one.
   return SERVER_ONLY_PREFIXES.map(prefix =>
-    registerApiRoute(`${prefix}/*`, {
+    withAccess('public', registerApiRoute(`${prefix}/*`, {
       method: 'ALL',
       requiresAuth: false,
       handler: c =>
@@ -41,6 +44,6 @@ export function buildUnknownServerRoutes(): ApiRoute[] {
           } satisfies UnknownServerRouteBody,
           404,
         ),
-    }),
+    })),
   );
 }

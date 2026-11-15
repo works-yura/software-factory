@@ -12,14 +12,14 @@ import { useApiConfig } from '../../api/config';
 import { queryKeys } from '../../api/keys';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../domains/auth/services/auth';
-import { OrganizationRequestError, reloadIntoOrganization } from '../domains/auth/services/organization';
+import { OrganizationRequestError, reloadIntoOrganization, setActiveOrganization } from '../domains/auth/services/organization';
 import { acceptJoinLink, previewJoinLink } from '../domains/auth/services/team';
 import type { JoinRefusal } from '../domains/auth/services/team';
 
-/** The server's refusal codes (`JOIN_LINK_<refusal>`) back to the refusal the page explains. */
+/** The server's refusal codes (`join_link_<refusal>`) back to the refusal the page explains. */
 function refusalOf(error: unknown): JoinRefusal | 'not_found' | undefined {
-  if (!(error instanceof OrganizationRequestError) || !error.code?.startsWith('JOIN_LINK_')) return undefined;
-  const code = error.code.slice('JOIN_LINK_'.length).toLowerCase();
+  if (!(error instanceof OrganizationRequestError) || !error.code?.startsWith('join_link_')) return undefined;
+  const code = error.code.slice('join_link_'.length);
   if (code === 'not_found') return 'not_found';
   return ['expired', 'revoked', 'used_up', 'domain_not_allowed', 'email_not_verified'].includes(code)
     ? (code as JoinRefusal)
@@ -78,7 +78,11 @@ export function JoinPage() {
     retry: false,
   });
   const accept = useMutation({
-    mutationFn: () => acceptJoinLink(baseUrl, token),
+    // Joined (or already in): make it the session's organization, then open the app afresh in it.
+    mutationFn: async () => {
+      const joined = await acceptJoinLink(baseUrl, token);
+      await setActiveOrganization(baseUrl, joined.organizationId);
+    },
     onSuccess: () => reloadIntoOrganization(),
   });
 

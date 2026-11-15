@@ -15,12 +15,13 @@ import type { Context } from 'hono';
 
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { AuditEmitter } from '@factory/feed';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import type { RouteDependencies } from '@factory/http';
 import { BoardWriteError, BoardWrites, issueMessage } from '@factory/runtime';
 import type { BoardWriter, ProjectBoardCache } from '@factory/runtime';
 import { boardDefinitionOf, codeBehaviourOf } from '@factory/store';
 import type { FactoryProjectsStorage, StoredBoardScope, StoredBoardsStorage, WorkItemsStorage } from '@factory/store';
+import type { RouteAccess } from '@factory/http';
 
 export interface BoardRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -70,7 +71,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
 
   async #requireAdmin(c: Context, scope: Resolved): Promise<void> {
     const { auth } = this.deps;
-    if (auth.enabled() && !(await auth.isOrganizationAdmin(c, scope.orgId))) {
+    if (auth.enabled() && !(await auth.can(c, 'factory.manage', scope.orgId))) {
       throw new Refusal(403, {
         error: 'organization_admin_required',
         message: 'Organization administrator access is required to change boards.',
@@ -97,7 +98,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
 
   async #respond(c: Context, scope: Resolved, key: string, status: 200 | 201 = 200) {
     const { auth } = this.deps;
-    const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, scope.orgId));
+    const canEdit = !auth.enabled() || (await auth.can(c, 'factory.manage', scope.orgId));
     const project = await this.deps.boards.describe(scope);
     const details = project.details.get(key);
     const code = this.deps.boards.codeRegistry.get(key);
@@ -153,6 +154,10 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const contracts = FACTORY_ROUTE_CONTRACTS;
     const writes = this.#writes;
     return [
@@ -218,3 +223,11 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects/:id/boards': 'factory.manage',
+  'PATCH /web/factory/projects/:id/boards/:boardKey': 'factory.manage',
+  'DELETE /web/factory/projects/:id/boards/:boardKey': 'factory.manage',
+  'POST /web/factory/projects/:id/boards/:boardKey/reset': 'factory.manage',
+};

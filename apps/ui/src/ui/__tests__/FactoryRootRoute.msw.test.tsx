@@ -49,7 +49,7 @@ describe('Factory root route', () => {
   it('redirects the bare factory URL to the work board', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Empty Factory', repositories: [] }] }),
@@ -64,7 +64,7 @@ describe('Factory root route', () => {
   it('redirects the root route to onboarding when no factories exist', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
     );
@@ -78,7 +78,7 @@ describe('Factory root route', () => {
   it('redirects onboarding to the first factory when one exists', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory', repositories: [] }] }),
@@ -96,7 +96,7 @@ describe('Factory root route', () => {
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Pending Factory', repositories: [] }] }),
@@ -119,7 +119,7 @@ describe('Factory root route', () => {
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
     );
@@ -140,7 +140,7 @@ describe('Factory root route', () => {
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory', repositories: [] }] }),
@@ -165,7 +165,7 @@ describe('Factory root route', () => {
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory', repositories: [] }] }),

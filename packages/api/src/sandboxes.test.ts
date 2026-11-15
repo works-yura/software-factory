@@ -18,7 +18,7 @@ function app(options: { admin?: boolean; views?: SandboxView[]; outcome?: SleepO
   mountApiRoutes(
     hono as never,
     new SandboxRoutes({
-      auth: fakeRouteAuth({ isOrganizationAdmin: async () => options.admin ?? true }),
+      auth: fakeRouteAuth({ isAdmin: async () => options.admin ?? true }),
       projects: { get: async ({ id }: { id: string }) => (id === PROJECT ? ({ id } as never) : null) },
       sleeper: { list: async () => options.views ?? [], sleep },
     }).routes(),

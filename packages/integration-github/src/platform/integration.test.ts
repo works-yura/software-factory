@@ -21,7 +21,7 @@ function fakeAuth(tenant: { orgId?: string; userId: string } | undefined = { org
     enabled: () => true,
     ensureUser: vi.fn(async () => ({ id: tenant?.userId ?? 'user-1', organizationId: tenant?.orgId })),
     tenant: () => tenant,
-    isOrganizationAdmin: vi.fn(async () => true),
+    isAdmin: vi.fn(async () => true),
   };
 }
 

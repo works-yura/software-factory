@@ -7,7 +7,7 @@ import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
-import { useIsViewer } from './useIsViewer';
+import { useCan } from './useCan';
 import { sessionRepositoryFor } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItem, WorkItemSource } from '../ui/domains/factory/services/workItems';
@@ -44,7 +44,7 @@ export function useStartFactoryRun() {
   const repositories = factoryQuery.data?.repositories ?? [];
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const viewer = useIsViewer();
+  const canStartRuns = useCan('run.start');
 
   const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({
@@ -109,8 +109,8 @@ export function useStartFactoryRun() {
   return {
     start: mutation,
     startingItemIds,
-    // A viewer starts nothing (ADR-0045); the server refuses it too.
-    enabled: Boolean(factoryId && repositories.length > 0) && !viewer,
+    // Starting needs `run.start` (ADR-0045); the server refuses it too.
+    enabled: Boolean(factoryId && repositories.length > 0) && canStartRuns,
     repositories,
   };
 }

@@ -31,9 +31,10 @@ import type { IntakeStorage } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { ProjectListRepository } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import type { ProjectBoardCache } from '@factory/runtime';
 import { buildEnvOf, maskSandboxEnvValues } from '@factory/sandbox';
+import type { RouteAccess } from '@factory/http';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -592,7 +593,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     if (!parsedPath.success) return { response: context.json({ error: 'Project not found' }, 404) };
     const project = await this.#project(tenant.orgId, parsedPath.data.id);
     if (!project) return { response: context.json({ error: 'Project not found' }, 404) };
-    if (this.deps.auth.enabled() && !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
+    if (this.deps.auth.enabled() && !(await this.deps.auth.can(context, 'factory.manage', tenant.orgId))) {
       return { response: context.json({ error: 'forbidden', message: adminMessage }, 403) };
     }
     const facet = this.deps.harnessModels?.()?.forInstance(parsedPath.data.instanceId);
@@ -742,6 +743,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectList.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectList.method,
@@ -814,7 +819,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (
             adminField &&
             this.deps.auth.enabled() &&
-            !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))
+            !(await this.deps.auth.can(context, 'factory.manage', tenant.orgId))
           ) {
             return context.json(
               {
@@ -1185,3 +1190,20 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects': 'factory.configure',
+  'PATCH /web/factory/projects/:id': 'factory.configure',
+  'PUT /web/factory/projects/:id/model-defaults/:instanceId': 'factory.configure',
+  'DELETE /web/factory/projects/:id/model-defaults/:instanceId': 'factory.configure',
+  'POST /web/factory/projects/:id/model-defaults/:instanceId/apply': 'factory.configure',
+  'DELETE /web/factory/projects/:id': 'factory.manage',
+  'POST /web/factory/projects/:id/source-control-connections': 'factory.configure',
+  'DELETE /web/factory/projects/:id/source-control-connections/:connectionId': 'factory.configure',
+  'POST /web/factory/projects/:id/source-control-connections/:connectionId/repositories': 'factory.configure',
+  'PATCH /web/factory/projects/:id/environment': 'factory.configure',
+  'PATCH /web/factory/projects/:id/repositories/:projectRepositoryId': 'factory.configure',
+  'DELETE /web/factory/projects/:id/repositories/:projectRepositoryId': 'factory.configure',
+  'POST /web/factory/projects/:id/environment/build': 'factory.configure',
+};

@@ -24,6 +24,8 @@ import type { CommentEditor, CommentsDomain } from './domain.ts';
 import { isRecord, parseCreateCommentBody, parseEditCommentBody, readJson, UUID_RE } from './parse.ts';
 import { toWireComment } from './wire.ts';
 import type { WireCommentPage } from './wire.ts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 const MAX_AUDIT_BODY_SNAPSHOT = 1024;
 /** Comment frames only — proxies drop an idle stream, and `write` can't detect a dead peer. */
@@ -50,7 +52,11 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
-export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiRoute[] {
+export function buildCommentRoutes(...args: Parameters<typeof buildCommentRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildCommentRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildCommentRoutesUndeclared(dependencies: CommentRouteDependencies): ApiRoute[] {
   const { domain, auth, comments, workItems, projects, pubsub, audit } = dependencies;
 
   async function resolveTenant(c: Context): Promise<Tenant | { response: Response }> {
@@ -68,7 +74,7 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
   function editorFor(c: Context, tenant: Tenant): CommentEditor {
     return {
       userId: tenant.userId,
-      canModerate: () => auth.isOrganizationAdmin(c, tenant.orgId),
+      canModerate: () => auth.can(c, 'content.moderate', tenant.orgId),
     };
   }
 
@@ -347,3 +353,10 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/work-items/:workItemId/comments': 'comment.write',
+  'PATCH /web/factory/work-items/:workItemId/comments/:commentId': 'comment.write',
+  'DELETE /web/factory/work-items/:workItemId/comments/:commentId': 'comment.write',
+};

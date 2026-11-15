@@ -6,7 +6,8 @@ import type { SandboxSleeper } from '@factory/sandbox';
 import type { FactoryProjectsStorage } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS, sandboxSleepBodySchema, UUID_PATTERN } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 const UUID_RE = new RegExp(UUID_PATTERN);
 
@@ -37,7 +38,7 @@ export class SandboxRoutes extends Route<SandboxRoutesDeps> {
     if (!projectId || !UUID_RE.test(projectId)) return { response: context.json({ error: 'Project not found' }, 404) };
     const project = await this.deps.projects.get({ orgId: tenant.orgId, id: projectId });
     if (!project) return { response: context.json({ error: 'Project not found' }, 404) };
-    if (this.deps.auth.enabled() && !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
+    if (this.deps.auth.enabled() && !(await this.deps.auth.can(context, 'factory.manage', tenant.orgId))) {
       return {
         response: context.json(
           { error: 'organization_admin_required', message: 'Organization administrator access is required to manage sandboxes.' },
@@ -66,6 +67,10 @@ export class SandboxRoutes extends Route<SandboxRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const contracts = FACTORY_ROUTE_CONTRACTS;
     return [
       this.#route(contracts.projectSandboxesList, async (context, scope) => {
@@ -104,3 +109,8 @@ export class SandboxRoutes extends Route<SandboxRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects/:id/sandboxes/sleep': 'factory.configure',
+};

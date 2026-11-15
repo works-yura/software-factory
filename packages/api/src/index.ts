@@ -20,3 +20,4 @@ export * from './surface.ts';
 export * from './telemetry.ts';
 export * from './work-items.ts';
 export * from './usage.ts';
+export * from './team.ts';

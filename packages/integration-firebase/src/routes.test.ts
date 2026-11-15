@@ -37,7 +37,7 @@ function setup(options: { user?: TestAuthUser | null; isAdmin?: boolean; google?
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  const auth = fakeRouteAuth({ isOrganizationAdmin: async () => options.isAdmin ?? true });
+  const auth = fakeRouteAuth({ isAdmin: async () => options.isAdmin ?? true });
   const projects = { get: async ({ orgId, id }: { orgId: string; id: string }) => (orgId === 'org-1' && FACTORIES.has(id) ? ({ id, name: id } as never) : null) };
   const hooks = {
     emitAudit: async ({ input }: { input: { action: string; metadata?: Record<string, unknown> } }) =>

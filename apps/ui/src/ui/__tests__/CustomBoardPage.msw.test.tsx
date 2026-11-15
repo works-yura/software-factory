@@ -63,7 +63,7 @@ function renderBoard(
     http.get('*/api/agent-controller/code/sessions/:id/permissions', () => HttpResponse.json({ permissions: [] })),
     http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: clickup?.bindings ?? [] })),
     http.get('*/auth/me', () =>
-      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
     ),
     http.get('*/web/factory/projects', () =>
       HttpResponse.json({

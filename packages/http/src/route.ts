@@ -7,6 +7,7 @@
  * stay portable and testable with fakes.
  */
 
+import type { Permission } from '@factory/access';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
@@ -26,12 +27,16 @@ export interface RouteAuth {
    */
   ensureUser(c: Context): Promise<unknown>;
   /**
-   * Tenant identity for the request, when signed in. `role` is the person's role in
-   * `orgId` when the provider reports roles (`viewer` reads and changes nothing).
+   * Tenant identity for the request, when signed in, with the person's role in `orgId`.
    */
   tenant(c: Context): { orgId?: string; userId: string; role?: string } | undefined;
-  /** Fail-closed check that the caller administers the given organization. */
-  isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean>;
+  /**
+   * Whether the caller's role in their organization holds the permission (`can()` of
+   * `@factory/access`). With `organizationId`, also that it is the caller's organization.
+   * Fail-closed: no user, another organization or an unknown role is `false`; a provider that
+   * cannot answer throws (503).
+   */
+  can(c: Context, permission: Permission, organizationId?: string): Promise<boolean>;
 }
 
 /** Dependencies shared by every factory route module. */

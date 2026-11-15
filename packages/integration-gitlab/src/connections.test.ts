@@ -16,7 +16,7 @@ function app(source: GitLabConnectionsSource, admin = true) {
   });
   mountApiRoutes(
     hono as never,
-    buildConnectionRoutes({ auth: fakeRouteAuth({ isOrganizationAdmin: async () => admin }), connectors: [{ id: 'gitlab', connections: new GitLabConnections(source) }] }),
+    buildConnectionRoutes({ auth: fakeRouteAuth({ isAdmin: async () => admin }), connectors: [{ id: 'gitlab', connections: new GitLabConnections(source) }] }),
   );
   return async (method: string, path: string, body?: unknown) => {
     const res = await hono.request(path, {

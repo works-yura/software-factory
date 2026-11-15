@@ -14,6 +14,7 @@
   "dependencies": {
     "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
+    "@factory/http": "workspace:*",
     "@factory/runtime": "workspace:*",
     "@factory/session": "workspace:*",
     "@factory/store": "workspace:*",

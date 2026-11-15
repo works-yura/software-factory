@@ -21,7 +21,7 @@ const localAuth: RouteAuth = {
   enabled: () => false,
   ensureUser: async () => undefined,
   tenant: () => undefined,
-  isOrganizationAdmin: async () => true,
+  can: async () => true,
 };
 
 /** A catalog whose only mode carries a provider that has a built-in low-cost OM pack. */

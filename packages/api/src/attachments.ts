@@ -13,7 +13,7 @@ import type { Context } from 'hono';
 
 import { attachmentQuerySchema } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import { canViewSourceControlSession } from '@factory/session';
 import {
   attachmentSandboxPath,
@@ -21,6 +21,7 @@ import {
   isInlineAttachmentMime,
 } from '@factory/store';
 import type { AttachmentOwner, AttachmentRecord, AttachmentService, SourceControlSession, WorkItemsStorage } from '@factory/store';
+import type { RouteAccess } from '@factory/http';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SESSION_ID_LENGTH = 512;
@@ -167,6 +168,10 @@ export class AttachmentRoutes extends Route<AttachmentRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     return [
       registerApiRoute('/web/factory/work-items/:workItemId/attachments', {
         method: 'GET',
@@ -243,3 +248,10 @@ export class AttachmentRoutes extends Route<AttachmentRoutesDeps> {
     return record.sessionId === tenant.userId;
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/work-items/:workItemId/attachments': 'card.write',
+  'POST /web/factory/sessions/:sessionId/attachments': 'session.write',
+  'DELETE /web/factory/attachments/:id': 'card.write',
+};

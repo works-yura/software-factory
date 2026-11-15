@@ -103,7 +103,7 @@ async function setup() {
     now: () => 0,
     warn: () => {},
   });
-  const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => userId === ADMIN });
+  const auth = fakeRouteAuth({ isAdmin: async (_org, userId) => userId === ADMIN });
   const app = new Hono();
   const caller = { id: ADMIN };
   app.use('*', async (c, next) => {

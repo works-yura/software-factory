@@ -19,6 +19,8 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '@factory/http';
 import type { PlatformApiClient} from './platform-api-client.ts';
 import { PlatformApiError } from './platform-api-client.ts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 type RouteContext = Context;
 
@@ -111,7 +113,11 @@ function platformError(c: RouteContext, err: unknown) {
  * Build the `/web/integrations/platform/*` routes. Callers only mount these
  * when Platform machine credentials are configured.
  */
-export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
+export function buildPlatformConnectRoutes(...args: Parameters<typeof buildPlatformConnectRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildPlatformConnectRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildPlatformConnectRoutesUndeclared(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
   const { auth, client } = options;
 
   return [
@@ -192,3 +198,9 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/integrations/platform/:provider/connect-session': 'connections.manage',
+  'POST /web/integrations/platform/:provider/connections/:connectionId/reconnect-session': 'connections.manage',
+};

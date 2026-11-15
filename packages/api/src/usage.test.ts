@@ -46,7 +46,7 @@ async function setup(
     mountApiRoutes(
       hono as never,
       new UsageRoutes({
-        auth: fakeRouteAuth({ isOrganizationAdmin: async (_org, user) => options.isAdmin?.(user) ?? false }),
+        auth: fakeRouteAuth({ isAdmin: async (_org, user) => options.isAdmin?.(user) ?? false }),
         usage: seed.usage,
         harnesses,
         sessions,

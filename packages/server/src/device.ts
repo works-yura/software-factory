@@ -23,6 +23,7 @@ import {
 import type { DeviceServiceInternals } from '@factory/device/server';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import { withAccess } from '@factory/http';
 import { registerApiRoute } from '@mastra/core/server';
 import { Hono } from 'hono';
 
@@ -73,10 +74,14 @@ export async function createFactoryDevice(config: FactoryDeviceConfig, auth: Rou
 
   return {
     routes: [
-      registerApiRoute(`${DEVICE_BASE_PATH}/*`, {
-        method: 'ALL',
-        handler: c => app.fetch(c.req.raw),
-      }),
+      // Driving a simulator or emulator is session work.
+      withAccess(
+        'session.write',
+        registerApiRoute(`${DEVICE_BASE_PATH}/*`, {
+          method: 'ALL',
+          handler: c => app.fetch(c.req.raw),
+        }),
+      ),
     ],
     attach(server) {
       // `attachDeviceHubUpgrade` listens on an emitter of its own; this listener hands it device

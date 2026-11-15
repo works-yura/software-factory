@@ -633,7 +633,7 @@ describe('project skill edit routes', () => {
   async function setup() {
     const seed = await createFactoryStorageForTests();
     const admins = new Set([ADMIN.id]);
-    const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => admins.has(userId) });
+    const auth = fakeRouteAuth({ isAdmin: async (_org, userId) => admins.has(userId) });
     const routes = new SkillRoutes({
       auth,
       controllerId: 'code',

@@ -41,7 +41,7 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser; now?: Da
   mountApiRoutes(
     app,
     buildMcpServerRoutes({
-      auth: fakeRouteAuth({ isOrganizationAdmin: async () => options.isAdmin ?? true }),
+      auth: fakeRouteAuth({ isAdmin: async () => options.isAdmin ?? true }),
       servers,
       hub: {
         status: async (_org, id) => {

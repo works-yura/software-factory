@@ -216,7 +216,13 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     expect(await res.json()).toEqual({
       authenticated: true,
       telemetryEnabled: false,
-      user: { userId: 'user_fake', email: 'fake@example.com', organizationId: 'org_fake' },
+      user: {
+        userId: 'user_fake',
+        email: 'fake@example.com',
+        organizationId: 'org_fake',
+        organizationRole: 'member',
+        permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'],
+      },
       provider: 'fake',
     });
   });

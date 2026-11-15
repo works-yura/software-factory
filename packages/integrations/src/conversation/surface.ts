@@ -1,6 +1,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import { withAccess } from '@factory/http';
 import { createTool } from '@mastra/core/tools';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -46,7 +47,8 @@ export function createConversationReplyTool(channels: readonly ConversationChann
  * their provider account to link it.
  */
 export function buildConnectCodeRoute(options: { platform: string; auth: RouteAuth; codes: ConnectCodes }): ApiRoute {
-  return registerApiRoute(`/web/channels/${options.platform}/connect-code`, {
+  // Linking a chat account lets that person talk to agents from the channel.
+  return withAccess('run.start', registerApiRoute(`/web/channels/${options.platform}/connect-code`, {
     method: 'POST',
     requiresAuth: false,
     handler: async c => {
@@ -59,5 +61,5 @@ export function buildConnectCodeRoute(options: { platform: string; auth: RouteAu
       }
       return c.json(options.codes.issue(options.platform, { userId: tenant.userId, orgId: tenant.orgId }));
     },
-  });
+  }));
 }

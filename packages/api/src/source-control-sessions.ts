@@ -49,6 +49,8 @@ function loose(c: unknown): RouteContext {
 }
 
 import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 export { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
 // Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
@@ -177,7 +179,7 @@ async function sessionManagePermission(
   const isOwner = session.userId === tenant.userId;
   if (session.visibility === 'private' && !isOwner) return 'not-found';
   if (isOwner) return 'allowed';
-  return (await auth.isOrganizationAdmin(c, session.orgId)) ? 'allowed' : 'forbidden';
+  return (await auth.can(c, 'content.moderate', session.orgId)) ? 'allowed' : 'forbidden';
 }
 
 const parkedApprovalAnswerSchema = z
@@ -661,7 +663,11 @@ function projectSessionRoutes(
   ];
 }
 
-export function buildSourceControlSessionRoutes(options: SourceControlSessionRoutesOptions): ApiRoute[] {
+export function buildSourceControlSessionRoutes(...args: Parameters<typeof buildSourceControlSessionRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildSourceControlSessionRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildSourceControlSessionRoutesUndeclared(options: SourceControlSessionRoutesOptions): ApiRoute[] {
   const nameSession = createSessionNaming();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
   return [
@@ -1139,3 +1145,15 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/user-sessions/:sessionId/parked-approval': 'run.start',
+  'POST /web/source-control/projects/:id/sessions': 'session.write',
+  'POST /web/github/projects/:id/sessions': 'session.write',
+  'POST /web/user-sessions/:sessionId/sandbox/start': 'session.write',
+  'POST /web/user-sessions/:sessionId/sandbox/recreate': 'session.write',
+  'DELETE /web/user-sessions/:sessionId': 'session.write',
+  'PUT /web/user-sessions/:sessionId/visibility': 'session.write',
+  'POST /web/user-sessions/:sessionId/title': 'session.write',
+};

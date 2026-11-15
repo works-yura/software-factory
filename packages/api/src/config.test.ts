@@ -484,7 +484,7 @@ describe('resolveDeploymentModelProviders', () => {
 
 describe('provider key routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
-  const isOrganizationAdmin = vi.fn(async () => true);
+  const isAdmin = vi.fn(async () => true);
 
   const controller = makeAgentController([
     { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
@@ -499,7 +499,7 @@ describe('provider key routes with a tenant', () => {
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
-        auth: fakeRouteAuth({ isOrganizationAdmin }),
+        auth: fakeRouteAuth({ isAdmin }),
         controller,
         authStorage,
         modelCredentials: seed.credentials,
@@ -514,7 +514,7 @@ describe('provider key routes with a tenant', () => {
 
   beforeEach(async () => {
     seed = await createFactoryStorageForTests();
-    isOrganizationAdmin.mockResolvedValue(true);
+    isAdmin.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -591,14 +591,14 @@ describe('provider key routes with a tenant', () => {
     const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     expect(res.status).toBe(200);
     expect((await res.json()).provider?.source).toBe('stored-org');
-    expect(isOrganizationAdmin).toHaveBeenCalledWith('org1', 'user-a');
+    expect(isAdmin).toHaveBeenCalledWith('org1', 'user-a');
 
     const resolvedForB = await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'org');
     expect(resolvedForB).toMatchObject({ scope: 'org', credential: { key: 'sk-shared' } });
   });
 
   it('rejects org-scoped writes from non-admin members', async () => {
-    isOrganizationAdmin.mockResolvedValue(false);
+    isAdmin.mockResolvedValue(false);
     const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
 
     expect(res.status).toBe(403);
@@ -607,7 +607,7 @@ describe('provider key routes with a tenant', () => {
   });
 
   it('fails closed when org-admin authorization errors', async () => {
-    isOrganizationAdmin.mockRejectedValue(new Error('identity provider unavailable'));
+    isAdmin.mockRejectedValue(new Error('identity provider unavailable'));
     const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
 
     expect(res.status).toBe(403);
@@ -615,7 +615,7 @@ describe('provider key routes with a tenant', () => {
   });
 
   it('refuses a key from a non-admin member even without a scope', async () => {
-    isOrganizationAdmin.mockResolvedValue(false);
+    isAdmin.mockResolvedValue(false);
     const res = await putKey(buildApp(userA), { key: 'sk-mine' });
 
     expect(res.status).toBe(403);
@@ -651,7 +651,7 @@ describe('provider key routes with a tenant', () => {
 
   it('rejects org-scoped deletes from non-admin members', async () => {
     await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
-    isOrganizationAdmin.mockResolvedValue(false);
+    isAdmin.mockResolvedValue(false);
 
     const res = await buildApp(userA).request('/web/config/providers/anthropic/key?scope=org', { method: 'DELETE' });
 

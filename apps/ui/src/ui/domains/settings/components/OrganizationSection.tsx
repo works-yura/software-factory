@@ -15,11 +15,10 @@ import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { useCan } from '../../../../hooks/useCan';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import {
-  canManageMembers,
   getOrganization,
-  isViewerRole,
   leaveOrganization,
   listOrganizations,
   reloadIntoOrganization,
@@ -223,6 +222,8 @@ export function OrganizationSection() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const { auth, organization, available, me } = useActiveOrganization();
+  const manage = useCan('org.manage');
+  const onlyReads = !useCan('card.write');
 
   if (auth.isPending || (available && organization.isPending)) {
     return (
@@ -245,11 +246,10 @@ export function OrganizationSection() {
   }
 
   const org = organization.data;
-  const manage = canManageMembers(me?.role);
 
   return (
     <div className="flex flex-col gap-8">
-      {isViewerRole(me?.role) ? <Notice variant="info">{t('organization.viewerNote')}</Notice> : null}
+      {onlyReads ? <Notice variant="info">{t('organization.viewerNote')}</Notice> : null}
       <SettingsSubsection
         scope="org"
         title={t('organization.details.title')}

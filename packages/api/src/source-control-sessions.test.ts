@@ -960,7 +960,7 @@ describe('session sandbox recreate', () => {
     options: {
       sessionRetirement?: SessionRetirementCoordinator;
       sandboxRecreateSupported?: boolean;
-      isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
+      isAdmin?: (orgId: string, userId: string) => Promise<boolean>;
       controller?: RouteOptions['controller'];
       abortSettleTimeoutMs?: number;
       caller?: { id: string; organizationId: string };
@@ -975,7 +975,7 @@ describe('session sandbox recreate', () => {
     mountApiRoutes(
       app as never,
       buildSourceControlSessionRoutes({
-        auth: fakeRouteAuth({ isOrganizationAdmin: options.isOrganizationAdmin ?? (async () => false) }),
+        auth: fakeRouteAuth({ isAdmin: options.isAdmin ?? (async () => false) }),
         sourceControls: [sourceControl],
         projects: seed.projects,
         memorySettings: seed.memorySettings,
@@ -1160,8 +1160,8 @@ describe('session sandbox recreate', () => {
   it('recreates the owner session with the public session id, without an admin check', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession();
     const sessionRetirement = fakeCoordinator();
-    const isOrganizationAdmin = vi.fn(async () => true);
-    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isOrganizationAdmin });
+    const isAdmin = vi.fn(async () => true);
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isAdmin });
 
     const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
 
@@ -1172,7 +1172,7 @@ describe('session sandbox recreate', () => {
       orgId: 'org-1',
       sessionId: session.sessionId,
     });
-    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+    expect(isAdmin).not.toHaveBeenCalled();
   });
 
   it('aborts an active run and recreates only after it stops', async () => {
@@ -1263,13 +1263,13 @@ describe('session sandbox recreate', () => {
   it('lets an org admin recreate a teammate org-visible session', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession('user-2');
     const sessionRetirement = fakeCoordinator();
-    const isOrganizationAdmin = vi.fn(async () => true);
-    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isOrganizationAdmin });
+    const isAdmin = vi.fn(async () => true);
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isAdmin });
 
     const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
 
     expect(response.status).toBe(200);
-    expect(isOrganizationAdmin).toHaveBeenCalledWith('org-1', 'user-1');
+    expect(isAdmin).toHaveBeenCalledWith('org-1', 'user-1');
     expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
   });
 
@@ -1287,7 +1287,7 @@ describe('session sandbox recreate', () => {
   it("hides another user's private session from an org admin", async () => {
     const { seed, sourceControl, session } = await seedRecreateSession('user-2', 'private');
     const sessionRetirement = fakeCoordinator();
-    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isOrganizationAdmin: async () => true });
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isAdmin: async () => true });
 
     const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
 
@@ -1300,7 +1300,7 @@ describe('session sandbox recreate', () => {
     const sessionRetirement = fakeCoordinator();
     const app = buildRecreateApp(seed, sourceControl, {
       sessionRetirement,
-      isOrganizationAdmin: async () => true,
+      isAdmin: async () => true,
       caller: { id: 'user-1', organizationId: 'org-2' },
     });
 
@@ -1410,10 +1410,10 @@ describe('session sandbox recreate', () => {
     ['anyone when there is no coordinator', 'user-1', async () => true, false, false],
   ] as const)(
     'reports session.capabilities.recreateSandbox on the session GET for %s',
-    async (_label, owner, isOrganizationAdmin, withCoordinator, expected) => {
+    async (_label, owner, isAdmin, withCoordinator, expected) => {
       const { seed, sourceControl, session } = await seedRecreateSession(owner);
       const app = buildRecreateApp(seed, sourceControl, {
-        isOrganizationAdmin,
+        isAdmin,
         ...(withCoordinator ? { sessionRetirement: fakeCoordinator() } : {}),
       });
 

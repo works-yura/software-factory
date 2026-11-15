@@ -26,7 +26,7 @@ describe('Repositories settings', () => {
     let gitlabProjectReads = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
@@ -111,7 +111,7 @@ describe('Repositories settings', () => {
   it('never connects GitHub here: connecting is in Підключення, linked from this page', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
@@ -154,7 +154,7 @@ describe('Repositories settings', () => {
   it('lists GitHub repositories of a token connection with no Connect or Manage step, beside GitLab', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [] }] }),

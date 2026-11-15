@@ -1,0 +1,20 @@
+{
+  "name": "@factory/access",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Who may do what in an organization: the permission catalog, the role matrix, can(), and the membership, invitation, join-link and avatar interfaces (ADR-0045). No auth provider in here.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

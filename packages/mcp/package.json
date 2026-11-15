@@ -25,6 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@factory/access": "workspace:*",
     "@factory/auth-better-auth": "workspace:*",
     "@factory/feed": "workspace:*",
     "@factory/harness-mastra": "workspace:*",

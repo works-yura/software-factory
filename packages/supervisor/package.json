@@ -18,6 +18,7 @@
     "@factory/core": "workspace:*",
     "@factory/credentials": "workspace:*",
     "@factory/feed": "workspace:*",
+    "@factory/http": "workspace:*",
     "@factory/integrations": "workspace:*",
     "@factory/runtime": "workspace:*",
     "@factory/session": "workspace:*",

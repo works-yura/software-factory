@@ -374,7 +374,7 @@ describe('GithubIntegration: connections through the shared connection routes (A
     const audits: Array<{ action: string; metadata: unknown }> = [];
     const seeded = await createFactoryStorageForTests();
     const integration = new GithubIntegration({ ...options.config, fetchImpl: github.fetchImpl });
-    const auth = fakeRouteAuth({ isOrganizationAdmin: async () => options.admin ?? true });
+    const auth = fakeRouteAuth({ isAdmin: async () => options.admin ?? true });
     const emitAudit = async ({ input }: { input: { action: string; metadata?: unknown } }) => void audits.push(input as never);
     const context = {
       auth,

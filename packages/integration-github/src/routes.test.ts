@@ -597,7 +597,7 @@ const testAuth: RouteAuth = {
     return u ? { orgId: u.organizationId, userId: u.id } : undefined;
   },
   // Everyone is an admin unless a test names the admins.
-  isOrganizationAdmin: async (c: any) => patAdmins === null || patAdmins.has((c.get('factoryAuthUser') as { id: string }).id),
+  can: async (c: any) => patAdmins === null || patAdmins.has((c.get('factoryAuthUser') as { id: string }).id),
 };
 let patAdmins: Set<string> | null = null;
 

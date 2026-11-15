@@ -62,7 +62,7 @@ function buildApp(
   opts?: {
     noCredentials?: boolean;
     enabled?: boolean;
-    isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
+    isAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
   },
 ) {
   const app = new Hono();
@@ -73,7 +73,7 @@ function buildApp(
   mountApiRoutes(
     app as any,
     new OAuthRoutes({
-      auth: fakeRouteAuth({ enabled: opts?.enabled, isOrganizationAdmin: opts?.isOrganizationAdmin }),
+      auth: fakeRouteAuth({ enabled: opts?.enabled, isAdmin: opts?.isAdmin }),
       authStorage,
       modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
     }).routes(),
@@ -438,7 +438,7 @@ describe('org-scoped sign-in', () => {
     ).json();
 
     // Admin at start, revoked before completion.
-    const revoked = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const revoked = buildApp(userA, { isAdmin: async () => false });
     const res = await post(revoked, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
     expect(res.status).toBe(403);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
@@ -451,14 +451,14 @@ describe('org-scoped sign-in', () => {
     pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
     await makePollable(sessionId);
 
-    const revoked = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const revoked = buildApp(userA, { isAdmin: async () => false });
     const res = await post(revoked, '/web/config/providers/openai/oauth/poll', { sessionId });
     expect(res.status).toBe(403);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'openai-codex')).toBeUndefined();
   });
 
   it('403s a non-admin starting an org-scoped flow', async () => {
-    const app = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const app = buildApp(userA, { isAdmin: async () => false });
     const res = await post(app, '/web/config/providers/anthropic/oauth/start', { scope: 'org' });
     expect(res.status).toBe(403);
   });
@@ -467,7 +467,7 @@ describe('org-scoped sign-in', () => {
     await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'oauth', ...ANTHROPIC_CREDS });
     await seed.credentials.setCredential(TENANT_A, 'anthropic', { type: 'oauth', ...ANTHROPIC_CREDS });
 
-    const forbidden = await buildApp(userA, { isOrganizationAdmin: async () => false }).request(
+    const forbidden = await buildApp(userA, { isAdmin: async () => false }).request(
       '/web/config/providers/anthropic/oauth?scope=org',
       { method: 'DELETE' },
     );

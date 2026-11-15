@@ -59,7 +59,7 @@ function app(options: { admin?: boolean; orgId?: string | null; failing?: boolea
     },
   };
   const routes = buildConnectionRoutes({
-    auth: fakeRouteAuth({ isOrganizationAdmin: async () => options.admin ?? true }),
+    auth: fakeRouteAuth({ isAdmin: async () => options.admin ?? true }),
     connectors: [{ id: 'fake', connections: fakeConnector(calls) }, ...(options.failing ? [{ id: 'broken', connections: broken }] : [])],
     emitAudit: async args => void audits.push(args.input),
   });
@@ -140,7 +140,7 @@ describe('/web/connections', () => {
       // Only `import` is a member's; everything else keeps the admin default.
       permissions: { settings: { import: 'member' } },
     };
-    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }), connectors: [{ id: 'naive', connections: naive }] });
+    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isAdmin: async () => false }), connectors: [{ id: 'naive', connections: naive }] });
     const send = (path: string, init?: RequestInit) => {
       const hono = new Hono();
       hono.use('*', async (c, next) => {
@@ -224,7 +224,7 @@ describe('/web/connections', () => {
       permissions: { connect: 'member', remove: { policy: 'owner' } },
       policies: { owner: async (request, id) => (id === 'one' && request.userId === 'owner' ? true : { reason: 'Only its owner removes it.' }) },
     };
-    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }), connectors: [{ id: 'owned', connections: owned }] });
+    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isAdmin: async () => false }), connectors: [{ id: 'owned', connections: owned }] });
     const as = (userId: string) => (path: string, init?: RequestInit) => {
       const hono = new Hono();
       hono.use('*', async (c, next) => {

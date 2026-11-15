@@ -35,6 +35,8 @@ import {
   SupervisorFindingAttentionProvider,
 } from '@factory/runtime';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 export { factoryDecisionType } from '@factory/runtime';
 
@@ -168,7 +170,11 @@ function receiptRoute(
   });
 }
 
-export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
+export function buildAttentionRoutes(...args: Parameters<typeof buildAttentionRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildAttentionRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildAttentionRoutesUndeclared(dependencies: AttentionRouteDependencies): ApiRoute[] {
   const { workItems, boards, comments, liveSessions } = dependencies;
   const providers: AttentionProvider[] = [
     new DecisionAttentionProvider({ workItems, boards }, failedDecisionAttentionSpec),
@@ -295,3 +301,11 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
     receiptRoute(dependencies, 'restore', 'restore'),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/factory/projects/:id/attention/read-all': 'self.write',
+  'POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/read': 'self.write',
+  'POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive': 'self.write',
+  'POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/restore': 'self.write',
+};

@@ -48,7 +48,7 @@ describe('SettingsNavigation', () => {
         .getAllByRole('link')
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
-    expect(linksIn('Organization')).toEqual(['Organization', 'Connections']);
+    expect(linksIn('Organization')).toEqual(['Organization', 'Team', 'Connections']);
     // The Factory group is titled with the Factory these pages change.
     await screen.findByRole('region', { name: 'Factory “bookfate”' });
     expect(linksIn('Factory “bookfate”')).toEqual([

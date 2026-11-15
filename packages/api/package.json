@@ -14,6 +14,7 @@
     "check:tests": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "@factory/access": "workspace:*",
     "@factory/activity": "workspace:*",
     "@factory/auth": "workspace:*",
     "@factory/capabilities": "workspace:*",

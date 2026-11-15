@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import { withAccess } from '@factory/http';
 import { createTool } from '@mastra/core/tools';
 import type { Tool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
@@ -433,12 +434,13 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
   const tenant = deps.auth.tenant(c);
   if (!tenant) return unauthorized(deps, mcpPath);
   if (!tenant.orgId) return c.json({ error: 'organization_required' }, 403);
-  // The endpoint's tools change cards, sessions and settings; a viewer only reads (ADR-0045).
-  if (tenant.role === 'viewer') {
+  // The endpoint's tools change cards, sessions and settings: a person needs `run.start` (ADR-0045).
+  if (!(await deps.auth.can(c, 'run.start', tenant.orgId))) {
     return c.json(
       {
-        error: 'viewer_read_only',
-        message: 'Viewers cannot use the Factory MCP endpoint. Ask an admin of your organization for the Member role.',
+        error: 'forbidden',
+        permission: 'run.start',
+        message: 'Your role cannot use the Factory MCP endpoint. Ask an admin of your organization for the Member role.',
       },
       403,
     );
@@ -494,7 +496,8 @@ export function buildFactoryMcpRoutes(deps: FactoryMcpRoutesDeps): ApiRoute[] {
   const handler = (c: unknown) => handleMcp(deps, c as Context);
   return [
     ...(['POST', 'GET', 'DELETE'] as const).map(method =>
-      registerApiRoute(FACTORY_MCP_PATH, { method, requiresAuth: false, handler }),
+      // The endpoint authenticates each caller itself (session token or OAuth) and checks `run.start`.
+      withAccess('public', registerApiRoute(FACTORY_MCP_PATH, { method, requiresAuth: false, handler })),
     ),
     registerApiRoute(`${PROTECTED_RESOURCE_PREFIX}${FACTORY_MCP_PATH}`, {
       method: 'GET',

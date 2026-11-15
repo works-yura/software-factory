@@ -34,7 +34,7 @@ async function setup(
     new SandboxEnvRoutes({
       auth: fakeRouteAuth({
         enabled: options.enabled ?? true,
-        isOrganizationAdmin: async () => options.admin ?? true,
+        isAdmin: async () => options.admin ?? true,
       }),
       projects: seed.projects,
       sandboxEnvs,

@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useUploadAttachment } from '../../../../../hooks/useAttachments';
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
-import { useIsViewer } from '../../../../../hooks/useIsViewer';
+import { useCan } from '../../../../../hooks/useCan';
 import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
 import { attachmentMessageLines, formatAttachmentSize } from '../../services/attachments';
 import { mentionLabel } from './mentions';
@@ -31,10 +31,10 @@ type CommentComposerProps = {
   onDismissQuote: () => void;
 };
 
-/** The comment box; a viewer reads comments but writes none (ADR-0045), so they get no box. */
+/** The comment box, for those who may write comments (`comment.write`; a viewer only reads them). */
 export function CommentComposer(props: CommentComposerProps) {
-  const viewer = useIsViewer();
-  if (viewer) return null;
+  const canComment = useCan('comment.write');
+  if (!canComment) return null;
   return <CommentComposerForm {...props} />;
 }
 

@@ -4,35 +4,44 @@
 
 Зразок — налаштування Mastra Platform (Account, Organization › General, Team). Листів Factory не надсилає: запрошення й вступ — посиланням.
 
-## План
+## Карта пакетів
 
-| Етап | Що | Де |
+| Пакет | Що | Інтерфейси |
 | --- | --- | --- |
-| 0. Ролі | роль `viewer`; зміна ролі адміном (без `owner`); ворота: глядач лише читає (403 `viewer_read_only`), MCP — 403; роль у `/auth/me`; UI: вибір ролі біля учасника, приховані запуск, коментар і створення картки; аудит | `packages/auth-better-auth`, `packages/auth`, `packages/mcp`, `apps/ui` |
-| 1. Організація › Загальне | назва (`organization/update`), ID з копіюванням, аватарка (`logo`) | плагін `factoryTeam`, `OrganizationGeneralSection` |
-| 2. Організація › Команда | діалог «Запросити учасника» (email і роль, посилання), запрошення, що чекають; посилання для вступу (назва, роль, домени, термін, ліміт), `/join/<токен>`; «Покинути організацію» | плагін `factoryTeam`, `OrganizationTeamSection`, `JoinPage` |
-| 3. Акаунт | аватарка (змінити, прибрати), ім'я, email лише для читання, сесії (пристрій, IP, поточна, завершити) | `AccountSettingsSection` |
+| `@factory/access` | каталог дозволів, матриця ролей, `can()`, правила посилань і аватарок | `MembershipDirectory`, `InvitationService`, `JoinLinkStore`, `AvatarStore` |
+| `@factory/http` | `route({ access })`, `withAccess`, `declareAccess`, `enforceRouteAccess`, `undeclaredWrites`; `RouteAuth.can()` | — |
+| `@factory/auth` | роль людини на запит (`resolveOrganizationRole`), `canInOrganization`, `/auth/me` з `permissions`, група `/api/*` → `run.start` | читає `MembershipDirectory.role` |
+| `@factory/auth-better-auth` | адаптер: роль `viewer`, зміна ролей без `owner`, події для аудиту | реалізує `MembershipDirectory`, `InvitationService` |
+| `@factory/store` | `JoinLinksStorage` (`join_links`), `AvatarsStorage` (`factory_avatars` + сховище вкладень) | реалізує `JoinLinkStore`, `AvatarStore` |
+| `@factory/api` | `buildTeamRoutes`: посилання для вступу, вступ, аватарки | використовує всі чотири |
+| `@factory/server` | збирає все, ставить `enforceRouteAccess` перед усіма маршрутами, події → журнал аудиту | — |
+| `apps/ui` | `useCan(permission)`; Організація, Команда, Мій акаунт, `/join/:token` | — |
 
-Поза планом: аналітика в акаунті (у v4 її нема), листи, ролі в каналах (Slack).
+## Ролі й дозволи
 
-## Ролі
+| Дозвіл | Глядач | Учасник | Адмін / власник |
+| --- | :-: | :-: | :-: |
+| `board.read` — дошки, картки, чати, налаштування | ✓ | ✓ | ✓ |
+| `self.write` — свої позначки уваги, профіль, вихід, вступ за посиланням | ✓ | ✓ | ✓ |
+| `card.write`, `comment.write`, `run.start`, `session.write` | | ✓ | ✓ |
+| `factory.configure` — середовище, моделі за замовчуванням, підключення своїх акаунтів | | ✓ | ✓ |
+| `factory.manage` — дошки, маршрути надходження, навички, змінні пісочниці, адмінські поля проєкту | | | ✓ |
+| `connections.manage`, `org.manage`, `members.manage`, `join-links.manage`, `content.moderate` | | | ✓ |
 
-| Роль | Хто | Може |
-| --- | --- | --- |
-| Глядач (`viewer`) | — | бачити дошки, картки, чати, активність; свій акаунт; вийти з організації |
-| Учасник (`member`) | типова | усе, крім адмінського |
-| Адмін (`admin`, `owner`) | творець — `owner` («власник») | учасники, ролі, запрошення, посилання для вступу, назва й аватарка організації, налаштування Factory, що вимагали адміна |
-
-- Ворота (`packages/auth/src/auth.ts`, `viewerMayWrite`) пропускають глядачеві з методів, що змінюють, лише: позначки уваги (`…/attention/…/read|archive|restore`, `…/attention/read-all`), `…/intake-routes/preview`. `/auth/api/*` ворота не проходить: свій профіль, сесії, вихід, запрошення й посилання для вступу перевіряє better-auth і плагін `factoryTeam`.
-- Роль читається з бази з кешем 10 с; зміна ролі чи видалення в цьому процесі скидає кеш одразу.
+- Кожен модуль маршрутів оголошує таблицю `ROUTE_ACCESS` (`"METHOD /path" → дозвіл`); запис без оголошення сервер відмовляє (403 `permission_undeclared`), а тест `factory.test.ts › route access` падає.
+- Власник — творець організації: показується як «Адмін» з позначкою «власник»; його роль ніхто не змінює, вийти він не може.
 
 ## Посилання для вступу
 
-- Таблиця `join_links` (плагін better-auth `factoryTeam`, `packages/auth-better-auth/src/team.ts`; створює міграція better-auth).
-- Ендпоінти під `/auth/api/factory/join-links/*`: `create`, `list`, `revoke` — адмін; `preview` (організація, роль, чи дійсне) і `accept` — будь-хто, хто ввійшов.
-- Перевірки вступу: підтверджений email, домен (`allowedDomains`, точний збіг домену email; піддомени — окремим записом), термін, відкликання, ліміт (умовний `UPDATE`, атомарний). Уже учасник — успіх без нового використання.
+- `@factory/store` › `JoinLinksStorage`: токен 32 байти, домени (точний збіг домену email; порожньо — будь-яка підтверджена адреса), термін (ніколи, 1, 7, 30 днів або своя дата), ліміт, використання під блокуванням рядка.
+- Маршрути: `GET/POST /web/org/join-links`, `POST /web/org/join-links/:id/revoke` (адмін), `GET /web/join/:token` (організація, роль, чи вже учасник, чому не можна), `POST /web/join/:token/accept`. Після вступу UI робить організацію активною (`set-active`) і відкриває застосунок у ній.
 
 ## Аватарки
 
-- Таблиця `factory_avatars` (той самий плагін): `POST /auth/api/factory/avatars` (тіло — data URL png/jpg/webp, до 256 КБ), `GET /auth/api/factory/avatars/<id>`. Браузер зменшує картинку до 256 px перед завантаженням.
-- Організація: `organization/update { data: { logo } }` (адмін). Людина: `update-user { image }`.
+- `POST /web/avatars` (тіло — data URL png/jpg/webp, до 256 КБ; браузер зменшує до 256 px), `GET /web/avatars/:id`. Байти — у сховищі вкладень.
+- Організація: `organization/update { data: { logo } }` (better-auth, адмін). Людина: `update-user { image }`.
+
+## Акаунт
+
+- Ім'я редагується (better-auth `update-user`), email лише для читання.
+- Сесії: пристрій з User-Agent, IP з `X-Forwarded-For`, «Поточна сесія», «Вийти» з іншої, «Вийти всюди, крім цього».

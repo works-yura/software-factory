@@ -8,7 +8,8 @@ import type { SandboxEnvFileMetadata, SandboxEnvMetadata, SandboxEnvStore } from
 import { SandboxEnvFilePathTakenError } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS, UUID_PATTERN } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 const UUID_RE = new RegExp(UUID_PATTERN);
 
@@ -89,7 +90,7 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
 
   /** Organization admins only, in tenant mode; local (no-auth) mode is a single operator. */
   async #isAdmin(context: Context, scope: Resolved): Promise<boolean> {
-    return !this.deps.auth.enabled() || (await this.deps.auth.isOrganizationAdmin(context, scope.orgId));
+    return !this.deps.auth.enabled() || (await this.deps.auth.can(context, 'factory.manage', scope.orgId));
   }
 
   #adminRequired(context: Context): Response {
@@ -160,6 +161,10 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const contracts = FACTORY_ROUTE_CONTRACTS;
     const refused = (context: Context) =>
       context.json(
@@ -369,3 +374,14 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'PUT /web/factory/projects/:id/sandbox-envs/:name': 'factory.manage',
+  'PATCH /web/factory/projects/:id/sandbox-envs/:name': 'factory.manage',
+  'DELETE /web/factory/projects/:id/sandbox-envs/:name': 'factory.manage',
+  'PUT /web/factory/projects/:id/sandbox-stages': 'factory.manage',
+  'POST /web/factory/projects/:id/sandbox-env-files': 'factory.manage',
+  'PATCH /web/factory/projects/:id/sandbox-env-files/:fileId': 'factory.manage',
+  'DELETE /web/factory/projects/:id/sandbox-env-files/:fileId': 'factory.manage',
+};

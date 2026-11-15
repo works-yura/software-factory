@@ -250,3 +250,27 @@ describe('CommentComposer', () => {
     expect(screen.queryByText('earlier words')).not.toBeInTheDocument();
   });
 });
+
+describe('CommentComposer and permissions (ADR-0045)', () => {
+  function signedInWith(permissions: string[]) {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, provider: 'better-auth', user: { userId: 'vera', organizationId: 'org-1', permissions } }),
+      ),
+    );
+  }
+
+  it('shows no comment box to someone without comment.write, such as a viewer', async () => {
+    signedInWith(['board.read', 'self.write']);
+    renderWithProviders(<CommentComposer workItemId="wi-1" factoryProjectId="fp-1" variant="panel" onDismissQuote={() => {}} />);
+
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Comment' })).not.toBeInTheDocument());
+  });
+
+  it('shows it to someone with comment.write', async () => {
+    signedInWith(['board.read', 'self.write', 'comment.write']);
+    renderWithProviders(<CommentComposer workItemId="wi-1" factoryProjectId="fp-1" variant="panel" onDismissQuote={() => {}} />);
+
+    expect(await screen.findByRole('textbox', { name: 'Comment' })).toBeInTheDocument();
+  });
+});

@@ -13,7 +13,7 @@ import { ModelSection } from './fixtures/modelSection';
 function registerAuthHandler() {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
-      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1', permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'] } }),
     ),
   );
 }

@@ -22,6 +22,8 @@ import type { RoutedProjectsSourceControl } from './routed-projects.ts';
 import { listMergeRequestSubscriptionsForThread, mergeRequestUrl } from './subscriptions.ts';
 import { handleGitLabWebhook } from './webhook.ts';
 import type { GitLabWebhookHandlerOptions, ParsedGitLabWebhook } from './webhook.ts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 type RouteContext = Context;
 
@@ -102,7 +104,11 @@ function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid:
   return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
 }
 
-export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[] {
+export function buildGitLabRoutes(...args: Parameters<typeof buildGitLabRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildGitLabRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildGitLabRoutesUndeclared(options: BuildGitLabRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
   const { gitlab, auth, intake, intakeRoutes, sourceControl } = options;
   const enabled = Boolean(gitlab && auth?.enabled());
@@ -490,3 +496,9 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
   );
   return routes;
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/gitlab/projects/registration': 'factory.configure',
+  'POST /web/gitlab/webhook': 'public',
+};

@@ -70,3 +70,5 @@ export * from './intake/label-route-migration.ts';
 export * from './sandbox-envs/base.ts';
 export * from './mcp-servers/base.ts';
 export * from './usage/base.ts';
+export * from './team/join-links.ts';
+export * from './team/avatars.ts';

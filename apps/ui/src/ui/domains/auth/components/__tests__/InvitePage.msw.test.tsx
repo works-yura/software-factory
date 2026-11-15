@@ -101,7 +101,7 @@ describe('InvitePage', () => {
     const router = renderInvite();
 
     expect(await screen.findByRole('heading', { name: 'Invitation to Acme' })).toBeInTheDocument();
-    expect(screen.getByText('ada@example.com invited you to join Acme as a member.')).toBeInTheDocument();
+    expect(screen.getByText('ada@example.com invited you to join Acme with the Member role.')).toBeInTheDocument();
     expect(screen.getByText('You are signed in as bob@example.com.')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/invite/inv-1');
 

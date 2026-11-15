@@ -15,7 +15,7 @@ const orgUser = { id: 'u1', organizationId: 'org1' };
 
 function buildApp(
   user: { id: string; organizationId?: string } | null,
-  options: { enabled?: boolean; isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean> } = {},
+  options: { enabled?: boolean; isAdmin?: (orgId: string, userId: string) => Promise<boolean> } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -101,7 +101,7 @@ describe('automation-runs ingress', () => {
 
   it('rejects tenant callers who are not organization administrators', async () => {
     await seedProjectAndItem();
-    const res = await post(validBody(), orgUser, { isOrganizationAdmin: async () => false });
+    const res = await post(validBody(), orgUser, { isAdmin: async () => false });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: 'forbidden' });
     expect(await listDecisions()).toHaveLength(0);

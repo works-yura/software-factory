@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@factory/access": "workspace:*",
     "@factory/core": "workspace:*",
     "@factory/harness": "workspace:*",
     "@factory/harness-claude-code": "workspace:*",

@@ -118,7 +118,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       warn: () => {},
       skillProblems: registry => findBoardSkillProblems(registry, []),
     });
-    const auth = options.auth ?? fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => userId === ADMIN });
+    const auth = options.auth ?? fakeRouteAuth({ isAdmin: async (_org, userId) => userId === ADMIN });
     const audit = new AuditDomain({ auth, audit: domains.audit, projects: domains.projects });
     const app = new Hono();
     app.use('*', async (c, next) => {
@@ -759,7 +759,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
   it('needs no admin in local mode', async () => {
     const { a, orgId, base } = await setup();
     const local = replica(a, orgId, {
-      auth: fakeRouteAuth({ enabled: false, isOrganizationAdmin: async () => false }),
+      auth: fakeRouteAuth({ enabled: false, isAdmin: async () => false }),
     });
     expect((await local.send('POST', base, bugsBoard, MEMBER)).status).toBe(201);
   });

@@ -1,3 +1,4 @@
+import { can } from '@factory/access';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -58,7 +59,7 @@ const USERS: Record<string, { orgId?: string; userId: string; role?: string }> =
   'token-bob': { orgId: 'org-1', userId: 'bob' },
   'token-mallory': { orgId: 'org-2', userId: 'mallory' },
   'token-no-org': { userId: 'drifter' },
-  'token-viewer': { orgId: 'org-1', userId: 'vera', role: 'viewer' },
+  'token-viewer': { orgId: 'org-1', userId: 'vera' },
 };
 
 function tokenAuth(): RouteAuth {
@@ -72,7 +73,8 @@ function tokenAuth(): RouteAuth {
       return user;
     },
     tenant: c => tenants.get(c),
-    isOrganizationAdmin: async () => false,
+    // Everyone here is a member, except the viewer.
+    can: async (c, permission) => can(tenants.get(c)?.userId === 'vera' ? 'viewer' : 'member', permission),
   };
 }
 
@@ -496,7 +498,7 @@ describe('Factory MCP server', () => {
     const { url } = await setup();
     const response = await claudeRequest(url, 'tools/list', {}, 'token-viewer');
     expect(response.status).toBe(403);
-    expect(response.body).toMatchObject({ error: 'viewer_read_only' });
+    expect(response.body).toMatchObject({ error: 'forbidden', permission: 'run.start' });
   });
 
   it('refuses a signed-in user without an organization', async () => {

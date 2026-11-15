@@ -260,7 +260,7 @@ describe('ProjectRoutes', () => {
   it('ignores a model scope sent by an old client, admin or not', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
-    const isOrganizationAdmin = vi.fn(async () => false);
+    const isAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
       context.set('factoryAuthUser' as never, { id: 'member', organizationId: 'org-1' } as never);
@@ -268,7 +268,7 @@ describe('ProjectRoutes', () => {
     });
     mountApiRoutes(
       app as never,
-      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isAdmin }) }),
     );
     const patch = (body: Record<string, unknown>) =>
       app.request(`/web/factory/projects/${project.id}`, {
@@ -281,7 +281,7 @@ describe('ProjectRoutes', () => {
     const ignored = await patch({ modelScope: 'user' });
     expect(ignored.status).toBe(400);
     expect(await ignored.json()).toEqual({ error: 'invalid_project' });
-    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+    expect(isAdmin).not.toHaveBeenCalled();
 
     const renamed = await patch({ name: 'Renamed', modelScope: 'user' });
     expect(renamed.status).toBe(200);
@@ -301,7 +301,7 @@ describe('ProjectRoutes', () => {
     ) => {
       const seed = await createFactoryStorageForTests();
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
-      const isOrganizationAdmin = vi.fn(async () => options.admin ?? true);
+      const isAdmin = vi.fn(async () => options.admin ?? true);
       // A third harness the routes know nothing about, beside a stub of Claude Code's catalog.
       const factoryDefaults = { current: {} as Record<string, ModelSelection> };
       const codex = codexStubModels(new Set(), factoryDefaults);
@@ -323,7 +323,7 @@ describe('ProjectRoutes', () => {
       mountApiRoutes(
         app as never,
         projectRoutes(seed, undefined, undefined, undefined, {
-          auth: fakeRouteAuth({ isOrganizationAdmin }),
+          auth: fakeRouteAuth({ isAdmin }),
           harnessModels: () => registry,
         }),
       );
@@ -333,7 +333,7 @@ describe('ProjectRoutes', () => {
           headers: { 'content-type': 'application/json' },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
-      return { seed, project, send, isOrganizationAdmin, applyDefaultToRunningSessions };
+      return { seed, project, send, isAdmin, applyDefaultToRunningSessions };
     };
 
     it("sets one instance's default, checked by that harness's facet, and clears it", async () => {
@@ -490,7 +490,7 @@ describe('ProjectRoutes', () => {
       input: { name: 'Shared', harness: 'claude-code' },
     });
     expect(project.toolPermissions).toBeNull();
-    const isOrganizationAdmin = vi.fn(async () => false);
+    const isAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
       context.set('factoryAuthUser' as never, { id: 'member', organizationId: 'org-1' } as never);
@@ -498,7 +498,7 @@ describe('ProjectRoutes', () => {
     });
     mountApiRoutes(
       app as never,
-      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isAdmin }) }),
     );
     const patch = (body: Record<string, unknown>) =>
       app.request(`/web/factory/projects/${project.id}`, {
@@ -515,7 +515,7 @@ describe('ProjectRoutes', () => {
     });
     expect((await seed.projects.getById({ id: project.id }))?.toolPermissions).toBeNull();
 
-    isOrganizationAdmin.mockResolvedValue(true);
+    isAdmin.mockResolvedValue(true);
     expect((await patch({ toolPermissions: { categories: { sudo: 'allow' }, yolo: false } })).status).toBe(400);
     expect((await patch({ toolPermissions: { categories: { read: 'maybe' }, yolo: false } })).status).toBe(400);
     expect((await patch({ toolPermissions: { categories: {} } })).status).toBe(400);

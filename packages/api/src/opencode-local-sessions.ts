@@ -11,6 +11,8 @@ import type { Context } from 'hono';
 
 import { createOpenCodeImportSession, resolveOrgTenant } from './source-control-sessions.ts';
 import type { SourceControlSessionRoutesOptions } from './source-control-sessions.ts';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 /** One of the person's OpenCode sessions, as the list reads it. */
 export interface OpenCodeLocalSessionItem {
@@ -68,7 +70,11 @@ async function factoryRepositories(options: SourceControlSessionRoutesOptions, o
   return lists.flat();
 }
 
-export function buildOpenCodeLocalSessionRoutes(options: OpenCodeLocalSessionRoutesOptions): ApiRoute[] {
+export function buildOpenCodeLocalSessionRoutes(...args: Parameters<typeof buildOpenCodeLocalSessionRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildOpenCodeLocalSessionRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildOpenCodeLocalSessionRoutesUndeclared(options: OpenCodeLocalSessionRoutesOptions): ApiRoute[] {
   const service = options.opencodeLocalSessions;
   if (!service) return [];
   return [
@@ -141,3 +147,8 @@ export function buildOpenCodeLocalSessionRoutes(options: OpenCodeLocalSessionRou
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/opencode/local-sessions/:openCodeSessionId/import': 'session.write',
+};

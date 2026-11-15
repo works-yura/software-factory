@@ -314,7 +314,7 @@ function makeSessionFs({
         enabled: () => true,
         ensureUser,
         tenant: () => ({ orgId: session.orgId, userId: session.userId }),
-        isOrganizationAdmin: async () => false,
+        isAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => session) },
       controller: {
@@ -433,7 +433,7 @@ describe('local filesystem routes auth', () => {
         enabled: () => true,
         ensureUser: vi.fn(async () => undefined),
         tenant: () => undefined,
-        isOrganizationAdmin: async () => false,
+        isAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => null) },
     };
@@ -454,7 +454,7 @@ describe('local filesystem routes auth', () => {
         enabled: () => true,
         ensureUser: vi.fn(async () => undefined),
         tenant: () => undefined,
-        isOrganizationAdmin: async () => false,
+        isAdmin: async () => false,
       },
       // An unresolved session must not fall through to the host workspace.
       sessions: { getBySessionId: vi.fn(async () => null) },
@@ -485,7 +485,7 @@ describe('local filesystem routes auth', () => {
         enabled: () => false,
         ensureUser: vi.fn(async () => undefined),
         tenant: () => undefined,
-        isOrganizationAdmin: async () => false,
+        isAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => null) },
     };

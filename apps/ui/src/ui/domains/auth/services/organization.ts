@@ -172,14 +172,7 @@ export function isOpenInvitation(invitation: OrganizationInvitation, now = Date.
   return invitation.status === 'pending' && new Date(invitation.expiresAt).getTime() > now;
 }
 
-export function canManageMembers(role: OrganizationRole | string | undefined): boolean {
-  return role === 'owner' || role === 'admin';
-}
 
-/** Whether the role only reads: the server refuses a viewer's writes (403 `viewer_read_only`). */
-export function isViewerRole(role: OrganizationRole | string | undefined): boolean {
-  return role === 'viewer';
-}
 
 /**
  * Opens the app afresh in the newly active organization (after switching or accepting an

@@ -1,12 +1,14 @@
 import { registerApiRoute } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 
 import { FACTORY_WEB_PAGES } from '@factory/observability';
 import { captureFactoryWebActivity, isFactoryTelemetryEnabled } from '@factory/observability';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import type { RouteDependencies } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 const activitySchema = z
   .object({
@@ -30,7 +32,11 @@ interface TelemetryRoutesDeps extends RouteDependencies {
 export class TelemetryRoutes extends Route<TelemetryRoutesDeps> {
   private readonly budgets = new Map<string, { until: number; count: number }>();
 
-  routes() {
+  routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const limitBody = bodyLimit({ maxSize: 512 });
     const origins = new Set([this.deps.publicOrigin, ...this.deps.allowedOrigins]);
     return [
@@ -76,3 +82,8 @@ export class TelemetryRoutes extends Route<TelemetryRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/telemetry/activity': 'self.write',
+};

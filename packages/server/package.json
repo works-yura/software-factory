@@ -14,6 +14,7 @@
     "check:tests": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "@factory/access": "workspace:*",
     "@factory/activity": "workspace:*",
     "@factory/agent-user": "workspace:*",
     "@factory/api": "workspace:*",
@@ -29,9 +30,9 @@
     "@factory/harness-claude-code-ui": "workspace:*",
     "@factory/harness-codex": "workspace:*",
     "@factory/harness-codex-ui": "workspace:*",
-    "@factory/harness-opencode": "workspace:*",
     "@factory/harness-handoff": "workspace:*",
     "@factory/harness-mastra": "workspace:*",
+    "@factory/harness-opencode": "workspace:*",
     "@factory/http": "workspace:*",
     "@factory/integration-github": "workspace:*",
     "@factory/integration-gitlab": "workspace:*",
@@ -58,6 +59,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@factory/integration-clickup": "workspace:*",
+    "@factory/integration-firebase": "workspace:*",
     "@factory/testing": "workspace:*",
     "@mastra/libsql": "1.30.0",
     "@mastra/pg": "1.36.0",

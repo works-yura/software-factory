@@ -13,7 +13,8 @@ import { hashSkillContent, listFactorySkills, readFactorySkillOriginals } from '
 import { formatSkillMessage, resolveSkillInvocation, SkillInvocationError } from '@factory/runtime';
 import type { FactoryProjectsStorage, SkillOverridesStorage, SourceControlStorageHandle } from '@factory/store';
 import type { RouteDependencies } from '@factory/http';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 const MAX_SESSION_ID_LENGTH = 512;
 const MAX_ARGUMENTS_LENGTH = 16_384;
@@ -151,7 +152,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
   /** Org admins edit skills; with auth disabled the single local user does. */
   async #canEdit(c: Context, orgId: string): Promise<boolean> {
     const { auth } = this.deps;
-    return !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
+    return !auth.enabled() || (await auth.can(c, 'factory.manage', orgId));
   }
 
   async #catalogEntry(scope: { orgId: string; projectId: string }, name: string) {
@@ -161,6 +162,10 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const { controllerId, harness, authorizeSessionAddress: customAuthorize } = this.deps;
     const authorize =
       customAuthorize ??
@@ -333,3 +338,11 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'PUT /web/factory/projects/:id/skills/:name': 'factory.manage',
+  'DELETE /web/factory/projects/:id/skills/:name': 'factory.manage',
+  'POST /web/agent-controller/:controllerId/skills/prepare': 'run.start',
+  'POST /web/agent-controller/:controllerId/skills/invoke': 'run.start',
+};

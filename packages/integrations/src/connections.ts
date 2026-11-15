@@ -49,6 +49,8 @@ import type {
 import type { AuditEmitter } from '@factory/feed';
 import type { RouteAuth } from '@factory/http';
 import type { AuditAction } from '@factory/store';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 export type * from '@factory/contracts/connections';
 
@@ -268,7 +270,11 @@ function splitConnectionId(id: string): { connectorId: string; localId: string }
  * (`IntegrationConnections.permissions`, an admin's by default), checked here; every refusal and every
  * string is in the request's language.
  */
-export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRoute[] {
+export function buildConnectionRoutes(...args: Parameters<typeof buildConnectionRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildConnectionRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildConnectionRoutesUndeclared(options: ConnectionRoutesOptions): ApiRoute[] {
   const { auth, connectors, emitAudit } = options;
   /** Whether the registry speaks the connector's contract major; one that does not is served nowhere, only named. */
   const speaks = (connector: ConnectorRegistration) =>
@@ -298,7 +304,7 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
       return { response: refuse(c, 403, { error: 'organization_required', message: copy.organizationRequired }) };
     }
     const orgId = tenant.orgId;
-    const admin = !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
+    const admin = !auth.enabled() || (await auth.can(c, 'connections.manage', orgId));
     const factoryProjectId = c.req.query('factoryProjectId');
     const request: ConnectionRequest = {
       orgId,
@@ -662,3 +668,13 @@ export function buildConnectionRoutes(options: ConnectionRoutesOptions): ApiRout
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/connections': 'factory.configure',
+  'POST /web/connections/:id/reconnect': 'factory.configure',
+  'PATCH /web/connections/:id': 'factory.configure',
+  'DELETE /web/connections/:id': 'factory.configure',
+  'POST /web/connections/:id/unlink': 'factory.configure',
+  'PATCH /web/connections/:id/settings': 'factory.configure',
+};

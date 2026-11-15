@@ -40,7 +40,7 @@ describe('Codex accounts connector with a fake codex CLI', () => {
     const tempRoot = await mkdtemp(join(tmpdir(), 'codex-connector-'));
     const signIn = createCodexSignInService({ credentials: seed.credentials, run, env: { PATH: process.env.PATH, TMPDIR: tempRoot } });
     const connections = createAgentAccountsConnections({ harness: CODEX_HARNESS, kind: 'codex_login', signInName: 'ChatGPT', credentials: seed.credentials, signIn });
-    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }), connectors: [{ id: 'codex', connections }] });
+    const routes = buildConnectionRoutes({ auth: fakeRouteAuth({ isAdmin: async () => false }), connectors: [{ id: 'codex', connections }] });
     const hono = new Hono();
     hono.use('*', async (c, next) => {
       c.set('factoryAuthUser' as never, { id: 'alice', organizationId: 'org1' } as never);

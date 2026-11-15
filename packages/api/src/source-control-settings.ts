@@ -4,6 +4,8 @@ import type { Context } from 'hono';
 
 import type { ProjectRepository, SourceControlStorageHandle } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
+import { declareAccess } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 interface SourceControlSettingsRoutesOptions {
   auth: RouteAuth;
@@ -49,7 +51,11 @@ function commandFromBody(
   return null;
 }
 
-export function buildSourceControlSettingsRoutes(options: SourceControlSettingsRoutesOptions): ApiRoute[] {
+export function buildSourceControlSettingsRoutes(...args: Parameters<typeof buildSourceControlSettingsRoutesUndeclared>): ApiRoute[] {
+  return declareAccess(buildSourceControlSettingsRoutesUndeclared(...args), ROUTE_ACCESS);
+}
+
+function buildSourceControlSettingsRoutesUndeclared(options: SourceControlSettingsRoutesOptions): ApiRoute[] {
   const path = '/web/source-control/projects/:id/settings';
   return [
     registerApiRoute(path, {
@@ -111,3 +117,8 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
     }),
   ];
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/source-control/projects/:id/settings': 'factory.configure',
+};

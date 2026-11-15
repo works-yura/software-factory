@@ -1,9 +1,10 @@
 /**
- * Join links, avatars, the person's profile and sessions (ADR-0045): the server's better-auth plugin
- * `factoryTeam` (`/auth/api/factory/*`) and better-auth's own account endpoints. Every call is
+ * Join links and avatars (ADR-0045: Factory's `/web/org/join-links`, `/web/join/:token`,
+ * `/web/avatars`), the person's profile and sessions (better-auth's own account endpoints). Every call is
  * checked on the server; the UI only hides what a role cannot do.
  */
-import { authApiRequest } from './organization';
+import { translator } from '../../../i18n/t';
+import { authApiRequest, OrganizationRequestError } from './organization';
 import type { AssignableRole } from './organization';
 
 export type JoinLinkStatus = 'active' | 'expired' | 'revoked' | 'used_up';
@@ -25,7 +26,6 @@ export interface JoinLink {
 }
 
 export interface CreateJoinLinkInput {
-  organizationId: string;
   name: string;
   role: AssignableRole;
   allowedDomains: string[];
@@ -35,6 +35,8 @@ export interface CreateJoinLinkInput {
 
 export type JoinRefusal = 'expired' | 'revoked' | 'used_up' | 'domain_not_allowed' | 'email_not_verified';
 
+const tk = translator('auth');
+
 export interface JoinLinkPreview {
   organization: { id: string; name: string; logo: string | null };
   role: AssignableRole;
@@ -43,31 +45,50 @@ export interface JoinLinkPreview {
   refusal: JoinRefusal | null;
 }
 
-export function createJoinLink(baseUrl: string, input: CreateJoinLinkInput): Promise<JoinLink> {
-  return authApiRequest(baseUrl, 'factory/join-links/create', input);
+/** A Factory `/web` call: JSON both ways; a refusal carries the server's `error` code. */
+async function webRequest<T>(baseUrl: string, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  const method = init.method ?? (init.body === undefined ? 'GET' : 'POST');
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: { Accept: 'application/json', ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    credentials: 'include',
+    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  });
+  const text = await res.text();
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new OrganizationRequestError(tk('organization.requestFailed', { status: res.status }), res.status);
+  }
+  if (!res.ok) {
+    const error = (data ?? {}) as { message?: string; error?: string };
+    throw new OrganizationRequestError(error.message || error.error || tk('organization.requestFailed', { status: res.status }), res.status, error.error);
+  }
+  return data as T;
 }
 
-export async function listJoinLinks(baseUrl: string, organizationId: string): Promise<JoinLink[]> {
-  const result = await authApiRequest<{ joinLinks: JoinLink[] }>(
-    baseUrl,
-    `factory/join-links/list?organizationId=${encodeURIComponent(organizationId)}`,
-  );
-  return result.joinLinks;
+export function createJoinLink(baseUrl: string, input: CreateJoinLinkInput): Promise<JoinLink> {
+  return webRequest(baseUrl, '/web/org/join-links', { body: input });
+}
+
+export async function listJoinLinks(baseUrl: string): Promise<JoinLink[]> {
+  return (await webRequest<{ joinLinks: JoinLink[] }>(baseUrl, '/web/org/join-links')).joinLinks;
 }
 
 export function revokeJoinLink(baseUrl: string, id: string): Promise<JoinLink> {
-  return authApiRequest(baseUrl, 'factory/join-links/revoke', { id });
+  return webRequest(baseUrl, `/web/org/join-links/${encodeURIComponent(id)}/revoke`, { body: {} });
 }
 
 export function previewJoinLink(baseUrl: string, token: string): Promise<JoinLinkPreview> {
-  return authApiRequest(baseUrl, `factory/join-links/preview?token=${encodeURIComponent(token)}`);
+  return webRequest(baseUrl, `/web/join/${encodeURIComponent(token)}`);
 }
 
 export function acceptJoinLink(
   baseUrl: string,
   token: string,
 ): Promise<{ organizationId: string; role: string; alreadyMember: boolean }> {
-  return authApiRequest(baseUrl, 'factory/join-links/accept', { token });
+  return webRequest(baseUrl, `/web/join/${encodeURIComponent(token)}/accept`, { body: {} });
 }
 
 /** The link the admin shares: the SPA's own origin, like invitation links. */
@@ -105,7 +126,7 @@ export const AVATAR_SIZE = 256;
 export const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp';
 
 export function uploadAvatar(baseUrl: string, dataUrl: string): Promise<{ id: string; url: string }> {
-  return authApiRequest(baseUrl, 'factory/avatars', { dataUrl });
+  return webRequest(baseUrl, '/web/avatars', { body: { dataUrl } });
 }
 
 /**

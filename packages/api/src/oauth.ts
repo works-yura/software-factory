@@ -36,8 +36,9 @@ import { ModelCredentialsStorage } from '@factory/store';
 import type { LoginSessionKind, LoginSessionRow } from '@factory/store';
 import { getAuthProviderId, resolveCredentialContext } from '@factory/credentials';
 import type { CredentialContext } from '@factory/credentials';
-import { Route } from '@factory/http';
+import { declareAccess, Route } from '@factory/http';
 import type { RouteDependencies } from '@factory/http';
+import type { RouteAccess } from '@factory/http';
 
 /** Lifetime of a paste-code session (Anthropic gives no explicit expiry). */
 const PASTE_CODE_TTL_MS = 10 * 60 * 1000;
@@ -256,6 +257,10 @@ export interface OAuthRoutesDeps extends RouteDependencies {
  */
 export class OAuthRoutes extends Route<OAuthRoutesDeps> {
   routes(): ApiRoute[] {
+    return declareAccess(this.#undeclaredRoutes(), ROUTE_ACCESS);
+  }
+
+  #undeclaredRoutes(): ApiRoute[] {
     const { auth, authStorage, modelCredentials } = this.deps;
     const onCredentialsChanged = this.deps.onCredentialsChanged ?? (() => {});
 
@@ -280,7 +285,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           }
 
           // The completed credential belongs to the whole org, so only admins sign in (tenant mode).
-          if (ctx.mode === 'tenant' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+          if (ctx.mode === 'tenant' && !(await auth.can(loose(c), 'org.manage', ctx.orgId))) {
             return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
           }
 
@@ -340,7 +345,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           if (session.kind !== 'paste-code') return c.json({ error: 'wrong_session_kind' }, 400);
           // Recheck admin access at completion time — the caller may have lost
           // admin since the flow was started.
-          if (ctx.mode === 'tenant' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+          if (ctx.mode === 'tenant' && !(await auth.can(loose(c), 'org.manage', ctx.orgId))) {
             return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
           }
 
@@ -394,7 +399,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           if (session.kind !== 'device-code') return c.json({ error: 'wrong_session_kind' }, 400);
           // Recheck admin access before the credential write — the caller may
           // have lost admin since the flow was started.
-          if (ctx.mode === 'tenant' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+          if (ctx.mode === 'tenant' && !(await auth.can(loose(c), 'org.manage', ctx.orgId))) {
             return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
           }
 
@@ -482,7 +487,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           try {
             if (ctx.mode === 'tenant') {
               // The sign-in belongs to the organization, so only admins remove it.
-              if (!(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+              if (!(await auth.can(loose(c), 'org.manage', ctx.orgId))) {
                 return c.json({ error: 'forbidden', message: 'Only org admins can remove an org-wide sign-in' }, 403);
               }
               const tenant = { orgId: ctx.orgId };
@@ -501,3 +506,12 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
     ];
   }
 }
+
+/** What each route that changes something needs (ADR-0045, `@factory/access`). */
+const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
+  'POST /web/config/providers/:provider/oauth/start': 'org.manage',
+  'POST /web/config/providers/:provider/oauth/complete': 'org.manage',
+  'POST /web/config/providers/:provider/oauth/poll': 'org.manage',
+  'DELETE /web/config/providers/:provider/oauth/session/:sessionId': 'org.manage',
+  'DELETE /web/config/providers/:provider/oauth': 'org.manage',
+};

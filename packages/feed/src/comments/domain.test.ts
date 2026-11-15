@@ -213,7 +213,7 @@ describe('CommentsDomain routes', () => {
     const seed = await createFactoryStorageForTests();
     const item = await seedWorkItem(seed);
     const memberDomain = commentsDomain(seed, {
-      auth: fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => userId === 'user-admin' }),
+      auth: fakeRouteAuth({ isAdmin: async (_org, userId) => userId === 'user-admin' }),
     });
 
     const comment = (await postComment(buildApp(memberDomain, asAlice), item.id, { body: 'mine' })).json.comment;

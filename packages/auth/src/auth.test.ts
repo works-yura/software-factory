@@ -2,6 +2,7 @@ import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import type { Permission } from '@factory/access';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -14,7 +15,7 @@ import {
   getFactoryAuthOrgId,
   getFactoryAuthUser,
   getFactoryAuthUserId,
-  isOrganizationAdmin,
+  canInOrganization,
   mountFactoryAuth,
   factoryAuthTenant,
 } from './auth.ts';
@@ -844,6 +845,9 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
         name: 'User',
         avatarUrl: 'https://avatars.example/user.png',
         organizationId: 'org_new',
+        // Without a directory the role is the provider's admin check: not an admin, so a member.
+        organizationRole: 'member',
+        permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'],
       },
       provider: 'sso-fake',
     });
@@ -863,7 +867,14 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(await res.json()).toEqual({
       authenticated: true,
       telemetryEnabled: false,
-      user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
+      user: {
+        email: 'user@example.com',
+        name: 'User',
+        organizationId: 'org_a',
+        userId: 'user_1',
+        organizationRole: 'member',
+        permissions: ['board.read', 'self.write', 'card.write', 'comment.write', 'run.start', 'session.write', 'factory.configure'],
+      },
       provider: 'sso-fake',
     });
     expect(mockEnsureOrganization).not.toHaveBeenCalled();
@@ -950,40 +961,45 @@ describe('org-tenant identity', () => {
   });
 });
 
-describe('isOrganizationAdmin', () => {
+describe('canInOrganization', () => {
   beforeEach(enableProvider);
 
-  async function adminCheck(): Promise<boolean> {
+  async function check(permission: Permission, organizationId = 'org_a'): Promise<boolean> {
     mockAuthenticate.mockResolvedValue({ id: 'user_1', organizationId: 'org_a' });
     const provider = activeProvider();
     const app = new Hono();
-    app.get('/web/admin', async c => c.json({ admin: await isOrganizationAdmin(provider, c, 'org_a') }));
-    const res = await app.request('/web/admin');
-    return ((await res.json()) as { admin: boolean }).admin;
+    app.get('/web/check', async c => c.json({ allowed: await canInOrganization(provider, c, permission, organizationId) }));
+    const res = await app.request('/web/check');
+    return ((await res.json()) as { allowed: boolean }).allowed;
   }
 
-  it('is what the provider confirms', async () => {
+  it('reads the role from isOrganizationAdmin on providers without a directory: admin or member', async () => {
     mockIsOrganizationAdmin.mockResolvedValue(true);
-    expect(await adminCheck()).toBe(true);
+    expect(await check('factory.manage')).toBe(true);
     expect(mockIsOrganizationAdmin).toHaveBeenCalledWith('org_a', 'user_1');
+    mockIsOrganizationAdmin.mockResolvedValue(false);
+    expect(await check('factory.manage')).toBe(false);
+    expect(await check('card.write')).toBe(true);
   });
 
-  it('answers 503 auth_unavailable and logs when the provider check fails', async () => {
+  it('is false for another organization than the caller’s', async () => {
+    mockIsOrganizationAdmin.mockResolvedValue(true);
+    expect(await check('factory.manage', 'org_b')).toBe(false);
+  });
+
+  it('answers 503 auth_unavailable and logs when the role cannot be read', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockIsOrganizationAdmin.mockRejectedValue(new Error('db down'));
     mockAuthenticate.mockResolvedValue({ id: 'user_1', organizationId: 'org_a' });
     const provider = activeProvider();
     const app = new Hono();
-    app.get('/web/admin', async c => c.json({ admin: await isOrganizationAdmin(provider, c, 'org_a') }));
+    app.get('/web/admin', async c => c.json({ allowed: await canInOrganization(provider, c, 'factory.manage', 'org_a') }));
 
     const res = await app.request('/web/admin');
 
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('user user_1 administers organization org_a (GET /web/admin)'),
-      expect.any(Error),
-    );
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('could not read the role of user user_1'), expect.any(Error));
     error.mockRestore();
   });
 
@@ -1005,91 +1021,61 @@ describe('isOrganizationAdmin', () => {
   });
 });
 
-describe('viewer role (ADR-0045)', () => {
-  const mockOrganizationRole = vi.fn(async (_organizationId: string, _userId: string): Promise<string | null> => 'viewer');
+describe('roles from a membership directory (ADR-0045)', () => {
+  const mockRole = vi.fn(async (_organizationId: string, _userId: string): Promise<string | null> => 'viewer');
 
-  class FakeRoleProvider extends FakeSsoProvider {
-    organizationRole = mockOrganizationRole;
+  class FakeDirectoryProvider extends FakeSsoProvider {
+    role = mockRole;
   }
 
-  function buildRoleApp() {
+  function buildDirectoryApp() {
     const app = new Hono();
-    mountFactoryAuth(app, { provider: new FakeRoleProvider() as unknown as IMastraAuthProvider });
+    mountFactoryAuth(app, { provider: new FakeDirectoryProvider() as unknown as IMastraAuthProvider });
     app.get('*', c => c.json({ tenant: factoryAuthTenant(c) }));
     for (const method of ['post', 'put', 'patch', 'delete'] as const) app[method]('*', c => c.text('changed'));
     return app;
   }
 
   beforeEach(() => {
-    mockOrganizationRole.mockReset();
-    mockOrganizationRole.mockResolvedValue('viewer');
+    mockRole.mockReset();
+    mockRole.mockResolvedValue('viewer');
     mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'v@b.com', organizationId: 'org_1' });
   });
 
-  it('lets a viewer read, with the role on the tenant', async () => {
-    const res = await buildRoleApp().request('/web/factory/projects/p1/work-items', { headers: { Accept: 'application/json' } });
+  it("refuses a viewer's write to Mastra's own API (one route group needing run.start)", async () => {
+    const res = await buildDirectoryApp().request('/api/agents/factory/stream', { method: 'POST', headers: { Accept: 'application/json' } });
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ tenant: { orgId: 'org_1', userId: 'user_1', role: 'viewer' } });
-    expect(mockOrganizationRole).toHaveBeenCalledWith('org_1', 'user_1');
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: 'forbidden', permission: 'run.start' });
+    expect(mockRole).toHaveBeenCalledWith('org_1', 'user_1');
   });
 
-  it('refuses every write of a viewer with 403 viewer_read_only', async () => {
-    const app = buildRoleApp();
-    for (const [method, path] of [
-      ['POST', '/web/factory/projects/p1/runs/start'],
-      ['POST', '/api/agents/factory/stream'],
-      ['PATCH', '/web/factory/work-items/w1'],
-      ['PUT', '/web/factory/projects/p1/skills/s'],
-      ['DELETE', '/web/factory/projects/p1/boards/b'],
-    ] as const) {
-      const res = await app.request(path, { method, headers: { Accept: 'application/json' } });
-      expect(res.status, `${method} ${path}`).toBe(403);
-      expect(await res.json()).toMatchObject({ error: 'viewer_read_only' });
-    }
-  });
-
-  it("lets a viewer mark their own attention items and preview an intake route", async () => {
-    const app = buildRoleApp();
-    for (const path of [
-      '/web/factory/projects/p1/attention/read-all',
-      '/web/factory/projects/p1/attention/mention/c1/0/read',
-      '/web/factory/projects/p1/attention/mention/c1/0/archive',
-      '/web/factory/projects/p1/attention/mention/c1/0/restore',
-      '/web/factory/projects/p1/intake-routes/preview',
-    ]) {
-      const res = await app.request(path, { method: 'POST', headers: { Accept: 'application/json' } });
-      expect(res.status, path).toBe(200);
-    }
-  });
-
-  it('lets members and admins write', async () => {
-    const app = buildRoleApp();
-    for (const role of ['member', 'admin', 'owner']) {
-      mockOrganizationRole.mockResolvedValue(role);
-      const res = await app.request('/web/factory/projects/p1/runs/start', { method: 'POST', headers: { Accept: 'application/json' } });
-      expect(res.status, role).toBe(200);
-    }
+  it("lets a member write to Mastra's API, and reads need no role lookup", async () => {
+    mockRole.mockResolvedValue('member');
+    const app = buildDirectoryApp();
+    expect((await app.request('/api/agents/factory/stream', { method: 'POST' })).status).toBe(200);
+    mockRole.mockClear();
+    expect((await app.request('/web/factory/projects/p1/work-items')).status).toBe(200);
+    expect(mockRole).not.toHaveBeenCalled();
   });
 
   it('answers 503 auth_unavailable when the role cannot be read, never running the request', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    mockOrganizationRole.mockRejectedValue(new Error('db down'));
+    mockRole.mockRejectedValue(new Error('db down'));
 
-    const res = await buildRoleApp().request('/web/factory/projects/p1/runs/start', {
-      method: 'POST',
-      headers: { Accept: 'application/json' },
-    });
+    const res = await buildDirectoryApp().request('/api/agents/factory/stream', { method: 'POST', headers: { Accept: 'application/json' } });
 
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual(AUTH_UNAVAILABLE_BODY);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('could not read the role of user user_1'), expect.any(Error));
     error.mockRestore();
   });
 
-  it('reports the role on /auth/me', async () => {
-    const res = await buildRoleApp().request('/auth/me');
+  it('reports the role and its permissions on /auth/me', async () => {
+    const res = await buildDirectoryApp().request('/auth/me');
 
-    expect(await res.json()).toMatchObject({ authenticated: true, user: { userId: 'user_1', organizationRole: 'viewer' } });
+    expect(await res.json()).toMatchObject({
+      authenticated: true,
+      user: { userId: 'user_1', organizationRole: 'viewer', permissions: ['board.read', 'self.write'] },
+    });
   });
 });

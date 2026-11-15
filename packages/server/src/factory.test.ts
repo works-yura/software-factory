@@ -12,7 +12,8 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
-import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import type { ApiRoute, AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import { undeclaredWrites, withAccess } from '@factory/http';
 import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -860,6 +861,7 @@ describe('MastraFactory.prepare', () => {
     expect(storage.domainNames()).toEqual([
       'intake',
       'audit',
+      'join_links',
       'work-items',
       'model-credentials',
       // No 'model-defaults': personal default models are gone; the table stays untouched.
@@ -2278,11 +2280,12 @@ describe('MastraFactory.prepare integrations', () => {
     vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'source-control');
     const ensureDomainReady = vi.spyOn(storage, 'ensureDomainReady').mockResolvedValue(undefined);
     const routes = vi.fn((_ctx: IntegrationContext) => [
-      {
+      // A webhook authenticates itself: public, like the real GitLab one.
+      withAccess('public', {
         path: '/web/gitlab/webhook',
         method: 'POST' as const,
         handler: () => new Response(null, { status: 202 }),
-      },
+      } as never) as { path: string; method: 'POST'; handler: () => Response },
     ]);
     const versionControl = {
       initialize: vi.fn(),
@@ -2769,5 +2772,30 @@ describe('MastraFactory.finalize', () => {
     } finally {
       reconcile.mockRestore();
     }
+  });
+});
+
+describe('route access (ADR-0045)', () => {
+  it('every route that changes something declares the permission it needs', async () => {
+    const { GithubIntegration } = await import('@factory/integration-github');
+    const { GitLabIntegration } = await import('@factory/integration-gitlab');
+    const { ClickUpIntegration } = await import('@factory/integration-clickup');
+    const { FirebaseIntegration } = await import('@factory/integration-firebase');
+    const prepared = await prepareFactory({
+      storage: fakeStorage(),
+      auth: fakeProvider(),
+      integrations: [
+        new GithubIntegration({ accessToken: 'ghp_test', webhookSecret: 'secret' }),
+        new GitLabIntegration({ accessToken: 'glpat-test', webhookSecret: 'secret' }),
+        new ClickUpIntegration({}),
+        new FirebaseIntegration(),
+      ],
+    });
+    const routes = (prepared.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
+
+    expect(routes.length).toBeGreaterThan(100);
+    const undeclared = undeclaredWrites(routes);
+    if (undeclared.length) console.log(`UNDECLARED\n${undeclared.join("\n")}`);
+    expect(undeclared).toEqual([]);
   });
 });
