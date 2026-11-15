@@ -116,8 +116,34 @@ export class FakeFactory implements FactoryClient, FactoryGrant {
 }
 
 export const fakeModels: AssistantModels = {
-  async list() {
-    return [{ id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5' }];
+  async catalog() {
+    return {
+      groups: [
+        {
+          id: 'mastra/anthropic',
+          harness: 'mastra',
+          harnessLabel: 'Mastra',
+          provider: 'anthropic',
+          label: 'Anthropic',
+          credential: 'api_key',
+          availability: { state: 'ready' },
+          models: [
+            {
+              id: 'anthropic/claude-sonnet-4-5',
+              label: 'claude-sonnet-4-5',
+              provider: 'anthropic',
+              modelName: 'claude-sonnet-4-5',
+              free: false,
+              legacy: false,
+              selectable: true,
+              availability: { state: 'ready' },
+            },
+          ],
+        },
+      ],
+      default: { modelId: 'anthropic/claude-sonnet-4-5', label: 'claude-sonnet-4-5', source: 'factory_default', reason: 'Test default.' },
+      defaultReason: 'Test default.',
+    };
   },
 };
 

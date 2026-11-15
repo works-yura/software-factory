@@ -77,16 +77,122 @@ export interface AssistantMemory {
   forgetThread(owner: AssistantOwner, requestId: string): Promise<void>;
 }
 
-/** A model of the organization's, as the settings picker lists it. */
+/** A model the person can pick for the assistant (the flat list older clients read). */
 export interface AssistantModelOption {
+  /** What the settings store and the turn resolves: `provider/model`, or `<harness>:<model>` for a sign-in. */
   id: string;
   provider: string;
   modelName: string;
+  label: string;
+  free: boolean;
+  /** The group (`AssistantModelGroup.id`) it is listed under. */
+  groupId: string;
 }
 
-/** The organization's models (its credential pool, ADR-0032): there are no personal ones. */
+/**
+ * Whether the assistant can run a model now, for the person asking:
+ * - `ready`: it runs;
+ * - `limited`: every account it may use is out of usage until `until` (it can still be picked);
+ * - `no_credentials`: nothing it runs on is connected for this person (`connector` says where);
+ * - `sessions_only`: it runs only in Factory sessions, through its harness's CLI (no API path);
+ * - `unavailable`: its catalog could not be read now (`reason`).
+ */
+export type AssistantModelState = 'ready' | 'limited' | 'no_credentials' | 'sessions_only' | 'unavailable';
+
+export interface AssistantModelAvailability {
+  state: AssistantModelState;
+  /** `limited`: when the first account comes back (ISO 8601). */
+  until?: string;
+  /** Why, in the server's words (English); absent when `ready`. */
+  reason?: string;
+  /** The Settings › Підключення connector that makes it available (`claude-code`, `codex`, `opencode`). */
+  connector?: string;
+}
+
+/**
+ * What a group's models run on in the assistant:
+ * - `api_key`, `provider_oauth`, `deployment`: the organization's model credentials (Settings › Моделі), as Mastra runs them;
+ * - `claude_login`: the person's Claude sign-ins (Claude Code connection), the Anthropic API with their OAuth token;
+ * - `codex_login`: the person's ChatGPT sign-ins (Codex connection), the Codex backend with their OAuth token;
+ * - `opencode_account`: the organization's OpenCode accounts (OpenCode connection), OpenCode's API with their key;
+ * - `cli_only`: nothing the assistant can call: the harness's CLI alone runs it.
+ */
+export type AssistantModelCredential = 'api_key' | 'provider_oauth' | 'deployment' | 'claude_login' | 'codex_login' | 'opencode_account' | 'cli_only';
+
+export interface AssistantCatalogModel {
+  id: string;
+  label: string;
+  provider: string;
+  modelName: string;
+  /** Costs nothing to run (its provider may use what is sent to improve its models). */
+  free: boolean;
+  /** Kept for old picks; listed after the current ones. */
+  legacy: boolean;
+  /** Whether the person can pick it for the assistant (`ready` or `limited`). */
+  selectable: boolean;
+  availability: AssistantModelAvailability;
+}
+
+/** One provider (Mastra, by its credential) or one harness's sign-ins, as Factory's model picker groups them. */
+export interface AssistantModelGroup {
+  /** `mastra/<provider>` or the harness instance (`claude-code`, `codex`, `opencode`). */
+  id: string;
+  /** The harness Factory runs these on (`mastra`, `claude-code`, …) and its name. */
+  harness: string;
+  harnessLabel: string;
+  provider: string;
+  /** "xAI", "Claude Code · Claude sign-in", … */
+  label: string;
+  credential: AssistantModelCredential;
+  /** How Settings names the credential ("xAI API key", "Claude Pro/Max", an account's label), when known. */
+  credentialLabel?: string;
+  availability: AssistantModelAvailability;
+  models: AssistantCatalogModel[];
+}
+
+/** The model a person who picked none runs on, and why that one. */
+export interface AssistantModelDefault {
+  modelId: string;
+  label: string;
+  /**
+   * `factory_default`: the model a new Factory chat of this organization starts on (no Factory default set);
+   * `org_preference`: that one cannot run here, so the first runnable model in the organization's catalog order.
+   */
+  source: 'factory_default' | 'org_preference';
+  /** Why, in the server's words (English). */
+  reason: string;
+}
+
+/** The organization's model catalog as the assistant offers it (`GET /web/assistant/models`). */
+export interface AssistantModelCatalog {
+  groups: AssistantModelGroup[];
+  /** Null when nothing can run; `defaultReason` says why. */
+  default: AssistantModelDefault | null;
+  defaultReason: string;
+}
+
+/** The selectable models of a catalog, flat, in catalog order. */
+export function selectableAssistantModels(catalog: AssistantModelCatalog): AssistantModelOption[] {
+  return catalog.groups.flatMap(group =>
+    group.models
+      .filter(model => model.selectable)
+      .map(model => ({
+        id: model.id,
+        provider: model.provider,
+        modelName: model.modelName,
+        label: model.label,
+        free: model.free,
+        groupId: group.id,
+      })),
+  );
+}
+
+/**
+ * The organization's models (ADR-0032: there are no personal model credentials), as Factory offers
+ * them: its model credentials, and the sign-ins and accounts its harnesses run on (Settings › Підключення).
+ */
 export interface AssistantModels {
-  list(owner: AssistantOwner): Promise<AssistantModelOption[]>;
+  catalog(owner: AssistantOwner): Promise<AssistantModelCatalog>;
 }
 
 /** A Factory the person can reach through MCP. */

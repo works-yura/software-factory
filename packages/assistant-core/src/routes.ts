@@ -16,6 +16,7 @@ import { safeReturnPath } from './factory-access.ts';
 import type { IncomingFile } from './files.ts';
 import { ASSISTANT_MAX_FILES_PER_MESSAGE, isInlineMime } from './files.ts';
 import type { AssistantModels } from './ports.ts';
+import { selectableAssistantModels } from './ports.ts';
 import type { AssistantService } from './service.ts';
 import type { AssistantFile, AssistantMessage, AssistantNote, AssistantOwner, AssistantRequest, DigestFrequency } from './types.ts';
 import { isRequestStatus, REQUEST_STATUSES } from './types.ts';
@@ -413,7 +414,12 @@ export class AssistantRoutes {
       }),
       registerApiRoute(`${p}/models`, {
         method: 'GET',
-        handler: handle(async (c, owner) => c.json({ models: await models.list(owner) })),
+        // The organization's catalog grouped as Factory's picker groups it, with what runs now and the
+        // default; `models` is the flat list of what can be picked (older clients read only it).
+        handler: handle(async (c, owner) => {
+          const catalog = await models.catalog(owner);
+          return c.json({ models: selectableAssistantModels(catalog), groups: catalog.groups, default: catalog.default, defaultReason: catalog.defaultReason });
+        }),
       }),
       registerApiRoute(`${p}/clear`, {
         method: 'POST',
