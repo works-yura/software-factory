@@ -177,7 +177,7 @@ export const proxyDeviceHubRequest = async (service: DeviceService, input: Devic
     : undefined;
   if (routed === null) return text('Not Found', 404);
   const upstreamUrl = routed?.url ?? `${ready.hub.origin}${hubPath}${search}`;
-  return proxyHttp(request, upstreamUrl, routed?.headers ?? {}, http);
+  return proxyHttp(request, upstreamUrl, routed?.headers ?? ready.hub.headers ?? {}, http);
 };
 
 /** Splits `{hubBasePath}/{hostId}/{hubPath}`; null when the path is not under the mount. */
@@ -277,6 +277,8 @@ const handleUpgrade = async (
   if (routed) {
     if (routed.protocols.length > 0) lines.push(`Sec-WebSocket-Protocol: ${routed.protocols.join(', ')}`);
     for (const [name, value] of Object.entries(routed.headers)) lines.push(`${name}: ${value}`);
+  } else {
+    for (const [name, value] of Object.entries(ready.hub.headers ?? {})) lines.push(`${name}: ${value}`);
   }
 
   const upstream = NodeNet.connect({ host: target.hostname.replace(/^\[|\]$/g, ''), port: Number(target.port || 80) });

@@ -6,7 +6,9 @@ import type { DeviceHostReady } from './DeviceHost.ts';
 import type { DeviceService } from './DeviceService.ts';
 import { createDeviceRoutes } from './routes.ts';
 
-const fixture = (options: { upstream?: DeviceHostReady['upstream']; running?: boolean } = {}) => {
+const fixture = (
+  options: { upstream?: DeviceHostReady['upstream']; running?: boolean; hubHeaders?: Record<string, string> } = {},
+) => {
   const requests: string[] = [];
   const headers: Array<Record<string, string>> = [];
   const screenshots: unknown[] = [];
@@ -21,7 +23,7 @@ const fixture = (options: { upstream?: DeviceHostReady['upstream']; running?: bo
         ? null
         : {
             hostId: hostId ?? LOCAL_DEVICE_HOST_ID,
-            hub: { origin: 'http://hub.test' },
+            hub: { origin: 'http://hub.test', ...(options.hubHeaders ? { headers: options.hubHeaders } : {}) },
             ...(options.upstream ? { upstream: options.upstream } : {}),
           },
     screenshot: async (input: unknown) => {
@@ -37,6 +39,16 @@ const fixture = (options: { upstream?: DeviceHostReady['upstream']; running?: bo
 const hub = 'http://server.test/api/device/hub/local';
 
 describe('device hub proxy', () => {
+  it("sends the hub's session token itself and drops the caller's authorization", async () => {
+    const { handler, headers } = fixture({ hubHeaders: { authorization: 'Bearer hub-token' } });
+    const response = await handler(
+      new Request(`${hub}/api/devices`, { headers: { authorization: 'Bearer factory-session', cookie: 'a=1' } }),
+    );
+    expect(response.status).toBe(200);
+    expect(headers[0]?.authorization).toBe('Bearer hub-token');
+    expect(headers[0]?.cookie).toBeUndefined();
+  });
+
   it('forwards the upstream body, strips tickets and never passes upstream cookies on', async () => {
     const { handler, requests } = fixture();
     const response = await handler(new Request(`${hub}/api/devices?wsTicket=secret`));

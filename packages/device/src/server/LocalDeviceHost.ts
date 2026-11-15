@@ -24,6 +24,7 @@ import {
   DeviceHostTimeoutError,
 } from './DeviceHost.ts';
 import { makeDeviceHubOperations } from './DeviceHubOperations.ts';
+import { hubAuthorization, hubSessionTokenOf, withoutHubSessionToken } from './hubSessionToken.ts';
 import {
   AGENT_DEVICE_VERSION,
   agentDeviceStateDir,
@@ -53,6 +54,7 @@ import {
 } from './runtime.ts';
 
 const HUB_READY_TIMEOUT_MS = 30_000;
+const HUB_TOKEN_TIMEOUT_MS = 5_000;
 const DAEMON_READY_TIMEOUT_MS = 30_000;
 const DAEMON_POLL_MS = 100;
 const HUB_RESTART_STABLE_UPTIME_MS = 60_000;
@@ -95,6 +97,8 @@ interface HubProcess {
   readonly nodePath: string;
   readonly child: ChildHandle;
   readonly origin: string;
+  /** The session token the hub printed; every request carries it. */
+  readonly token: string;
   readonly startedAtMillis: number;
 }
 
@@ -372,6 +376,7 @@ export const createLocalDeviceHost = async (options: LocalDeviceHostOptions): Pr
           '127.0.0.1',
           '--hide-sidebar',
           '--hide-boot-device',
+          '--require-token',
           ...hubPlatformArguments(hostPlatform),
         ],
         { cwd: runtime.cwd, env },
@@ -381,9 +386,16 @@ export const createLocalDeviceHost = async (options: LocalDeviceHostOptions): Pr
     }
     // The hub is not recorded yet; stop it on failure from spawn onward.
     try {
-      const hub: HubProcess = { child, origin, startedAtMillis: runtime.now(), nodePath };
+      let token: string | undefined;
+      let tokenPrinted: () => void = () => undefined;
+      const printed = new Promise<void>((resolve) => (tokenPrinted = resolve));
       child.onOutputLine((line) => {
-        const output = line.trim();
+        const found = hubSessionTokenOf(line);
+        if (found !== undefined && token === undefined) {
+          token = found;
+          tokenPrinted();
+        }
+        const output = withoutHubSessionToken(line.trim());
         if (output.length > 0) log.debug('Device hub output', { pid: Number(child.pid), output });
       });
       await waitForHttpReady({
@@ -393,6 +405,22 @@ export const createLocalDeviceHost = async (options: LocalDeviceHostOptions): Pr
         timeoutMs: HUB_READY_TIMEOUT_MS,
         makeError: (info) => new DeviceHostError({ hostId, step: 'waiting for the device hub to answer', cause: info.cause }),
       });
+      // The hub prints its link right after it starts listening, so it is there by now or very soon.
+      let waited: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        printed,
+        child.exited,
+        new Promise<void>((resolve) => (waited = setTimeout(resolve, HUB_TOKEN_TIMEOUT_MS))),
+      ]);
+      clearTimeout(waited);
+      if (token === undefined) {
+        throw new DeviceHostError({
+          hostId,
+          step: 'reading the device hub session token',
+          cause: new Error('The device hub did not print a link with its session token.'),
+        });
+      }
+      const hub: HubProcess = { child, origin, token, startedAtMillis: runtime.now(), nodePath };
       await recordHub(hub, hubTool);
       log.info('Device hub started', { pid: Number(child.pid), port });
       return hub;
@@ -625,10 +653,11 @@ export const createLocalDeviceHost = async (options: LocalDeviceHostOptions): Pr
       );
 
   const toReady = (current: RunningHost): DeviceHostReady => ({
-    hub: { origin: current.hub.origin } satisfies DeviceHubEndpoint,
+    hub: { origin: current.hub.origin, headers: hubAuthorization(current.hub.token) } satisfies DeviceHubEndpoint,
     devices: makeDeviceHubOperations({
       hostId,
       origin: current.hub.origin,
+      headers: hubAuthorization(current.hub.token),
       fetch: runtime.fetch,
       run,
       platformAvailable: (platform) => platformAvailability(platform).then((availability) => availability.available),

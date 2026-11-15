@@ -59,6 +59,8 @@ const vendorPrefix = (platform: DevicePlatform) => (platform === 'ios' ? '/vendo
 export const makeDeviceHubOperations = (options: {
   readonly hostId: DeviceHostId;
   readonly origin: string;
+  /** Headers every request to the hub carries (its session token). */
+  readonly headers?: Readonly<Record<string, string>>;
   readonly fetch: typeof fetch;
   readonly run: DeviceHostReady['run'];
   /** Android gates listing AVDs, which the hub does not report until they boot. */
@@ -66,6 +68,7 @@ export const makeDeviceHubOperations = (options: {
   readonly log?: { readonly info: (message: string, fields?: Record<string, unknown>) => void };
 }): DeviceOperations => {
   const { hostId, origin, run } = options;
+  const hubHeaders = options.headers ?? {};
 
   const fetchJson = async <T>(
     url: string,
@@ -73,7 +76,11 @@ export const makeDeviceHubOperations = (options: {
     schema: z.ZodType<T>,
     signal: AbortSignal,
   ): Promise<T> => {
-    const response = await options.fetch(url, { ...init, signal });
+    const response = await options.fetch(url, {
+      ...init,
+      headers: { ...hubHeaders, ...(init.headers as Record<string, string> | undefined) },
+      signal,
+    });
     if (!response.ok) {
       await response.arrayBuffer().catch(() => undefined);
       throw new HttpStatusError(url, response.status);
@@ -260,7 +267,7 @@ export const makeDeviceHubOperations = (options: {
     try {
       return await withTimeout(SCREENSHOT_TIMEOUT_MS, async (signal) => {
         const url = `${origin}${vendorPrefix(device.platform)}/api/screenshot?device=${encodeURIComponent(device.id)}`;
-        const response = await options.fetch(url, { method: 'POST', signal });
+        const response = await options.fetch(url, { method: 'POST', headers: hubHeaders, signal });
         if (!response.ok) {
           await response.arrayBuffer().catch(() => undefined);
           throw new HttpStatusError(url, response.status);
