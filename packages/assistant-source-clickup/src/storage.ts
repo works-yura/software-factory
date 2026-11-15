@@ -11,6 +11,8 @@
  */
 import { assertOwner, DEFAULT_CHANNEL_RULE, formatChannelRule, parseChannelRule } from '@factory/assistant-core';
 import type { AssistantOwner, ChannelMode, ChannelRule } from '@factory/assistant-core';
+
+import type { ChannelLocationKind } from './client.ts';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere } from '@mastra/core/storage';
 
@@ -60,6 +62,17 @@ export const SOURCE_SCHEMAS: CollectionSchema[] = [
       mode: { type: 'text' },
       // What a new request from it gets (phase 3): `analyse` (null), `analyse_and_ask:<factoryId>`, `digest_only`.
       rule: { type: 'text', nullable: true },
+      // What ClickUp says about it: in the person's sidebar (they follow it), a DM they hid,
+      // PUBLIC/PRIVATE, and the Space/Folder/List a location channel belongs to.
+      following: { type: 'boolean', nullable: true },
+      hidden: { type: 'boolean', nullable: true },
+      visibility: { type: 'text', nullable: true },
+      location_kind: { type: 'text', nullable: true },
+      location_id: { type: 'text', nullable: true },
+      // Looked up once (and again after a day): the location's names, outermost first; a DM's other people.
+      location_path: { type: 'json', nullable: true },
+      members: { type: 'json', nullable: true },
+      details_at: { type: 'timestamp', nullable: true },
       // Epoch ms of the newest top-level message taken; `null` until the first read after enabling.
       cursor_at: { type: 'bigint', nullable: true },
       last_sync_at: { type: 'timestamp', nullable: true },
@@ -105,6 +118,21 @@ const OWNER_TABLES = [SOURCE_THREADS, SOURCE_CHANNELS, SOURCE_CONNECTIONS] as co
 
 export type ChannelKind = 'channel' | 'dm' | 'group_dm';
 
+/** Another person in a DM, as the channel list shows them. */
+export interface ChannelMember {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+/** What the channel listing knows of a channel besides its name and kind. */
+export interface ChannelFacts {
+  following: boolean;
+  hidden: boolean;
+  visibility: 'PUBLIC' | 'PRIVATE' | null;
+  location: { kind: ChannelLocationKind; id: string } | null;
+}
+
 export interface SourceConnection {
   owner: AssistantOwner;
   secret: string;
@@ -125,6 +153,13 @@ export interface SourceChannel {
   kind: ChannelKind;
   mode: ChannelMode;
   rule: ChannelRule;
+  following: boolean;
+  hidden: boolean;
+  visibility: 'PUBLIC' | 'PRIVATE' | null;
+  location: { kind: ChannelLocationKind; id: string; path: string[] | null } | null;
+  /** A DM's or group DM's other people, once looked up; `null` until then. */
+  members: ChannelMember[] | null;
+  detailsAt: Date | null;
   cursorAt: number | null;
   lastSyncAt: Date | null;
   lastError: string | null;
@@ -162,6 +197,14 @@ interface ChannelRow extends Record<string, unknown> {
   kind: string;
   mode: string;
   rule: string | null;
+  following: unknown;
+  hidden: unknown;
+  visibility: string | null;
+  location_kind: string | null;
+  location_id: string | null;
+  location_path: string[] | null;
+  members: ChannelMember[] | null;
+  details_at: Date | null;
   cursor_at: number | string | null;
   last_sync_at: Date | null;
   last_error: string | null;
@@ -210,6 +253,15 @@ function toChannel(row: ChannelRow): SourceChannel {
     kind: row.kind === 'dm' || row.kind === 'group_dm' ? row.kind : 'channel',
     mode: row.mode === 'watch' || row.mode === 'addressed' ? row.mode : 'ignore',
     rule: parseChannelRule(row.rule) ?? DEFAULT_CHANNEL_RULE,
+    following: bool(row.following),
+    hidden: bool(row.hidden),
+    visibility: row.visibility === 'PUBLIC' || row.visibility === 'PRIVATE' ? row.visibility : null,
+    location:
+      (row.location_kind === 'space' || row.location_kind === 'folder' || row.location_kind === 'list') && row.location_id
+        ? { kind: row.location_kind, id: row.location_id, path: Array.isArray(row.location_path) ? row.location_path : null }
+        : null,
+    members: Array.isArray(row.members) ? row.members : null,
+    detailsAt: row.details_at ?? null,
     cursorAt: row.cursor_at === null || row.cursor_at === undefined ? null : Number(row.cursor_at),
     lastSyncAt: row.last_sync_at,
     lastError: row.last_error,
@@ -338,7 +390,7 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
    */
   async syncChannels(
     o: AssistantOwner,
-    listed: Array<{ workspaceId: string; channelId: string; name: string; kind: ChannelKind; defaultMode: ChannelMode }>,
+    listed: Array<{ workspaceId: string; channelId: string; name: string; kind: ChannelKind; defaultMode: ChannelMode } & ChannelFacts>,
     now = new Date(),
   ): Promise<void> {
     const w = where(o);
@@ -348,12 +400,31 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
       const existing = known.get(key);
       known.delete(key);
       const target = { ...w, workspace_id: channel.workspaceId, channel_id: channel.channelId };
+      const facts = {
+        following: channel.following,
+        hidden: channel.hidden,
+        visibility: channel.visibility,
+        location_kind: channel.location?.kind ?? null,
+        location_id: channel.location?.id ?? null,
+      };
       if (existing) {
-        if (existing.name !== channel.name || existing.gone || existing.kind !== channel.kind) {
+        const movedLocation = existing.location?.id !== channel.location?.id;
+        if (
+          existing.name !== channel.name ||
+          existing.gone ||
+          existing.kind !== channel.kind ||
+          existing.following !== channel.following ||
+          existing.hidden !== channel.hidden ||
+          existing.visibility !== channel.visibility ||
+          movedLocation
+        ) {
           await this.ops.updateAtomic<ChannelRow>(SOURCE_CHANNELS, target, () => ({
             name: channel.name,
             kind: channel.kind,
             gone: false,
+            ...facts,
+            // A channel that moved to another location gets its path looked up again.
+            ...(movedLocation ? { location_path: null, details_at: null } : {}),
             updated_at: now,
           }));
         }
@@ -366,6 +437,10 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
           kind: channel.kind,
           mode: channel.defaultMode,
           rule: null,
+          ...facts,
+          location_path: null,
+          members: null,
+          details_at: null,
           cursor_at: null,
           last_sync_at: null,
           last_error: null,
@@ -409,6 +484,22 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
       updated_at: now,
     }));
     return row ? toChannel(row) : null;
+  }
+
+  /** What was looked up about a channel: a location's path, a DM's other people. */
+  async setDetails(
+    o: AssistantOwner,
+    workspaceId: string,
+    channelId: string,
+    details: { path?: string[]; members?: ChannelMember[] },
+    now = new Date(),
+  ): Promise<void> {
+    await this.ops.updateAtomic<ChannelRow>(SOURCE_CHANNELS, { ...where(o), workspace_id: workspaceId, channel_id: channelId }, () => ({
+      ...(details.path ? { location_path: details.path } : {}),
+      ...(details.members ? { members: details.members } : {}),
+      details_at: now,
+      updated_at: now,
+    }));
   }
 
   async setMode(o: AssistantOwner, workspaceId: string, channelId: string, mode: ChannelMode, now = new Date()) {

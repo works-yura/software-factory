@@ -16,25 +16,49 @@ export interface FakeMessage {
   tagged?: string[];
 }
 
+export interface FakeChannel {
+  id: string;
+  name: string;
+  type: 'CHANNEL' | 'DM' | 'GROUP_DM';
+  following?: boolean;
+  is_hidden?: boolean;
+  visibility?: 'PUBLIC' | 'PRIVATE';
+  parent?: { id: string; type: number };
+  is_canonical_channel?: boolean;
+  /** User ids in the channel (`…/members`). */
+  members?: string[];
+}
+
 export class FakeClickUp {
   readonly token = 'pk_12345678_FAKEFAKEFAKEFAKE';
   me = { id: 42, username: 'ada', email: 'ada@example.com' };
-  workspaces = [
+  workspaces: Array<{
+    id: string;
+    name: string;
+    members: Array<{ user: { id: number; username: string; email: string; profilePicture?: string | null } }>;
+  }> = [
     {
       id: '9001',
       name: 'Acme',
       members: [
         { user: { id: 42, username: 'ada', email: 'ada@example.com' } },
-        { user: { id: 7, username: 'Olena', email: 'olena@example.com' } },
+        { user: { id: 7, username: 'Olena', email: 'olena@example.com', profilePicture: 'https://attachments.clickup.com/profilePictures/7_olena.jpg' } },
         { user: { id: 8, username: 'Taras', email: 'taras@example.com' } },
       ],
     },
   ];
-  channels = [
-    { id: 'ch-general', name: 'general', type: 'CHANNEL' },
-    { id: 'ch-support', name: 'support', type: 'CHANNEL' },
-    { id: 'dm-olena', name: 'Olena', type: 'DM' },
+  /**
+   * Channels as `GET …/chat/channels` lists them. `following` decides `is_follower=true`;
+   * `parent` is the location (4 Space, 5 Folder, 6 List; 7 = the workspace); DMs have no name
+   * (their people come from `…/members`).
+   */
+  channels: FakeChannel[] = [
+    { id: 'ch-general', name: 'general', type: 'CHANNEL', following: true },
+    { id: 'ch-support', name: 'support', type: 'CHANNEL', following: true },
+    { id: 'dm-olena', name: 'Olena', type: 'DM', following: true, members: ['42', '7'] },
   ];
+  /** v2 locations by kind and id, for `GET /api/v2/{space|folder|list}/{id}`. */
+  locations: Record<string, Record<string, unknown>> = {};
   messages: FakeMessage[] = [];
   files = new Map<string, Uint8Array>();
   /** Every request path, in order. */
@@ -61,21 +85,43 @@ export class FakeClickUp {
     const path = url.pathname;
     if (path === '/api/v2/user') return Response.json({ user: this.me });
     if (path === '/api/v2/team') return Response.json({ teams: this.workspaces });
-    let match = /^\/api\/v3\/workspaces\/([^/]+)\/chat\/channels$/.exec(path);
+    let match = /^\/api\/v2\/(space|folder|list)\/([^/]+)$/.exec(path);
     if (match) {
+      const location = this.locations[`${match[1]}:${match[2]}`];
+      return location ? Response.json(location) : Response.json({ err: 'Not found', ECODE: 'X' }, { status: 404 });
+    }
+    match = /^\/api\/v3\/workspaces\/([^/]+)\/chat\/channels$/.exec(path);
+    if (match) {
+      const followingOnly = url.searchParams.get('is_follower') === 'true';
       return Response.json({
         next_cursor: '',
-        data: this.channels.map(channel => ({
-          ...channel,
-          visibility: 'PUBLIC',
-          parent: { id: match![1], type: 7 },
-          creator: '7',
-          created_at: '1700000000000',
-          updated_at: '1700000000000',
-          workspace_id: match![1],
-          archived: false,
-          links: { members: '', followers: '' },
-        })),
+        data: this.channels
+          .filter(channel => !followingOnly || channel.following)
+          .map(({ following: _following, members: _members, ...channel }) => ({
+            visibility: 'PUBLIC',
+            parent: { id: match![1], type: 7 },
+            ...channel,
+            // DMs carry no name in the documented shape.
+            name: channel.type === 'CHANNEL' ? channel.name : '',
+            creator: '7',
+            created_at: '1700000000000',
+            updated_at: '1700000000000',
+            workspace_id: match![1],
+            archived: false,
+            links: { members: '', followers: '' },
+          })),
+      });
+    }
+    match = /^\/api\/v3\/workspaces\/[^/]+\/chat\/channels\/([^/]+)\/members$/.exec(path);
+    if (match) {
+      const channel = this.channels.find(candidate => candidate.id === match![1]);
+      const users = new Map(this.workspaces.flatMap(workspace => workspace.members.map(member => [String(member.user.id), member.user] as const)));
+      return Response.json({
+        next_cursor: '',
+        data: (channel?.members ?? []).map(id => {
+          const user = users.get(id);
+          return { id, email: user?.email ?? '', name: user?.username ?? '', username: user?.username ?? '', initials: '' };
+        }),
       });
     }
     match = /^\/api\/v3\/workspaces\/[^/]+\/chat\/channels\/([^/]+)\/messages$/.exec(path);

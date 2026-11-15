@@ -561,3 +561,115 @@ describe('phase 3: channel rules and reading on demand', () => {
     expect((await service.listEnabledChannels(BOB)).map(channel => channel.name)).toEqual(['Olena']);
   });
 });
+
+describe('the channel list as the person’s ClickUp sidebar shows it', () => {
+  /**
+   * Shaped like the person's workspace: plain channels they follow, «Bugs» and «Development» as
+   * List/Folder channels in several places (same name, different location), DMs without names,
+   * a group DM, a DM they hid.
+   */
+  function sidebarFixture() {
+    clickup.workspaces[0]!.members.push({ user: { id: 9, username: 'Iryna', email: 'iryna@example.com' } });
+    clickup.channels = [
+      { id: 'ch-albi', name: 'Albi', type: 'CHANNEL', following: true, parent: { id: 'sp-albi', type: 4 }, is_canonical_channel: true },
+      { id: 'ch-bookfate', name: 'BookFate', type: 'CHANNEL', following: true },
+      { id: 'ch-bugs-1', name: 'Bugs', type: 'CHANNEL', following: true, parent: { id: 'l-1', type: 6 } },
+      { id: 'ch-bugs-2', name: 'Bugs', type: 'CHANNEL', following: false, parent: { id: 'l-2', type: 6 } },
+      { id: 'ch-bugs-3', name: 'Bugs', type: 'CHANNEL', following: false, parent: { id: 'l-3', type: 6 } },
+      { id: 'ch-dev-1', name: 'Development', type: 'CHANNEL', following: false, parent: { id: 'f-1', type: 5 } },
+      { id: 'ch-dev-2', name: 'Development', type: 'CHANNEL', following: false, parent: { id: 'f-2', type: 5 } },
+      { id: 'dm-olena', name: '', type: 'DM', following: true, members: ['42', '7'] },
+      { id: 'dm-taras', name: '', type: 'DM', following: true, members: ['42', '8'] },
+      { id: 'dm-old', name: '', type: 'DM', following: false, is_hidden: true, members: ['42', '9'] },
+      { id: 'gdm-1', name: '', type: 'GROUP_DM', following: true, members: ['42', '7', '8'] },
+    ];
+    clickup.locations = {
+      'space:sp-albi': { id: 'sp-albi', name: 'Albi' },
+      'list:l-1': { id: 'l-1', name: 'Bugs', folder: { id: 'f-a', name: 'Syncta', hidden: false }, space: { id: 's-1', name: 'Clients' } },
+      'list:l-2': { id: 'l-2', name: 'Bugs', folder: { id: 'f-b', name: 'KidNation', hidden: false }, space: { id: 's-1', name: 'Clients' } },
+      'list:l-3': { id: 'l-3', name: 'Bugs', folder: { id: 'hidden', name: 'hidden', hidden: true }, space: { id: 's-2', name: 'Internal' } },
+      'folder:f-1': { id: 'f-1', name: 'Development', space: { id: 's-1', name: 'Clients' } },
+      'folder:f-2': { id: 'f-2', name: 'Development', space: { id: 's-2', name: 'Internal' } },
+    };
+  }
+
+  const lookups = () => clickup.calls.filter(call => /\/members|\/api\/v2\/(space|folder|list)\//.test(call)).length;
+
+  it('names each DM after its people, tells location channels apart by path, and marks the sidebar', async () => {
+    sidebarFixture();
+    const view = await source.connect(ADA, clickup.token);
+    const rows = view.channels.map(channel => ({
+      name: channel.name,
+      kind: channel.kind,
+      location: channel.location ? `${channel.location.kind}:${channel.location.path.join(' › ')}` : null,
+      inSidebar: channel.inSidebar,
+    }));
+    expect(rows).toEqual([
+      { name: 'Iryna', kind: 'dm', location: null, inSidebar: false },
+      { name: 'Olena', kind: 'dm', location: null, inSidebar: true },
+      { name: 'Taras', kind: 'dm', location: null, inSidebar: true },
+      { name: 'Olena, Taras', kind: 'group_dm', location: null, inSidebar: true },
+      { name: 'Albi', kind: 'channel', location: 'space:Albi', inSidebar: true },
+      { name: 'BookFate', kind: 'channel', location: null, inSidebar: true },
+      { name: 'Bugs', kind: 'channel', location: 'list:Clients › KidNation › Bugs', inSidebar: false },
+      { name: 'Bugs', kind: 'channel', location: 'list:Clients › Syncta › Bugs', inSidebar: true },
+      { name: 'Bugs', kind: 'channel', location: 'list:Internal › Bugs', inSidebar: false },
+      { name: 'Development', kind: 'channel', location: 'folder:Clients › Development', inSidebar: false },
+      { name: 'Development', kind: 'channel', location: 'folder:Internal › Development', inSidebar: false },
+    ]);
+    // Never two rows that read the same.
+    const labels = rows.map(row => `${row.kind}|${row.name}|${row.location}`);
+    expect(new Set(labels).size).toBe(labels.length);
+    // The person themself is not one of a DM's people; the avatar comes from the workspace member.
+    expect(view.channels.find(channel => channel.channelId === 'dm-olena')!.members).toEqual([
+      { id: '7', name: 'Olena', avatarUrl: 'https://attachments.clickup.com/profilePictures/7_olena.jpg' },
+    ]);
+  });
+
+  it('looks details up within its limit, sidebar first, keeps them, and asks again only after a day', async () => {
+    sidebarFixture();
+    build({ detailsPerListing: 3 });
+    await source.connect(ADA, clickup.token);
+    expect(lookups()).toBe(3);
+    // Sidebar rows first: a followed DM is named even with the small budget; the hidden one is not yet.
+    const first = await source.view(ADA);
+    expect(first.channels.filter(channel => channel.kind !== 'channel' && channel.members.length > 0).every(channel => channel.inSidebar)).toBe(true);
+    build();
+    clickup.calls.length = 0;
+    await source.syncNow(ADA);
+    // The other 7 of the 10 that need a lookup (BookFate has no location); none twice.
+    expect(lookups()).toBe(7);
+    clickup.calls.length = 0;
+    await source.syncNow(ADA);
+    expect(lookups()).toBe(0);
+    now += 25 * 60 * 60 * 1000;
+    clickup.calls.length = 0;
+    await source.syncNow(ADA);
+    expect(lookups()).toBe(10);
+  });
+
+  it('sets every DM to one mode at once, channels untouched', async () => {
+    sidebarFixture();
+    await source.connect(ADA, clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-albi', mode: 'watch' });
+    expect(await source.setDmModes(ADA, 'watch')).toBe(4);
+    const modes = Object.fromEntries((await source.view(ADA)).channels.map(channel => [channel.channelId, channel.mode]));
+    expect(modes).toMatchObject({ 'dm-olena': 'watch', 'dm-taras': 'watch', 'dm-old': 'watch', 'gdm-1': 'watch', 'ch-albi': 'watch', 'ch-bugs-1': 'ignore' });
+    await expect(source.setDmModes(BOB, 'watch')).rejects.toMatchObject({ code: 'not_connected' });
+  });
+
+  it('names where a request came from with its location, and a DM by its person', async () => {
+    sidebarFixture();
+    await source.connect(ADA, clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-bugs-2', mode: 'watch' });
+    now += 1000;
+    await poll();
+    clickup.post({ id: 'b1', channel: 'ch-bugs-2', user: '7', content: 'crash on login', date: now + 5000 });
+    now += 60_000;
+    await poll();
+    expect(brain.turns.at(-1)!.input.text).toContain('(#Clients › KidNation › Bugs)');
+    expect((await source.enabledChannels(ADA)).map(channel => channel.name)).toEqual(
+      expect.arrayContaining(['Olena', 'Olena, Taras', 'Bugs']),
+    );
+  });
+});

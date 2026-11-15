@@ -49,6 +49,16 @@ export function buildClickUpSourceRoutes(deps: { auth: RouteAuth; source: ClickU
         return c.json({ result: { ingested: result.ingested, channels: result.channels, error: result.error ?? null }, clickup: await source.view(owner) });
       }),
     }),
+    // Bulk: every DM and group DM to one mode (e.g. «only when addressed»).
+    registerApiRoute(`${p}/clickup/dms`, {
+      method: 'PUT',
+      handler: handle(async (c, owner) => {
+        const body = await jsonBody(c);
+        if (!isChannelMode(body.mode)) throw new AssistantError('invalid_mode', 'mode is ignore, addressed or watch.', 400);
+        const changed = await source.setDmModes(owner, body.mode);
+        return c.json({ changed, clickup: await source.view(owner) });
+      }),
+    }),
     registerApiRoute(`${p}/clickup/channels/:workspaceId/:channelId`, {
       method: 'PUT',
       handler: handle(async (c, owner) => {
@@ -83,4 +93,5 @@ export const CLICKUP_SOURCE_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> 
   'DELETE /web/assistant/sources/clickup': 'self.write',
   'POST /web/assistant/sources/clickup/sync': 'self.write',
   'PUT /web/assistant/sources/clickup/channels/:workspaceId/:channelId': 'self.write',
+  'PUT /web/assistant/sources/clickup/dms': 'self.write',
 };

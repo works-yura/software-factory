@@ -17,11 +17,11 @@ import type {
   SourceMessage,
 } from '@factory/assistant-core';
 
-import type { ChatChannel, ChatMessage, ClickUpChatClientOptions } from './client.ts';
+import type { ChannelLocationKind, ChatChannel, ChatMessage, ClickUpChatClientOptions, ClickUpWorkspaceInfo } from './client.ts';
 import { channelUrl, ClickUpBudgetSpent, ClickUpChatClient, ClickUpChatError, fileLinks, isPersonalToken } from './client.ts';
 import type { OrgClickUpReader } from './org-connection.ts';
 import { orgConnectionFor } from './org-connection.ts';
-import type { ChannelKind, ClickUpSourceStorage, SourceChannel, SourceConnection } from './storage.ts';
+import type { ChannelKind, ChannelMember, ClickUpSourceStorage, SourceChannel, SourceConnection } from './storage.ts';
 import { PLATFORM } from './storage.ts';
 
 const MINUTE = 60_000;
@@ -47,6 +47,8 @@ export interface ClickUpPollLimits {
   followThreadsMs: number;
   /** ClickUp calls one on-demand read by the agent's tool may make. */
   callsPerRead: number;
+  /** DMs' people and location channels' paths looked up per channel listing (one call each). */
+  detailsPerListing: number;
 }
 
 export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
@@ -59,6 +61,7 @@ export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
   channelsRefreshMs: 60 * MINUTE,
   followThreadsMs: 14 * DAY,
   callsPerRead: 3,
+  detailsPerListing: 15,
 };
 
 /** What the source needs from the core: taking messages in, and which threads have open requests. */
@@ -91,6 +94,19 @@ export interface ClickUpSourceDeps {
 /** The default mode of a channel the person has not set: DMs are read when addressed, channels not at all. */
 export function defaultMode(kind: ChannelKind): ChannelMode {
   return kind === 'channel' ? 'ignore' : 'addressed';
+}
+
+/**
+ * How a channel is called in the list: a DM or group DM by its other people (the API gives DMs no
+ * name), a channel by its own name.
+ */
+export function channelDisplayName(channel: Pick<SourceChannel, 'kind' | 'name' | 'members'>): string {
+  if (channel.kind !== 'channel') {
+    const names = (channel.members ?? []).map(member => member.name).filter(Boolean);
+    if (names.length) return names.join(', ');
+    return channel.name || (channel.kind === 'dm' ? 'Direct message' : 'Group message');
+  }
+  return channel.name;
 }
 
 function kindOf(channel: ChatChannel): ChannelKind {
@@ -130,6 +146,13 @@ export interface ConnectionView {
     channelId: string;
     name: string;
     kind: ChannelKind;
+    /** In the person's ClickUp sidebar: a channel they follow, a DM they did not hide. The rest is behind «show all». */
+    inSidebar: boolean;
+    visibility: 'PUBLIC' | 'PRIVATE' | null;
+    /** A location channel's Space/Folder/List and its path (outermost first; empty until looked up). */
+    location: { kind: ChannelLocationKind; path: string[] } | null;
+    /** A DM's or group DM's other people (empty until looked up). */
+    members: ChannelMember[];
     mode: ChannelMode;
     /** `analyse`, `analyse_and_ask:<factoryId>` or `digest_only`. */
     rule: string;
@@ -300,11 +323,17 @@ export class ClickUpChatSource implements AssistantSource {
       };
     }
     const via = await this.#via(connection);
-    // DMs first (they are what reaches the person), then channels, each by name.
+    // DMs first (they are what reaches the person), then channels, each by the name the list shows.
     const order: Record<ChannelKind, number> = { dm: 0, group_dm: 1, channel: 2 };
     const channels = (await this.#deps.storage.listChannels(owner))
       .filter(channel => !channel.gone)
-      .sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name));
+      .map(channel => ({ channel, displayName: channelDisplayName(channel) }))
+      .sort(
+        (a, b) =>
+          order[a.channel.kind] - order[b.channel.kind] ||
+          a.displayName.localeCompare(b.displayName) ||
+          (a.channel.location?.path ?? []).join('/').localeCompare((b.channel.location?.path ?? []).join('/')),
+      );
     return {
       connected: true,
       via,
@@ -314,11 +343,16 @@ export class ClickUpChatSource implements AssistantSource {
       lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
       lastError: connection.lastError,
       nextPollAt: connection.nextPollAt?.toISOString() ?? null,
-      channels: channels.map(channel => ({
+      channels: channels.map(({ channel, displayName }) => ({
         workspaceId: channel.workspaceId,
         channelId: channel.channelId,
-        name: channel.name,
+        name: displayName,
         kind: channel.kind,
+        // In the person's ClickUp sidebar: a channel they follow, a DM they did not hide.
+        inSidebar: channel.kind === 'channel' ? channel.following : !channel.hidden,
+        visibility: channel.visibility,
+        location: channel.location ? { kind: channel.location.kind, path: channel.location.path ?? [] } : null,
+        members: channel.members ?? [],
         mode: channel.mode,
         rule: formatChannelRule(channel.rule),
         lastSyncAt: channel.lastSyncAt?.toISOString() ?? null,
@@ -413,7 +447,7 @@ export class ClickUpChatSource implements AssistantSource {
   #info(channel: SourceChannel): SourceChannelInfo {
     return {
       ref: `clickup:${channel.workspaceId}:${channel.channelId}`,
-      name: channel.name,
+      name: channelDisplayName(channel),
       kind: channel.kind,
       mode: channel.mode,
       rule: channel.rule,
@@ -529,11 +563,25 @@ export class ClickUpChatSource implements AssistantSource {
     }
   }
 
+  /**
+   * Reads the channel list: every channel the token sees, which of them the person follows (their
+   * ClickUp sidebar, `is_follower=true`), then — within `detailsPerListing` calls — what the list
+   * does not name: a DM's people (`…/members`) and a location channel's Space › Folder › List.
+   * What is looked up is kept and looked up again after a day.
+   */
   async #listChannels(owner: AssistantOwner, client: ClickUpChatClient): Promise<void> {
-    const listed: Array<{ workspaceId: string; channelId: string; name: string; kind: ChannelKind; defaultMode: ChannelMode }> = [];
+    const listed: Parameters<ClickUpSourceStorage['syncChannels']>[1] = [];
     const workspaces = await client.workspaces();
     for (const workspace of workspaces) {
+      const following = new Set<string>();
       let cursor: string | null = null;
+      for (let page = 0; page < 10; page += 1) {
+        const result = await client.channels(workspace.id, { cursor, following: true });
+        for (const channel of result.items) following.add(channel.id);
+        cursor = result.nextCursor;
+        if (!cursor) break;
+      }
+      cursor = null;
       for (let page = 0; page < 10; page += 1) {
         const result = await client.channels(workspace.id, { cursor });
         for (const channel of result.items) {
@@ -542,9 +590,13 @@ export class ClickUpChatSource implements AssistantSource {
           listed.push({
             workspaceId: workspace.id,
             channelId: channel.id,
-            name: channel.name || (kind === 'channel' ? channel.id : 'DM'),
+            name: channel.name || (kind === 'channel' ? channel.id : ''),
             kind,
             defaultMode: defaultMode(kind),
+            following: following.has(channel.id),
+            hidden: channel.hidden,
+            visibility: channel.visibility,
+            location: kind === 'channel' ? channel.location : null,
           });
         }
         cursor = result.nextCursor;
@@ -553,6 +605,62 @@ export class ClickUpChatSource implements AssistantSource {
     }
     await this.#deps.storage.syncChannels(owner, listed, this.#now());
     await this.#deps.storage.patchConnection(owner, { channelsListedAt: this.#now() }, this.#now());
+    await this.#lookUpDetails(owner, client, workspaces);
+  }
+
+  /** DM people and location paths the channel list does not give, a bounded number per listing. */
+  async #lookUpDetails(owner: AssistantOwner, client: ClickUpChatClient, workspaces: ClickUpWorkspaceInfo[]): Promise<void> {
+    const { storage } = this.#deps;
+    const connection = await storage.getConnection(owner);
+    if (!connection) return;
+    const stale = this.#now().getTime() - DAY;
+    const wanted = (await storage.listChannels(owner)).filter(
+      channel =>
+        !channel.gone &&
+        (channel.kind !== 'channel' || channel.location) &&
+        (!channel.detailsAt || channel.detailsAt.getTime() < stale),
+    );
+    // The person's sidebar first: those are the rows they look for.
+    wanted.sort((a, b) => Number(b.following || !b.hidden) - Number(a.following || !a.hidden));
+    const avatars = new Map<string, string>(workspaces.flatMap(workspace => [...workspace.avatars]));
+    const paths = new Map<string, string[]>();
+    let spent = 0;
+    for (const channel of wanted) {
+      if (spent >= this.limits.detailsPerListing || client.remaining <= 1) break;
+      spent += 1;
+      try {
+        if (channel.kind !== 'channel') {
+          const members = (await client.channelMembers(channel.workspaceId, channel.channelId))
+            .filter(member => member.id !== connection.accountId)
+            .map(member => ({ id: member.id, name: member.name, avatarUrl: avatars.get(member.id) ?? null }));
+          await storage.setDetails(owner, channel.workspaceId, channel.channelId, { members }, this.#now());
+        } else if (channel.location) {
+          const key = `${channel.location.kind}:${channel.location.id}`;
+          const path = paths.get(key) ?? (await client.locationPath(channel.location.kind, channel.location.id));
+          paths.set(key, path);
+          await storage.setDetails(owner, channel.workspaceId, channel.channelId, { path }, this.#now());
+        }
+      } catch (error) {
+        if (error instanceof ClickUpBudgetSpent) break;
+        if (error instanceof ClickUpChatError && (error.status === 401 || error.status === 429)) throw error;
+        // A location or DM ClickUp will not describe: shown by its own name; asked again tomorrow.
+        console.warn('[assistant] A ClickUp channel could not be described:', errorText(error));
+        await storage.setDetails(owner, channel.workspaceId, channel.channelId, {}, this.#now());
+      }
+    }
+  }
+
+  /** Bulk: one mode for every DM and group DM (e.g. all of them «only when addressed»). */
+  async setDmModes(owner: AssistantOwner, mode: ChannelMode): Promise<number> {
+    await this.#ready();
+    if (!(await this.#deps.storage.getConnection(owner))) throw new AssistantError('not_connected', 'Connect ClickUp first.', 409);
+    let changed = 0;
+    for (const channel of await this.#deps.storage.listChannels(owner)) {
+      if (channel.gone || channel.kind === 'channel' || channel.mode === mode) continue;
+      await this.#deps.storage.setChannel(owner, channel.workspaceId, channel.channelId, { mode }, this.#now());
+      changed += 1;
+    }
+    return changed;
   }
 
   /** Member names by user id across the person's workspaces (one call). */
@@ -670,7 +778,12 @@ export class ClickUpChatSource implements AssistantSource {
         // A digest-only channel never spends a turn; the others count against the hourly limit.
         analyse: fromMe || channel.rule.kind === 'digest_only' ? false : this.#turns.allow(owner, this.limits.turnsPerHour, this.#now().getTime()),
         rule: channel.rule,
-        where: channel.kind === 'channel' ? `#${channel.name}` : channel.kind === 'dm' ? `DM ${channel.name}` : `group DM ${channel.name}`,
+        where:
+          channel.kind === 'channel'
+            ? `#${[...(channel.location?.path?.slice(0, -1) ?? []), channel.name].join(' › ')}`
+            : channel.kind === 'dm'
+              ? `DM ${channelDisplayName(channel)}`
+              : `group DM ${channelDisplayName(channel)}`,
       });
       if (outcome.outcome !== 'duplicate' && outcome.outcome !== 'skipped') ingested += 1;
     }
