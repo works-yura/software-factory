@@ -213,7 +213,7 @@ describe('Settings › Assistant › Model', () => {
             { id: 'opencode/beam-free', provider: 'opencode', modelName: 'beam-free', free: true },
             { id: 'xai/grok-4.5', provider: 'xai', modelName: 'grok-4.5', available: false, unavailableReason: 'No credits' },
           ],
-          default: { modelId: 'opencode/beam-free', reason: 'The first connected provider’s default.' },
+          default: { modelId: 'opencode/beam-free', source: 'org_preference', reason: 'The first connected provider’s default.' },
         }),
       ),
       http.get(`${A}/model-status`, () =>
@@ -228,7 +228,7 @@ describe('Settings › Assistant › Model', () => {
     renderIn(<AssistantModelSettings />);
 
     await waitFor(() => expect(screen.getByTestId('assistant-effective-model')).toHaveTextContent("opencode · beam-free — the organization's default"));
-    expect(screen.getByText('The first connected provider’s default.')).toBeInTheDocument();
+    expect(screen.getByText("The organization's first model that works right now.")).toBeInTheDocument();
     expect(screen.getByText(/only models that work in this organization now are free ones/)).toBeInTheDocument();
     expect(await screen.findByText('limit / no credits')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Check the model' }));

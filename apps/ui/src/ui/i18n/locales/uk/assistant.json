@@ -201,7 +201,9 @@
       "sessions_only": "Працює лише в сесіях Factory",
       "unavailable": "Недоступно",
       "until": "до {{at}}"
-    }
+    },
+    "reasonFactoryDefault": "З цієї моделі стартує новий чат Factory у вашій організації, коли Factory не задає свою.",
+    "reasonOrgPreference": "Перша модель організації, яка зараз працює."
   },
   "time": {
     "now": "щойно",
