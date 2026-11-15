@@ -12,7 +12,7 @@ import { ClearEnvWrapper, EnvLoaderWrapper, SeatbeltWrapper, SudoWrapper } from 
 
 /**
  * Whether one process runs under the Seatbelt profile, asked per launch with the folder it works in
- * (a Factory's sandbox setting, ADR-0047's settings page). `undefined` falls back to the
+ * (a Factory's sandbox setting, ADR-0050). `undefined` falls back to the
  * configuration's default.
  */
 export type SeatbeltChoice = (spec: ProcessSpec) => boolean | undefined;
