@@ -162,7 +162,7 @@ export function AssistantModelSettings({ renderPicker }: { renderPicker?: (props
       </SettingsRow>
       {actions.save.isError ? <Notice variant="destructive">{actions.save.error.message}</Notice> : null}
       <SettingsRow label={t('settings.runsOn')} description={t('settings.runsOnDescription')} controlPlacement="below">
-        <Txt as="span" variant="body-sm" data-testid="assistant-effective-model">
+        <Txt as="p" variant="body-sm" data-testid="assistant-effective-model">
           {chosen
             ? t('settings.runsChosen', { model: modelLabel(chosen) })
             : defaultModel?.modelId
@@ -172,7 +172,7 @@ export function AssistantModelSettings({ renderPicker }: { renderPicker?: (props
                 : '…'}
         </Txt>
         {!chosen && defaultModel?.source ? (
-          <Txt as="span" variant="caption" tone="muted" title={defaultModel.reason ?? undefined}>
+          <Txt as="p" variant="caption" tone="muted" title={defaultModel.reason ?? undefined}>
             {t(defaultModel.source === 'factory_default' ? 'settings.reasonFactoryDefault' : 'settings.reasonOrgPreference')}
           </Txt>
         ) : null}
