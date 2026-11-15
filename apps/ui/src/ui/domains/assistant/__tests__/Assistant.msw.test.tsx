@@ -1,5 +1,5 @@
 import { AssistantApiProvider, AssistantPanel, AssistantSettings } from '@factory/assistant-ui';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { File as NodeFile } from 'node:buffer';
@@ -55,6 +55,35 @@ function view(overrides: Record<string, unknown> = {}) {
     ],
     files: [{ id: 'f1', name: 'shot.png', mime: 'image/png', size: 10, createdAt: NOW, contentUrl: '/web/assistant/files/f1/content' }],
   };
+}
+
+/** Types at the end of the note's Markdown editor (CodeMirror reads what lands in its content). */
+async function typeInEditor(editor: HTMLElement, text: string) {
+  const content = await waitFor(() => {
+    const found = editor.querySelector<HTMLElement>('.cm-content');
+    if (!found) throw new Error('The note editor is not in edit mode');
+    return found;
+  });
+  type View = { state: { doc: { length: number } }; dispatch: (spec: unknown) => void };
+  const view = (content as unknown as { cmTile?: { root?: { view?: View } } }).cmTile?.root?.view;
+  if (!view) throw new Error('No CodeMirror view on the editor');
+  act(() => view.dispatch({ changes: { from: view.state.doc.length, insert: text } }));
+}
+
+/** Selects the start of a passage in the thread and adds it, as a person drags over it and presses Add note. */
+async function annotatePassage(user: ReturnType<typeof userEvent.setup>, passage: string, length: number) {
+  const paragraph = await screen.findByText(passage);
+  const text = paragraph.firstChild;
+  if (!(text instanceof Text)) throw new Error('The paragraph has no text node');
+  fireEvent.pointerDown(paragraph);
+  const range = document.createRange();
+  range.setStart(text, 0);
+  range.setEnd(text, length);
+  document.getSelection()?.removeAllRanges();
+  document.getSelection()?.addRange(range);
+  fireEvent.pointerUp(paragraph);
+  await user.click(await screen.findByRole('button', { name: 'Add note' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).not.toBeInTheDocument());
 }
 
 function renderPanel(props: { compact?: boolean } = {}, settingsHref?: string) {
@@ -429,20 +458,127 @@ describe('the assistant panel', () => {
     expect(await screen.findByRole('button', { name: /Checkout fails/ })).toBeInTheDocument();
   });
 
-  it('keeps notes in their own tab', async () => {
-    let created: unknown;
+  it('notes: an empty state, «+» starts one in the Markdown editor, it saves itself, then edits and deletes after confirming', async () => {
+    let notes: Array<Record<string, unknown>> = [];
+    const created: unknown[] = [];
+    const patched: unknown[] = [];
+    let deleted = '';
     server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/notes`, () => HttpResponse.json({ notes })),
       http.post(`${TEST_BASE_URL}/web/assistant/notes`, async ({ request: incoming }) => {
-        created = await incoming.json();
-        return HttpResponse.json({ note: { id: 'n1', requestId: null, text: 'Call Olena', author: 'person', createdAt: NOW, updatedAt: NOW } }, { status: 201 });
+        const body = (await incoming.json()) as { text: string };
+        created.push(body);
+        const at = new Date().toISOString();
+        const note = { id: 'n1', requestId: null, text: body.text, author: 'person', createdAt: at, updatedAt: at };
+        notes = [note];
+        return HttpResponse.json({ note }, { status: 201 });
+      }),
+      http.patch(`${TEST_BASE_URL}/web/assistant/notes/n1`, async ({ request: incoming }) => {
+        const body = (await incoming.json()) as { text: string };
+        patched.push(body);
+        notes = [{ ...notes[0]!, text: body.text }];
+        return HttpResponse.json({ note: notes[0] });
+      }),
+      http.delete(`${TEST_BASE_URL}/web/assistant/notes/n1`, () => {
+        deleted = 'n1';
+        notes = [];
+        return HttpResponse.json({ deleted: true });
       }),
     );
     const user = userEvent.setup();
     renderPanel();
     await user.click(screen.getByRole('tab', { name: 'Notes' }));
-    await user.type(await screen.findByLabelText('A note for yourself…'), 'Call Olena');
-    await user.click(screen.getByRole('button', { name: 'Add note' }));
-    await waitFor(() => expect(created).toEqual({ text: 'Call Olena' }));
+    const view = await screen.findByTestId('assistant-notes');
+    expect(await within(view).findByText('No notes yet')).toBeInTheDocument();
+
+    await user.click(within(view).getAllByRole('button', { name: 'New note' })[0]!);
+    const editor = await within(view).findByTestId('assistant-note-editor');
+    await typeInEditor(editor, 'Call Olena\nabout the **invoice**');
+    // Saved a moment after typing stops, with no button to press.
+    await waitFor(() => expect(created).toEqual([{ text: 'Call Olena\nabout the **invoice**' }]), { timeout: 3000 });
+    await waitFor(() => expect(within(editor).getByRole('status')).toHaveTextContent('Saved'));
+    // The list: the first line as the title, the rest as the preview, how long ago.
+    const row = await within(view).findByRole('button', { name: /Call Olena/ });
+    expect(row).toHaveTextContent('about the **invoice**');
+    expect(row).toHaveTextContent('now');
+
+    await typeInEditor(editor, ' today');
+    await waitFor(() => expect(patched).toEqual([{ text: 'Call Olena\nabout the **invoice** today' }]), { timeout: 3000 });
+    expect(created).toHaveLength(1);
+
+    // Preview renders the Markdown.
+    await user.click(within(editor).getByRole('radio', { name: 'Preview' }));
+    expect(within(within(editor).getByTestId('assistant-note-preview')).getByText('invoice').tagName).toBe('STRONG');
+
+    await user.click(within(editor).getByRole('button', { name: 'Delete note' }));
+    const confirm = await screen.findByRole('alertdialog');
+    expect(deleted).toBe('');
+    await user.click(within(confirm).getByRole('button', { name: 'Delete note' }));
+    await waitFor(() => expect(deleted).toBe('n1'));
+    expect(await within(view).findByText('No notes yet')).toBeInTheDocument();
+  });
+
+  it('starts a note about a request from its thread, and the note opens that request', async () => {
+    let created: unknown;
+    let notes: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view())),
+      http.get(`${TEST_BASE_URL}/web/assistant/notes`, () => HttpResponse.json({ notes })),
+      http.post(`${TEST_BASE_URL}/web/assistant/notes`, async ({ request: incoming }) => {
+        created = await incoming.json();
+        const note = { id: 'n2', requestId: 'req-1', text: 'Reply tomorrow', author: 'person', createdAt: NOW, updatedAt: NOW };
+        notes = [note];
+        return HttpResponse.json({ note }, { status: 201 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    const header = await screen.findByTestId('assistant-topic-line');
+    await user.click(within(header).getByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Note about this request' }));
+
+    const editor = await screen.findByTestId('assistant-note-editor');
+    expect(within(editor).getByText('About')).toBeInTheDocument();
+    await typeInEditor(editor, 'Reply tomorrow');
+    await waitFor(() => expect(created).toEqual({ text: 'Reply tomorrow', requestId: 'req-1' }), { timeout: 3000 });
+
+    await user.click(within(editor).getByRole('button', { name: 'Checkout fails for Olena’s client' }));
+    expect(await screen.findByTestId('assistant-thread')).toBeInTheDocument();
+  });
+
+  it('takes passages marked in the thread — the assistant’s report and a colleague’s message — to the next message, as in a Factory chat', async () => {
+    let sent: { text?: string } | undefined;
+    const clickup = request({ source: 'clickup', fromName: 'Olena' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [clickup] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () =>
+        HttpResponse.json({
+          request: clickup,
+          messages: [
+            { id: 's1', author: 'source', fromName: 'Olena', text: 'Checkout fails on mobile only', fileIds: [], createdAt: NOW },
+            { id: 'm2', author: 'agent', fromName: null, text: 'Olena says payment never finishes.', fileIds: [], createdAt: NOW },
+          ],
+          files: [],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/assistant/requests/req-1/messages`, async ({ request: incoming }) => {
+        sent = (await incoming.json()) as { text?: string };
+        return HttpResponse.json({ request: clickup }, { status: 201 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    await annotatePassage(user, 'Checkout fails on mobile only', 'Checkout fails'.length);
+    await annotatePassage(user, 'Olena says payment never finishes.', 'Olena says payment'.length);
+    expect(await screen.findByRole('button', { name: '2 annotations' })).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', { name: 'Write to the assistant…' }), 'Which one is it?{Enter}');
+    await waitFor(() => expect(sent).toBeDefined());
+    expect(sent!.text).toBe('1. > Checkout fails\n\n2. > Olena says payment\n\nWhich one is it?');
+    await waitFor(() => expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument());
   });
 });
 

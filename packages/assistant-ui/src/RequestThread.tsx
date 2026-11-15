@@ -1,3 +1,10 @@
+import {
+  ChatAnnotationsProvider,
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  TranscriptAnnotations,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
 import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -43,6 +50,7 @@ import {
   Forward,
   MessageCircleQuestion,
   MoreHorizontal,
+  NotebookPen,
   Paperclip,
   Pencil,
   RefreshCw,
@@ -309,6 +317,7 @@ function ThreadHeader({
   target,
   onTarget,
   onDone,
+  onAddNote,
 }: {
   request: AssistantRequest;
   compact: boolean;
@@ -316,6 +325,7 @@ function ThreadHeader({
   target: FactoryTarget | undefined;
   onTarget: (id: string) => void;
   onDone?: () => void;
+  onAddNote?: (requestId: string) => void;
 }) {
   const { t } = useTranslation('assistant');
   const update = useUpdateRequest();
@@ -372,6 +382,12 @@ function ThreadHeader({
           <Pencil />
           {t('thread.rename')}
         </DropdownMenu.Item>
+        {onAddNote ? (
+          <DropdownMenu.Item onSelect={() => onAddNote(request.id)}>
+            <NotebookPen />
+            {t('thread.addNote')}
+          </DropdownMenu.Item>
+        ) : null}
         {waitingOnQuestion ? (
           <DropdownMenu.Item onSelect={() => actions.checkAnswer.mutate()}>
             <RefreshCw />
@@ -683,7 +699,9 @@ function ReplyComposer({
   const mutation = effective === 'ask' ? actions.ask : effective === 'handOver' ? actions.handOver : post;
   const factoryReady = Boolean(access?.connected && target);
   const busy = mutation.isPending || (effective === 'assistant' && request.analysing);
-  const canSend = !busy && (toFactory ? factoryReady : text.trim().length > 0 || files.length > 0);
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
+  const canSend =
+    !busy && (toFactory ? factoryReady : text.trim().length > 0 || files.length > 0 || annotations.length > 0);
   const addFiles = (added: File[]) => setFiles(current => [...current, ...added]);
   const reset = () => {
     setText('');
@@ -693,10 +711,14 @@ function ReplyComposer({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!canSend) return;
-    const typed = text.trim();
-    if (effective === 'assistant') post.mutate({ text, files }, { onSuccess: reset });
-    else if (effective === 'ask') actions.ask.mutate({ factoryId: target!.id, ...(typed ? { question: typed } : {}) }, { onSuccess: reset });
-    else actions.handOver.mutate({ factoryId: target!.id, ...(typed ? { note: typed } : {}) }, { onSuccess: reset });
+    // Passages the person marked in the thread go first, as in a Factory chat: quoted, each with its comment.
+    const sent = takeAnnotations();
+    const message = formatAnnotatedMessage(text, sent);
+    const typed = message.trim();
+    const done = { onSuccess: reset, onError: () => restoreAnnotations(sent) };
+    if (effective === 'assistant') post.mutate({ text: message, files }, done);
+    else if (effective === 'ask') actions.ask.mutate({ factoryId: target!.id, ...(typed ? { question: typed } : {}) }, done);
+    else actions.handOver.mutate({ factoryId: target!.id, ...(typed ? { note: typed } : {}) }, done);
   };
   const drop = (event: DragEvent<HTMLFormElement>) => {
     const dropped = Array.from(event.dataTransfer?.files ?? []);
@@ -758,6 +780,7 @@ function ReplyComposer({
       </ComposerHeader>
       <ComposerRing busy={busy} tone={MODE_TONE[effective]}>
         <ComposerBox>
+          <ComposerAnnotations />
           {toFactory ? null : <PendingFiles files={files} onRemove={index => setFiles(current => current.filter((_, at) => at !== index))} />}
           <ComposerInput
             aria-label={placeholder}
@@ -848,6 +871,7 @@ export function RequestThread({
   compact = false,
   onDone,
   onOpenRequest,
+  onAddNote,
 }: {
   requestId: string;
   hint?: FactoryTarget;
@@ -856,6 +880,8 @@ export function RequestThread({
   onDone?: () => void;
   /** Opens another request (the earlier one a source request continues). */
   onOpenRequest?: (id: string) => void;
+  /** Starts a note about this request in the Notes tab. */
+  onAddNote?: (requestId: string) => void;
 }) {
   const { t } = useTranslation('assistant');
   const view = useAssistantRequest(requestId);
@@ -879,44 +905,56 @@ export function RequestThread({
   const lastAgent = messages.findLastIndex(message => message.author === 'agent');
   const canAnalyse = request.status !== 'closed' && !request.analysing;
   return (
-    <ChatShell
-      data-testid="assistant-thread"
-      className="flex-1 [--chat-surface:var(--assistant-surface,var(--color-card))]"
-      scroller={{ autoScroll: true, defaultScrollPosition: 'end' }}
-    >
-      <ThreadHeader request={request} compact={compact} access={factories.data} target={target} onTarget={setPicked} onDone={onDone} />
-      <ChatShell.Stage>
-        <ChatShell.Viewport>
-          <ChatShell.Content role="log" aria-label={t('thread.label')} className="pt-4">
-            <ChatShell.Transcript>
-              {messages.map((message, index) => (
-                <ThreadEntry
-                  key={message.id}
-                  message={message}
-                  files={files}
-                  onOpenRequest={onOpenRequest}
-                  analysing={actions.retry.isPending}
-                  {...(canAnalyse && index > lastAgent ? { onAnalyse: () => actions.retry.mutate() } : {})}
-                />
-              ))}
-              {request.analysing ? (
-                <Message from="assistant" pending>
-                  <Txt as="p" variant="body-sm" tone="muted" role="status">
-                    <Shimmer>{t('thread.analysing')}</Shimmer>
-                  </Txt>
-                </Message>
-              ) : null}
-              {request.lastError && !request.analysing ? <TurnFailureNotice failure={request.lastError} request={request} /> : null}
-            </ChatShell.Transcript>
-          </ChatShell.Content>
-          <ChatShell.Dock>
-            <ChatShell.ScrollButton />
-            <ChatShell.Column>
-              <ReplyComposer request={request} compact={compact} access={factories.data} target={target} />
-            </ChatShell.Column>
-          </ChatShell.Dock>
-        </ChatShell.Viewport>
-      </ChatShell.Stage>
-    </ChatShell>
+    // Marked passages belong to this thread: the provider lives (and goes) with it.
+    <ChatAnnotationsProvider>
+      <ChatShell
+        data-testid="assistant-thread"
+        className="flex-1 [--chat-surface:var(--assistant-surface,var(--color-card))]"
+        scroller={{ autoScroll: true, defaultScrollPosition: 'end' }}
+      >
+        <ThreadHeader
+          request={request}
+          compact={compact}
+          access={factories.data}
+          target={target}
+          onTarget={setPicked}
+          onDone={onDone}
+          onAddNote={onAddNote}
+        />
+        <ChatShell.Stage>
+          <ChatShell.Viewport>
+            <ChatShell.Content role="log" aria-label={t('thread.label')} className="pt-4">
+              <ChatShell.Transcript>
+                <TranscriptAnnotations />
+                {messages.map((message, index) => (
+                  <ThreadEntry
+                    key={message.id}
+                    message={message}
+                    files={files}
+                    onOpenRequest={onOpenRequest}
+                    analysing={actions.retry.isPending}
+                    {...(canAnalyse && index > lastAgent ? { onAnalyse: () => actions.retry.mutate() } : {})}
+                  />
+                ))}
+                {request.analysing ? (
+                  <Message from="assistant" pending>
+                    <Txt as="p" variant="body-sm" tone="muted" role="status">
+                      <Shimmer>{t('thread.analysing')}</Shimmer>
+                    </Txt>
+                  </Message>
+                ) : null}
+                {request.lastError && !request.analysing ? <TurnFailureNotice failure={request.lastError} request={request} /> : null}
+              </ChatShell.Transcript>
+            </ChatShell.Content>
+            <ChatShell.Dock>
+              <ChatShell.ScrollButton />
+              <ChatShell.Column>
+                <ReplyComposer request={request} compact={compact} access={factories.data} target={target} />
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </ChatShell.Viewport>
+        </ChatShell.Stage>
+      </ChatShell>
+    </ChatAnnotationsProvider>
   );
 }

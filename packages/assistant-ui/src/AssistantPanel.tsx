@@ -18,6 +18,7 @@ import { REQUEST_STATUSES, useAssistantRequests, useUpdateRequest } from './api'
 import type { AssistantRequest, RequestStatus } from './api';
 import { NewRequestForm } from './NewRequestForm';
 import { NotesView } from './NotesView';
+import type { NoteSelection } from './NotesView';
 import { RequestStatusDot, RequestThread, ShortcutHint } from './RequestThread';
 import { requestAge } from './time';
 
@@ -106,6 +107,14 @@ export function AssistantPanel({
   const [tab, setTab] = useState<Tab>('requests');
   const [filter, setFilter] = useState<Filter>('open');
   const [selected, setSelected] = useState<string | 'new' | undefined>(undefined);
+  const [note, setNote] = useState<NoteSelection | undefined>(undefined);
+  /** Opens a request from anywhere in the panel (a note about it, the earlier one a source request continues). */
+  const openRequest = (id: string) => {
+    const known = all.find(request => request.id === id);
+    if (known?.status === 'closed' && filter === 'open') setFilter('all');
+    setTab('requests');
+    setSelected(id);
+  };
   const all = requests.data ?? [];
   const shown = filterRequests(all, filter);
   const newCount = all.filter(request => request.status === 'new').length;
@@ -234,10 +243,10 @@ export function AssistantPanel({
         hint={hint}
         compact={compact}
         onDone={() => moveOn(selected)}
-        onOpenRequest={id => {
-          // The earlier request is closed: show it in the list too.
-          if (filter === 'open') setFilter('all');
-          setSelected(id);
+        onOpenRequest={openRequest}
+        onAddNote={requestId => {
+          setNote({ draft: crypto.randomUUID(), requestId });
+          setTab('notes');
         }}
       />
     ) : (
@@ -302,7 +311,7 @@ export function AssistantPanel({
           )}
         </TabContent>
         <TabContent value="notes" flush className="flex-1">
-          <NotesView />
+          <NotesView compact={compact} selection={note} onSelect={setNote} onOpenRequest={openRequest} />
         </TabContent>
       </div>
     </Tabs>

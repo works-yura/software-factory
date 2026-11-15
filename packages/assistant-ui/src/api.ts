@@ -311,10 +311,16 @@ export function useNoteActions() {
   const queryClient = useQueryClient();
   const done = { onSuccess: () => void queryClient.invalidateQueries({ queryKey: assistantKeys.notes() }) };
   return {
-    create: useMutation({ mutationFn: (text: string) => call(api, '/notes', json('POST', { text })), ...done }),
+    create: useMutation({
+      mutationFn: (input: { text: string; requestId?: string | null }) =>
+        call<{ note: AssistantNote }>(api, '/notes', json('POST', input.requestId ? input : { text: input.text })).then(body => body.note),
+      ...done,
+    }),
     update: useMutation({
       mutationFn: (input: { id: string; text: string }) =>
-        call(api, `/notes/${encodeURIComponent(input.id)}`, json('PATCH', { text: input.text })),
+        call<{ note: AssistantNote }>(api, `/notes/${encodeURIComponent(input.id)}`, json('PATCH', { text: input.text })).then(
+          body => body.note,
+        ),
       ...done,
     }),
     remove: useMutation({

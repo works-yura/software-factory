@@ -78,7 +78,8 @@
     "notAnalysed": "Not analysed: hourly analysis limit reached",
     "analyse": "Analyse",
     "someone": "Someone",
-    "sourceFrom": "Message from {{name}}"
+    "sourceFrom": "Message from {{name}}",
+    "addNote": "Note about this request"
   },
   "actions": {
     "label": "Request actions",
@@ -106,10 +107,28 @@
     "hint": "{{factory}}?"
   },
   "notes": {
-    "empty": "No notes yet.",
-    "placeholder": "A note for yourself…",
-    "add": "Add note",
-    "delete": "Delete note"
+    "empty": "No notes yet",
+    "placeholder": "A note for yourself… Markdown works.",
+    "delete": "Delete note",
+    "title": "Notes",
+    "new": "New note",
+    "untitled": "Untitled",
+    "emptyDescription": "Keep what you want to remember — a reply to send, a call to make. Only you see them.",
+    "select": "Open a note, or start a new one.",
+    "gone": "This note is no longer here.",
+    "text": "Note",
+    "mode": "View",
+    "edit": "Edit",
+    "preview": "Preview",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveFailed": "Not saved — keep typing to retry",
+    "edited": "Edited",
+    "back": "Back to notes",
+    "deleteConfirmTitle": "Delete this note?",
+    "deleteConfirmDescription": "It cannot be brought back.",
+    "about": "About",
+    "someRequest": "a request"
   },
   "settings": {
     "title": "Assistant",
