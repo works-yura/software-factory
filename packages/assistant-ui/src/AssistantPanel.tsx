@@ -4,6 +4,8 @@ import { Header, HeaderAction } from '@mastra/playground-ui/components/Header';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { StatusDot } from '@mastra/playground-ui/components/StatusIndicators';
+import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ThreadList, ThreadListItem, ThreadListItems } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -15,7 +17,7 @@ import { REQUEST_STATUSES, useAssistantRequests } from './api';
 import type { AssistantRequest, RequestStatus } from './api';
 import { NewRequestForm } from './NewRequestForm';
 import { NotesView } from './NotesView';
-import { RequestThread, StatusBadge } from './RequestThread';
+import { RequestThread } from './RequestThread';
 
 type Filter = 'open' | 'all' | RequestStatus;
 type Tab = 'requests' | 'notes';
@@ -26,20 +28,31 @@ export function filterRequests(requests: AssistantRequest[], filter: Filter): As
   return requests.filter(request => request.status === filter);
 }
 
+/** A request's status as the kit's status dot: amber while someone has to act, green once answered. */
+const STATUS_DOT: Record<RequestStatus, Omit<StatusPresentation, 'label' | 'description'>> = {
+  new: { tone: 'neutral' },
+  waiting_factory: { tone: 'progress', glyph: 'ring' },
+  waiting_me: { tone: 'progress' },
+  answered: { tone: 'success' },
+  closed: { tone: 'neutral', glyph: 'ring' },
+};
+
+/**
+ * One request in the list, on the one line a thread list row has: the status dot, the topic (bold
+ * while unread), and the status in words at the end.
+ */
 function RequestRow({ request }: { request: AssistantRequest }) {
+  const { t } = useTranslation('assistant');
+  const label = t(`status.${request.status}`);
   return (
-    <span className="flex min-w-0 flex-col gap-1 py-1">
-      <Txt as="span" variant={request.unread ? 'label' : 'body-sm'} className="truncate">
+    <span className="flex min-w-0 items-center gap-2">
+      <StatusDot status={request.status} presentation={() => ({ ...STATUS_DOT[request.status], label, description: label })} decorative />
+      <Txt as="span" variant={request.unread ? 'label' : 'body-sm'} className="min-w-0 flex-1 truncate">
         {request.topic}
       </Txt>
-      <span className="flex min-w-0 items-center gap-1.5">
-        <StatusBadge status={request.status} unread={request.unread} />
-        {request.fromName ? (
-          <Txt as="span" variant="caption" tone="muted" className="truncate">
-            {request.fromName}
-          </Txt>
-        ) : null}
-      </span>
+      <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+        {label}
+      </Txt>
     </span>
   );
 }
