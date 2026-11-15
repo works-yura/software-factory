@@ -47,7 +47,7 @@ describe('SettingsNavigation', () => {
       within(screen.getByRole('region', { name: group }))
         .getAllByRole('link')
         .map(link => link.textContent);
-    expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
+    expect(linksIn('Account')).toEqual(['My account', 'Assistant', 'Preferences']);
     expect(linksIn('Organization')).toEqual(['Organization', 'Team', 'Connections']);
     // The Factory group: the Factory you are in, never its name (the sidebar already says which).
     await screen.findByRole('region', { name: 'Factory' });

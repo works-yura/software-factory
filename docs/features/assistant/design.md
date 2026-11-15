@@ -89,7 +89,7 @@
 
 ### Інструкції й навички
 
-- `instructions` — вільний текст людини (до 4000 символів). Дописується після базових інструкцій і не скасовує «звітуй лише людині».
+- ~~`instructions`~~ — з'єднано з базовим документом (див. «Сторінка налаштувань і прозорість» нижче): старий текст один раз дописується в документ людини розділом «My instructions».
 - `skills` — до 10 назв з каталогу навичок Factory (`GET /web/assistant/skills`). Агент бачить назву й опис кожної обраної і завантажує текст інструментом `assistant_read_skill` — так само, як сесії Factory.
 - Каталог — рівня розгортання (вбудовані, `factory-skills/` застосунку, `MastraFactory({ skills })`), оригінали без правок проєктів. Навичок рівня організації у Factory немає. Навичка, яку прибрали з каталогу, тихо випадає з ходу.
 
@@ -143,3 +143,25 @@
   - `rule:analyse_and_ask`, `auto_ask_failed\n<чому>`;
   - `answer_timeout`, `not_analysed:digest`, `digest:<n>`.
 - Нове джерело звернення — `digest`.
+
+## Сторінка налаштувань і прозорість
+
+Відповідь на «де редагування навичок помічника? там може бути що завгодно, а я й не знатиму». Гілка `feat/assistant-settings-transparency`.
+
+- **Сторінка** Налаштування › «Помічник» (`/factories/:id/settings/assistant`, область `personal`): Модель, Поведінка, Навички, Джерела, Проактивність, Доступ до Factory, Що бачить агент, Зберігання. Відкривається з навігації налаштувань, з Акаунта (посилання) і шестернею в заголовку панелі. Старі посилання `account#assistant` переводяться сюди.
+- **Модель.** Пікер — той самий `ProviderModelPicker`, що в Налаштуваннях › Моделі (apps/ui передає його в `AssistantModelSettings` слотом `renderPicker`), побудований на `groups` з `GET /models`: групи з обліковими даними й доступністю, типова позначена, безкоштовні з позначкою, неробочі моделі сірі з причиною, група без облікових даних веде на підключення. Під ним — на чому реально піде хід і чому, «лише безкоштовні моделі працюють», стан кожного провайдера (з ходів і перевірок) і «Перевірити модель».
+- **Поведінка.** Базові інструкції — один Markdown-документ. Типовий — `packages/assistant-core/src/base-instructions.md` (сервер бандлиться, тож модуль `base-instructions.ts` генерується скриптом `gen:base-instructions`, тест ловить розбіжність). Версія людини — `assistant_settings.base_instructions` (+ `base_instructions_updated_at`); «Повернути типову» стирає її. Редактор — CodeEditor (markdown) + MarkdownRenderer + CodeDiff проти типового. Після документа — перелік навичок і **запобіжник**, якого правка не прибирає: «звітуй лише людині; дії у Factory — лише пропозиції».
+- **Навички.** Каталог Factory з перемикачами (`settings.skills`), повний текст у редакторі навичок Factory (`SkillSimpleForm` з kit). Збереження пише **правку лише для помічника** (`assistant_skills`, `kind: override`), оригінал і правки Factory не змінюються; позначка «змінено» й «Повернути оригінал». Власні навички (`kind: personal`, до 30) — створити й видалити. Агент читає спершу текст людини, потім каталог. Таблиця з власником, стирається разом з помічником.
+- **Що бачить агент** — `GET /agent-preview`: увесь системний промпт, що піде в наступний хід, його версія (sha256, 12 знаків) і кожен інструмент з описом і родом: `read` / `write_own` (нотатка) / `proposal` (лише пропозиція).
+- **Подробиці ходу.** Кожна відповідь агента зберігає `details`: модель, версію інструкцій, навички, виклики інструментів (назва, аргументи й відповідь коротким JSON до 500 знаків, помилка, тривалість). Під відповіддю — згорнуте «Подробиці ходу», виклики намальовано так, як у сесіях Factory (`ActivityItem` + `ToolCallBody` з kit).
+- **Тред.** Пропозиція (`pendingAction`) — картка з «Спитати»/«Передати» і «Скасувати» (існуючі confirm/cancel); рядки подій фази 3 (`proposed:…`, `confirmed`, `cancelled`, `rule:analyse_and_ask`, `auto_ask_failed`, `answer_timeout`, `not_analysed:digest`, `digest:<n>`) мають власні підписи.
+
+API:
+
+- `GET /web/assistant/behavior` → `{ behavior: { document, defaultDocument, customized, updatedAt, version } }`; `PUT {document}` (400 `empty`, `instructions_too_long` — до 20 000); `DELETE` — типова. `PUT /settings` з `instructions` → 400 `instructions_moved`.
+- `GET /web/assistant/skills` → `{ skills: [{ name, description, origin: 'factory'|'personal', overridden, enabled }] }`; `GET /skills/:name` → `{ skill: { …, instructions, original, updatedAt } }`; `PUT /skills/:name {description, instructions}` — правка чи текст власної; `POST /skills {name, description, instructions}` (400 `invalid_skill_name`/`invalid_skill`, 409 `skill_exists`); `DELETE /skills/:name` → `{ reverted, deleted }`.
+- `GET /web/assistant/agent-preview` → `{ preview: { systemPrompt, version, modelId, skills, tools: [{ name, description, kind }] } }`.
+- `GET /web/assistant/model-status` → `{ providers: [{ provider, modelId, state: 'ok'|<kind збою>, detail, at }] }` — останній хід чи перевірка на провайдера (у пам'яті), інакше останні `lastError` звернень.
+- `POST /web/assistant/model-test {modelId?}` → `{ check: { ok, modelId, reply, failure, durationMs } }`; до 20 на годину (409 `too_many_checks`).
+- `GET /web/assistant/requests/:id` — у `messages[].details` подробиці ходу агента (`null` в інших і старих).
+
