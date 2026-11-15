@@ -1,3 +1,7 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
@@ -191,6 +195,25 @@ describe('mountFactoryAuth gate (enabled)', () => {
     );
   });
 
+  // The allowlist once named `/mastra.svg` while the page asked for `/factory.svg`: the
+  // signed-out tab had no icon. Every file the page shell names must pass signed out.
+  it('lets a signed-out browser fetch every icon and file the app shell and its manifest name', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+    const shell = path.resolve(import.meta.dirname, '../../../apps/ui/src/ui');
+    const html = await readFile(path.join(shell, 'index.html'), 'utf8');
+    const manifest = JSON.parse(await readFile(path.join(shell, 'public/manifest.webmanifest'), 'utf8')) as { icons: { src: string }[] };
+    const named = [
+      ...[...html.matchAll(/<link [^>]*href="(\/[^"]+)"/g)].map(match => match[1]!),
+      ...manifest.icons.map(icon => icon.src),
+    ];
+    expect(named).toEqual(expect.arrayContaining(['/factory.svg', '/manifest.webmanifest', '/pwa-192.png']));
+    for (const file of named) {
+      const res = await app.request(file, { headers: { Accept: '*/*' } });
+      expect(res.status, file).toBe(200);
+    }
+  });
+
   it('lets unauthenticated requests fetch static assets and metadata needed by the sign-in page', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
@@ -198,7 +221,7 @@ describe('mountFactoryAuth gate (enabled)', () => {
     for (const path of [
       '/assets/app.js',
       '/manifest.webmanifest',
-      '/mastra.svg',
+      '/factory.svg',
       '/pwa-192.png',
       '/pwa-512.png',
       '/apple-touch-icon.png',

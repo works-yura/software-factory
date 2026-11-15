@@ -1060,7 +1060,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path === '/signin' ||
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
-      path === '/mastra.svg' ||
+      path === '/factory.svg' ||
       path === '/pwa-192.png' ||
       path === '/pwa-512.png' ||
       path === '/apple-touch-icon.png' ||
