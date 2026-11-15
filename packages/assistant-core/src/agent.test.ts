@@ -59,6 +59,7 @@ function request(owner: AssistantOwner, id: string): AssistantRequest {
     analysing: true,
     lastError: null,
     unread: false,
+    pendingAction: null,
     createdAt: at,
     updatedAt: at,
     closedAt: null,

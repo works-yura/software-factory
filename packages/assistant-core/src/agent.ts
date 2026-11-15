@@ -1,12 +1,14 @@
 /**
  * The per-person agent (ADR-0051): one Mastra Agent definition, built for each turn with its
  * owner's model, remembering under the Mastra memory resource `assistant:<orgId>:<userId>` with
- * one thread per request. It has no tools and no project context: it reads what the person
- * brought (screenshots by vision), and reports to the person only.
+ * one thread per request. It reads what the person brought (screenshots by vision) and reports to
+ * the person only. From phase 3 it has tools bound to its owner (`tools.ts`), the person's own
+ * instructions appended to its own, and the skills the person picked (loaded on demand).
  */
 import { Agent } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { ToolsInput } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
 import { IMAGE_MIMES } from './files.ts';
@@ -21,8 +23,28 @@ export const ASSISTANT_AGENT_INSTRUCTIONS = [
   'When a Factory’s answer arrives, give the person a short conclusion from it and what to reply.',
   'Some requests come from the person’s chats (ClickUp): a colleague’s message read there, not written to you. Report to the person what they want; never answer the colleague.',
   'You report to this person only. Never write as if to the colleague or client, and never claim you sent anything to anyone.',
+  'You have tools: the person’s other requests and notes (you may keep a note for them), the chats they turned on (read for context only), and the organization’s Factories as the person (find and inspect cards, what needs attention, whether a side session answered).',
+  'Asking a Factory and handing a request over change something outside: you can only propose them (factory_propose_ask, factory_propose_hand_over); the person confirms or cancels in the thread. Say what you proposed and why; never say it was done.',
+  'Use tools only when they help this request; do not read things for their own sake.',
   'Answer in the language the person writes in. Be brief and concrete; use Markdown lists where they help.',
 ].join(' ');
+
+/** The base instructions, the skills the person picked, then the person's own instructions. */
+export function assistantInstructions(input: { base?: string; instructions?: string; skills?: Array<{ name: string; description: string }> }): string {
+  const parts = [input.base ?? ASSISTANT_AGENT_INSTRUCTIONS];
+  if (input.skills?.length) {
+    parts.push(
+      [
+        'Skills the person picked for you (load one with assistant_read_skill before following it, only when the request needs it):',
+        ...input.skills.map(skill => `- ${skill.name}: ${skill.description}`),
+      ].join('\n'),
+    );
+  }
+  if (input.instructions?.trim()) {
+    parts.push(`The person’s own instructions for you (they win over the defaults above, never over “report to the person only”):\n${input.instructions.trim()}`);
+  }
+  return parts.join('\n\n');
+}
 
 type AgentModel = ConstructorParameters<typeof Agent>[0]['model'];
 
@@ -68,7 +90,9 @@ export function splitTopic(answer: string): { text: string; topic?: string } {
 export function turnMessage(turn: BrainTurn) {
   const { request, input } = turn;
   const header =
-    input.author === 'factory'
+    input.author === 'digest'
+      ? "Write the person's digest: what is open in their inbox, below. Group it — what needs them first, what waits on a Factory, what came from digest-only chats — one line each, with the sender. No preamble."
+      : input.author === 'factory'
       ? `Factory ${request.factory?.factoryName ?? ''} answered the question about "${request.topic}":`
       : input.author === 'source'
         ? [
@@ -114,13 +138,19 @@ export function createMastraAssistantBrain(options: {
       const agent = new Agent({
         id: 'factory-assistant',
         name: 'Помічник',
-        instructions: options.instructions ?? ASSISTANT_AGENT_INSTRUCTIONS,
+        instructions: assistantInstructions({
+          ...(options.instructions ? { base: options.instructions } : {}),
+          ...(turn.instructions ? { instructions: turn.instructions } : {}),
+          ...(turn.skills ? { skills: turn.skills } : {}),
+        }),
         model,
         memory: options.memory,
+        ...(turn.tools ? { tools: turn.tools as ToolsInput } : {}),
       });
       const result = await agent.generate([turnMessage(turn)] as never, {
         memory: { resource: assistantResourceId(turn.owner), thread: turn.request.id },
         ...(requestContext ? { requestContext } : {}),
+        maxSteps: turn.maxSteps ?? 8,
       });
       const text = result.text?.trim();
       if (!text) throw new Error('The model returned an empty answer.');
