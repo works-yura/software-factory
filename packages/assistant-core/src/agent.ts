@@ -2,8 +2,8 @@
  * The per-person agent (ADR-0051): one Mastra Agent definition, built for each turn with its
  * owner's model, remembering under the Mastra memory resource `assistant:<orgId>:<userId>` with
  * one thread per request. It reads what the person brought (screenshots by vision) and reports to
- * the person only. From phase 3 it has tools bound to its owner (`tools.ts`), the person's own
- * instructions appended to its own, and the skills the person picked (loaded on demand).
+ * the person only. It has tools bound to its owner (`tools.ts`); its system prompt is the person's
+ * version of the base document (or the shipped one), the skills index, and a guard no edit removes.
  */
 import { Agent } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -12,40 +12,11 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
 import { IMAGE_MIMES } from './files.ts';
+import { assistantInstructions } from './instructions.ts';
 import type { AssistantBrain, AssistantMemory, BrainFile, BrainTurn } from './ports.ts';
 import { AssistantTurnError } from './turn-failure.ts';
 import type { AssistantOwner } from './types.ts';
 import { assistantResourceId, assertOwner } from './types.ts';
-
-export const ASSISTANT_AGENT_INSTRUCTIONS = [
-  'You are «Помічник», the personal assistant of one person in their organization.',
-  'Colleagues and clients send this person messages, screenshots and files; the person brings each one to you as a request.',
-  'For a new request: look closely at every screenshot and file, then say briefly who is asking what, what you think the answer or next step is, and whether one of the organization’s Factories (its software agents) should be asked or given the task.',
-  'When a Factory’s answer arrives, give the person a short conclusion from it and what to reply.',
-  'Some requests come from the person’s chats (ClickUp): a colleague’s message read there, not written to you. Report to the person what they want; never answer the colleague.',
-  'You report to this person only. Never write as if to the colleague or client, and never claim you sent anything to anyone.',
-  'You have tools: the person’s other requests and notes (you may keep a note for them), the chats they turned on (read for context only), and the organization’s Factories as the person (find and inspect cards, what needs attention, whether a side session answered).',
-  'Asking a Factory and handing a request over change something outside: you can only propose them (factory_propose_ask, factory_propose_hand_over); the person confirms or cancels in the thread. Say what you proposed and why; never say it was done.',
-  'Use tools only when they help this request; do not read things for their own sake.',
-  'Answer in the language the person writes in. Be brief and concrete; use Markdown lists where they help.',
-].join(' ');
-
-/** The base instructions, the skills the person picked, then the person's own instructions. */
-export function assistantInstructions(input: { base?: string; instructions?: string; skills?: Array<{ name: string; description: string }> }): string {
-  const parts = [input.base ?? ASSISTANT_AGENT_INSTRUCTIONS];
-  if (input.skills?.length) {
-    parts.push(
-      [
-        'Skills the person picked for you (load one with assistant_read_skill before following it, only when the request needs it):',
-        ...input.skills.map(skill => `- ${skill.name}: ${skill.description}`),
-      ].join('\n'),
-    );
-  }
-  if (input.instructions?.trim()) {
-    parts.push(`The person’s own instructions for you (they win over the defaults above, never over “report to the person only”):\n${input.instructions.trim()}`);
-  }
-  return parts.join('\n\n');
-}
 
 type AgentModel = ConstructorParameters<typeof Agent>[0]['model'];
 
@@ -144,11 +115,9 @@ export function createMastraAssistantBrain(options: {
       const agent = new Agent({
         id: 'factory-assistant',
         name: 'Помічник',
-        instructions: assistantInstructions({
-          ...(options.instructions ? { base: options.instructions } : {}),
-          ...(turn.instructions ? { instructions: turn.instructions } : {}),
-          ...(turn.skills ? { skills: turn.skills } : {}),
-        }),
+        instructions:
+          turn.systemPrompt ??
+          assistantInstructions({ ...(options.instructions ? { base: options.instructions } : {}), ...(turn.skills ? { skills: turn.skills } : {}) }),
         model,
         memory: options.memory,
         ...(turn.tools ? { tools: turn.tools as ToolsInput } : {}),
@@ -166,7 +135,28 @@ export function createMastraAssistantBrain(options: {
       }
       const text = result.text?.trim();
       if (!text) throw new Error('The model returned an empty answer.');
-      return turn.first && turn.input.author === 'source' ? splitTopic(text) : { text };
+      const answer = turn.first && turn.input.author === 'source' ? splitTopic(text) : { text };
+      return modelId ? { ...answer, modelId } : answer;
+    },
+    async probe(owner, modelId) {
+      assertOwner(owner);
+      const resolved = await options.models.resolve(owner, modelId);
+      const usedId = resolved.modelId ?? modelId;
+      const agent = new Agent({
+        id: 'factory-assistant-probe',
+        name: 'Помічник (model check)',
+        instructions: 'Answer with the single word OK.',
+        model: resolved.model,
+      });
+      try {
+        const result = await agent.generate('Reply with the single word OK.', {
+          ...(resolved.requestContext ? { requestContext: resolved.requestContext } : {}),
+          maxSteps: 1,
+        });
+        return { modelId: usedId ?? null, text: (result.text ?? '').trim().slice(0, 200) };
+      } catch (error) {
+        throw usedId ? new AssistantTurnError(usedId, error) : error;
+      }
     },
   };
 }

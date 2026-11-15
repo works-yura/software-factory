@@ -36,7 +36,7 @@ function renderSources() {
   );
 }
 
-describe('Account › Assistant › Sources', () => {
+describe('Settings › Assistant › Sources', () => {
   it('connects ClickUp with a personal token and lists its chats with their modes', async () => {
     let sent: unknown;
     let state: Record<string, unknown> = disconnected;
@@ -158,7 +158,7 @@ describe('Account › Assistant › Sources', () => {
   });
 });
 
-describe('Account › Assistant › Sources: the chat list as the ClickUp sidebar shows it', () => {
+describe('Settings › Assistant › Sources: the chat list as the ClickUp sidebar shows it', () => {
   /** The view the server sends for a workspace like the person's: DMs by person, location channels with equal names. */
   function sidebarChannels() {
     const row = (overrides: Record<string, unknown> & { kind: string }) => ({

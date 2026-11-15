@@ -16,10 +16,13 @@ import type {
   AssistantSettings,
   DigestFrequency,
   FactoryLink,
+  BehaviorDocument,
   MessageAuthor,
+  OwnSkill,
   PendingAction,
   RequestSource,
   RequestStatus,
+  TurnDetails,
 } from './types.ts';
 import { assertOwner, DEFAULT_DIGEST, DEFAULT_RETENTION_DAYS, DIGEST_FREQUENCIES } from './types.ts';
 import type { TurnFailure } from './turn-failure.ts';
@@ -33,6 +36,8 @@ export const ASSISTANT_FILES = 'assistant_files';
 export const ASSISTANT_FACTORY_GRANTS = 'assistant_factory_grants';
 /** Every source message the assistant took in, by its source id: what makes reading idempotent. */
 export const ASSISTANT_SOURCE_MESSAGES = 'assistant_source_messages';
+/** The person's skills for their assistant only: overrides of catalogue skills and their own. */
+export const ASSISTANT_SKILLS = 'assistant_skills';
 
 const owner = { owner_org_id: { type: 'text' }, owner_user_id: { type: 'text' } } as const;
 
@@ -78,6 +83,8 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
       from_name: { type: 'text', nullable: true },
       text: { type: 'text' },
       file_ids: { type: 'json' },
+      // On an agent reply: the model, the system prompt's version, skills and tool calls (transparency).
+      details: { type: 'json', nullable: true },
       created_at: { type: 'timestamp' },
     },
     indexes: [{ name: 'assistant_messages_request_idx', columns: ['owner_org_id', 'owner_user_id', 'request_id'] }],
@@ -110,6 +117,9 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
       digest_time_zone: { type: 'text', nullable: true },
       digest_last_at: { type: 'timestamp', nullable: true },
       digest_next_at: { type: 'timestamp', nullable: true },
+      // The person's version of the base instructions (Markdown); null → the shipped default.
+      base_instructions: { type: 'text', nullable: true },
+      base_instructions_updated_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -162,6 +172,20 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
     ],
     indexes: [{ name: 'assistant_source_messages_request_idx', columns: ['owner_org_id', 'owner_user_id', 'request_id'] }],
   },
+  {
+    name: ASSISTANT_SKILLS,
+    columns: {
+      id: { type: 'uuid-pk' },
+      ...owner,
+      name: { type: 'text' },
+      kind: { type: 'text' },
+      description: { type: 'text' },
+      instructions: { type: 'text' },
+      created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [{ name: 'assistant_skills_owner_name_key', columns: ['owner_org_id', 'owner_user_id', 'name'] }],
+  },
 ];
 
 /** Every table an owner has rows in, in the order cleanup erases them (files last: their bytes follow). */
@@ -172,6 +196,7 @@ export const OWNER_TABLES = [
   ASSISTANT_NOTES,
   ASSISTANT_SETTINGS,
   ASSISTANT_FACTORY_GRANTS,
+  ASSISTANT_SKILLS,
 ] as const;
 
 function ownerWhere(o: AssistantOwner): CollectionWhere {
@@ -208,7 +233,28 @@ interface MessageRow extends Record<string, unknown> {
   from_name: string | null;
   text: string;
   file_ids: string[];
+  details: TurnDetails | null;
   created_at: Date;
+}
+
+interface SkillRow extends Record<string, unknown> {
+  name: string;
+  kind: string;
+  description: string;
+  instructions: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function toOwnSkill(row: SkillRow): OwnSkill {
+  return {
+    name: row.name,
+    kind: row.kind === 'override' ? 'override' : 'personal',
+    description: row.description,
+    instructions: row.instructions,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 interface NoteRow extends Record<string, unknown> {
@@ -234,17 +280,18 @@ interface SettingsRow extends Record<string, unknown> {
   digest_time_zone: string | null;
   digest_last_at: Date | null;
   digest_next_at: Date | null;
+  base_instructions?: string | null;
+  base_instructions_updated_at?: Date | null;
 }
 
 function toSettings(row: SettingsRow | null): AssistantSettings {
-  if (!row) return { modelId: null, retentionDays: DEFAULT_RETENTION_DAYS, instructions: '', skills: [], digest: { ...DEFAULT_DIGEST } };
+  if (!row) return { modelId: null, retentionDays: DEFAULT_RETENTION_DAYS, skills: [], digest: { ...DEFAULT_DIGEST } };
   const frequency = (DIGEST_FREQUENCIES as readonly string[]).includes(row.digest_frequency ?? '')
     ? (row.digest_frequency as DigestFrequency)
     : DEFAULT_DIGEST.frequency;
   return {
     modelId: row.model_id,
     retentionDays: Number(row.retention_days),
-    instructions: row.instructions ?? '',
     skills: Array.isArray(row.skills) ? row.skills.filter(name => typeof name === 'string') : [],
     digest: {
       frequency,
@@ -316,6 +363,7 @@ function toMessage(row: MessageRow): AssistantMessage {
     fromName: row.from_name ?? null,
     text: row.text,
     fileIds: Array.isArray(row.file_ids) ? row.file_ids : [],
+    details: row.details && typeof row.details === 'object' ? row.details : null,
     createdAt: row.created_at,
   };
 }
@@ -488,6 +536,7 @@ export class AssistantStorage extends FactoryStorageDomain {
       text: string;
       fromName?: string | null;
       fileIds?: string[];
+      details?: TurnDetails | null;
       now?: Date;
     },
   ): Promise<AssistantMessage> {
@@ -504,6 +553,7 @@ export class AssistantStorage extends FactoryStorageDomain {
       from_name: input.fromName ?? null,
       text: input.text,
       file_ids: input.fileIds ?? [],
+      details: input.details ?? null,
       created_at: input.now ?? new Date(),
     } as Partial<MessageRow>);
     return toMessage(row);
@@ -603,14 +653,13 @@ export class AssistantStorage extends FactoryStorageDomain {
    */
   async patchSettings(
     o: AssistantOwner,
-    patch: Partial<AssistantSettings> & { digestNextAt?: Date | null; digestLastAt?: Date | null },
+    patch: Partial<AssistantSettings> & { digestNextAt?: Date | null; digestLastAt?: Date | null; behavior?: BehaviorDocument },
     now = new Date(),
   ): Promise<AssistantSettings> {
     const where = ownerWhere(o);
     const set: Partial<SettingsRow> = { updated_at: now } as Partial<SettingsRow>;
     if (patch.modelId !== undefined) set.model_id = patch.modelId;
     if (patch.retentionDays !== undefined) set.retention_days = patch.retentionDays;
-    if (patch.instructions !== undefined) set.instructions = patch.instructions;
     if (patch.skills !== undefined) set.skills = patch.skills;
     if (patch.digest !== undefined) {
       set.digest_frequency = patch.digest.frequency;
@@ -619,6 +668,12 @@ export class AssistantStorage extends FactoryStorageDomain {
     }
     if (patch.digestNextAt !== undefined) set.digest_next_at = patch.digestNextAt;
     if (patch.digestLastAt !== undefined) set.digest_last_at = patch.digestLastAt;
+    if (patch.behavior !== undefined) {
+      set.base_instructions = patch.behavior.document;
+      set.base_instructions_updated_at = patch.behavior.updatedAt;
+      // The phase-3 «own instructions» live inside the document from now on.
+      set.instructions = null;
+    }
     const update = () => this.ops.updateAtomic<SettingsRow>(ASSISTANT_SETTINGS, where, () => set);
     if (!(await update())) {
       try {
@@ -635,6 +690,54 @@ export class AssistantStorage extends FactoryStorageDomain {
       }
     }
     return this.getSettings(o);
+  }
+
+  /**
+   * The person's version of the base instructions, and the phase-3 «own instructions» text not yet
+   * merged into it (empty once it is).
+   */
+  async getBehavior(o: AssistantOwner): Promise<BehaviorDocument & { legacyInstructions: string }> {
+    const row = await this.ops.findOne<SettingsRow>(ASSISTANT_SETTINGS, ownerWhere(o));
+    return {
+      document: row?.base_instructions ?? null,
+      updatedAt: row?.base_instructions_updated_at ?? null,
+      legacyInstructions: row?.instructions?.trim() ?? '',
+    };
+  }
+
+  // Own skills (overrides and the person's own)
+
+  async listOwnSkills(o: AssistantOwner): Promise<OwnSkill[]> {
+    const rows = await this.ops.findMany<SkillRow>(ASSISTANT_SKILLS, ownerWhere(o), { orderBy: [['name', 'asc']] });
+    return rows.map(toOwnSkill);
+  }
+
+  async getOwnSkill(o: AssistantOwner, name: string): Promise<OwnSkill | null> {
+    const row = await this.ops.findOne<SkillRow>(ASSISTANT_SKILLS, { ...ownerWhere(o), name });
+    return row ? toOwnSkill(row) : null;
+  }
+
+  async putOwnSkill(
+    o: AssistantOwner,
+    input: { name: string; kind: OwnSkill['kind']; description: string; instructions: string },
+    now = new Date(),
+  ): Promise<OwnSkill> {
+    const where = { ...ownerWhere(o), name: input.name };
+    const set = { kind: input.kind, description: input.description, instructions: input.instructions, updated_at: now };
+    const updated = await this.ops.updateAtomic<SkillRow>(ASSISTANT_SKILLS, where, () => set);
+    if (updated) return toOwnSkill(updated);
+    try {
+      return toOwnSkill(await this.ops.insertOne<SkillRow>(ASSISTANT_SKILLS, { ...where, ...set, created_at: now } as Partial<SkillRow>));
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      const row = await this.ops.updateAtomic<SkillRow>(ASSISTANT_SKILLS, where, () => set);
+      if (!row) throw error;
+      return toOwnSkill(row);
+    }
+  }
+
+  async deleteOwnSkill(o: AssistantOwner, name: string): Promise<boolean> {
+    return (await this.ops.deleteMany(ASSISTANT_SKILLS, { ...ownerWhere(o), name })) > 0;
   }
 
   async getDigestState(o: AssistantOwner): Promise<DigestState> {

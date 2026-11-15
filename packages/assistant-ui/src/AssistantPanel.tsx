@@ -10,11 +10,11 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { ThreadList, ThreadListItem, ThreadListItems } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { ArrowLeft, Inbox, MessageSquareDashed, Plus, X } from 'lucide-react';
+import { ArrowLeft, Inbox, MessageSquareDashed, Plus, Settings, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { REQUEST_STATUSES, useAssistantRequests, useUpdateRequest } from './api';
+import { REQUEST_STATUSES, useAssistantApi, useAssistantRequests, useUpdateRequest } from './api';
 import type { AssistantRequest, RequestStatus } from './api';
 import { NewRequestForm } from './NewRequestForm';
 import { NotesView } from './NotesView';
@@ -100,6 +100,7 @@ export function AssistantPanel({
   onClose: () => void;
 }) {
   const { t } = useTranslation('assistant');
+  const { settingsHref } = useAssistantApi();
   const requests = useAssistantRequests();
   const update = useUpdateRequest();
   const root = useRef<HTMLDivElement>(null);
@@ -291,6 +292,11 @@ export function AssistantPanel({
               <Tab value="requests">{t('panel.requests')}</Tab>
               <Tab value="notes">{t('panel.notes')}</Tab>
             </TabList>
+            {settingsHref ? (
+              <Button size="icon-sm" variant="ghost" aria-label={t('panel.settings')} tooltip={t('panel.settings')} render={<a href={settingsHref} />}>
+                <Settings />
+              </Button>
+            ) : null}
             <Button size="icon-sm" variant="ghost" aria-label={t('launcher.close')} onClick={onClose}>
               <X />
             </Button>

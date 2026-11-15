@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { assistantInstructions } from './agent.ts';
+import { ASSISTANT_GUARD, assistantInstructions } from './instructions.ts';
 import { nextDigestAt } from './digest.ts';
 import { FactoryAccess } from './factory-access.ts';
 import type { AssistantSkills, AssistantSource, BrainTurn, SourceChannelInfo, SourceMessage } from './ports.ts';
@@ -274,27 +274,28 @@ describe('Factory actions wait for the person’s confirmation', () => {
 });
 
 describe('instructions and skills', () => {
-  it('appends the person’s instructions and the picked skills to the agent’s', async () => {
+  it('the picked skills reach the agent, after the base document and before the guard', async () => {
     await expect(service.patchSettings(ADA, { skills: ['no-such-skill'] })).rejects.toMatchObject({ code: 'unknown_skill' });
-    await expect(service.patchSettings(ADA, { instructions: 'x'.repeat(4001) })).rejects.toMatchObject({ code: 'instructions_too_long' });
-    const settings = await service.patchSettings(ADA, { instructions: '  Always answer in Ukrainian.  ', skills: ['factory-triage', 'factory-triage'] });
-    expect(settings).toMatchObject({ instructions: 'Always answer in Ukrainian.', skills: ['factory-triage'] });
+    await service.saveBehavior(ADA, 'Always answer in Ukrainian.');
+    const settings = await service.patchSettings(ADA, { skills: ['factory-triage', 'factory-triage'] });
+    expect(settings).toMatchObject({ skills: ['factory-triage'] });
 
     await requestOf(ADA, 'hi');
     const turn = brain.turns[0]!;
-    expect(turn.instructions).toBe('Always answer in Ukrainian.');
+    expect(turn.systemPrompt).toContain('Always answer in Ukrainian.');
+    expect(turn.systemPrompt).toContain('factory-triage: Sort an incoming issue.');
     expect(turn.skills).toEqual([{ name: 'factory-triage', description: 'Sort an incoming issue.' }]);
     expect(await run(turn, 'assistant_read_skill', { name: 'factory-triage' })).toEqual({ name: 'factory-triage', instructions: 'Step 1: read it.' });
     // A skill the person did not pick is not readable, even through the service.
     expect(await service.readSkill(ADA, 'product-brief')).toBeNull();
     // Bob's turn has neither.
     await requestOf(BOB, 'hi');
-    expect(brain.turns.at(-1)!.instructions).toBeUndefined();
+    expect(brain.turns.at(-1)!.systemPrompt).not.toContain('Always answer in Ukrainian.');
     expect((brain.turns.at(-1)!.tools as Record<string, unknown>).assistant_read_skill).toBeUndefined();
 
-    const text = assistantInstructions({ base: 'BASE', instructions: 'MINE', skills: [{ name: 'factory-triage', description: 'Sort.' }] });
+    const text = assistantInstructions({ base: 'BASE', skills: [{ name: 'factory-triage', description: 'Sort.' }] });
     expect(text.indexOf('BASE')).toBeLessThan(text.indexOf('factory-triage'));
-    expect(text.indexOf('factory-triage')).toBeLessThan(text.indexOf('MINE'));
+    expect(text.endsWith(ASSISTANT_GUARD)).toBe(true);
   });
 });
 
@@ -433,10 +434,12 @@ describe('routes the settings page and the thread use', () => {
     }
   });
 
-  it('GET /skills, GET/PUT /settings with instructions, skills and the digest', async () => {
-    expect(await (await send('/web/assistant/skills', 'GET', 'ada')).json()).toEqual({ skills: await SKILLS.list(ADA) });
+  it('GET /skills, GET/PUT /settings with skills and the digest', async () => {
+    expect(await (await send('/web/assistant/skills', 'GET', 'ada')).json()).toEqual({
+      skills: (await SKILLS.list(ADA)).map(skill => ({ ...skill, origin: 'factory', overridden: false, enabled: false })),
+    });
+    expect((await send('/web/assistant/settings', 'PUT', 'ada', { instructions: 'Be short.' })).status).toBe(400);
     const put = await send('/web/assistant/settings', 'PUT', 'ada', {
-      instructions: 'Be short.',
       skills: ['factory-triage'],
       digest: { frequency: 'daily', hour: 13, timeZone: 'Europe/Kyiv' },
     });
@@ -445,7 +448,6 @@ describe('routes the settings page and the thread use', () => {
       settings: {
         modelId: null,
         retentionDays: 30,
-        instructions: 'Be short.',
         skills: ['factory-triage'],
         digest: { frequency: 'daily', hour: 13, timeZone: 'Europe/Kyiv' },
       },
@@ -453,8 +455,8 @@ describe('routes the settings page and the thread use', () => {
     });
     expect((await send('/web/assistant/settings', 'PUT', 'ada', { skills: 'factory-triage' })).status).toBe(400);
     expect((await send('/web/assistant/settings', 'PUT', 'ada', { skills: ['nope'] })).status).toBe(400);
-    const bob = (await (await send('/web/assistant/settings', 'GET', 'bob')).json()) as { settings: { instructions: string } };
-    expect(bob.settings.instructions).toBe('');
+    const bob = (await (await send('/web/assistant/settings', 'GET', 'bob')).json()) as { settings: { skills: string[] } };
+    expect(bob.settings.skills).toEqual([]);
   });
 
   it('POST …/actions/:actionId/confirm and …/cancel, the caller’s own only', async () => {

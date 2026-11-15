@@ -18,6 +18,7 @@ import { AnalyticsSection } from '../../analytics/components/AnalyticsSection';
 import { DebugSection } from './DebugSection';
 import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
+import { AssistantSettingsSection } from './AssistantSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
@@ -71,6 +72,7 @@ export function SettingsPanel() {
   return (
     <>
       {section === 'account' && <AccountSettingsSection />}
+      {section === 'assistant' && <AssistantSettingsSection />}
       {section === 'organization' && <OrganizationSection />}
       {section === 'team' && <TeamSection />}
       {section === 'preferences' && <GeneralSettings />}
