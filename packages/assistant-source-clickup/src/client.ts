@@ -3,10 +3,15 @@
  * offers is recorded in `docs/features/assistant/clickup-chat.md`; in short:
  *
  * - v2 `GET /user` (who the token is) and `GET /team` (workspaces with their members);
- * - v3 `GET /workspaces/{ws}/chat/channels` (channels, DMs and group DMs as one list, by type;
- *   `is_follower=true` for the ones in the person's sidebar), `…/channels/{id}/members` (who is in
- *   a DM: its only names), `…/channels/{id}/messages` and `…/messages/{id}/replies` (newest first, cursor-paged, no
- *   "since" filter), `…/messages/{id}/tagged_users` (mentions);
+ * - v3 `GET /workspaces/{ws}/chat/channels` (channels, DMs and group DMs as one list, by `type`;
+ *   `is_follower=true` is a *filter* — "only return Channels the user is following" — not a field of
+ *   the channel, and ClickUp silently ignores query parameters it does not know, so the filter is
+ *   sent only when wanted), `…/channels/{id}/members` and `…/channels/{id}/followers`
+ *   (`ChatSimpleUser` `{ id, email, name?, username?, initials? }`, cursor-paged — a DM's only
+ *   names), `…/channels/{id}/messages` and `…/messages/{id}/replies` (newest first, cursor-paged),
+ *   `…/messages/{id}/tagged_users` (mentions);
+ * - a DM's `name` is not a person's name (live data shows the literal "DM"): its people come from
+ *   `…/members`, named from the workspace members of v2 `/team` when a member comes back bare;
  * - no chat webhooks, no attachment field on chat messages.
  *
  * Every call counts against a budget the caller gives, so one poll cannot spend the person's
@@ -16,14 +21,23 @@
 export const CLICKUP_API_ORIGIN = 'https://api.clickup.com';
 
 export class ClickUpChatError extends Error {
+  /** The HTTP status; `0` when ClickUp was not reached at all (a network error). */
   readonly status: number;
   /** When ClickUp said the rate limit resets (from `X-RateLimit-Reset`), on a 429. */
   readonly retryAt: Date | null;
-  constructor(message: string, status: number, retryAt: Date | null = null) {
+  /** The network error's cause (`err.cause.code`, e.g. `ECONNRESET`), for status 0; ClickUp's `ECODE` otherwise. */
+  readonly code: string | null;
+  constructor(message: string, status: number, retryAt: Date | null = null, code: string | null = null) {
     super(message);
     this.name = 'ClickUpChatError';
     this.status = status;
     this.retryAt = retryAt;
+    this.code = code;
+  }
+
+  /** What the settings show as the code: the HTTP status, or the network cause. */
+  get shortCode(): string {
+    return this.status === 0 ? (this.code ?? 'network') : String(this.status);
   }
 
   /** The token is wrong or was revoked: polling stops until the person connects again. */
@@ -66,10 +80,11 @@ export function locationKindOf(parentType: number | null): ChannelLocationKind |
   return parentType === 4 ? 'space' : parentType === 5 ? 'folder' : parentType === 6 ? 'list' : null;
 }
 
-/** A person in a channel (`ChatSimpleUser`). */
+/** A person in a channel (`ChatSimpleUser`); `name` is empty when ClickUp gave none. */
 export interface ChatMember {
   id: string;
   name: string;
+  email?: string;
 }
 
 export type ChatChannelType = 'CHANNEL' | 'DM' | 'GROUP_DM';
@@ -104,12 +119,142 @@ export interface Page<T> {
   nextCursor: string | null;
 }
 
+/**
+ * One ClickUp call as diagnostics see it: the shape of the answer, never its content — no names, no
+ * message text, no ids in the path, never the token. Logged and kept for
+ * `GET /web/assistant/sources/clickup/diagnostics`.
+ */
+export interface ClickUpCallTrace {
+  /** What was asked, e.g. `v3.chat.channels`, `v3.chat.channels?is_follower`, `v3.chat.members`, `v2.list`. */
+  endpoint: string;
+  /** HTTP status; `0` when ClickUp was not reached. */
+  status: number;
+  /** Tries (a network error or a 5xx is tried again with backoff). */
+  attempts: number;
+  ms: number;
+  /** The network error's cause code when ClickUp was not reached; ClickUp's `ECODE` on an error answer. */
+  errorCode?: string;
+  /** Items in the answer's list (`data`, `teams`). */
+  count?: number;
+  /** Whether the answer gave a cursor for a next page. */
+  nextCursor?: boolean;
+  /** The answer's top-level keys. */
+  keys?: string[];
+  /** Every key seen on the list's items (first 100). */
+  itemKeys?: string[];
+  /** What the list's items are (`object`, `string`, `number`): a members list of bare ids shows here. */
+  itemKinds?: string[];
+  /** Values of enum-like fields only (`type`, `visibility`, `parent.type`, `is_hidden` …) and URL templates of `links.*`. */
+  enums?: Record<string, string[]>;
+}
+
 export interface ClickUpChatClientOptions {
   token: string;
   origin?: string;
   fetch?: typeof globalThis.fetch;
   /** How many calls this client may make; unlimited when absent. */
   budget?: number;
+  /** Told about every call (its shape, never its content). */
+  observe?: (trace: ClickUpCallTrace) => void;
+  /** Tries after the first one on a network error or a 5xx (default 2), with doubling backoff. */
+  retries?: number;
+  /** The first backoff (default 500 ms). */
+  retryDelayMs?: number;
+  /** Waits between tries; tests give an instant one. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** Fields whose values are enums (or booleans), safe to show in diagnostics. No other field's value is ever kept. */
+const ENUM_FIELDS = [
+  'type',
+  'visibility',
+  'archived',
+  'is_hidden',
+  'is_canonical_channel',
+  'channel_type',
+  'chat_room_category',
+  'parent.type',
+  'default_view.type',
+  'folder.hidden',
+  'resolved',
+] as const;
+
+/** A link with its ids taken out: `https://api.clickup.com/api/v3/workspaces/{id}/chat/channels/{id}/members`. */
+export function urlTemplate(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value, 'https://api.clickup.com');
+  } catch {
+    return '(not a url)';
+  }
+  const segments = url.pathname.split('/');
+  const path = segments
+    .map((segment, index) => {
+      if (/^v\d$/.test(segment)) return segment;
+      const before = segments[index - 1] ?? '';
+      const named = /^(workspaces|channels|messages|team|space|folder|list|task|user)$/.test(before);
+      return named || /\d/.test(segment) || segment.length > 24 ? '{id}' : segment;
+    })
+    .join('/');
+  return `${/^https?:/i.test(value) ? `${url.protocol}//${url.host}` : ''}${path}`;
+}
+
+function pathValue(row: Record<string, unknown>, path: string): unknown {
+  let value: unknown = row;
+  for (const key of path.split('.')) value = record(value)[key];
+  return value;
+}
+
+export type ClickUpShape = Omit<ClickUpCallTrace, 'endpoint' | 'status' | 'attempts' | 'ms' | 'errorCode'>;
+
+/** The shape of an answer: keys, counts, enum values — never a name, a text or an id. */
+export function shapeOf(body: Record<string, unknown>): ClickUpShape {
+  const listKey = Array.isArray(body.data) ? 'data' : Array.isArray(body.teams) ? 'teams' : null;
+  const out: ClickUpShape = { keys: Object.keys(body).sort() };
+  if ('next_cursor' in body) out.nextCursor = Boolean(str(body.next_cursor));
+  const enums = new Map<string, Set<string>>();
+  const add = (field: string, value: unknown) => {
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return;
+    const text = String(value);
+    if (text.length > 120) return;
+    const set = enums.get(field) ?? new Set<string>();
+    if (set.size < 12) set.add(text);
+    enums.set(field, set);
+  };
+  const scan = (row: Record<string, unknown>) => {
+    for (const field of ENUM_FIELDS) add(field, pathValue(row, field));
+    for (const [name, link] of Object.entries(record(row.links))) if (typeof link === 'string') add(`links.${name}`, urlTemplate(link));
+  };
+  if (listKey) {
+    const list = body[listKey] as unknown[];
+    out.count = list.length;
+    const itemKeys = new Set<string>();
+    const kinds = new Set<string>();
+    for (const item of list.slice(0, 100)) {
+      kinds.add(item === null ? 'null' : Array.isArray(item) ? 'array' : typeof item);
+      const row = record(item);
+      for (const key of Object.keys(row)) itemKeys.add(key);
+      scan(row);
+      // v2 /team: what a workspace member looks like (keys of `members[].user` only) and how many.
+      if (listKey === 'teams') {
+        const members = array(row.members);
+        for (const member of members) for (const key of Object.keys(record(record(member).user))) itemKeys.add(`members[].user.${key}`);
+        add('members.count', members.length);
+      }
+    }
+    out.itemKeys = [...itemKeys].sort();
+    out.itemKinds = [...kinds].sort();
+  } else {
+    scan(body);
+  }
+  if (enums.size) out.enums = Object.fromEntries([...enums].sort(([a], [b]) => a.localeCompare(b)).map(([key, set]) => [key, [...set].sort()]));
+  return out;
+}
+
+/** The cause of a `fetch failed`: Node's undici puts the system code on `err.cause.code`. */
+export function networkCause(error: unknown): string {
+  const cause = record(record(error).cause);
+  return (str(cause.code) || str(cause.name) || (error instanceof Error ? error.name : '') || 'unknown').slice(0, 40);
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -164,6 +309,24 @@ function locationOf(parent: Record<string, unknown>): ChatChannel['location'] {
   return id && kind ? { kind, id } : null;
 }
 
+/**
+ * A channel member as `…/members` / `…/followers` return it: documented as a flat `ChatSimpleUser`
+ * (`id`, `email` required; `name`, `username` optional). Also taken: a bare id, and `{ user: {…} }`
+ * as v2 nests users — so a different live shape shows up as members, not as an empty list.
+ */
+export function toMember(raw: unknown): ChatMember | null {
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const id = str(raw);
+    return id ? { id, name: '' } : null;
+  }
+  const row = record(raw);
+  const user = row.user && typeof row.user === 'object' ? record(row.user) : row;
+  const id = str(user.id) || str(row.user_id) || str(row.id);
+  if (!id) return null;
+  const email = str(user.email);
+  return { id, name: str(user.name) || str(user.username), ...(email ? { email } : {}) };
+}
+
 function toMessage(raw: unknown, channelId: string): ChatMessage | null {
   const row = record(raw);
   const id = str(row.id);
@@ -185,12 +348,20 @@ export class ClickUpChatClient {
   readonly #fetch: typeof globalThis.fetch;
   #budget: number;
   #calls = 0;
+  readonly #observe: ((trace: ClickUpCallTrace) => void) | undefined;
+  readonly #retries: number;
+  readonly #retryDelayMs: number;
+  readonly #sleep: (ms: number) => Promise<void>;
 
   constructor(options: ClickUpChatClientOptions) {
     this.#token = options.token.trim();
     this.#origin = (options.origin ?? CLICKUP_API_ORIGIN).replace(/\/+$/, '');
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.#budget = options.budget ?? Number.POSITIVE_INFINITY;
+    this.#observe = options.observe;
+    this.#retries = Math.max(0, options.retries ?? 2);
+    this.#retryDelayMs = options.retryDelayMs ?? 500;
+    this.#sleep = options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
   }
 
   /** Calls made so far. */
@@ -205,7 +376,7 @@ export class ClickUpChatClient {
 
   /** v2: the account the token belongs to. */
   async me(): Promise<ClickUpMe> {
-    const user = record((await this.#get('/api/v2/user')).user);
+    const user = record((await this.#get('/api/v2/user', 'v2.user')).user);
     const id = str(user.id);
     if (!id) throw new ClickUpChatError('ClickUp did not say whose token this is.', 502);
     return { id, username: str(user.username), email: str(user.email) };
@@ -213,7 +384,7 @@ export class ClickUpChatClient {
 
   /** v2: the workspaces ("teams") the token reaches, with their members' names. */
   async workspaces(): Promise<ClickUpWorkspaceInfo[]> {
-    const body = await this.#get('/api/v2/team');
+    const body = await this.#get('/api/v2/team', 'v2.team');
     return array(body.teams).flatMap(raw => {
       const team = record(raw);
       const id = str(team.id);
@@ -240,25 +411,52 @@ export class ClickUpChatClient {
     workspaceId: string,
     input: { cursor?: string | null; limit?: number; following?: boolean } = {},
   ): Promise<Page<ChatChannel>> {
-    const query = new URLSearchParams({ limit: String(input.limit ?? 100), is_follower: input.following ? 'true' : 'false' });
+    // `is_follower` is a filter (default false = every channel); sent only to ask for the followed ones.
+    const query = new URLSearchParams({ limit: String(input.limit ?? 100) });
+    if (input.following) query.set('is_follower', 'true');
     if (input.cursor) query.set('cursor', input.cursor);
-    const body = await this.#get(`/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/channels?${query}`);
+    const body = await this.#get(
+      `/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/channels?${query}`,
+      input.following ? 'v3.chat.channels?is_follower' : 'v3.chat.channels',
+    );
     return {
       items: array(body.data).flatMap(raw => toChannel(raw, workspaceId) ?? []),
       nextCursor: str(body.next_cursor) || null,
     };
   }
 
-  /** v3: the people in a channel (for a DM, the only way to its names); the first page. */
-  async channelMembers(workspaceId: string, channelId: string): Promise<ChatMember[]> {
-    const body = await this.#get(
-      `/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/channels/${encodeURIComponent(channelId)}/members?limit=100`,
-    );
-    return array(body.data).flatMap(raw => {
-      const user = record(raw);
-      const id = str(user.id);
-      return id ? [{ id, name: str(user.name) || str(user.username) || str(user.email) || id }] : [];
-    });
+  /**
+   * v3: the people in a channel (for a DM, the only way to its names), up to `pages` pages. A member
+   * may come back without a name (only `id` and `email` are required): `name` is then empty and the
+   * caller names them from the workspace members.
+   */
+  async channelMembers(workspaceId: string, channelId: string, pages = 3): Promise<ChatMember[]> {
+    return this.#people(workspaceId, channelId, 'members', pages);
+  }
+
+  /** v3: who follows a channel (`…/followers`): the person among them means it is in their sidebar. */
+  async channelFollowers(workspaceId: string, channelId: string, pages = 3): Promise<ChatMember[]> {
+    return this.#people(workspaceId, channelId, 'followers', pages);
+  }
+
+  async #people(workspaceId: string, channelId: string, what: 'members' | 'followers', pages: number): Promise<ChatMember[]> {
+    const out: ChatMember[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < pages; page += 1) {
+      const query = new URLSearchParams({ limit: '100' });
+      if (cursor) query.set('cursor', cursor);
+      const body = await this.#get(
+        `/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/channels/${encodeURIComponent(channelId)}/${what}?${query}`,
+        `v3.chat.${what}`,
+      );
+      for (const raw of array(body.data)) {
+        const member = toMember(raw);
+        if (member && !out.some(known => known.id === member.id)) out.push(member);
+      }
+      cursor = str(body.next_cursor) || null;
+      if (!cursor) break;
+    }
+    return out;
   }
 
   /**
@@ -267,7 +465,7 @@ export class ClickUpChatClient {
    */
   async locationPath(kind: ChannelLocationKind, id: string): Promise<string[]> {
     const path = `/api/v2/${kind}/${encodeURIComponent(id)}`;
-    const body = await this.#get(path);
+    const body = await this.#get(path, `v2.${kind}`);
     const name = str(body.name);
     if (kind === 'space') return [name].filter(Boolean);
     const space = str(record(body.space).name);
@@ -287,6 +485,7 @@ export class ClickUpChatClient {
     if (input.cursor) query.set('cursor', input.cursor);
     const body = await this.#get(
       `/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/channels/${encodeURIComponent(channelId)}/messages?${query}`,
+      'v3.chat.messages',
     );
     return {
       items: array(body.data).flatMap(raw => toMessage(raw, channelId) ?? []),
@@ -305,6 +504,7 @@ export class ClickUpChatClient {
     if (input.cursor) query.set('cursor', input.cursor);
     const body = await this.#get(
       `/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/messages/${encodeURIComponent(messageId)}/replies?${query}`,
+      'v3.chat.replies',
     );
     return {
       items: array(body.data).flatMap(raw => {
@@ -319,6 +519,7 @@ export class ClickUpChatClient {
   async taggedUsers(workspaceId: string, messageId: string): Promise<string[]> {
     const body = await this.#get(
       `/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/messages/${encodeURIComponent(messageId)}/tagged_users?limit=100`,
+      'v3.chat.tagged_users',
     );
     return array(body.data).flatMap(raw => {
       const id = str(record(raw).id);
@@ -333,7 +534,9 @@ export class ClickUpChatClient {
   async download(url: string, maxBytes: number): Promise<{ bytes: Uint8Array; mime: string | null }> {
     if (!isClickUpFileUrl(url)) throw new ClickUpChatError('Refusing to download a file that is not on ClickUp.', 400);
     this.#spend();
-    const response = await this.#fetch(url, { headers: { Authorization: this.#token } });
+    const started = Date.now();
+    const { response, attempts } = await this.#send(url, { Authorization: this.#token }, 'file', started);
+    this.#observe?.({ endpoint: 'file', status: response.status, attempts, ms: Date.now() - started });
     if (!response.ok) throw new ClickUpChatError(`ClickUp file download failed with ${response.status}.`, response.status);
     const declared = Number(response.headers.get('content-length'));
     if (Number.isFinite(declared) && declared > maxBytes) throw new ClickUpChatError('The file is larger than the limit.', 413);
@@ -347,29 +550,72 @@ export class ClickUpChatClient {
     this.#calls += 1;
   }
 
-  async #get(path: string): Promise<Record<string, unknown>> {
+  /**
+   * One request, tried again on a network error (`fetch failed`) or a 5xx with doubling backoff. A
+   * network error that outlasts the tries becomes a `ClickUpChatError` with status 0 and the
+   * cause's code, so the settings say what went wrong instead of «fetch failed».
+   */
+  async #send(
+    url: string,
+    headers: Record<string, string>,
+    endpoint: string,
+    started: number,
+  ): Promise<{ response: Response; attempts: number }> {
+    for (let attempt = 1; ; attempt += 1) {
+      let response: Response;
+      try {
+        response = await this.#fetch(url, { headers });
+      } catch (error) {
+        if (attempt <= this.#retries) {
+          await this.#sleep(this.#retryDelayMs * 2 ** (attempt - 1));
+          continue;
+        }
+        const code = networkCause(error);
+        this.#observe?.({ endpoint, status: 0, attempts: attempt, ms: Date.now() - started, errorCode: code });
+        throw new ClickUpChatError(`ClickUp could not be reached (${code}) after ${attempt} tries.`, 0, null, code);
+      }
+      if (response.status >= 500 && attempt <= this.#retries) {
+        await response.body?.cancel().catch(() => undefined);
+        await this.#sleep(this.#retryDelayMs * 2 ** (attempt - 1));
+        continue;
+      }
+      return { response, attempts: attempt };
+    }
+  }
+
+  async #get(path: string, endpoint: string): Promise<Record<string, unknown>> {
     this.#spend();
-    const response = await this.#fetch(`${this.#origin}${path}`, {
-      headers: { Authorization: this.#token, Accept: 'application/json' },
-    });
+    const started = Date.now();
+    const { response, attempts } = await this.#send(
+      `${this.#origin}${path}`,
+      { Authorization: this.#token, Accept: 'application/json' },
+      endpoint,
+      started,
+    );
     if (!response.ok) {
       const reset = Number(response.headers.get('x-ratelimit-reset'));
       const retryAt = response.status === 429 && Number.isFinite(reset) && reset > 0 ? new Date(reset * 1000) : null;
       // ClickUp's error body names the problem (`{ err, ECODE }` in v2, `{ message }` in v3); never the token.
       let detail = '';
+      let ecode = '';
       try {
         const body = record(await response.json());
         detail = str(body.err) || str(body.message);
+        ecode = str(body.ECODE).slice(0, 40);
       } catch {
         // No JSON body.
       }
+      this.#observe?.({ endpoint, status: response.status, attempts, ms: Date.now() - started, ...(ecode ? { errorCode: ecode } : {}) });
       throw new ClickUpChatError(
         `ClickUp answered ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}.`,
         response.status,
         retryAt,
+        ecode || null,
       );
     }
-    return record(await response.json());
+    const body = record(await response.json());
+    this.#observe?.({ endpoint, status: response.status, attempts, ms: Date.now() - started, ...shapeOf(body) });
+    return body;
   }
 }
 

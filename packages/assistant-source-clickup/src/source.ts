@@ -17,11 +17,18 @@ import type {
   SourceMessage,
 } from '@factory/assistant-core';
 
-import type { ChannelLocationKind, ChatChannel, ChatMessage, ClickUpChatClientOptions, ClickUpWorkspaceInfo } from './client.ts';
+import type {
+  ChannelLocationKind,
+  ChatChannel,
+  ChatMessage,
+  ClickUpCallTrace,
+  ClickUpChatClientOptions,
+  ClickUpWorkspaceInfo,
+} from './client.ts';
 import { channelUrl, ClickUpBudgetSpent, ClickUpChatClient, ClickUpChatError, fileLinks, isPersonalToken } from './client.ts';
 import type { OrgClickUpReader } from './org-connection.ts';
 import { orgConnectionFor } from './org-connection.ts';
-import type { ChannelKind, ChannelMember, ClickUpSourceStorage, SourceChannel, SourceConnection } from './storage.ts';
+import type { ChannelKind, ChannelMember, ClickUpSourceStorage, DetailsWhat, SourceChannel, SourceConnection } from './storage.ts';
 import { PLATFORM } from './storage.ts';
 
 const MINUTE = 60_000;
@@ -47,8 +54,14 @@ export interface ClickUpPollLimits {
   followThreadsMs: number;
   /** ClickUp calls one on-demand read by the agent's tool may make. */
   callsPerRead: number;
-  /** DMs' people and location channels' paths looked up per channel listing (one call each). */
+  /**
+   * Channels described per poll: a DM's people (`…/members`), a channel's followers (is the person
+   * one: their sidebar) and a location channel's path. Rows never described, or whose lookup failed
+   * a while ago, go first.
+   */
   detailsPerListing: number;
+  /** A failed lookup is tried again after this long (a good one after a day). */
+  detailsRetryMs: number;
 }
 
 export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
@@ -62,6 +75,7 @@ export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
   followThreadsMs: 14 * DAY,
   callsPerRead: 3,
   detailsPerListing: 15,
+  detailsRetryMs: 10 * MINUTE,
 };
 
 /** What the source needs from the core: taking messages in, and which threads have open requests. */
@@ -109,12 +123,54 @@ export function channelDisplayName(channel: Pick<SourceChannel, 'kind' | 'name' 
   return channel.name;
 }
 
+/**
+ * In the person's ClickUp sidebar: a channel they follow — by the `is_follower=true` filter of the
+ * listing, or found among the channel's `…/followers` — and a DM they did not hide.
+ */
+export function inSidebarOf(channel: Pick<SourceChannel, 'kind' | 'following' | 'follower' | 'hidden'>): boolean {
+  return channel.kind === 'channel' ? channel.following || channel.follower === true : !channel.hidden;
+}
+
+function ownerKey(owner: AssistantOwner): string {
+  return `${owner.orgId}\u0000${owner.userId}`;
+}
+
+/** Member names by user id across the person's workspaces (from v2 `/team`). */
+function namesOf(workspaces: ClickUpWorkspaceInfo[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const workspace of workspaces) for (const [id, name] of workspace.members) names.set(id, name);
+  return names;
+}
+
 function kindOf(channel: ChatChannel): ChannelKind {
   return channel.type === 'DM' ? 'dm' : channel.type === 'GROUP_DM' ? 'group_dm' : 'channel';
 }
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** The code a failed lookup shows: the HTTP status or the network cause, never a message. */
+function errorCode(error: unknown): string {
+  if (error instanceof ClickUpChatError) return error.shortCode;
+  return (error instanceof Error ? error.name : 'error').slice(0, 40);
+}
+
+/** Calls kept per read for the diagnostics. */
+const DIAGNOSTIC_CALLS = 300;
+
+/**
+ * The last ClickUp read of one person, redacted to its shape (`GET …/clickup/diagnostics`): per
+ * call the endpoint (no ids), status, counts, keys and enum values; no names, no message text, no
+ * token.
+ */
+export interface ClickUpDiagnostics {
+  /** When the read started. */
+  at: string;
+  trigger: 'connect' | 'poll' | 'read';
+  calls: ClickUpCallTrace[];
+  /** Calls left out past the first `DIAGNOSTIC_CALLS`. */
+  droppedCalls: number;
 }
 
 export interface PollResult {
@@ -153,6 +209,8 @@ export interface ConnectionView {
     location: { kind: ChannelLocationKind; path: string[] } | null;
     /** A DM's or group DM's other people (empty until looked up). */
     members: ChannelMember[];
+    /** Why the last lookup of its people / path / followers failed (`code`: HTTP status, network cause, `empty`). */
+    detailsError: { what: DetailsWhat; code: string } | null;
     mode: ChannelMode;
     /** `analyse`, `analyse_and_ask:<factoryId>` or `digest_only`. */
     rule: string;
@@ -194,6 +252,8 @@ export class ClickUpChatSource implements AssistantSource {
   readonly #turns = new TurnLimiter();
   /** One poll per person at a time. */
   readonly #polling = new Map<string, Promise<PollResult>>();
+  /** The last read of each person, as shapes only (in memory: diagnostics, not history). */
+  readonly #diagnostics = new Map<string, ClickUpDiagnostics>();
 
   constructor(deps: ClickUpSourceDeps) {
     this.#deps = deps;
@@ -201,9 +261,72 @@ export class ClickUpChatSource implements AssistantSource {
     this.limits = { ...DEFAULT_POLL_LIMITS, ...deps.limits };
   }
 
-  #client(token: string, budget?: number): ClickUpChatClient {
-    const options: ClickUpChatClientOptions = { token, ...(budget !== undefined ? { budget } : {}) };
+  /**
+   * A client for one read. Every call it makes is logged as one structured line and kept as the
+   * person's last read for the diagnostics — shapes only: endpoint, status, counts, keys, enums.
+   */
+  #client(owner: AssistantOwner, trigger: ClickUpDiagnostics['trigger'], token: string, budget?: number): ClickUpChatClient {
+    const record: ClickUpDiagnostics = { at: this.#now().toISOString(), trigger, calls: [], droppedCalls: 0 };
+    this.#diagnostics.set(ownerKey(owner), record);
+    const observe = (trace: ClickUpCallTrace) => {
+      if (record.calls.length < DIAGNOSTIC_CALLS) record.calls.push(trace);
+      else record.droppedCalls += 1;
+      // Logged: the list, members/followers, location and workspace calls, and every failure; the
+      // message reads only into the diagnostics (they would flood the log every poll).
+      if (trace.status !== 200 || !/^v3\.chat\.(messages|replies|tagged_users)$|^file$/.test(trace.endpoint)) {
+        console.info(`[assistant] clickup.call ${JSON.stringify({ org: owner.orgId, user: owner.userId, trigger, ...trace })}`);
+      }
+    };
+    const options: ClickUpChatClientOptions = { token, observe, ...(budget !== undefined ? { budget } : {}) };
     return this.#deps.client ? this.#deps.client(options) : new ClickUpChatClient(options);
+  }
+
+  /**
+   * The person's last ClickUp read and what the stored channel list adds up to, without content:
+   * counts by kind, how many are in the sidebar (by the `is_follower` filter, by `…/followers`),
+   * how many DMs have their people, and the lookup failures by code.
+   */
+  async diagnostics(owner: AssistantOwner) {
+    await this.#ready();
+    const connection = await this.#deps.storage.getConnection(owner);
+    if (!connection) throw new AssistantError('not_connected', 'Connect ClickUp first.', 409);
+    const channels = (await this.#deps.storage.listChannels(owner)).filter(channel => !channel.gone);
+    const count = (test: (channel: SourceChannel) => boolean) => channels.filter(test).length;
+    const failures: Record<string, number> = {};
+    for (const channel of channels) {
+      if (!channel.detailsError) continue;
+      const key = `${channel.detailsError.what}:${channel.detailsError.code}`;
+      failures[key] = (failures[key] ?? 0) + 1;
+    }
+    const dms = (channel: SourceChannel) => channel.kind !== 'channel';
+    return {
+      connection: {
+        status: connection.status,
+        lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
+        failures: connection.failures,
+        channelsListedAt: connection.channelsListedAt?.toISOString() ?? null,
+        nextPollAt: connection.nextPollAt?.toISOString() ?? null,
+        hasError: connection.lastError !== null,
+      },
+      channels: {
+        total: channels.length,
+        byKind: { channel: count(c => c.kind === 'channel'), dm: count(c => c.kind === 'dm'), group_dm: count(c => c.kind === 'group_dm') },
+        listedWithSidebarFacts: count(c => c.factsKnown),
+        followingByFilter: count(c => c.kind === 'channel' && c.following),
+        followerByEndpoint: count(c => c.kind === 'channel' && c.follower === true),
+        followersLookedUp: count(c => c.kind === 'channel' && c.follower !== null),
+        inSidebar: count(c => inSidebarOf(c)),
+        hiddenDms: count(c => dms(c) && c.hidden),
+        dmsWithPeople: count(c => dms(c) && (c.members?.length ?? 0) > 0),
+        dmsWithoutPeople: count(c => dms(c) && (c.members?.length ?? 0) === 0),
+        dmsWithUnnamedPeople: count(c => dms(c) && (c.members ?? []).some(member => !member.name || member.name === member.id)),
+        locationChannels: count(c => c.location !== null),
+        locationsWithPath: count(c => (c.location?.path?.length ?? 0) > 0),
+        neverDescribed: count(c => c.detailsAt === null),
+        lookupFailures: failures,
+      },
+      lastRead: this.#diagnostics.get(ownerKey(owner)) ?? null,
+    };
   }
 
   async #ready() {
@@ -227,7 +350,7 @@ export class ClickUpChatSource implements AssistantSource {
         400,
       );
     }
-    const client = this.#client(token);
+    const client = this.#client(owner, 'connect', token);
     let me;
     try {
       me = await client.me();
@@ -272,7 +395,7 @@ export class ClickUpChatSource implements AssistantSource {
       this.#now(),
     );
     try {
-      await this.#listChannels(owner, this.#client(token));
+      await this.#listChannels(owner, this.#client(owner, 'connect', token));
     } catch (error) {
       await this.#deps.storage.patchConnection(owner, { lastError: errorText(error) }, this.#now());
     }
@@ -349,10 +472,11 @@ export class ClickUpChatSource implements AssistantSource {
         name: displayName,
         kind: channel.kind,
         // In the person's ClickUp sidebar: a channel they follow, a DM they did not hide.
-        inSidebar: channel.kind === 'channel' ? channel.following : !channel.hidden,
+        inSidebar: inSidebarOf(channel),
         visibility: channel.visibility,
         location: channel.location ? { kind: channel.location.kind, path: channel.location.path ?? [] } : null,
         members: channel.members ?? [],
+        detailsError: channel.detailsError,
         mode: channel.mode,
         rule: formatChannelRule(channel.rule),
         lastSyncAt: channel.lastSyncAt?.toISOString() ?? null,
@@ -418,10 +542,10 @@ export class ClickUpChatSource implements AssistantSource {
     // The person's own token, or the organization's while it is still provably theirs — as polling.
     const access = await this.#token(owner, connection);
     if (!access) throw new AssistantError('not_connected', ORG_CONNECTION_GONE, 409);
-    const client = this.#client(access.token, this.limits.callsPerRead);
+    const client = this.#client(owner, 'read', access.token, this.limits.callsPerRead);
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 30);
     try {
-      const members = await this.#members(client);
+      const members = namesOf(await client.workspaces());
       const page = input.threadId
         ? await client.replies(channel.workspaceId, channel.channelId, input.threadId, { limit })
         : await client.messages(channel.workspaceId, channel.channelId, { limit });
@@ -497,10 +621,18 @@ export class ClickUpChatSource implements AssistantSource {
         result.error = ORG_CONNECTION_GONE;
         return result;
       }
-      client = this.#client(access.token, this.limits.callsPerPoll);
+      client = this.#client(owner, 'poll', access.token, this.limits.callsPerPoll);
       const listedAt = connection.channelsListedAt?.getTime() ?? 0;
-      if (started.getTime() - listedAt >= this.limits.channelsRefreshMs) await this.#listChannels(owner, client);
-      const members = await this.#members(client);
+      const workspaces = await client.workspaces();
+      // Rows listed before the sidebar facts were kept (`following` never stored) are listed again now.
+      const unlisted = (await storage.listChannels(owner)).some(channel => !channel.gone && !channel.factsKnown);
+      if (unlisted || started.getTime() - listedAt >= this.limits.channelsRefreshMs) {
+        await this.#listChannels(owner, client, workspaces);
+      } else {
+        // What a listing could not describe (budget, a failure) is looked up on the next polls.
+        await this.#lookUpDetails(owner, client, workspaces);
+      }
+      const members = namesOf(workspaces);
       const channels = (await storage.listChannels(owner))
         .filter(channel => channel.mode !== 'ignore' && !channel.gone)
         .sort((a, b) => (a.lastSyncAt?.getTime() ?? 0) - (b.lastSyncAt?.getTime() ?? 0))
@@ -557,7 +689,7 @@ export class ClickUpChatSource implements AssistantSource {
         { lastError: result.error, failures, nextPollAt: new Date(Math.max(this.#now().getTime() + backoff, retryAt)) },
         this.#now(),
       );
-      // Loud, without content: who and why.
+      // Loud, without content: who and why (a network error names its cause code).
       console.error(`[assistant] ClickUp poll of ${owner.orgId}/${owner.userId} failed (${failures} in a row):`, result.error);
       return result;
     }
@@ -569,9 +701,9 @@ export class ClickUpChatSource implements AssistantSource {
    * does not name: a DM's people (`…/members`) and a location channel's Space › Folder › List.
    * What is looked up is kept and looked up again after a day.
    */
-  async #listChannels(owner: AssistantOwner, client: ClickUpChatClient): Promise<void> {
+  async #listChannels(owner: AssistantOwner, client: ClickUpChatClient, known?: ClickUpWorkspaceInfo[]): Promise<void> {
     const listed: Parameters<ClickUpSourceStorage['syncChannels']>[1] = [];
-    const workspaces = await client.workspaces();
+    const workspaces = known ?? (await client.workspaces());
     for (const workspace of workspaces) {
       const following = new Set<string>();
       let cursor: string | null = null;
@@ -608,45 +740,85 @@ export class ClickUpChatSource implements AssistantSource {
     await this.#lookUpDetails(owner, client, workspaces);
   }
 
-  /** DM people and location paths the channel list does not give, a bounded number per listing. */
+  /**
+   * What the channel list does not give, a bounded number of channels per poll: a DM's people
+   * (`…/members`, named from the workspace members when ClickUp sends them bare), whether the person
+   * follows a channel (`…/followers`) and a location channel's Space › Folder › List. A lookup that
+   * fails keeps its code on the row (the settings show it) and is tried again after `detailsRetryMs`.
+   */
   async #lookUpDetails(owner: AssistantOwner, client: ClickUpChatClient, workspaces: ClickUpWorkspaceInfo[]): Promise<void> {
     const { storage } = this.#deps;
     const connection = await storage.getConnection(owner);
     if (!connection) return;
-    const stale = this.#now().getTime() - DAY;
-    const wanted = (await storage.listChannels(owner)).filter(
-      channel =>
-        !channel.gone &&
-        (channel.kind !== 'channel' || channel.location) &&
-        (!channel.detailsAt || channel.detailsAt.getTime() < stale),
+    const now = this.#now().getTime();
+    const due = (channel: SourceChannel) =>
+      !channel.detailsAt ||
+      channel.detailsAt.getTime() < now - DAY ||
+      (channel.detailsError !== null && channel.detailsAt.getTime() <= now - this.limits.detailsRetryMs);
+    const wanted = (await storage.listChannels(owner)).filter(channel => !channel.gone && due(channel));
+    // Never described first, then the person's sidebar: those are the rows they look for.
+    wanted.sort(
+      (a, b) =>
+        Number(a.detailsAt !== null) - Number(b.detailsAt !== null) ||
+        Number(inSidebarOf(b)) - Number(inSidebarOf(a)),
     );
-    // The person's sidebar first: those are the rows they look for.
-    wanted.sort((a, b) => Number(b.following || !b.hidden) - Number(a.following || !a.hidden));
+    const names = namesOf(workspaces);
     const avatars = new Map<string, string>(workspaces.flatMap(workspace => [...workspace.avatars]));
     const paths = new Map<string, string[]>();
     let spent = 0;
     for (const channel of wanted) {
       if (spent >= this.limits.detailsPerListing || client.remaining <= 1) break;
       spent += 1;
+      const found: Parameters<ClickUpSourceStorage['setDetails']>[3] = {};
+      let error: { what: DetailsWhat; code: string } | null = null;
+      const attempt = async (what: DetailsWhat, run: () => Promise<void>) => {
+        try {
+          await run();
+        } catch (failure) {
+          if (failure instanceof ClickUpBudgetSpent) throw failure;
+          if (failure instanceof ClickUpChatError && (failure.status === 401 || failure.status === 429)) throw failure;
+          error ??= { what, code: errorCode(failure) };
+          console.warn(`[assistant] clickup.details ${JSON.stringify({ org: owner.orgId, user: owner.userId, what, kind: channel.kind, code: errorCode(failure) })}`);
+        }
+      };
       try {
         if (channel.kind !== 'channel') {
-          const members = (await client.channelMembers(channel.workspaceId, channel.channelId))
-            .filter(member => member.id !== connection.accountId)
-            .map(member => ({ id: member.id, name: member.name, avatarUrl: avatars.get(member.id) ?? null }));
-          await storage.setDetails(owner, channel.workspaceId, channel.channelId, { members }, this.#now());
-        } else if (channel.location) {
-          const key = `${channel.location.kind}:${channel.location.id}`;
-          const path = paths.get(key) ?? (await client.locationPath(channel.location.kind, channel.location.id));
-          paths.set(key, path);
-          await storage.setDetails(owner, channel.workspaceId, channel.channelId, { path }, this.#now());
+          await attempt('members', async () => {
+            const people = await client.channelMembers(channel.workspaceId, channel.channelId);
+            const others = people.filter(member => member.id !== connection.accountId);
+            const members = others.map(member => ({
+              id: member.id,
+              name: member.name || names.get(member.id) || member.email || member.id,
+              avatarUrl: avatars.get(member.id) ?? null,
+            }));
+            found.members = members;
+            if (!people.length) error ??= { what: 'members', code: 'empty' };
+            // Only the person themself came back: the DM has nobody to be named after.
+            else if (!others.length) error ??= { what: 'members', code: 'only-self' };
+            else if (members.some(member => member.name === member.id)) error ??= { what: 'members', code: 'unnamed' };
+          });
+        } else {
+          await attempt('followers', async () => {
+            const followers = await client.channelFollowers(channel.workspaceId, channel.channelId);
+            found.follower = followers.some(member => member.id === connection.accountId);
+          });
+          const location = channel.location;
+          if (location) {
+            await attempt('path', async () => {
+              const key = `${location.kind}:${location.id}`;
+              const path = paths.get(key) ?? (await client.locationPath(location.kind, location.id));
+              paths.set(key, path);
+              found.path = path;
+              if (!path.length) error ??= { what: 'path', code: 'empty' };
+            });
+          }
         }
-      } catch (error) {
-        if (error instanceof ClickUpBudgetSpent) break;
-        if (error instanceof ClickUpChatError && (error.status === 401 || error.status === 429)) throw error;
-        // A location or DM ClickUp will not describe: shown by its own name; asked again tomorrow.
-        console.warn('[assistant] A ClickUp channel could not be described:', errorText(error));
-        await storage.setDetails(owner, channel.workspaceId, channel.channelId, {}, this.#now());
+      } catch (failure) {
+        // Out of calls halfway: nothing is stored, the channel is described whole on the next poll.
+        if (failure instanceof ClickUpBudgetSpent) break;
+        throw failure;
       }
+      await storage.setDetails(owner, channel.workspaceId, channel.channelId, { ...found, error }, this.#now());
     }
   }
 
@@ -661,13 +833,6 @@ export class ClickUpChatSource implements AssistantSource {
       changed += 1;
     }
     return changed;
-  }
-
-  /** Member names by user id across the person's workspaces (one call). */
-  async #members(client: ClickUpChatClient): Promise<Map<string, string>> {
-    const names = new Map<string, string>();
-    for (const workspace of await client.workspaces()) for (const [id, name] of workspace.members) names.set(id, name);
-    return names;
   }
 
   /**

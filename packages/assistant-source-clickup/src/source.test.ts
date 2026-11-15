@@ -4,7 +4,7 @@ import { FakeBrain, FakeFactory, FakeMemory, fakeModels, MemoryBlobStore, testCi
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ClickUpChatClient, fileLinks, isClickUpFileUrl } from './client.ts';
+import { ClickUpChatClient, fileLinks, isClickUpFileUrl, shapeOf, toMember, urlTemplate } from './client.ts';
 import { FakeClickUp } from './fake-clickup.ts';
 import { startClickUpPolling } from './scheduler.ts';
 import type { ClickUpPollLimits } from './source.ts';
@@ -29,6 +29,8 @@ let now: number;
 let service: AssistantService;
 let source: ClickUpChatSource;
 let factory: FakeFactory;
+/** Backoff waits the clients asked for (instant in tests). */
+let sleeps: number[] = [];
 
 function build(limits: Partial<ClickUpPollLimits> = {}, orgClickUp?: OrgClickUpReader) {
   source = new ClickUpChatSource({
@@ -36,7 +38,7 @@ function build(limits: Partial<ClickUpPollLimits> = {}, orgClickUp?: OrgClickUpR
     storage,
     cipher: testCipher,
     ingest: { ingestSourceMessage: (o, m) => service.ingestSourceMessage(o, m), hasOpenSourceRequest: (o, k) => service.hasOpenSourceRequest(o, k) },
-    client: options => new ClickUpChatClient({ ...options, fetch: clickup.fetch }),
+    client: options => new ClickUpChatClient({ ...options, fetch: clickup.fetch, sleep: async ms => void sleeps.push(ms) }),
     limits,
     checkRule: (owner, rule) => service.checkChannelRule(owner, rule),
     now: () => new Date(now),
@@ -593,7 +595,8 @@ describe('the channel list as the person’s ClickUp sidebar shows it', () => {
     };
   }
 
-  const lookups = () => clickup.calls.filter(call => /\/members|\/api\/v2\/(space|folder|list)\//.test(call)).length;
+  /** Channels described: one `…/members` (a DM) or `…/followers` (a channel) call each. */
+  const lookups = () => clickup.calls.filter(call => /\/(members|followers)\?/.test(call)).length;
 
   it('names each DM after its people, tells location channels apart by path, and marks the sidebar', async () => {
     sidebarFixture();
@@ -634,18 +637,23 @@ describe('the channel list as the person’s ClickUp sidebar shows it', () => {
     // Sidebar rows first: a followed DM is named even with the small budget; the hidden one is not yet.
     const first = await source.view(ADA);
     expect(first.channels.filter(channel => channel.kind !== 'channel' && channel.members.length > 0).every(channel => channel.inSidebar)).toBe(true);
+    // The next poll (no new listing) goes on with the rest, 3 at a time.
+    clickup.calls.length = 0;
+    now += 1000;
+    await poll();
+    expect(lookups()).toBe(3);
     build();
     clickup.calls.length = 0;
     await source.syncNow(ADA);
-    // The other 7 of the 10 that need a lookup (BookFate has no location); none twice.
-    expect(lookups()).toBe(7);
+    // The other 5 of the 11 (every channel is asked for its followers); none twice.
+    expect(lookups()).toBe(5);
     clickup.calls.length = 0;
     await source.syncNow(ADA);
     expect(lookups()).toBe(0);
     now += 25 * 60 * 60 * 1000;
     clickup.calls.length = 0;
     await source.syncNow(ADA);
-    expect(lookups()).toBe(10);
+    expect(lookups()).toBe(11);
   });
 
   it('sets every DM to one mode at once, channels untouched', async () => {
@@ -671,5 +679,227 @@ describe('the channel list as the person’s ClickUp sidebar shows it', () => {
     expect((await source.enabledChannels(ADA)).map(channel => channel.name)).toEqual(
       expect.arrayContaining(['Olena', 'Olena, Taras', 'Bugs']),
     );
+  });
+});
+
+describe('live ClickUp shapes, failures made visible, and diagnostics', () => {
+  /** Shaped like the person's real workspace: DMs named "DM", channels followed only per `…/followers`. */
+  function liveFixture() {
+    clickup.channels = [
+      { id: 'ch-switch5', name: 'SWITCH5', type: 'CHANNEL', following: false, followers: ['42', '7'], parent: { id: 'sp-1', type: 4 } },
+      { id: 'ch-syncta', name: 'Syncta', type: 'CHANNEL', following: false, followers: ['42'] },
+      { id: 'ch-other', name: 'Other team', type: 'CHANNEL', following: false, followers: ['7'] },
+      { id: 'dm-olena', name: 'DM', type: 'DM', members: ['42', '7'] },
+      { id: 'dm-taras', name: 'DM', type: 'DM', members: ['42', '8'] },
+    ];
+    clickup.locations = { 'space:sp-1': { id: 'sp-1', name: 'SWITCH5' } };
+  }
+
+  it('names a DM ClickUp calls "DM" after its people, when members come back with only id and email', async () => {
+    liveFixture();
+    clickup.memberShape = 'bare';
+    const view = await source.connect(ADA, clickup.token);
+    const dms = view.channels.filter(channel => channel.kind === 'dm');
+    expect(dms.map(channel => [channel.name, channel.members.map(member => member.name), channel.detailsError])).toEqual([
+      ['Olena', ['Olena'], null],
+      ['Taras', ['Taras'], null],
+    ]);
+  });
+
+  it('takes members that come back as bare ids too', async () => {
+    liveFixture();
+    clickup.memberShape = 'ids';
+    const view = await source.connect(ADA, clickup.token);
+    expect(view.channels.filter(channel => channel.kind === 'dm').map(channel => channel.name)).toEqual(['Olena', 'Taras']);
+  });
+
+  it('is_follower is only a filter: the full list is asked without it, and …/followers finds the sidebar the filter missed', async () => {
+    liveFixture();
+    const view = await source.connect(ADA, clickup.token);
+    const listing = clickup.calls.filter(call => call.includes('/chat/channels?'));
+    expect(listing.some(call => call.includes('is_follower=true'))).toBe(true);
+    expect(listing.some(call => !call.includes('is_follower'))).toBe(true);
+    expect(listing.some(call => call.includes('is_follower=false'))).toBe(false);
+    const sidebar = Object.fromEntries(view.channels.map(channel => [channel.name, channel.inSidebar]));
+    expect(sidebar).toEqual({ Olena: true, Taras: true, 'Other team': false, SWITCH5: true, Syncta: true });
+  });
+
+  it('rows listed before the sidebar facts existed are listed again on the next poll', async () => {
+    liveFixture();
+    await source.connect(ADA, clickup.token);
+    const ops = (storage as unknown as { ops: { updateAtomic: (...args: unknown[]) => Promise<unknown> } }).ops;
+    for (const id of ['ch-syncta', 'dm-olena']) {
+      await ops.updateAtomic(
+        'assistant_source_channels',
+        { owner_org_id: ADA.orgId, owner_user_id: ADA.userId, platform: 'clickup', workspace_id: WS, channel_id: id },
+        () => ({ following: null, follower: null, members: null, details_at: null }),
+      );
+    }
+    clickup.calls.length = 0;
+    now += 1000;
+    await poll();
+    expect(clickup.calls.some(call => call.includes('is_follower=true'))).toBe(true);
+    const view = await source.view(ADA);
+    expect(view.channels.find(channel => channel.channelId === 'ch-syncta')?.inSidebar).toBe(true);
+    expect(view.channels.find(channel => channel.channelId === 'dm-olena')?.name).toBe('Olena');
+  });
+
+  it('a lookup ClickUp refuses shows its code on the row and is tried again after a while', async () => {
+    liveFixture();
+    clickup.failPaths = [{ path: /\/members$/, status: 403 }];
+    let view = await source.connect(ADA, clickup.token);
+    const olena = () => view.channels.find(channel => channel.channelId === 'dm-olena')!;
+    expect(olena().detailsError).toEqual({ what: 'members', code: '403' });
+    expect(olena().members).toEqual([]);
+    clickup.failPaths = [];
+    now += 60_000;
+    await poll();
+    view = await source.view(ADA);
+    expect(olena().detailsError).toEqual({ what: 'members', code: '403' });
+    now += source.limits.detailsRetryMs;
+    await poll();
+    view = await source.view(ADA);
+    expect(olena()).toMatchObject({ name: 'Olena', detailsError: null });
+  });
+
+  it('a members list that comes back empty is a visible failure, not a silent blank', async () => {
+    liveFixture();
+    clickup.channels.find(channel => channel.id === 'dm-taras')!.members = [];
+    const view = await source.connect(ADA, clickup.token);
+    expect(view.channels.find(channel => channel.channelId === 'dm-taras')!.detailsError).toEqual({ what: 'members', code: 'empty' });
+  });
+
+  it('«fetch failed» is tried again with backoff; past the tries the cause code is what the person sees', async () => {
+    await connectAndWatch('ch-general');
+    sleeps = [];
+    clickup.networkFailures = 2;
+    now += 10 * 60_000;
+    const ok = await poll();
+    expect(ok.error).toBeUndefined();
+    expect(sleeps).toEqual([500, 1000]);
+    clickup.networkFailures = 3;
+    clickup.networkCode = 'UND_ERR_CONNECT_TIMEOUT';
+    now += 10 * 60_000;
+    const failed = await poll();
+    expect(failed.error).toContain('UND_ERR_CONNECT_TIMEOUT');
+    const connection = await storage.getConnection(ADA);
+    expect(connection?.lastError).toContain('UND_ERR_CONNECT_TIMEOUT');
+    expect(connection?.failures).toBe(1);
+    const diagnostics = await source.diagnostics(ADA);
+    expect(diagnostics.lastRead?.calls.at(-1)).toMatchObject({ status: 0, attempts: 3, errorCode: 'UND_ERR_CONNECT_TIMEOUT' });
+  });
+
+  it('diagnostics carry shapes, counts and enum values — never names, ids, message text or the token', async () => {
+    liveFixture();
+    clickup.memberShape = 'bare';
+    const logged: string[] = [];
+    const info = console.info;
+    console.info = (...args: unknown[]) => void logged.push(args.map(String).join(' '));
+    try {
+      await source.connect(ADA, clickup.token);
+      await source.setMode(ADA, { workspaceId: WS, channelId: 'dm-olena', mode: 'watch' });
+      now += 1000;
+      await poll();
+      clickup.post({ id: 'm1', channel: 'dm-olena', user: '7', content: 'secret client words', date: now + 5000 });
+      now += 3 * 60_000;
+      await poll();
+    } finally {
+      console.info = info;
+    }
+    const diagnostics = await source.diagnostics(ADA);
+    expect(diagnostics.channels).toMatchObject({
+      total: 5,
+      byKind: { channel: 3, dm: 2, group_dm: 0 },
+      followingByFilter: 0,
+      followerByEndpoint: 2,
+      dmsWithPeople: 2,
+      dmsWithoutPeople: 0,
+      lookupFailures: {},
+    });
+    const messages = diagnostics.lastRead!.calls.find(call => call.endpoint === 'v3.chat.messages');
+    expect(messages).toMatchObject({ status: 200, count: 1, itemKinds: ['object'] });
+    const everything = JSON.stringify(diagnostics) + logged.join('\n');
+    expect(logged.length).toBeGreaterThan(0);
+    for (const secret of [clickup.token, 'Olena', 'olena@example.com', 'secret client words', 'SWITCH5', 'dm-olena', 'ch-syncta', WS]) {
+      expect(everything).not.toContain(secret);
+    }
+    const channelsCall = logged.find(line => line.includes('"endpoint":"v3.chat.channels"'))!;
+    expect(channelsCall).toContain('"type":["CHANNEL","DM"]');
+    expect(channelsCall).toContain('https://api.clickup.com/api/v3/workspaces/{id}/chat/channels/{id}/members');
+  });
+
+  it('GET …/clickup/diagnostics answers only the caller about their own connection', async () => {
+    liveFixture();
+    await source.connect(ADA, clickup.token);
+    const { Hono } = await import('hono');
+    const { enforceRouteAccess } = await import('@factory/http');
+    const { buildClickUpSourceRoutes } = await import('./routes.ts');
+    const auth = {
+      enabled: () => true,
+      ensureUser: async () => undefined,
+      tenant: (c: { req: { header: (name: string) => string | undefined } }) => {
+        const userId = c.req.header('x-user');
+        return userId ? { userId, orgId: c.req.header('x-org') ?? 'org-a', role: 'member' } : undefined;
+      },
+      can: async () => true,
+    } as unknown as Parameters<typeof buildClickUpSourceRoutes>[0]['auth'];
+    const app = new Hono();
+    for (const route of enforceRouteAccess(buildClickUpSourceRoutes({ auth, source }), auth)) {
+      app.on([route.method], route.path, c => (route as unknown as { handler: (c: unknown) => Promise<Response> }).handler(c));
+    }
+    const get = (headers: Record<string, string>) => app.request('http://localhost/web/assistant/sources/clickup/diagnostics', { headers });
+    const ada = await get({ 'x-user': 'ada', 'x-org': 'org-a' });
+    expect(ada.status).toBe(200);
+    const body = (await ada.json()) as { diagnostics: { channels: { total: number }; lastRead: { calls: unknown[] } } };
+    expect(body.diagnostics.channels.total).toBe(5);
+    expect(body.diagnostics.lastRead.calls.length).toBeGreaterThan(0);
+    expect(JSON.stringify(body)).not.toContain(clickup.token);
+    expect(JSON.stringify(body)).not.toContain('Olena');
+    // Bob in the same organization has no connection: he sees nothing of Ada's.
+    const bob = await get({ 'x-user': 'bob', 'x-org': 'org-a' });
+    expect(bob.status).toBe(409);
+    expect(JSON.stringify(await bob.json())).not.toContain('v3.chat');
+    // Ada in another organization is another owner: nothing either.
+    expect((await get({ 'x-user': 'ada', 'x-org': 'org-b' })).status).toBe(409);
+    expect((await get({})).status).toBeGreaterThanOrEqual(401);
+  });
+});
+
+describe('the client against documented and live shapes', () => {
+  it('summarises an answer without content', () => {
+    expect(urlTemplate('https://api.clickup.com/api/v3/workspaces/9001/chat/channels/8cr-abc/members')).toBe(
+      'https://api.clickup.com/api/v3/workspaces/{id}/chat/channels/{id}/members',
+    );
+    const shape = shapeOf({
+      next_cursor: 'abc',
+      data: [
+        {
+          id: '1',
+          name: 'Secret name',
+          type: 'DM',
+          parent: { id: '9001', type: 7 },
+          is_hidden: false,
+          links: { members: '/api/v3/workspaces/9001/chat/channels/1/members' },
+        },
+        'bare-id',
+      ],
+    });
+    expect(shape).toEqual({
+      keys: ['data', 'next_cursor'],
+      nextCursor: true,
+      count: 2,
+      itemKeys: ['id', 'is_hidden', 'links', 'name', 'parent', 'type'],
+      itemKinds: ['object', 'string'],
+      enums: { is_hidden: ['false'], 'links.members': ['/api/v3/workspaces/{id}/chat/channels/{id}/members'], 'parent.type': ['7'], type: ['DM'] },
+    });
+    expect(JSON.stringify(shape)).not.toContain('Secret');
+  });
+
+  it('reads ChatSimpleUser, bare ids and v2-nested users as members', () => {
+    expect(toMember({ id: '7', email: 'o@example.com' })).toEqual({ id: '7', name: '', email: 'o@example.com' });
+    expect(toMember({ id: 7, email: 'o@example.com', name: 'Olena' })).toEqual({ id: '7', name: 'Olena', email: 'o@example.com' });
+    expect(toMember('7')).toEqual({ id: '7', name: '' });
+    expect(toMember({ user: { id: 7, username: 'Olena' } })).toEqual({ id: '7', name: 'Olena' });
+    expect(toMember({})).toBeNull();
   });
 });

@@ -22,6 +22,12 @@ export function buildClickUpSourceRoutes(deps: { auth: RouteAuth; source: ClickU
       method: 'GET',
       handler: handle(async (c, owner) => c.json({ clickup: await source.view(owner) })),
     }),
+    // The caller's own last ClickUp read, redacted to its shape (status, counts, keys, enum values):
+    // for checking live data without names, message text or the token. Only ever the caller's own.
+    registerApiRoute(`${p}/clickup/diagnostics`, {
+      method: 'GET',
+      handler: handle(async (c, owner) => c.json({ diagnostics: await source.diagnostics(owner) })),
+    }),
     registerApiRoute(`${p}/clickup`, {
       method: 'POST',
       handler: handle(async (c, owner) => {
