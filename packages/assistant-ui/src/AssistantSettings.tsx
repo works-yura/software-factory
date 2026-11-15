@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useAssistantFactories, useAssistantModelCatalog, useAssistantSettings, useSettingsActions } from './api';
 import type { AssistantModel, AssistantModelCatalog } from './api';
-import { modelLabel } from './RequestThread';
+import { useModelLabel } from './RequestThread';
 import { useModelCheck, useModelStatus } from './settings-api';
 import type { ProviderState } from './settings-api';
 import { RequestTime } from './time';
@@ -48,23 +48,41 @@ const unavailable = (model: AssistantModel) => model.available === false;
  */
 function CatalogCombobox({ catalog, value, disabled, onChange }: AssistantModelPickerProps) {
   const { t } = useTranslation('assistant');
-  const options = useMemo<ComboboxOption[]>(
-    () =>
-      catalog.models.map(model => ({
-        value: model.id,
-        label: model.label ?? modelLabel(model.id),
-        description: model.unavailableReason ?? model.id,
-        keywords: [model.id, model.provider, ...(model.group ? [model.group] : [])],
-        ...(model.free ? { end: <Badge size="xs" variant="neutral">{t('settings.free')}</Badge> } : {}),
-      })),
-    [catalog.models, t],
-  );
+  const modelLabel = useModelLabel();
+  const options = useMemo<ComboboxOption[]>(() => {
+    const free = (on: boolean | undefined) => (on ? { end: <Badge size="xs" variant="neutral">{t('settings.free')}</Badge> } : {});
+    if (catalog.groups.length) {
+      // Only what can run is offered here; the host's picker shows the rest disabled, with why.
+      return catalog.groups.flatMap(group =>
+        group.models
+          .filter(model => model.selectable)
+          .map(model => ({
+            value: model.id,
+            label: `${group.label} · ${model.label}`,
+            description: model.id,
+            keywords: [model.id, group.label, ...(group.harnessLabel ? [group.harnessLabel] : [])],
+            ...free(model.free),
+          })),
+      );
+    }
+    return catalog.models.map(model => ({
+      value: model.id,
+      label: model.label ?? modelLabel(model.id),
+      description: model.unavailableReason ?? model.id,
+      keywords: [model.id, model.provider, ...(model.group ? [model.group] : [])],
+      ...free(model.free),
+    }));
+  }, [catalog, t, modelLabel]);
   return (
     <Combobox
       options={options}
       value={value ?? ''}
       onValueChange={onChange}
-      placeholder={catalog.default?.modelId ? t('settings.modelDefaultIs', { model: modelLabel(catalog.default.modelId) }) : t('settings.modelDefault')}
+      placeholder={
+        catalog.default?.modelId
+          ? t('settings.modelDefaultIs', { model: catalog.default.label ?? modelLabel(catalog.default.modelId) })
+          : t('settings.modelDefault')
+      }
       searchPlaceholder={t('settings.searchModels')}
       emptyText={t('settings.noModelFound')}
       disabled={disabled}
@@ -94,9 +112,14 @@ export function AssistantModelSettings({ renderPicker }: { renderPicker?: (props
   const status = useModelStatus();
   const actions = useSettingsActions();
   const check = useModelCheck();
+  const modelLabel = useModelLabel();
   const chosen = settings.data?.modelId ?? null;
   const models = catalog.data?.models ?? [];
-  const runnable = models.filter(model => !unavailable(model));
+  const runnable = catalog.data?.groups.length
+    ? catalog.data.groups
+        .filter(group => !group.availability || group.availability.state === 'ready' || group.availability.state === 'limited')
+        .flatMap(group => group.models.filter(model => model.selectable))
+    : models.filter(model => !unavailable(model));
   const onlyFree = runnable.length > 0 && runnable.every(model => model.free === true);
   const defaultModel = catalog.data?.default ?? null;
   const pickerProps: AssistantModelPickerProps | undefined = catalog.data
@@ -143,7 +166,7 @@ export function AssistantModelSettings({ renderPicker }: { renderPicker?: (props
           {chosen
             ? t('settings.runsChosen', { model: modelLabel(chosen) })
             : defaultModel?.modelId
-              ? t('settings.runsDefault', { model: modelLabel(defaultModel.modelId) })
+              ? t('settings.runsDefault', { model: defaultModel.label ?? modelLabel(defaultModel.modelId) })
               : catalog.data
                 ? t('settings.runsNothing')
                 : '…'}

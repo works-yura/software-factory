@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 
 import { usePendingAction } from './api';
 import type { AssistantRequest, PendingAction, ToolCallRecord, TurnDetails } from './api';
+import { useModelLabel } from './RequestThread';
 import { RequestTime } from './time';
 
 function parsed(text: string): unknown {
@@ -46,6 +47,7 @@ function ToolCallRow({ call }: { call: ToolCallRecord }) {
  */
 export function TurnDetailsView({ details }: { details: TurnDetails }) {
   const { t } = useTranslation('assistant');
+  const label = useModelLabel();
   return (
     <Collapsible data-testid="assistant-turn-details">
       <CollapsibleTrigger className="group flex items-center gap-1 rounded-sm">
@@ -59,7 +61,7 @@ export function TurnDetailsView({ details }: { details: TurnDetails }) {
         <div className="flex flex-col gap-1 py-1">
           <Txt as="p" variant="caption" tone="muted">
             {[
-              t('details.model', { model: details.modelId ?? t('failure.defaultModel') }),
+              t('details.model', { model: details.modelId ? label(details.modelId) : t('failure.defaultModel') }),
               t('details.version', { version: details.instructionsVersion }),
               details.skills.length ? t('details.skills', { skills: details.skills.join(', ') }) : t('details.noSkills'),
               t('details.ms', { ms: details.durationMs }),

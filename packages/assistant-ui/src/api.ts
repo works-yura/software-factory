@@ -151,11 +151,47 @@ export interface AssistantModel {
 /** The model a person who chose none runs on, and why (when the server says). */
 export interface AssistantDefaultModel {
   modelId: string | null;
+  label?: string;
+  source?: string;
   reason?: string;
+}
+
+/** Whether a group (or a model) can run now, as Factory's catalog says. */
+export interface ModelAvailability {
+  state: 'ready' | 'limited' | 'no_credentials' | 'sessions_only' | 'unavailable';
+  until?: string;
+  reason?: string;
+  connector?: string;
+}
+
+export interface ModelGroupModel {
+  id: string;
+  label: string;
+  provider?: string;
+  modelName?: string;
+  free?: boolean;
+  legacy?: boolean;
+  selectable: boolean;
+  availability?: ModelAvailability;
+}
+
+/** The organization's models as Factory presents them: by harness and credential (Claude sign-in, an API key …). */
+export interface ModelGroup {
+  id: string;
+  harness?: string;
+  harnessLabel?: string;
+  provider?: string;
+  label: string;
+  credential?: string;
+  credentialLabel?: string;
+  availability?: ModelAvailability;
+  models: ModelGroupModel[];
 }
 
 export interface AssistantModelCatalog {
   models: AssistantModel[];
+  /** Absent from servers that list models only. */
+  groups: ModelGroup[];
   default: AssistantDefaultModel | null;
   /** The response as the server sent it, for a host picker that reads more of it (provider instances). */
   raw: Record<string, unknown>;
@@ -428,6 +464,7 @@ export function usePendingAction(requestId: string) {
 /** `GET /models` as the picker reads it: the list, and the default with its reason when the server gives one. */
 export function readModelCatalog(body: Record<string, unknown>): AssistantModelCatalog {
   const models = Array.isArray(body.models) ? (body.models as AssistantModel[]) : [];
+  const groups = Array.isArray(body.groups) ? (body.groups as ModelGroup[]).filter(group => Array.isArray(group?.models)) : [];
   const raw = (body.default ?? body.defaultModel) as Record<string, unknown> | string | null | undefined;
   const defaultModel =
     typeof raw === 'string'
@@ -435,10 +472,16 @@ export function readModelCatalog(body: Record<string, unknown>): AssistantModelC
       : raw && typeof raw === 'object'
         ? {
             modelId: typeof raw.modelId === 'string' ? raw.modelId : typeof raw.id === 'string' ? raw.id : null,
-            ...(typeof raw.reason === 'string' ? { reason: raw.reason } : {}),
+            ...(typeof raw.label === 'string' ? { label: raw.label } : {}),
+            ...(typeof raw.source === 'string' ? { source: raw.source } : {}),
+            ...(typeof raw.reason === 'string'
+              ? { reason: raw.reason }
+              : typeof body.defaultReason === 'string'
+                ? { reason: body.defaultReason }
+                : {}),
           }
         : null;
-  return { models, default: defaultModel, raw: body };
+  return { models, groups, default: defaultModel, raw: body };
 }
 
 export function useAssistantModelCatalog() {
@@ -447,6 +490,16 @@ export function useAssistantModelCatalog() {
     queryKey: assistantKeys.models(),
     queryFn: () => call<Record<string, unknown>>(api, '/models').then(readModelCatalog),
   });
+}
+
+/** A model id as the catalog names it (`Claude Code · Opus 5.5`), else as `modelLabel` spells the id. */
+export function catalogModelLabel(catalog: AssistantModelCatalog | undefined, modelId: string): string | undefined {
+  if (!catalog) return undefined;
+  for (const group of catalog.groups) {
+    const model = group.models.find(candidate => candidate.id === modelId);
+    if (model) return model.label.includes(group.label) ? model.label : `${group.label} · ${model.label}`;
+  }
+  return catalog.models.find(model => model.id === modelId)?.label;
 }
 
 export function useAssistantModels() {

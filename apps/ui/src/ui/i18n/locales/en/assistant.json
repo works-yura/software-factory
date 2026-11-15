@@ -190,7 +190,14 @@
     "checkOk": "{{model}} answered in {{ms}} ms: «{{reply}}»",
     "reachable": "Factories",
     "reachableDescription": "The Factories the assistant can reach as you.",
-    "unavailable": "Not available now"
+    "unavailable": "Not available now",
+    "availability": {
+      "limited": "Limited",
+      "no_credentials": "No credentials: connect one",
+      "sessions_only": "Runs only in Factory sessions",
+      "unavailable": "Unavailable",
+      "until": "until {{at}}"
+    }
   },
   "time": {
     "now": "now",

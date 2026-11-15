@@ -6,7 +6,7 @@ import { SettingsContainer, SettingsItem, SettingsListHeader } from '@mastra/pla
 import { useTranslation } from 'react-i18next';
 
 import { MarkdownDocumentEditor } from './BehaviorSettings';
-import { modelLabel } from './RequestThread';
+import { useModelLabel } from './RequestThread';
 import { useAgentPreview } from './settings-api';
 import type { AssistantToolKind } from './settings-api';
 
@@ -23,6 +23,7 @@ const KIND_VARIANT: Record<AssistantToolKind, 'neutral' | 'info' | 'warning'> = 
 export function AssistantAgentPreview() {
   const { t } = useTranslation('assistant');
   const preview = useAgentPreview();
+  const modelLabel = useModelLabel();
   if (preview.isError) return <Notice variant="destructive">{preview.error.message}</Notice>;
   if (!preview.data) return <Skeleton className="h-40 w-full" />;
   const { data } = preview;

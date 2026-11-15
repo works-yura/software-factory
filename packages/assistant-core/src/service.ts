@@ -108,9 +108,12 @@ export interface ModelCheck {
   durationMs: number;
 }
 
-function providerOf(modelId: string | null): string | null {
+/** `xai/grok-4.5` → `xai`; a harness model `claude-code:claude-opus-5-5` → `claude-code`. */
+export function providerOf(modelId: string | null): string | null {
   if (!modelId) return null;
+  const colon = modelId.indexOf(':');
   const slash = modelId.indexOf('/');
+  if (colon > 0 && (slash < 0 || colon < slash)) return modelId.slice(0, colon);
   return slash > 0 ? modelId.slice(0, slash) : modelId;
 }
 

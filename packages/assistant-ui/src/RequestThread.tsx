@@ -65,7 +65,9 @@ import { useTranslation } from 'react-i18next';
 import {
   REQUEST_STATUSES,
   assistantUrl,
+  catalogModelLabel,
   useAssistantApi,
+  useAssistantModelCatalog,
   useAssistantFactories,
   useAssistantRequest,
   useAssistantRequests,
@@ -604,8 +606,19 @@ const PROVIDER_NAMES: Record<string, string> = {
   togetherai: 'Together AI',
 };
 
-/** `xai/grok-4.5` → `xAI · grok-4.5`, as the thread names the model that failed. */
+/**
+ * The model's name as the organization's catalog gives it (`useModelLabel`); without the catalog,
+ * `xai/grok-4.5` → `xAI · grok-4.5`, `claude-code:claude-opus-5-5` → `claude-code · claude-opus-5-5`.
+ */
+export function useModelLabel(): (modelId: string) => string {
+  const catalog = useAssistantModelCatalog().data;
+  return modelId => catalogModelLabel(catalog, modelId) ?? modelLabel(modelId);
+}
+
+/** `xai/grok-4.5` → `xAI · grok-4.5`, as the thread names the model that failed (no catalog at hand). */
 export function modelLabel(modelId: string): string {
+  const colon = modelId.indexOf(':');
+  if (colon > 0 && (modelId.indexOf('/') < 0 || colon < modelId.indexOf('/'))) return `${modelId.slice(0, colon)} · ${modelId.slice(colon + 1)}`;
   const slash = modelId.indexOf('/');
   if (slash < 0) return modelId;
   const provider = modelId.slice(0, slash);
@@ -624,7 +637,8 @@ function TurnFailureNotice({ failure, request }: { failure: TurnFailure; request
   const { t } = useTranslation('assistant');
   const { settingsHref } = useAssistantApi();
   const actions = useRequestAction(request.id);
-  const model = failure.modelId ? modelLabel(failure.modelId) : t('failure.defaultModel');
+  const label = useModelLabel();
+  const model = failure.modelId ? label(failure.modelId) : t('failure.defaultModel');
   const headline = t(`failure.${failure.kind}.title`, { model });
   const fix = t(`failure.${failure.kind}.fix`);
   const canRetry = request.status !== 'closed' && !request.analysing;

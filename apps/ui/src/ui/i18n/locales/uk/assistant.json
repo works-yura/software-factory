@@ -194,7 +194,14 @@
     "checkOk": "{{model}} відповіла за {{ms}} мс: «{{reply}}»",
     "reachable": "Factory",
     "reachableDescription": "Factory, до яких помічник має доступ від вашого імені.",
-    "unavailable": "Зараз недоступна"
+    "unavailable": "Зараз недоступна",
+    "availability": {
+      "limited": "Обмежено",
+      "no_credentials": "Немає облікових даних: підключіть",
+      "sessions_only": "Працює лише в сесіях Factory",
+      "unavailable": "Недоступно",
+      "until": "до {{at}}"
+    }
   },
   "time": {
     "now": "щойно",

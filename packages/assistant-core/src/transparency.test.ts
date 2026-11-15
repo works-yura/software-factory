@@ -19,7 +19,7 @@ import { FactoryAccess } from './factory-access.ts';
 import { ASSISTANT_AGENT_INSTRUCTIONS, ASSISTANT_GUARD, instructionsVersion } from './instructions.ts';
 import type { AssistantSkills, BrainTurn } from './ports.ts';
 import { buildAssistantRoutes } from './routes.ts';
-import { AssistantService } from './service.ts';
+import { AssistantService, providerOf } from './service.ts';
 import { AssistantStorage } from './storage.ts';
 import { FakeBrain, FakeFactory, FakeMemory, fakeModels, MemoryBlobStore, testCipher } from './testing.ts';
 import { recordToolCalls } from './tools.ts';
@@ -330,5 +330,14 @@ describe('routes', () => {
     const created = await requestOf({ orgId: 'org-a', userId: 'ada' }, 'hi');
     const thread = (await (await send(`/web/assistant/requests/${created.id}`, 'GET', 'ada')).json()) as { messages: Array<{ author: string; details: unknown }> };
     expect(thread.messages.find(message => message.author === 'agent')!.details).toMatchObject({ toolCalls: [] });
+  });
+});
+
+describe('provider of a model id', () => {
+  it('reads Mastra ids and harness ids', () => {
+    expect(providerOf('xai/grok-4.5')).toBe('xai');
+    expect(providerOf('claude-code:claude-opus-5-5')).toBe('claude-code');
+    expect(providerOf('opencode:opencode-go/glm-5.3')).toBe('opencode');
+    expect(providerOf(null)).toBeNull();
   });
 });
