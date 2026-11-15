@@ -1,11 +1,11 @@
 # Помічник — особистий деск звернень
 
-Фаза 1 зроблена (гілка `feat/assistant-phase1`). Рішення: [ADR-0051](../../adr/0051-personal-assistant-requests-desk.md). Фаза 2 — ClickUp Chat як особисте джерело: [clickup-chat.md](clickup-chat.md).
+Фаза 1 зроблена (гілка `feat/assistant-phase1`). Рішення: [ADR-0051](../../adr/0051-personal-assistant-requests-desk.md). Фаза 2 — ClickUp Chat як особисте джерело: [clickup-chat.md](clickup-chat.md). Фаза 3 — інструменти агента, підтвердження дій Factory, інструкції й навички, правила каналів, дайджести: [нижче](#фаза-3-інструменти-правила-дайджести) (гілка `feat/assistant-phase3`; бекенд і API, UI ще немає).
 
 - **Що це.** Плаваюча кнопка на сторінках Factory відкриває панель «Помічник»: звернення людини в її поточній організації. Звернення людина приносить сама — вставляє текст чи скріншот (Ctrl+V), перетягує файли, пише «від кого» і посилання на першоджерело. Одне звернення — один тред.
 - **Власник — пара `(orgId, userId)`.** Береться лише з сесії (`tenant`), ніколи з запиту. Чуже звернення, нотатка чи файл (іншої людини або тієї самої людини в іншій організації) — 404. Порожня половина власника відкидається до будь-якого запиту в БД.
 - **Статуси.** `new` (агент ще дивиться) → `waiting_me` (агент відзвітував) / `waiting_factory` (спитали Factory чи передали картку) → `answered` (з фази 4, коли піде відповідь колезі) → `closed` (закриває людина). Нове повідомлення в закрите звернення не приймається.
-- **Агент.** Один Mastra Agent, що створюється на кожен хід з моделлю власника; без інструментів і без контексту проєктів. Пам'ять Mastra: ресурс `assistant:<orgId>:<userId>`, тред = id звернення. Картинки йдуть моделі як зображення (vision), PDF — файлом, текстові файли — текстом. Модель — обрана людиною з моделей організації або типова модель організації (`resolveTenantProviderDefaultModel`, credentialScope `factory`). Немає жодної моделі — хід падає з поясненням у треді («Your organization has no model connected…»), статус лишається `new`.
+- **Агент.** Один Mastra Agent, що створюється на кожен хід з моделлю власника; без контексту проєктів. З фази 3 — з інструментами власника, інструкціями й навичками людини (див. фазу 3). Пам'ять Mastra: ресурс `assistant:<orgId>:<userId>`, тред = id звернення. Картинки йдуть моделі як зображення (vision), PDF — файлом, текстові файли — текстом. Модель — обрана людиною з моделей організації або типова модель організації (`resolveTenantProviderDefaultModel`, credentialScope `factory`). Немає жодної моделі — хід падає з поясненням у треді («Your organization has no model connected…»), статус лишається `new`.
 - **Хід агента** йде після відповіді на запит (панель опитує, поки `analysing`). Помилка ходу записується в `lastError` і показується в треді; в лог іде лише id звернення, без вмісту.
 - **Factory — лише через MCP Factory від імені людини.**
   - Доступ: Акаунт › Помічник › «Дозволити». Помічник — OAuth-клієнт власного сервера авторизації Factory (better-auth `oauthProvider`): реєстрація, PKCE, та сама сторінка згоди `/oauth/consent`, повернення на `/web/assistant/factory-access/callback`. Токени (access + refresh, `offline_access`) — у `assistant_factory_grants` конвертом `secret-encryption`. Access-токен оновлюється refresh-токеном.
@@ -21,24 +21,125 @@
 
 ## Таблиці
 
-`assistant_requests`, `assistant_messages` (тред для панелі: людина, агент, Factory, події «запитано/передано»), `assistant_notes`, `assistant_settings`, `assistant_files`, `assistant_factory_grants`. Усі з `owner_org_id` + `owner_user_id`; створюються доменом `assistant` при старті (`ensureCollections`), міграцій даних не потрібно. Пам'ять агента — у сховищі Mastra memory (`mastra_threads`/`mastra_messages`) під ресурсом `assistant:<orgId>:<userId>`.
+`assistant_requests` (з фази 3 — `pending_action`), `assistant_messages` (тред для панелі: людина, агент, Factory, події «запитано/передано/запропоновано»), `assistant_notes`, `assistant_settings` (з фази 3 — `instructions`, `skills`, `digest_frequency`, `digest_hour`, `digest_time_zone`, `digest_last_at`, `digest_next_at`), `assistant_files`, `assistant_factory_grants`. Усі з `owner_org_id` + `owner_user_id`; створюються доменом `assistant` при старті (`ensureCollections`), міграцій даних не потрібно. Пам'ять агента — у сховищі Mastra memory (`mastra_threads`/`mastra_messages`) під ресурсом `assistant:<orgId>:<userId>`.
 
 ## Маршрути
 
-`/web/assistant/*`: `requests` (GET, POST multipart/JSON), `requests/:id` (GET; PATCH — тема й статус, які людина ставить сама; закрите можна відкрити знову), `requests/:id/messages|close|ask|check-answer|hand-over` (POST), `files/:id/content`, `notes` (GET, POST), `notes/:id` (PATCH, DELETE), `settings` (GET, PUT), `models`, `factories`, `clear`, `factory-access/start` (POST), `factory-access/callback` (GET), `factory-access` (DELETE). Кожен запис — `self.write` (є в кожної ролі, зокрема Глядача). Маршрути монтуються лише на сервері з входом.
+`/web/assistant/*`: `requests` (GET, POST multipart/JSON), `requests/:id` (GET; PATCH — тема й статус, які людина ставить сама; закрите можна відкрити знову), `requests/:id/messages|close|ask|check-answer|hand-over` (POST), `requests/:id/actions/:actionId/confirm|cancel` (POST, фаза 3), `files/:id/content`, `notes` (GET, POST), `notes/:id` (PATCH, DELETE), `settings` (GET, PUT), `skills` (GET, фаза 3), `models`, `factories`, `clear`, `factory-access/start` (POST), `factory-access/callback` (GET), `factory-access` (DELETE). Кожен запис — `self.write` (є в кожної ролі, зокрема Глядача). Маршрути монтуються лише на сервері з входом.
 
 ## Чого ще немає
 
-- (б) `factory_ask` у MCP — помічник сам стартує бічну сесію й перевіряє відповідь за кнопкою (без фонового чекання).
+- (б) `factory_ask` у MCP — помічник сам стартує бічну сесію; з фази 3 він опитує відповідь у фоні з тайм-аутом, далі — кнопка.
 - (г) довгий доступ: access-токен прив'язаний до браузерної сесії, з якої людина дозволила доступ; після виходу треба дозволити знову. Для фази 1 (усе за дією людини) достатньо.
 - (д) `factory_start_session` без репозиторію: у Factory без репозиторію «Спитати» відповідає, що ця Factory поки не приймає питань.
 - Розділ «Помічник» в Акаунті відкривається зі сторінок Factory (як увесь Акаунт сьогодні), хоч дані не належать жодній Factory.
-- Пошта, відповіді колегам, дайджести — фази 3–4. ClickUp Chat (фаза 2) — [clickup-chat.md](clickup-chat.md).
+- Пошта, відповіді колегам — пізніше. ClickUp Chat (фаза 2) — [clickup-chat.md](clickup-chat.md). Дайджести — фаза 3, без листа.
+- UI фази 3 (налаштування інструкцій, навичок, дайджесту, правил каналів; «Підтвердити/Скасувати» в треді) — наступний крок; API нижче.
 
 ## Де в коді
 
-- Ядро: `packages/assistant-core/src/` — `storage.ts` (таблиці), `service.ts` (життєвий цикл, очищення, термін), `agent.ts` (Mastra Agent і пам'ять), `factory-access.ts` (OAuth), `factory-client.ts` (MCP), `routes.ts`, `retention.ts`; межа залежностей — `boundary.test.ts`.
-- Сервер: `packages/server/src/assistant/wiring.ts` (порти: моделі організації, сховище, аудит, хуки видалення), монтування — `packages/server/src/factory.ts`.
+- Ядро: `packages/assistant-core/src/` — `storage.ts` (таблиці), `service.ts` (життєвий цикл, очищення, термін, пропозиції, правила, дайджести), `agent.ts` (Mastra Agent, пам'ять, інструкції), `tools.ts` (інструменти агента), `digest.ts` (розклад і таймер дайджестів), `factory-access.ts` (OAuth), `factory-client.ts` (MCP), `routes.ts`, `retention.ts`; межа залежностей — `boundary.test.ts`.
+- Сервер: `packages/server/src/assistant/wiring.ts` (порти: моделі організації, сховище, аудит, хуки видалення, каталог навичок, таймер дайджестів), монтування — `packages/server/src/factory.ts`.
 - MCP: документ виявлення — `packages/mcp/src/routes.ts` (`FACTORY_MCP_DISCOVERY_PATH`).
 - Хуки видалення: `packages/auth-better-auth/src/team.ts` (`OrganizationEventRelay.onMemberRemoved/onUserDeleted`), `index.ts`.
 - UI: `packages/assistant-ui/src/` (кнопка, панель, тред, нове звернення, нотатки, налаштування); у застосунку — `apps/ui/src/ui/domains/assistant/AssistantOverlay.tsx`, `ChatOverlays.tsx`, `AccountSettingsSection.tsx`; переклади — `apps/ui/src/ui/i18n/locales/{en,uk}/assistant.json`.
+
+## Фаза 3: інструменти, правила, дайджести
+
+Рішення й відступи — ADR-0051, розділ «Фаза 3». Зроблено бекенд і API; UI — наступний крок.
+
+### Що перевикористано
+
+- **Mastra `createTool`** (як у `harness-mastra`) і той самий Mastra Agent помічника, з `maxSteps`.
+- **`FactoryClient` / MCP Factory від імені людини.** Новий лише метод `read` для наявних read-only інструментів MCP (`factory_list_work_items`, `factory_inspect_work_item`, `factory_list_attention`). «Спитати» й «передати» — наявні `askFactory` / `handOver`. У `packages/mcp` нічого не додано.
+- **Каталог навичок Factory** — `listFactorySkills` з `harness-mastra`: той самий завантажувач і перевірка SKILL.md, що в сесій і в налаштуваннях навичок. Помічник отримує його портом `AssistantSkills`, бо межа пакета не дозволяє імпортувати `harness-*`.
+- **Клієнт ClickUp, токен і курсори фази 2.** Читання на запит іде тим самим `ClickUpChatClient` з бюджетом викликів.
+- **Цикл тиків фази 2** (як `startClickUpPolling` і `startAssistantRetention`) — для дайджестів.
+
+### Інструменти агента
+
+Будуються на кожен хід (`createAssistantTools`) і прив'язані до власника й звернення ходу. Власника модель не передає, тож чужого не видно.
+
+| Інструмент | Що робить | Пише? |
+|---|---|---|
+| `assistant_search_requests` | свої звернення за текстом теми/відправника, статусом | ні |
+| `assistant_read_request` | звернення й останні записи треду (не знімає «непрочитане») | ні |
+| `assistant_list_notes` | свої нотатки | ні |
+| `assistant_create_note` | нотатка людині (автор `agent`), за бажанням про це звернення | так, свої дані |
+| `source_list_channels` | канали, які людина ввімкнула (режим ≠ `ignore`), з режимом і правилом | ні |
+| `source_read_channel` | останні повідомлення ввімкненого каналу чи треду, зараз, особистим підключенням | ні |
+| `factory_list_factories` | Factory, до яких людина має доступ | ні |
+| `factory_find_work_items` | картки Factory (MCP `factory_list_work_items`) | ні |
+| `factory_inspect_work_item` | картка докладно (MCP `factory_inspect_work_item`) | ні |
+| `factory_list_attention` | що в Factory чекає людину | ні |
+| `factory_session_status` | чи відповіла бічна сесія | ні |
+| `factory_propose_ask` | **пропонує** спитати Factory | ні, лише пропозиція |
+| `factory_propose_hand_over` | **пропонує** передати звернення карткою | ні, лише пропозиція |
+| `assistant_read_skill` | текст навички, яку людина обрала (є, лише коли обрані навички є) | ні |
+
+Відповідати колегам агент не може: такого інструмента немає.
+
+### Підтвердження дій Factory
+
+1. Агент викликає `factory_propose_*` → на звернення кладеться `pendingAction` `{ id, kind: 'ask'|'hand_over', factoryId, factoryName, question?, title?, note?, reason?, proposedBy: 'agent'|'rule', proposedAt }`, у тред — подія `proposed:<kind>:<Factory>` з питанням чи назвою. Статус не змінюється (`waiting_me`). Одна пропозиція на хід; нова замінює стару.
+2. Тред показує пропозицію (`request.pendingAction`) з кнопками.
+3. `POST /web/assistant/requests/:id/actions/:actionId/confirm` — виконує від імені людини (`askFactory` чи `handOver`), подія `confirmed:<kind>`. Дія знімається атомарно; повторне підтвердження — 409 `no_pending_action`. Помилка Factory (502 `factory_failed`) повертає пропозицію назад для повтору.
+4. `POST …/cancel` — нічого не виконує, подія `cancelled:<kind>`.
+5. Після «спитати» (з кнопки чи підтвердження) сервіс сам перевіряє бічну сесію кожні 20 с до 15 хв. Коли відповідь є — вона в треді, агент робить висновок (`waiting_me`). Після тайм-ауту — подія `answer_timeout`, далі «Перевірити відповідь».
+
+### Інструкції й навички
+
+- `instructions` — вільний текст людини (до 4000 символів). Дописується після базових інструкцій і не скасовує «звітуй лише людині».
+- `skills` — до 10 назв з каталогу навичок Factory (`GET /web/assistant/skills`). Агент бачить назву й опис кожної обраної і завантажує текст інструментом `assistant_read_skill` — так само, як сесії Factory.
+- Каталог — рівня розгортання (вбудовані, `factory-skills/` застосунку, `MastraFactory({ skills })`), оригінали без правок проєктів. Навичок рівня організації у Factory немає. Навичка, яку прибрали з каталогу, тихо випадає з ходу.
+
+### Правила каналів (ClickUp)
+
+Колонка `assistant_source_channels.rule`:
+
+- `analyse` — типово: розбір агента;
+- `analyse_and_ask:<factoryId>` — розбір, потім Factory питається сама (подія `rule:analyse_and_ask`):
+  - лише за ввімкненням людини, ніколи не типово;
+  - Factory має бути доступна людині (перевіряється при збереженні: 409 `factory_not_connected` / 404 `factory_not_found`);
+  - до 10 автопитань на людину за добу, понад ліміт — пропозиція `proposedBy: 'rule'`;
+  - якщо Factory недоступна в момент питання — подія `auto_ask_failed`;
+- `digest_only` — звернення без ходу агента (подія `not_analysed:digest`), ліміт ходів не витрачається; потрапляє в дайджест.
+
+Режим (`ignore`/`addressed`/`watch`) і правило незалежні.
+
+### Дайджести
+
+- `digest: { frequency: 'off'|'hourly'|'daily', hour: 0–23, timeZone: IANA }`, типово `off`, 9:00, UTC.
+- `hourly` — щогодини о :00. `daily` — щодня о `hour` у `timeZone`.
+- Таймер — тік раз на хвилину (`startAssistantDigests`), до 20 людей за тік.
+- Дайджест — звернення з `source: 'digest'`, тема «Daily digest · …». Агент підсумовує відкриті звернення людини (до 40): статус, тема, від кого, останні слова; звернення з `digest_only`-каналів позначені. Якщо відкритих немає, звернення не створюється, наступний час усе одно ставиться. Листа немає.
+
+### Ліміти
+
+`DEFAULT_ASSISTANT_LIMITS` у `service.ts`:
+
+| Ліміт | Значення |
+|---|---|
+| кроків моделі за хід | 8 |
+| автопитань за добу | 10 |
+| опитування відповіді | кожні 20 с, до 15 хв |
+| звернень у дайджесті | до 40 |
+
+`callsPerRead` ClickUp — 3 виклики на одне читання агентом, до 30 повідомлень.
+
+### API для UI (налаштування й тред)
+
+- `GET /web/assistant/settings` → `{ settings: { modelId, retentionDays, instructions, skills, digest: { frequency, hour, timeZone } }, digestSchedule: { lastAt, nextAt } }`.
+- `PUT /web/assistant/settings` — будь-яка підмножина: `{ modelId?, retentionDays?, instructions?, skills?: string[], digest?: { frequency?, hour?, timeZone? } }` → те саме, що GET. Помилки 400: `instructions_too_long`, `too_many_skills`, `unknown_skill`, `invalid_digest`.
+- `GET /web/assistant/skills` → `{ skills: [{ name, description }] }` — каталог для вибору.
+- `GET /web/assistant/requests/:id` — `request.pendingAction` (`null` або пропозиція, `proposedAt` ISO). Пропозиція є і в списку `GET /web/assistant/requests`.
+- `POST /web/assistant/requests/:id/actions/:actionId/confirm` → `{ request }`; 409 `no_pending_action`, 409 `factory_not_connected`, 502 `factory_failed`.
+- `POST /web/assistant/requests/:id/actions/:actionId/cancel` → `{ request }`; 409 `no_pending_action`.
+- `GET /web/assistant/sources` → у кожного каналу ще `rule` (`analyse` / `analyse_and_ask:<factoryId>` / `digest_only`).
+- `PUT /web/assistant/sources/clickup/channels/:workspaceId/:channelId` `{ mode?, rule? }` (хоча б одне); 400 `invalid_rule`.
+- Нові рядки треду (author `event`):
+  - `proposed:<ask|hand_over>:<Factory>\n<текст>`;
+  - `confirmed:<kind>`, `cancelled:<kind>`;
+  - `rule:analyse_and_ask`, `auto_ask_failed\n<чому>`;
+  - `answer_timeout`, `not_analysed:digest`, `digest:<n>`.
+- Нове джерело звернення — `digest`.

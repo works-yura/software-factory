@@ -90,7 +90,7 @@
 - `POST {token}` — підключити;
 - `DELETE` — відключити;
 - `POST …/sync` — прочитати зараз;
-- `PUT …/channels/:workspaceId/:channelId {mode}` — змінити режим.
+- `PUT …/channels/:workspaceId/:channelId {mode?, rule?}` — змінити режим і/або правило для нового звернення (фаза 3: `analyse` / `analyse_and_ask:<factoryId>` / `digest_only`, див. [design.md](design.md#фаза-3-інструменти-правила-дайджести)).
 
 Кожен запис — `self.write`.
 
