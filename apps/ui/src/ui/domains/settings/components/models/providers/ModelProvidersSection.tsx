@@ -24,10 +24,11 @@ export function ModelProvidersSection() {
       <div className="flex flex-col gap-4">
         <ProviderList credentialScope="org" />
         <div className="flex flex-col gap-2">
-          <Txt as="h4" variant="label">
+          {/* Inset like a section title, so it lines up with the titles above and below. */}
+          <Txt as="h3" variant="label" className="ps-2.5">
             {t('models.customProviders')}
           </Txt>
-          <SettingsContainer className="p-4">
+          <SettingsContainer>
             <CustomProvidersSection />
           </SettingsContainer>
         </div>

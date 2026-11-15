@@ -49,7 +49,9 @@ function NameRow({ view }: { view: ConnectionView }) {
           </Button>
         </form>
       ) : (
-        <span className="text-body-sm text-foreground">{view.label}</span>
+        <span className="text-body-sm text-foreground max-w-full truncate" title={view.label}>
+          {view.label}
+        </span>
       )}
     </SettingsRow>
   );
@@ -60,13 +62,22 @@ function Overview({ view, factoryId, organizationWide }: { view: ConnectionView;
   const { t } = useTranslation('settings');
   const who = useWho(factoryId);
   const by = who(view.createdBy);
+  const account = view.accountLabel ?? (view.scope === 'organization' ? organizationWide : '—');
   return (
     <SettingsContainer>
       <NameRow view={view} />
       <SettingsRow label={t('connections.detail.account')}>
-        <span className="text-body-sm flex min-w-0 flex-col items-end text-right max-sm:items-start max-sm:text-left">
-          <span className="text-foreground truncate">{view.accountLabel ?? (view.scope === 'organization' ? organizationWide : '—')}</span>
-          {view.accountDetail && <span className="text-meta text-muted-foreground truncate">{view.accountDetail}</span>}
+        {/* Aligned like every other value (left when the row stacks, right beside the label); a long
+            account name is cut and shown whole on hover. */}
+        <span className="text-body-sm flex max-w-full min-w-0 flex-col items-start text-left sm:items-end sm:text-right">
+          <span className="text-foreground max-w-full truncate" title={account}>
+            {account}
+          </span>
+          {view.accountDetail && (
+            <span className="text-meta text-muted-foreground max-w-full truncate" title={view.accountDetail}>
+              {view.accountDetail}
+            </span>
+          )}
         </span>
       </SettingsRow>
       {view.method && (
@@ -94,7 +105,7 @@ function Overview({ view, factoryId, organizationWide }: { view: ConnectionView;
       <SettingsRow label={t('connections.detail.id')}>
         <span className="bg-surface-panel shadow-inset flex min-w-0 items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2">
           <span className="text-meta text-muted-foreground truncate font-mono">{view.id}</span>
-          <CopyButton content={view.id} size="icon-sm" variant="ghost" />
+          <CopyButton content={view.id} size="icon-sm" variant="ghost" tooltip={t('connections.detail.copyId')} />
         </span>
       </SettingsRow>
     </SettingsContainer>

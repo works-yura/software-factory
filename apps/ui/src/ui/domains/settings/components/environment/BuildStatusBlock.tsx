@@ -61,7 +61,7 @@ export function BuildStatusBlock({
   const status = build ? BUILD_STATUS[build.status] : lastBuild ? undefined : null;
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex flex-col items-start gap-1 sm:items-end">
       <div className="flex items-center gap-3">
         {status === undefined ? (
           <span role="status" aria-label={t('environment.status.loading')}>

@@ -124,7 +124,7 @@ export function HarnessModelDefaults({
                 : t('models.defaults.followsHarness')
           }
         >
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-start gap-2 sm:justify-end">
             {pending && <Spinner size="sm" aria-label={t('models.defaults.saving')} className="text-muted-foreground" />}
             <Button
               variant="ghost"

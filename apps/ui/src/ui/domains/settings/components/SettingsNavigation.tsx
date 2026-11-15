@@ -10,6 +10,7 @@ import {
   Building2,
   ChartColumn,
   CircleUserRound,
+  Factory,
   GitBranch,
   Inbox,
   Palette,
@@ -174,8 +175,8 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         get label() {
           return SETTINGS_SECTION_LABELS.factory;
         },
-        icon: ChartColumn,
-        searchText: 'analytics metrics usage tokens cost turns cache completions lead time throughput queue health overview dashboard',
+        icon: Factory,
+        searchText: 'manage factory harness agents run on delete remove danger zone',
       },
     ],
   },

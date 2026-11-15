@@ -84,7 +84,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
       {(githubConnected || gitlabConfigured || linked.length > 0) && (
         <>
-          <div className="flex items-center gap-2 px-4 py-2">
+          {/* Sits in a settings card, which owns the inset: rows line up with the card's other text. */}
+          <div className="flex items-center gap-2 py-2">
             <div className="min-w-0 flex-1">
               <SearchInput
                 {...listSearchProps}
@@ -114,13 +115,14 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </div>
 
           {error && (
-            <Txt as="p" variant="caption" className="text-destructive-foreground px-4 pb-2">
+            <Txt as="p" variant="caption" className="text-destructive-foreground pb-2">
               {error.message}
             </Txt>
           )}
 
           <ScrollArea orientation="vertical" maxHeight="20rem">
-            <div className="flex min-w-0 flex-col gap-px p-2">
+            {/* Rows keep their own 8px inset for the hover fill, so the list bleeds out by as much. */}
+            <div className="-mx-2 flex min-w-0 flex-col gap-px py-2">
               {visibleLinked.length > 0 && <ListHeading>{t('connectRepos.linked')}</ListHeading>}
               {visibleLinked.map(repo => (
                 <div key={repo.projectRepositoryId} className="flex w-full items-center gap-3 rounded-md px-2 py-2">
@@ -131,7 +133,9 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                       ) : (
                         <GithubIcon className="text-foreground size-3.5 shrink-0" />
                       )}
-                      <span className="min-w-0 truncate">{repo.slug}</span>
+                      <span className="min-w-0 truncate" title={repo.slug}>
+                        {repo.slug}
+                      </span>
                     </Txt>
                     {repo.gitBranch && (
                       <Txt as="span" variant="caption" tone="muted" className="block truncate">

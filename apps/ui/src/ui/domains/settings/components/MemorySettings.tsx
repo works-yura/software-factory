@@ -20,6 +20,7 @@ import {
 } from './models/routing/model-routes';
 import type { ModelDefaults, ModelLane } from './models/routing/model-routes';
 import { OMSection } from './OMSection';
+import { ScopeBadge } from './SettingsScope';
 
 export function MemorySettings({ factoryId }: { factoryId: string }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
@@ -94,21 +95,25 @@ function MemoryGroup({
       <SettingsTitle
         info={info}
         accessory={
-          <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-2">
-            {t('memory.usedBy')}{' '}
-            {usedBy.map(lane => {
-              const UsedByIcon = MODEL_LANE_ICONS[lane];
-              return (
-                <span
-                  key={lane}
-                  className="bg-fill-subtle text-foreground inline-flex h-6 items-center gap-1.5 rounded-md px-2"
-                >
-                  <UsedByIcon className={cn('size-3.5', tone)} aria-hidden="true" />
-                  {MODEL_LANE_LABELS[lane]}
-                </span>
-              );
-            })}
-          </Txt>
+          <>
+            {/* Every other Factory section names its scope; memory is this Factory's too. */}
+            <ScopeBadge scope="factory" />
+            <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-2">
+              {t('memory.usedBy')}{' '}
+              {usedBy.map(lane => {
+                const UsedByIcon = MODEL_LANE_ICONS[lane];
+                return (
+                  <span
+                    key={lane}
+                    className="bg-fill-subtle text-foreground inline-flex h-6 items-center gap-1.5 rounded-md px-2"
+                  >
+                    <UsedByIcon className={cn('size-3.5', tone)} aria-hidden="true" />
+                    {MODEL_LANE_LABELS[lane]}
+                  </span>
+                );
+              })}
+            </Txt>
+          </>
         }
       >
         {title}

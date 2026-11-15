@@ -524,7 +524,11 @@
       "revokeOthers": "Вийти всюди, крім цього",
       "loadFailed": "Не вдалося завантажити сесії: {{message}}",
       "failed": "Не вийшло: {{message}}",
-      "device": "{{browser}} на {{os}}"
+      "device": "{{browser}} на {{os}}",
+      "count_one": "{{count}} сесія",
+      "count_few": "{{count}} сесії",
+      "count_many": "{{count}} сесій",
+      "count_other": "{{count}} сесії"
     }
   },
   "panel": {
@@ -1755,7 +1759,8 @@
       "id": "ID підключення",
       "by": "{{who}}",
       "byYou": "вами",
-      "notRecorded": "не записано"
+      "notRecorded": "не записано",
+      "copyId": "Скопіювати ID підключення"
     },
     "activity": {
       "title": "Активність",
@@ -1862,7 +1867,8 @@
       },
       "mcpPending": "Сервер бази налаштовується; він з’явиться тут за мить.",
       "choose": "Виберіть…"
-    }
+    },
+    "accountLine": "Акаунт: {{account}}"
   },
   "conditions": {
     "where": "Де",
@@ -2088,7 +2094,11 @@
       "copyNamed": "Скопіювати посилання для вступу {{name}}",
       "revoke": "Відкликати",
       "revokeNamed": "Відкликати посилання для вступу {{name}}",
-      "loadFailed": "Не вдалося завантажити посилання для вступу: {{message}}"
+      "loadFailed": "Не вдалося завантажити посилання для вступу: {{message}}",
+      "count_one": "{{count}} посилання",
+      "count_few": "{{count}} посилання",
+      "count_many": "{{count}} посилань",
+      "count_other": "{{count}} посилання"
     }
   }
 }

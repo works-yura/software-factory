@@ -32,7 +32,9 @@ export function MobilePageTitle({
   const { pathname } = useLocation();
 
   return (
-    <Txt tone="ink" as="h1" variant="heading" ref={ref} tabIndex={tabIndex} className="min-w-0 truncate md:hidden">
+    // A focus target for screen readers after navigation (tabIndex -1), not a control: no focus ring,
+    // as on the connections page title.
+    <Txt tone="ink" as="h1" variant="heading" ref={ref} tabIndex={tabIndex} className="min-w-0 truncate outline-hidden md:hidden">
       {children ?? routeTitle(pathname)}
     </Txt>
   );

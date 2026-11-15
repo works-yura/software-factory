@@ -21,7 +21,7 @@ const ROLE_BADGE: Record<OrganizationRole, BadgeVariant> = {
 export function RoleBadge({ role }: { role: OrganizationRole }) {
   const { t } = useTranslation('settings');
   return (
-    <span className="flex items-center gap-1">
+    <span className="flex shrink-0 items-center gap-1">
       <Badge size="sm" variant={ROLE_BADGE[role]}>
         {t(`organization.roles.${role}`)}
       </Badge>
@@ -34,17 +34,19 @@ export function RoleBadge({ role }: { role: OrganizationRole }) {
   );
 }
 
-/** Viewer, Member or Admin, each with what it may do. */
+/** Viewer, Member or Admin, each with what it may do. `fill` stretches it across a form field. */
 export function RoleSelect({
   value,
   onChange,
   label,
   disabled,
+  fill = false,
 }: {
   value: AssignableRole;
   onChange: (role: AssignableRole) => void;
   label: string;
   disabled?: boolean;
+  fill?: boolean;
 }) {
   const { t } = useTranslation('settings');
   return (
@@ -55,7 +57,7 @@ export function RoleSelect({
         if (next && (ASSIGNABLE_ROLES as readonly string[]).includes(next)) onChange(next as AssignableRole);
       }}
     >
-      <SelectTrigger size="sm" aria-label={label} className="w-fit min-w-28">
+      <SelectTrigger size="sm" aria-label={label} className={fill ? 'w-full' : 'w-fit min-w-28'}>
         <Txt as="span" variant="caption">
           {t(`organization.roles.${value}`)}
         </Txt>

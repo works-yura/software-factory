@@ -1,29 +1,15 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LogOut, Monitor, Pencil, Smartphone } from 'lucide-react';
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
-import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import {
-  currentSession,
-  describeUserAgent,
-  listSessions,
-  revokeOtherSessions,
-  revokeSession,
-  updateProfile,
-} from '../../auth/services/team';
-import type { SignInSession } from '../../auth/services/team';
+import { useUpdateProfile } from '../hooks/useAccount';
+import { EditableName } from './account/EditableName';
+import { SessionsList } from './account/SessionsList';
 import { AvatarPicker } from './team/AvatarPicker';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
@@ -53,198 +39,9 @@ function authProviderLabel(provider: string | undefined): string {
 
 function AccountValue({ children }: { children: string }) {
   return (
-    <Txt tone="muted" as="span" variant="caption" className="truncate">
+    <Txt tone="muted" as="span" variant="caption" className="truncate" title={children}>
       {children}
     </Txt>
-  );
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function useRefreshAuth() {
-  const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: queryKeys.factoryAuth() });
-}
-
-/** The name, with a pencil to edit it in place (better-auth `update-user`). */
-function EditableName({ name }: { name: string }) {
-  const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
-  const refresh = useRefreshAuth();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(name);
-  const save = useMutation({
-    mutationFn: (next: string) => updateProfile(baseUrl, { name: next }),
-    onSuccess: async () => {
-      await refresh();
-      setEditing(false);
-    },
-  });
-  const trimmed = draft.trim();
-
-  if (!editing) {
-    return (
-      <Button
-        size="sm"
-        variant="ghost"
-        aria-label={t('account.editName')}
-        onClick={() => {
-          setDraft(name);
-          setEditing(true);
-        }}
-      >
-        <span data-testid="account-name">{name}</span>
-        <Pencil size={14} aria-hidden="true" />
-      </Button>
-    );
-  }
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (trimmed && trimmed !== name) save.mutate(trimmed);
-    else setEditing(false);
-  };
-  return (
-    <form onSubmit={submit} className="flex flex-col items-end gap-2">
-      <div className="flex items-center gap-2">
-        <Input
-          size="sm"
-          autoFocus
-          maxLength={80}
-          aria-label={t('account.nameLabel')}
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-        />
-        <Button type="submit" size="sm" variant="primary" disabled={!trimmed || save.isPending}>
-          {t('account.saveName')}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-          {t('account.cancelEdit')}
-        </Button>
-      </div>
-      {save.isError ? (
-        <Notice variant="destructive" role="alert">
-          {t('account.sessions.failed', { message: errorText(save.error) })}
-        </Notice>
-      ) : null}
-    </form>
-  );
-}
-
-function deviceLabel(session: SignInSession): { label: string; mobile: boolean } {
-  const device = describeUserAgent(session.userAgent);
-  if (!device) return { label: tk('account.sessions.unknownDevice'), mobile: false };
-  const label =
-    device.browser && device.os
-      ? tk('account.sessions.device', { browser: device.browser, os: device.os })
-      : (device.browser ?? device.os ?? tk('account.sessions.unknownDevice'));
-  return { label, mobile: device.mobile };
-}
-
-function SessionRow({ session, current }: { session: SignInSession; current: boolean }) {
-  const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const revoke = useMutation({
-    mutationFn: () => revokeSession(baseUrl, session.token),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signInSessions() }),
-  });
-  const { label, mobile } = deviceLabel(session);
-  const Icon = mobile ? Smartphone : Monitor;
-
-  return (
-    <SettingsRow
-      label={
-        <span className="flex items-center gap-2">
-          <Icon size={16} aria-hidden="true" />
-          {label}
-        </span>
-      }
-      description={
-        <span className="flex items-center gap-1">
-          {session.ipAddress || t('account.sessions.unknownIp')},
-          <RelativeTimestamp value={new Date(session.createdAt)} />
-        </span>
-      }
-    >
-      {current ? (
-        <Badge size="sm" variant="neutral">
-          {t('account.sessions.current')}
-        </Badge>
-      ) : (
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={revoke.isPending}
-          aria-label={t('account.sessions.revokeNamed', { device: label })}
-          onClick={() => revoke.mutate()}
-        >
-          {t('account.sessions.revoke')}
-        </Button>
-      )}
-      {revoke.isError ? (
-        <Notice variant="destructive" role="alert">
-          {t('account.sessions.failed', { message: errorText(revoke.error) })}
-        </Notice>
-      ) : null}
-    </SettingsRow>
-  );
-}
-
-/** Where the person is signed in (better-auth sessions): device from the User-Agent, IP, when. */
-function SessionsList() {
-  const { t } = useTranslation('settings');
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const sessions = useQuery({
-    queryKey: queryKeys.signInSessions(),
-    queryFn: async () => {
-      const [list, current] = await Promise.all([listSessions(baseUrl), currentSession(baseUrl)]);
-      return { list, currentId: current?.session.id };
-    },
-  });
-  const revokeOthers = useMutation({
-    mutationFn: () => revokeOtherSessions(baseUrl),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signInSessions() }),
-  });
-
-  return (
-    <SettingsSubsection scope="personal" title={t('account.sessions.title')} description={t('account.sessions.description')}>
-      <SettingsContainer>
-        {sessions.isPending ? (
-          <SettingsRow label={<Skeleton className="h-4 w-40" />} />
-        ) : sessions.isError ? (
-          <div className="p-4">
-            <Notice variant="destructive" role="alert">
-              {t('account.sessions.loadFailed', { message: errorText(sessions.error) })}
-            </Notice>
-          </div>
-        ) : (
-          <>
-            {[...sessions.data.list]
-              .sort((a, b) => Number(b.id === sessions.data.currentId) - Number(a.id === sessions.data.currentId))
-              .map(session => (
-                <SessionRow key={session.id} session={session} current={session.id === sessions.data.currentId} />
-              ))}
-            {sessions.data.list.length > 1 ? (
-              <SettingsRow label="">
-                <Button size="sm" disabled={revokeOthers.isPending} onClick={() => revokeOthers.mutate()}>
-                  {t('account.sessions.revokeOthers')}
-                </Button>
-              </SettingsRow>
-            ) : null}
-            {revokeOthers.isError ? (
-              <div className="p-4">
-                <Notice variant="destructive" role="alert">
-                  {t('account.sessions.failed', { message: errorText(revokeOthers.error) })}
-                </Notice>
-              </div>
-            ) : null}
-          </>
-        )}
-      </SettingsContainer>
-    </SettingsSubsection>
   );
 }
 
@@ -259,7 +56,7 @@ export function AccountSettingsSection() {
   const { t } = useTranslation('settings');
   const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
-  const refreshAuth = useRefreshAuth();
+  const updateProfile = useUpdateProfile();
 
   if (auth.isPending) {
     return (
@@ -308,10 +105,7 @@ export function AccountSettingsSection() {
                 name={displayName}
                 src={user?.avatarUrl}
                 editable
-                onChange={async image => {
-                  await updateProfile(baseUrl, { image });
-                  await refreshAuth();
-                }}
+                onChange={image => updateProfile.mutateAsync({ image })}
               />
             </SettingsRow>
           ) : null}

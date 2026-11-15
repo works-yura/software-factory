@@ -2,8 +2,15 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus } from 'lucide-react';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import {
+  SettingsItem,
+  SettingsItemIcon,
+  SettingsListHeader,
+  SettingsNoticeRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
+import { Plus, Server } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -13,7 +20,6 @@ import {
   useRemoveCustomProvider,
   useSaveCustomProvider,
 } from '../../../../hooks/use-custom-providers';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 interface DraftState {
   /** id of the provider being edited, or '' for a brand-new one. */
@@ -91,27 +97,22 @@ export function CustomProvidersSection() {
     }
   };
 
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <Txt tone="muted" as="p" variant="caption">
-          {t('customProviders.description')}
-        </Txt>
-        {!draft && (
-          <Button size="sm" onClick={startAdd} disabled={busy}>
-            <Plus size={13} /> {t('customProviders.add')}
-          </Button>
-        )}
-      </div>
+  const addButton = !draft && (
+    <Button size="sm" onClick={startAdd} disabled={busy}>
+      <Plus aria-hidden="true" /> {t('customProviders.add')}
+    </Button>
+  );
 
-      {error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground">
-          {error}
-        </Txt>
-      )}
+  // Rows of the `SettingsContainer` the caller puts it in: the list's caption and action, the
+  // providers as items, the add/edit form, and any error.
+  return (
+    <>
+      <SettingsListHeader action={addButton || undefined}>
+        <span className="text-body-sm text-muted-foreground">{t('customProviders.description')}</span>
+      </SettingsListHeader>
 
       {draft && (
-        <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
+        <div className="flex flex-col gap-3">
           <Field className="gap-1">
             <FieldLabel>{t('customProviders.name')}</FieldLabel>
             <Input
@@ -152,55 +153,64 @@ export function CustomProvidersSection() {
               onChange={e => setDraft({ ...draft, models: e.target.value })}
             />
           </Field>
-          <div className="flex items-center gap-2">
-            <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
-              {draft.editingId ? t('customProviders.save') : t('customProviders.addShort')}
-            </Button>
+          <div className="flex items-center justify-end gap-2">
             <Button size="sm" disabled={busy} onClick={() => setDraft(null)}>
               {t('customProviders.cancel')}
+            </Button>
+            <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
+              {draft.editingId ? t('customProviders.save') : t('customProviders.addShort')}
             </Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <SkeletonRows label={t('customProviders.loading')} rows={3} rowClassName="h-9 w-full" />
-      ) : providers.length === 0 ? null : (
-        <ul role="list" className="divide-border flex flex-col divide-y">
-          {providers.map(p => (
-            <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <Txt tone="ink" as="span" variant="body" className="truncate">
-                    {p.name}
-                  </Txt>
-                  {p.hasApiKey && (
-                    <Badge size="sm" variant="success">
-                      {t('credentials.keySaved')}
-                    </Badge>
-                  )}
-                </div>
-                <Txt tone="muted" as="span" variant="meta" className="truncate">
-                  {p.url}
-                </Txt>
-                {p.models.length > 0 && (
-                  <Txt tone="muted" as="span" variant="meta">
-                    {t('customProviders.modelCount', { count: p.models.length })}
-                  </Txt>
+        <SettingsSkeleton label={t('customProviders.loading')} rows={2} variant="item" />
+      ) : (
+        providers.map(p => (
+          <SettingsItem
+            key={p.id}
+            media={
+              <SettingsItemIcon>
+                <Server />
+              </SettingsItemIcon>
+            }
+            title={
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate" title={p.name}>
+                  {p.name}
+                </span>
+                {p.hasApiKey && (
+                  <Badge size="sm" variant="success" className="shrink-0">
+                    {t('credentials.keySaved')}
+                  </Badge>
                 )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
-                  {t('customProviders.edit')}
-                </Button>
-                <Button size="sm" disabled={busy} onClick={() => void remove(p.id)}>
-                  {t('customProviders.remove')}
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </span>
+            }
+            description={
+              <>
+                <span title={p.url}>{p.url}</span>
+                {p.models.length > 0 && <span> · {t('customProviders.modelCount', { count: p.models.length })}</span>}
+              </>
+            }
+          >
+            <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
+              {t('customProviders.edit')}
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => void remove(p.id)}>
+              {t('customProviders.remove')}
+            </Button>
+          </SettingsItem>
+        ))
       )}
-    </div>
+
+      <SettingsNoticeRow>
+        {error && (
+          <Notice variant="destructive" role="alert">
+            {error}
+          </Notice>
+        )}
+      </SettingsNoticeRow>
+    </>
   );
 }

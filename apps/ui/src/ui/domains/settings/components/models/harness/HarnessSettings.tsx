@@ -64,7 +64,7 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
               <SkeletonRows label={t('models.harness.title')} rows={1} />
             )
           ) : (
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-col items-start gap-1 sm:items-end">
               <SegmentedControl
                 aria-label={t('models.harness.label')}
                 size="sm"

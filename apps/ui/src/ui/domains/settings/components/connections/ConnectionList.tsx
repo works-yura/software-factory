@@ -291,10 +291,10 @@ export function ConnectionList({
           <Table.Header>
             <Table.Row>
               <Table.Head>{t('connections.columns.integration')}</Table.Head>
-              <Table.Head>{t('connections.columns.connection')}</Table.Head>
-              <Table.Head>{t('connections.columns.account')}</Table.Head>
+              {/* The one column that gives way: the settings pane is narrow at every width. */}
+              <Table.Head className="w-full">{t('connections.columns.connection')}</Table.Head>
               <Table.Head>{t('connections.columns.capabilities')}</Table.Head>
-              <Table.Head className="w-full">{t('connections.columns.created')}</Table.Head>
+              <Table.Head>{t('connections.columns.created')}</Table.Head>
               <Table.Head align="end">
                 <span className="sr-only">{t('connections.columns.actions')}</span>
               </Table.Head>
@@ -306,17 +306,17 @@ export function ConnectionList({
                 <Table.Cell>
                   <IntegrationCell view={view} />
                 </Table.Cell>
-                <Table.Cell>
-                  <span className="flex items-center gap-2">
-                    <Table.RowLink render={<Link to={hrefOf(view.id)} />} className="truncate">
+                <Table.Cell className="max-w-0">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Table.RowLink render={<Link to={hrefOf(view.id)} />} className="truncate" title={view.label}>
                       {view.label}
                     </Table.RowLink>
                     <McpBadge view={view} />
                     <AttentionMark view={view} />
                   </span>
-                </Table.Cell>
-                <Table.Cell>
-                  <span title={view.accountDetail}>{accountOf(view)}</span>
+                  <span className="text-meta text-muted-foreground block truncate" title={view.accountDetail ?? accountOf(view)}>
+                    {t('connections.accountLine', { account: accountOf(view) })}
+                  </span>
                 </Table.Cell>
                 <Table.Cell>
                   <CapabilityDots dots={serverDots(view.provides)} />
