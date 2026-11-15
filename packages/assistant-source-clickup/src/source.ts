@@ -5,8 +5,17 @@
  * `ingestSourceMessage` (binding key `clickup:<workspace>:<channel>:<root message>`, idempotent by
  * message id). It never writes to ClickUp.
  */
-import { AssistantError, ASSISTANT_FILE_MAX_BYTES } from '@factory/assistant-core';
-import type { AssistantOwner, AssistantSource, ChannelMode, SecretCipher, SourceMessage } from '@factory/assistant-core';
+import { AssistantError, ASSISTANT_FILE_MAX_BYTES, formatChannelRule } from '@factory/assistant-core';
+import type {
+  AssistantOwner,
+  AssistantSource,
+  ChannelMode,
+  ChannelRule,
+  SecretCipher,
+  SourceChannelInfo,
+  SourceChannelMessages,
+  SourceMessage,
+} from '@factory/assistant-core';
 
 import type { ChatChannel, ChatMessage, ClickUpChatClientOptions } from './client.ts';
 import { channelUrl, ClickUpBudgetSpent, ClickUpChatClient, ClickUpChatError, fileLinks, isPersonalToken } from './client.ts';
@@ -34,6 +43,8 @@ export interface ClickUpPollLimits {
   channelsRefreshMs: number;
   /** Threads older than this stop being followed for replies. */
   followThreadsMs: number;
+  /** ClickUp calls one on-demand read by the agent's tool may make. */
+  callsPerRead: number;
 }
 
 export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
@@ -45,6 +56,7 @@ export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
   turnsPerHour: 20,
   channelsRefreshMs: 60 * MINUTE,
   followThreadsMs: 14 * DAY,
+  callsPerRead: 3,
 };
 
 /** What the source needs from the core: taking messages in, and which threads have open requests. */
@@ -60,6 +72,11 @@ export interface ClickUpSourceDeps {
   /** Builds the client for a token; tests give a fake `fetch`. */
   client?: (options: ClickUpChatClientOptions) => ClickUpChatClient;
   limits?: Partial<ClickUpPollLimits>;
+  /**
+   * Whether a channel rule can run (a rule that asks a Factory needs one the person reaches): the
+   * core's `checkChannelRule`. Throws an `AssistantError` saying why not.
+   */
+  checkRule?: (owner: AssistantOwner, rule: ChannelRule) => Promise<void>;
   maxFileBytes?: number;
   now?: () => Date;
 }
@@ -100,6 +117,8 @@ export interface ConnectionView {
     name: string;
     kind: ChannelKind;
     mode: ChannelMode;
+    /** `analyse`, `analyse_and_ask:<factoryId>` or `digest_only`. */
+    rule: string;
     lastSyncAt: string | null;
     lastError: string | null;
   }>;
@@ -224,6 +243,7 @@ export class ClickUpChatSource implements AssistantSource {
         name: channel.name,
         kind: channel.kind,
         mode: channel.mode,
+        rule: formatChannelRule(channel.rule),
         lastSyncAt: channel.lastSyncAt?.toISOString() ?? null,
         lastError: channel.lastError,
       })),
@@ -231,13 +251,94 @@ export class ClickUpChatSource implements AssistantSource {
   }
 
   async setMode(owner: AssistantOwner, input: { workspaceId: string; channelId: string; mode: ChannelMode }) {
+    return this.setChannel(owner, input);
+  }
+
+  /**
+   * Sets a channel's mode and/or its rule for new requests. A rule that asks a Factory on its own
+   * is checked first (the Factory must be one the person reaches) and is only ever set here, by the
+   * person: it is never a default.
+   */
+  async setChannel(owner: AssistantOwner, input: { workspaceId: string; channelId: string; mode?: ChannelMode; rule?: ChannelRule }) {
     await this.#ready();
     if (!(await this.#deps.storage.getConnection(owner))) {
       throw new AssistantError('not_connected', 'Connect ClickUp first.', 409);
     }
-    const channel = await this.#deps.storage.setMode(owner, input.workspaceId, input.channelId, input.mode, this.#now());
+    if (input.rule?.kind === 'analyse_and_ask') {
+      if (!this.#deps.checkRule) throw new AssistantError('rule_unavailable', 'Asking a Factory from a channel rule is not available here.', 409);
+      await this.#deps.checkRule(owner, input.rule);
+    }
+    const channel = await this.#deps.storage.setChannel(
+      owner,
+      input.workspaceId,
+      input.channelId,
+      { ...(input.mode !== undefined ? { mode: input.mode } : {}), ...(input.rule !== undefined ? { rule: input.rule } : {}) },
+      this.#now(),
+    );
     if (!channel) throw new AssistantError('not_found', 'Channel not found.', 404);
     return channel;
+  }
+
+  // On demand, for the agent's tools
+
+  /** The chats the person turned on (any mode but `ignore`), for the agent. */
+  async enabledChannels(owner: AssistantOwner): Promise<SourceChannelInfo[]> {
+    await this.#ready();
+    if (!(await this.#deps.storage.getConnection(owner))) return [];
+    return (await this.#deps.storage.listChannels(owner))
+      .filter(channel => channel.mode !== 'ignore' && !channel.gone)
+      .map(channel => this.#info(channel));
+  }
+
+  /**
+   * The latest messages of a chat the person turned on — or of one thread in it — read now with the
+   * person's own token, within `callsPerRead` ClickUp calls. A chat that is off, gone or unknown
+   * is refused: the agent reads only what the person chose to let the assistant read.
+   */
+  async readChannel(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages> {
+    await this.#ready();
+    const match = /^clickup:([^:]+):([^:]+)$/.exec(input.ref);
+    const refused = () => new AssistantError('not_found', 'No such chat among the ones you turned on.', 404);
+    if (!match) throw refused();
+    const channel = await this.#deps.storage.getChannel(owner, match[1]!, match[2]!);
+    if (!channel || channel.mode === 'ignore' || channel.gone) throw refused();
+    const connection = await this.#deps.storage.getConnection(owner);
+    if (!connection || connection.status !== 'active') throw new AssistantError('not_connected', 'ClickUp is not connected (or no longer accepts the token).', 409);
+    const { value } = await this.#deps.cipher.decrypt<{ token: string }>(connection.secret);
+    const client = this.#client(value.token, this.limits.callsPerRead);
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 30);
+    try {
+      const members = await this.#members(client);
+      const page = input.threadId
+        ? await client.replies(channel.workspaceId, channel.channelId, input.threadId, { limit })
+        : await client.messages(channel.workspaceId, channel.channelId, { limit });
+      return {
+        channel: this.#info(channel),
+        messages: page.items
+          .sort((a, b) => a.date - b.date)
+          .map(message => ({
+            id: message.id,
+            from: members.get(message.userId) ?? (message.userId || null),
+            text: message.content,
+            at: new Date(message.date).toISOString(),
+            replies: message.repliesCount,
+            threadId: message.parentMessageId,
+          })),
+      };
+    } catch (error) {
+      if (error instanceof AssistantError) throw error;
+      throw new AssistantError('clickup_failed', `ClickUp answered: ${errorText(error)}`, 502);
+    }
+  }
+
+  #info(channel: SourceChannel): SourceChannelInfo {
+    return {
+      ref: `clickup:${channel.workspaceId}:${channel.channelId}`,
+      name: channel.name,
+      kind: channel.kind,
+      mode: channel.mode,
+      rule: channel.rule,
+    };
   }
 
   /** Reads the channel list again now and polls; the settings' «Sync now». */
@@ -481,7 +582,9 @@ export class ClickUpChatSource implements AssistantSource {
         sourceUrl: channelUrl(workspaceId, channelId),
         files: await this.#files(client, message.content),
         fromMe,
-        analyse: fromMe ? false : this.#turns.allow(owner, this.limits.turnsPerHour, this.#now().getTime()),
+        // A digest-only channel never spends a turn; the others count against the hourly limit.
+        analyse: fromMe || channel.rule.kind === 'digest_only' ? false : this.#turns.allow(owner, this.limits.turnsPerHour, this.#now().getTime()),
+        rule: channel.rule,
         where: channel.kind === 'channel' ? `#${channel.name}` : channel.kind === 'dm' ? `DM ${channel.name}` : `group DM ${channel.name}`,
       });
       if (outcome.outcome !== 'duplicate' && outcome.outcome !== 'skipped') ingested += 1;

@@ -4,13 +4,13 @@
  *
  * - `assistant_source_connections` — the person's connection: the encrypted token, whose it is,
  *   the sync state (last sync, last error, failures, when to poll next);
- * - `assistant_source_channels` — each channel/DM the token sees, with the person's mode and the
- *   read cursor (the newest top-level message taken);
+ * - `assistant_source_channels` — each channel/DM the token sees, with the person's mode, the rule
+ *   for a new request (phase 3) and the read cursor (the newest top-level message taken);
  * - `assistant_source_threads` — threads seen in a channel: replies count, the newest reply taken,
  *   whether the person is in it (for «only when addressed»).
  */
-import { assertOwner } from '@factory/assistant-core';
-import type { AssistantOwner, ChannelMode } from '@factory/assistant-core';
+import { assertOwner, DEFAULT_CHANNEL_RULE, formatChannelRule, parseChannelRule } from '@factory/assistant-core';
+import type { AssistantOwner, ChannelMode, ChannelRule } from '@factory/assistant-core';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere } from '@mastra/core/storage';
 
@@ -58,6 +58,8 @@ export const SOURCE_SCHEMAS: CollectionSchema[] = [
       // `channel`, `dm`, `group_dm`
       kind: { type: 'text' },
       mode: { type: 'text' },
+      // What a new request from it gets (phase 3): `analyse` (null), `analyse_and_ask:<factoryId>`, `digest_only`.
+      rule: { type: 'text', nullable: true },
       // Epoch ms of the newest top-level message taken; `null` until the first read after enabling.
       cursor_at: { type: 'bigint', nullable: true },
       last_sync_at: { type: 'timestamp', nullable: true },
@@ -122,6 +124,7 @@ export interface SourceChannel {
   name: string;
   kind: ChannelKind;
   mode: ChannelMode;
+  rule: ChannelRule;
   cursorAt: number | null;
   lastSyncAt: Date | null;
   lastError: string | null;
@@ -158,6 +161,7 @@ interface ChannelRow extends Record<string, unknown> {
   name: string;
   kind: string;
   mode: string;
+  rule: string | null;
   cursor_at: number | string | null;
   last_sync_at: Date | null;
   last_error: string | null;
@@ -205,6 +209,7 @@ function toChannel(row: ChannelRow): SourceChannel {
     name: row.name,
     kind: row.kind === 'dm' || row.kind === 'group_dm' ? row.kind : 'channel',
     mode: row.mode === 'watch' || row.mode === 'addressed' ? row.mode : 'ignore',
+    rule: parseChannelRule(row.rule) ?? DEFAULT_CHANNEL_RULE,
     cursorAt: row.cursor_at === null || row.cursor_at === undefined ? null : Number(row.cursor_at),
     lastSyncAt: row.last_sync_at,
     lastError: row.last_error,
@@ -360,6 +365,7 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
           name: channel.name,
           kind: channel.kind,
           mode: channel.defaultMode,
+          rule: null,
           cursor_at: null,
           last_sync_at: null,
           last_error: null,
@@ -382,20 +388,31 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Sets a channel's mode. Turning reading on (from `ignore`) restarts its cursor, so only what is
-   * written from now on is read — never the channel's history.
+   * Sets a channel's mode and/or rule. Turning reading on (from `ignore`) restarts its cursor, so
+   * only what is written from now on is read — never the channel's history.
    */
-  async setMode(o: AssistantOwner, workspaceId: string, channelId: string, mode: ChannelMode, now = new Date()) {
+  async setChannel(
+    o: AssistantOwner,
+    workspaceId: string,
+    channelId: string,
+    patch: { mode?: ChannelMode; rule?: ChannelRule },
+    now = new Date(),
+  ) {
     const target = { ...where(o), workspace_id: workspaceId, channel_id: channelId };
     const current = await this.ops.findOne<ChannelRow>(SOURCE_CHANNELS, target);
     if (!current) return null;
-    const restart = mode !== 'ignore' && toChannel(current).mode === 'ignore';
+    const restart = patch.mode !== undefined && patch.mode !== 'ignore' && toChannel(current).mode === 'ignore';
     const row = await this.ops.updateAtomic<ChannelRow>(SOURCE_CHANNELS, target, () => ({
-      mode,
+      ...(patch.mode !== undefined ? { mode: patch.mode } : {}),
+      ...(patch.rule !== undefined ? { rule: patch.rule.kind === 'analyse' ? null : formatChannelRule(patch.rule) } : {}),
       ...(restart ? { cursor_at: null, last_error: null } : {}),
       updated_at: now,
     }));
     return row ? toChannel(row) : null;
+  }
+
+  async setMode(o: AssistantOwner, workspaceId: string, channelId: string, mode: ChannelMode, now = new Date()) {
+    return this.setChannel(o, workspaceId, channelId, { mode }, now);
   }
 
   async patchChannel(

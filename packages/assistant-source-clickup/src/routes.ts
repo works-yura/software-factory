@@ -3,7 +3,7 @@
  * current organization — connect with a personal API token, a mode per channel, sync now,
  * disconnect. The owner is always the caller; the token never leaves the server.
  */
-import { AssistantError, assistantHandler, isChannelMode, jsonBody } from '@factory/assistant-core';
+import { AssistantError, assistantHandler, isChannelMode, jsonBody, parseChannelRule } from '@factory/assistant-core';
 import type { RouteAccess, RouteAuth } from '@factory/http';
 import { declareAccess } from '@factory/http';
 import type { ApiRoute } from '@mastra/core/server';
@@ -48,11 +48,21 @@ export function buildClickUpSourceRoutes(deps: { auth: RouteAuth; source: ClickU
       method: 'PUT',
       handler: handle(async (c, owner) => {
         const body = await jsonBody(c);
-        if (!isChannelMode(body.mode)) throw new AssistantError('invalid_mode', 'mode is ignore, addressed or watch.', 400);
-        await source.setMode(owner, {
+        if (body.mode === undefined && body.rule === undefined) {
+          throw new AssistantError('invalid_body', 'Send mode and/or rule.', 400);
+        }
+        if (body.mode !== undefined && !isChannelMode(body.mode)) {
+          throw new AssistantError('invalid_mode', 'mode is ignore, addressed or watch.', 400);
+        }
+        const rule = body.rule === undefined ? undefined : parseChannelRule(body.rule);
+        if (rule === null) {
+          throw new AssistantError('invalid_rule', 'rule is analyse, analyse_and_ask:<factoryId> or digest_only.', 400);
+        }
+        await source.setChannel(owner, {
           workspaceId: c.req.param('workspaceId') ?? '',
           channelId: c.req.param('channelId') ?? '',
-          mode: body.mode,
+          ...(body.mode !== undefined ? { mode: body.mode } : {}),
+          ...(rule ? { rule } : {}),
         });
         return c.json({ clickup: await source.view(owner) });
       }),
