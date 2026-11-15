@@ -49,9 +49,9 @@ describe('SettingsNavigation', () => {
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
     expect(linksIn('Organization')).toEqual(['Organization', 'Team', 'Connections']);
-    // The Factory group is titled with the Factory these pages change.
-    await screen.findByRole('region', { name: 'Factory “bookfate”' });
-    expect(linksIn('Factory “bookfate”')).toEqual([
+    // The Factory group: the Factory you are in, never its name (the sidebar already says which).
+    await screen.findByRole('region', { name: 'Factory' });
+    expect(linksIn('Factory')).toEqual([
       'Harness',
       'Memory',
       'Behavior',
@@ -59,7 +59,7 @@ describe('SettingsNavigation', () => {
       'Environment',
       'Work Intake',
       'Analytics',
-      'Manage Factory',
+      'Manage',
     ]);
     expect(linksIn('Server')).toEqual(['Debug']);
     expect(screen.queryByRole('region', { name: 'Agent' })).not.toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('SettingsNavigation', () => {
       'Environment',
       'Work Intake',
       'Analytics',
-      'Manage Factory',
+      'Manage',
     ]);
   });
 
