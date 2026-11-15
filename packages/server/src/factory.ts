@@ -136,6 +136,7 @@ import {
 } from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/mcp';
 import { AssistantStorage } from '@factory/assistant-core';
+import { ClickUpSourceStorage } from '@factory/assistant-source-clickup';
 import { createFactoryAssistant } from './assistant/wiring.ts';
 import type { FactoryAssistant } from './assistant/wiring.ts';
 import type { FactoryMcpConfig } from '@factory/mcp';
@@ -982,6 +983,8 @@ export class MastraFactory {
     const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
     // The assistant's own tables (`assistant_*`, ADR-0051): requests, threads, notes, settings, files, its OAuth grant.
     const assistantStorage = storage.registerDomain(new AssistantStorage());
+    // Its personal ClickUp Chat connections (ADR-0051 phase 2): encrypted token, channel modes, cursors.
+    const assistantClickUpStorage = storage.registerDomain(new ClickUpSourceStorage());
     const intakeRouteFiresStorage = storage.registerDomain(new IntakeRouteFiresStorage());
     const usageStorage = storage.registerDomain(new UsageStorage());
     const bootMigrationsStorage = storage.registerDomain(new BootMigrationsStorage());
@@ -1097,6 +1100,7 @@ export class MastraFactory {
     this.#assistant = auth
       ? createFactoryAssistant({
           storage: assistantStorage,
+          clickupStorage: assistantClickUpStorage,
           mastraStorage: storage.getMastraStorage(),
           secretEncryption,
           ...(attachmentsConfig ? { blobs: attachmentsConfig.store } : {}),

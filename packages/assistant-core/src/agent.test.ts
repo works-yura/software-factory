@@ -52,6 +52,8 @@ function request(owner: AssistantOwner, id: string): AssistantRequest {
     fromName: 'Olena',
     source: 'manual',
     sourceUrl: null,
+    sourceKey: null,
+    previousRequestId: null,
     status: 'new',
     factory: null,
     analysing: true,

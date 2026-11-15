@@ -18,7 +18,7 @@ import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playgr
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 import { translator } from '../../../i18n/t';
-import { AssistantAccountSettings } from '../../assistant/AssistantOverlay';
+import { AssistantAccountSettings, AssistantAccountSources } from '../../assistant/AssistantOverlay';
 
 const tk = translator('settings');
 
@@ -146,6 +146,15 @@ export function AccountSettingsSection() {
       {user?.organizationId ? (
         <SettingsSubsection scope="personal" title={t('account.assistant.title')} description={t('account.assistant.description')}>
           <AssistantAccountSettings />
+        </SettingsSubsection>
+      ) : null}
+      {user?.organizationId ? (
+        <SettingsSubsection
+          scope="personal"
+          title={t('account.assistantSources.title')}
+          description={t('account.assistantSources.description')}
+        >
+          <AssistantAccountSources />
         </SettingsSubsection>
       ) : null}
       {editable ? <SessionsList /> : null}

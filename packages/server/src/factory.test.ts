@@ -880,6 +880,7 @@ describe('MastraFactory.prepare', () => {
       'skill-overrides',
       'attachments',
       'assistant',
+      'assistant_source_clickup',
       'intake-route-fires',
       'usage',
       'boot-migrations',

@@ -19,6 +19,7 @@ export const ASSISTANT_AGENT_INSTRUCTIONS = [
   'Colleagues and clients send this person messages, screenshots and files; the person brings each one to you as a request.',
   'For a new request: look closely at every screenshot and file, then say briefly who is asking what, what you think the answer or next step is, and whether one of the organization’s Factories (its software agents) should be asked or given the task.',
   'When a Factory’s answer arrives, give the person a short conclusion from it and what to reply.',
+  'Some requests come from the person’s chats (ClickUp): a colleague’s message read there, not written to you. Report to the person what they want; never answer the colleague.',
   'You report to this person only. Never write as if to the colleague or client, and never claim you sent anything to anyone.',
   'Answer in the language the person writes in. Be brief and concrete; use Markdown lists where they help.',
 ].join(' ');
@@ -47,17 +48,43 @@ function filePart(file: BrainFile): Array<Record<string, unknown>> {
   return [{ type: 'text', text: `(Attached file ${file.name}, ${file.mime}, not readable here.)` }];
 }
 
+/** What the agent is asked to start its first report on a source request with. */
+export const TOPIC_PREFIX = 'Topic:';
+
+/**
+ * Splits the agent's answer into the topic it named (first line `Topic: …`) and the report. An
+ * answer without that line is all report.
+ */
+export function splitTopic(answer: string): { text: string; topic?: string } {
+  const lines = answer.split('\n');
+  const index = lines.findIndex(line => line.trim() !== '');
+  const match = index >= 0 ? /^\s*\**\s*topic\s*:\s*\**\s*(.+?)\s*\**\s*$/i.exec(lines[index]!) : null;
+  if (!match?.[1]) return { text: answer.trim() };
+  const text = lines.slice(index + 1).join('\n').trim();
+  return { text: text || answer.trim(), topic: match[1].replace(/\*+$/, '').trim().slice(0, 120) };
+}
+
 /** The user message of a turn: who wrote it, the request's topic line on the first turn, the files. */
 export function turnMessage(turn: BrainTurn) {
   const { request, input } = turn;
   const header =
     input.author === 'factory'
       ? `Factory ${request.factory?.factoryName ?? ''} answered the question about "${request.topic}":`
-      : [
-          `Request: ${request.topic}`,
-          ...(request.fromName ? [`From: ${request.fromName}`] : []),
-          ...(request.sourceUrl ? [`Original: ${request.sourceUrl}`] : []),
-        ].join('\n');
+      : input.author === 'source'
+        ? [
+            turn.first
+              ? `New message in the person's ${request.source} chat, from ${input.fromName ?? 'someone'}.`
+              : `A new message in the same ${request.source} thread, from ${input.fromName ?? 'someone'}.`,
+            ...(request.sourceUrl ? [`Original: ${request.sourceUrl}`] : []),
+            ...(turn.first
+              ? [`Start your answer with one line "${TOPIC_PREFIX} <what it is about, at most 80 characters>", then your report.`]
+              : []),
+          ].join('\n')
+        : [
+            `Request: ${request.topic}`,
+            ...(request.fromName ? [`From: ${request.fromName}`] : []),
+            ...(request.sourceUrl ? [`Original: ${request.sourceUrl}`] : []),
+          ].join('\n');
   return {
     role: 'user' as const,
     content: [
@@ -97,7 +124,7 @@ export function createMastraAssistantBrain(options: {
       });
       const text = result.text?.trim();
       if (!text) throw new Error('The model returned an empty answer.');
-      return { text };
+      return turn.first && turn.input.author === 'source' ? splitTopic(text) : { text };
     },
   };
 }
