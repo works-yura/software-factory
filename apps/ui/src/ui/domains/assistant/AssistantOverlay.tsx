@@ -4,10 +4,19 @@ import type { ReactNode } from 'react';
 import { useApiConfig } from '../../../api/config';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 
-/** The assistant's API at this app's server. */
-export function AssistantApi({ children }: { children: ReactNode }) {
+/** Account › «Помічник» (its model picker) under a Factory's settings. */
+export function assistantSettingsHref(factoryId: string): string {
+  return `/factories/${encodeURIComponent(factoryId)}/settings/account#assistant`;
+}
+
+/** The assistant's API at this app's server; with a Factory, the panel can link to its Account settings. */
+export function AssistantApi({ children, factoryId }: { children: ReactNode; factoryId?: string }) {
   const { baseUrl } = useApiConfig();
-  return <AssistantApiProvider baseUrl={baseUrl}>{children}</AssistantApiProvider>;
+  return (
+    <AssistantApiProvider baseUrl={baseUrl} {...(factoryId ? { settingsHref: assistantSettingsHref(factoryId) } : {})}>
+      {children}
+    </AssistantApiProvider>
+  );
 }
 
 /** Whether this person has an assistant: it lives in an organization, so only a signed-in person on a server with sign-in. */
@@ -23,7 +32,7 @@ export function useHasAssistant(): boolean {
 export function AssistantOverlay({ factory }: { factory?: { id: string; name: string } }) {
   if (!useHasAssistant()) return null;
   return (
-    <AssistantApi>
+    <AssistantApi {...(factory ? { factoryId: factory.id } : {})}>
       <AssistantLauncher {...(factory ? { hint: factory } : {})} />
     </AssistantApi>
   );

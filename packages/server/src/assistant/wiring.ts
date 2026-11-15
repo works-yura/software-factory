@@ -107,12 +107,30 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     },
   };
 
+  /**
+   * The model a person who has not chosen one runs on: the same pick a new Factory chat makes when
+   * its Factory has no default (Settings › Моделі «built-in default», `/web/config/models`) — the
+   * harness's default-mode model when the organization can run it, otherwise the default model of
+   * the first connected provider in `PROVIDER_DEFAULT_MODELS` order. There is no organization-wide
+   * default setting (defaults are per Factory), so this is the organization-level equivalent. A
+   * failing model is never swapped for another provider: the thread names it and the person picks.
+   */
+  async function organizationDefaultModel(owner: { orgId: string; userId: string }): Promise<string | undefined> {
+    const tenant = { orgId: owner.orgId, userId: owner.userId, credentialScope: 'factory' as const };
+    const modeModelId = catalog?.getDefaultMode?.().defaultModelId;
+    const providerDefault = await resolveTenantProviderDefaultModel(tenant, modeModelId);
+    if (providerDefault) return providerDefault;
+    if (!modeModelId) return undefined;
+    // `undefined` above means either "the mode's model is usable" or "nothing is connected".
+    const listed = await models.list(owner);
+    return listed.some(model => model.id === modeModelId) ? modeModelId : undefined;
+  }
+
   // The organization's credentials, as every Factory run bills them (ADR-0032): never personal ones,
   // never the server's environment. No model at all is a loud refusal the thread shows.
   const resolver: AssistantModelResolver = {
     async resolve(owner, modelId) {
-      const tenant = { orgId: owner.orgId, userId: owner.userId, credentialScope: 'factory' as const };
-      const id = modelId ?? (await resolveTenantProviderDefaultModel(tenant, undefined));
+      const id = modelId ?? (await organizationDefaultModel(owner));
       if (!id) {
         throw new AssistantError(
           'no_org_model',
@@ -127,6 +145,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
         model: ({ requestContext: context }: { requestContext: RequestContext }) =>
           resolveModel(id, { remapForCodexOAuth: true, requestContext: context }),
         requestContext,
+        modelId: id,
       };
     },
   };

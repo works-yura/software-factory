@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Header, HeaderAction } from '@mastra/playground-ui/components/Header';
@@ -11,7 +12,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { ArrowLeft, Inbox, MessageSquareDashed, Plus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
 import { REQUEST_STATUSES, useAssistantRequests, useUpdateRequest } from './api';
@@ -19,6 +19,7 @@ import type { AssistantRequest, RequestStatus } from './api';
 import { NewRequestForm } from './NewRequestForm';
 import { NotesView } from './NotesView';
 import { RequestStatusDot, RequestThread, ShortcutHint } from './RequestThread';
+import { requestAge } from './time';
 
 type Filter = 'open' | 'all' | RequestStatus;
 type Tab = 'requests' | 'notes';
@@ -29,20 +30,7 @@ export function filterRequests(requests: AssistantRequest[], filter: Filter): As
   return requests.filter(request => request.status === filter);
 }
 
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-
-/** An inbox row's age: `now`, `5m`, `3h`, `2d`, then the date. */
-export function requestAge(value: string, t: TFunction<'assistant'>, language: string | undefined, now = Date.now()): string {
-  const at = new Date(value);
-  const diff = Math.max(0, now - at.getTime());
-  if (diff < MINUTE) return t('time.now');
-  if (diff < HOUR) return t('time.minutes', { count: Math.floor(diff / MINUTE) });
-  if (diff < DAY) return t('time.hours', { count: Math.floor(diff / HOUR) });
-  if (diff < 7 * DAY) return t('time.days', { count: Math.floor(diff / DAY) });
-  return new Intl.DateTimeFormat(language, { day: 'numeric', month: 'short' }).format(at);
-}
+export { requestAge } from './time';
 
 /**
  * One request in the list, on the one line a thread list row has: the status dot, the topic (bold
@@ -176,9 +164,10 @@ export function AssistantPanel({
 
   const list = (
     <div className={compact ? 'flex min-h-0 flex-1 flex-col' : 'border-border flex min-h-0 w-72 shrink-0 flex-col border-r'}>
-      <Header border={false}>
+      {/* One row in the 288px column: the filter with the new ones counted beside it, the new-request button icon-only. */}
+      <Header border={false} className="min-w-0">
         <Select value={filter} onValueChange={value => setFilter(value as Filter)}>
-          <SelectTrigger size="sm" variant="ghost" aria-label={t('filter.label')}>
+          <SelectTrigger size="sm" variant="ghost" aria-label={t('filter.label')} className="min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -192,20 +181,20 @@ export function AssistantPanel({
           </SelectContent>
         </Select>
         {newCount > 0 ? (
-          <Txt as="span" variant="caption" tone="muted" data-testid="assistant-new-count">
+          <Badge size="sm" variant="info" className="shrink-0 whitespace-nowrap" data-testid="assistant-new-count">
             {t('panel.newCount', { count: newCount })}
-          </Txt>
+          </Badge>
         ) : null}
         <HeaderAction>
           <Button
-            size="sm"
+            size="icon-sm"
             variant="primary"
-            icon={<Plus />}
+            aria-label={t('panel.newRequest')}
             aria-keyshortcuts="C"
             tooltip={<ShortcutHint label={t('panel.newRequest')} keys={['C']} />}
             onClick={() => setSelected('new')}
           >
-            {t('panel.newRequest')}
+            <Plus />
           </Button>
         </HeaderAction>
       </Header>
@@ -239,7 +228,18 @@ export function AssistantPanel({
     selected === 'new' ? (
       <NewRequestForm onCreated={request => setSelected(request.id)} onCancel={() => setSelected(undefined)} />
     ) : selected ? (
-      <RequestThread key={selected} requestId={selected} hint={hint} compact={compact} onDone={() => moveOn(selected)} />
+      <RequestThread
+        key={selected}
+        requestId={selected}
+        hint={hint}
+        compact={compact}
+        onDone={() => moveOn(selected)}
+        onOpenRequest={id => {
+          // The earlier request is closed: show it in the list too.
+          if (filter === 'open') setFilter('all');
+          setSelected(id);
+        }}
+      />
     ) : (
       <EmptyState
         variant="fill"

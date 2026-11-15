@@ -114,7 +114,7 @@ describe('the assistant on the Factory server', () => {
         view = await assistant.service.openRequest(owner, created.id);
       }
       expect(view.request.analysing).toBe(false);
-      expect(view.request.lastError).toMatch(/no model connected/);
+      expect(view.request.lastError).toMatchObject({ kind: 'no_model', modelId: null, detail: expect.stringMatching(/no model connected/) });
     } finally {
       assistant.stop();
     }

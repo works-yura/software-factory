@@ -249,6 +249,10 @@ export class AssistantRoutes {
         method: 'POST',
         handler: handle(async (c, owner) => c.json({ request: requestWire(await service.close(owner, c.req.param('id') ?? '')) })),
       }),
+      registerApiRoute(`${p}/requests/:id/retry`, {
+        method: 'POST',
+        handler: handle(async (c, owner) => c.json({ request: requestWire(await service.retry(owner, c.req.param('id') ?? '')) })),
+      }),
       registerApiRoute(`${p}/requests/:id/ask`, {
         method: 'POST',
         handler: handle(async (c, owner) => {
@@ -423,6 +427,7 @@ export const ASSISTANT_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'PATCH /web/assistant/requests/:id': 'self.write',
   'POST /web/assistant/requests/:id/messages': 'self.write',
   'POST /web/assistant/requests/:id/close': 'self.write',
+  'POST /web/assistant/requests/:id/retry': 'self.write',
   'POST /web/assistant/requests/:id/ask': 'self.write',
   'POST /web/assistant/requests/:id/check-answer': 'self.write',
   'POST /web/assistant/requests/:id/hand-over': 'self.write',

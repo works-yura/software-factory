@@ -58,7 +58,6 @@
     "factoryCard": "Card in {{factory}}",
     "factorySession": "Question in {{factory}}",
     "analysing": "The assistant is looking at it…",
-    "failed": "The assistant could not answer: {{message}}",
     "you": "You",
     "agent": "Assistant",
     "factory": "Factory",
@@ -72,7 +71,14 @@
     "created": "Created",
     "rename": "Rename",
     "topic": "Topic",
-    "properties": "Request properties"
+    "properties": "Request properties",
+    "continues": "Continues “{{topic}}”",
+    "continuesUnknown": "Continues an earlier request",
+    "openPrevious": "Open",
+    "notAnalysed": "Not analysed: hourly analysis limit reached",
+    "analyse": "Analyse",
+    "someone": "Someone",
+    "sourceFrom": "Message from {{name}}"
   },
   "actions": {
     "label": "Request actions",
@@ -152,7 +158,8 @@
     "new": "new"
   },
   "source": {
-    "manual": "Brought by you"
+    "manual": "Brought by you",
+    "clickup": "ClickUp"
   },
   "composer": {
     "mode": "Send to",
@@ -199,5 +206,35 @@
       "group_dm": "Group DM"
     },
     "loading": "Loading sources…"
+  },
+  "failure": {
+    "defaultModel": "The organization's default model",
+    "retry": "Retry",
+    "pickModel": "Choose another model",
+    "details": "Details",
+    "no_model": {
+      "title": "The organization has no model connected",
+      "fix": "An admin connects one in Settings › Models; then retry."
+    },
+    "rate_limit": {
+      "title": "{{model}}: limit reached or no credits",
+      "fix": "Choose another model in Account › Assistant, or top up this provider, then retry."
+    },
+    "auth": {
+      "title": "{{model}}: the API key was refused",
+      "fix": "The key is invalid or has no access. An admin replaces it in Settings › Models, or choose another model in Account › Assistant."
+    },
+    "model_not_found": {
+      "title": "{{model}}: the provider has no such model",
+      "fix": "Choose another model in Account › Assistant."
+    },
+    "overloaded": {
+      "title": "{{model}}: the provider is overloaded or down",
+      "fix": "Retry in a minute, or choose another model in Account › Assistant."
+    },
+    "unknown": {
+      "title": "{{model}}: the assistant could not answer",
+      "fix": "Retry; if it fails again, choose another model in Account › Assistant."
+    }
   }
 }

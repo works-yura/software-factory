@@ -11,6 +11,7 @@ import { Memory } from '@mastra/memory';
 
 import { IMAGE_MIMES } from './files.ts';
 import type { AssistantBrain, AssistantMemory, BrainFile, BrainTurn } from './ports.ts';
+import { AssistantTurnError } from './turn-failure.ts';
 import type { AssistantOwner } from './types.ts';
 import { assistantResourceId, assertOwner } from './types.ts';
 
@@ -32,7 +33,10 @@ export interface AssistantModelResolver {
    * The model to run (`modelId`, or the organization's default when `null`) and the request
    * context its credentials resolve under. Throws when the organization has no model.
    */
-  resolve(owner: AssistantOwner, modelId: string | null): Promise<{ model: AgentModel; requestContext?: RequestContext }>;
+  resolve(
+    owner: AssistantOwner,
+    modelId: string | null,
+  ): Promise<{ model: AgentModel; requestContext?: RequestContext; modelId?: string }>;
 }
 
 const TEXT_FILE_LIMIT = 40_000;
@@ -110,7 +114,9 @@ export function createMastraAssistantBrain(options: {
   return {
     async respond(turn) {
       assertOwner(turn.owner);
-      const { model, requestContext } = await options.models.resolve(turn.owner, turn.modelId);
+      const resolved = await options.models.resolve(turn.owner, turn.modelId);
+      const { model, requestContext } = resolved;
+      const modelId = resolved.modelId ?? turn.modelId;
       const agent = new Agent({
         id: 'factory-assistant',
         name: 'Помічник',
@@ -118,10 +124,16 @@ export function createMastraAssistantBrain(options: {
         model,
         memory: options.memory,
       });
-      const result = await agent.generate([turnMessage(turn)] as never, {
-        memory: { resource: assistantResourceId(turn.owner), thread: turn.request.id },
-        ...(requestContext ? { requestContext } : {}),
-      });
+      let result: Awaited<ReturnType<typeof agent.generate>>;
+      try {
+        result = await agent.generate([turnMessage(turn)] as never, {
+          memory: { resource: assistantResourceId(turn.owner), thread: turn.request.id },
+          ...(requestContext ? { requestContext } : {}),
+        });
+      } catch (error) {
+        // The thread names the model that failed; the cause stays as the detail.
+        throw modelId ? new AssistantTurnError(modelId, error) : error;
+      }
       const text = result.text?.trim();
       if (!text) throw new Error('The model returned an empty answer.');
       return turn.first && turn.input.author === 'source' ? splitTopic(text) : { text };
