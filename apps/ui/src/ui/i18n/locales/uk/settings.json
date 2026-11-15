@@ -11,7 +11,7 @@
     "account": "Мій акаунт",
     "organization": "Організація",
     "preferences": "Налаштування",
-    "factory": "Керування Factory",
+    "factory": "Керування",
     "analytics": "Аналітика",
     "repositories": "Репозиторії",
     "environment": "Середовище",
@@ -29,7 +29,6 @@
     "account": "Акаунт",
     "organization": "Організація",
     "factory": "Factory",
-    "factoryNamed": "Factory «{{name}}»",
     "server": "Сервер"
   },
   "intake": {
@@ -654,7 +653,7 @@
       "note": "Діє для нових сесій; картки, що вже виконуються, завершаться на своєму харнесі.",
       "changeFailed": "Не вдалося змінити харнес",
       "connectHeading": "Харнеси, які треба підключити",
-      "notOffered": "{{name}} не пропонується: немає вашого акаунта для нього.",
+      "notOffered": "Щоб вибрати {{name}}, потрібен ваш акаунт.",
       "notOfferedBecause": "{{name}} не пропонується: {{reason}}",
       "connect": "Підключити {{name}}"
     },

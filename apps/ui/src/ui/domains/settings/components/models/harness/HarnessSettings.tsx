@@ -54,7 +54,15 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
   return (
     <SettingsSubsection scope="factory" title={t('models.harness.title')} description={t('models.harness.description')}>
       <SettingsContainer>
-        <SettingsRow label={t('models.harness.label')} description={t('models.harness.note')}>
+        <SettingsRow
+          label={t('models.harness.label')}
+          description={
+            <>
+              {t('models.harness.note')}
+              {harness !== undefined && <ConnectAgentHint factoryId={factoryId} choices={choices} />}
+            </>
+          }
+        >
           {harness === undefined ? (
             projectQuery.isError ? (
               <Txt as="span" variant="caption" tone="muted">
@@ -64,8 +72,7 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
               <SkeletonRows label={t('models.harness.title')} rows={1} />
             )
           ) : (
-            <div className="flex flex-col items-start gap-1 sm:items-end">
-              <SegmentedControl
+            <SegmentedControl
                 aria-label={t('models.harness.label')}
                 size="sm"
                 value={harness}
@@ -83,8 +90,6 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
                   </SegmentedControlItem>
                 ))}
               </SegmentedControl>
-              <ConnectAgentHint factoryId={factoryId} choices={choices} />
-            </div>
           )}
         </SettingsRow>
       </SettingsContainer>

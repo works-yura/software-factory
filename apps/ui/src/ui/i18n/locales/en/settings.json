@@ -11,7 +11,7 @@
     "account": "My account",
     "organization": "Organization",
     "preferences": "Preferences",
-    "factory": "Manage Factory",
+    "factory": "Manage",
     "analytics": "Analytics",
     "repositories": "Repositories",
     "environment": "Environment",
@@ -29,7 +29,6 @@
     "account": "Account",
     "organization": "Organization",
     "factory": "Factory",
-    "factoryNamed": "Factory “{{name}}”",
     "server": "Server"
   },
   "intake": {
@@ -644,7 +643,7 @@
       "note": "Applies to new sessions; cards already running finish on their harness.",
       "changeFailed": "Couldn’t switch the harness",
       "connectHeading": "Harnesses to connect",
-      "notOffered": "{{name}} isn’t offered: no account of yours to run it.",
+      "notOffered": "To pick {{name}}, it needs your account.",
       "notOfferedBecause": "{{name}} isn’t offered: {{reason}}",
       "connect": "Connect {{name}}"
     },

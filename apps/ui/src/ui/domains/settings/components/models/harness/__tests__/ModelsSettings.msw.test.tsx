@@ -184,7 +184,7 @@ describe('Models settings per harness', () => {
     renderModels();
 
     const control = await harnessSwitch();
-    expect(await screen.findByText(/Robo Agent isn’t offered/)).toBeInTheDocument();
+    expect(await screen.findByText(/To pick Robo Agent, it needs your account/)).toBeInTheDocument();
     expect(within(control).queryByRole('radio', { name: 'Robo Agent' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connect Robo Agent' })).toHaveAttribute(
       'href',
