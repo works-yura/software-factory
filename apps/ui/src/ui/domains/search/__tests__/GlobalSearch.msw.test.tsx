@@ -553,7 +553,7 @@ describe('Global search', () => {
       'Rules',
       'Preferences',
       'Analytics',
-      'Manage Factory',
+      'Manage',
       'Repositories',
       'Work Intake',
       'Harness',

@@ -21,7 +21,6 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
@@ -209,15 +208,11 @@ export function SettingsNavigation() {
   const [query, setQuery] = useState('');
   // Observational memory is Mastra's; a Factory on a harness without it (Claude Code, Codex) has nothing to set there.
   const { harness, descriptor } = useFactoryHarness(factoryId ?? '');
-  const factoryName = useFactoryQuery(factoryId).data?.name;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => {
     const items = group.items.filter(({ id }) => id !== 'memory' || harness === undefined || descriptor.supports.memory);
-    // The Factory group names the Factory once it is known; until then it reads «Factory».
-    const label = group.id === 'factory' && factoryName ? t('groups.factoryNamed', { name: factoryName }) : group.label;
     return {
       ...group,
-      label,
       items: normalizedQuery ? items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : items,
     };
   }).filter(group => group.items.length > 0);
