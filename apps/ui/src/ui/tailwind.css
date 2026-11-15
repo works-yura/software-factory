@@ -5,6 +5,9 @@
 
 /* Device preview (`@factory/device`) ships its panel as source: Tailwind scans it here. */
 @source '../../../../packages/device/src/react';
+/* So does the assistant panel (`@factory/assistant-ui`, ADR-0051): without this its own classes
+ * (the floating window's size and place) are not generated and the panel opens off-screen. */
+@source '../../../../packages/assistant-ui/src';
 
 /* The board card's corner. It is not a free number: a card is a rounded box with
  * a capsule pill sitting in its bottom corner, and the two only look concentric

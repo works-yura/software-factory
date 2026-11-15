@@ -1,0 +1,43 @@
+# Помічник — особистий деск звернень
+
+Фаза 1 зроблена (гілка `feat/assistant-phase1`). Рішення: [ADR-0051](../../adr/0051-personal-assistant-requests-desk.md).
+
+- **Що це.** Плаваюча кнопка на сторінках Factory відкриває панель «Помічник»: звернення людини в її поточній організації. Звернення людина приносить сама — вставляє текст чи скріншот (Ctrl+V), перетягує файли, пише «від кого» і посилання на першоджерело. Одне звернення — один тред.
+- **Власник — пара `(orgId, userId)`.** Береться лише з сесії (`tenant`), ніколи з запиту. Чуже звернення, нотатка чи файл (іншої людини або тієї самої людини в іншій організації) — 404. Порожня половина власника відкидається до будь-якого запиту в БД.
+- **Статуси.** `new` (агент ще дивиться) → `waiting_me` (агент відзвітував) / `waiting_factory` (спитали Factory чи передали картку) → `answered` (з фази 4, коли піде відповідь колезі) → `closed` (закриває людина). Нове повідомлення в закрите звернення не приймається.
+- **Агент.** Один Mastra Agent, що створюється на кожен хід з моделлю власника; без інструментів і без контексту проєктів. Пам'ять Mastra: ресурс `assistant:<orgId>:<userId>`, тред = id звернення. Картинки йдуть моделі як зображення (vision), PDF — файлом, текстові файли — текстом. Модель — обрана людиною з моделей організації або типова модель організації (`resolveTenantProviderDefaultModel`, credentialScope `factory`). Немає жодної моделі — хід падає з поясненням у треді («Your organization has no model connected…»), статус лишається `new`.
+- **Хід агента** йде після відповіді на запит (панель опитує, поки `analysing`). Помилка ходу записується в `lastError` і показується в треді; в лог іде лише id звернення, без вмісту.
+- **Factory — лише через MCP Factory від імені людини.**
+  - Доступ: Акаунт › Помічник › «Дозволити». Помічник — OAuth-клієнт власного сервера авторизації Factory (better-auth `oauthProvider`): реєстрація, PKCE, та сама сторінка згоди `/oauth/consent`, повернення на `/web/assistant/factory-access/callback`. Токени (access + refresh, `offline_access`) — у `assistant_factory_grants` конвертом `secret-encryption`. Access-токен оновлюється refresh-токеном.
+  - Список Factory — документ виявлення `GET /web/factory/mcp` (ADR-0051 (а), `packages/mcp`).
+  - «Спитати Factory X» — `factory_start_session` з питанням; «Перевірити відповідь» читає `factory_thread_read` бічної сесії; коли агент Factory відповів — відповідь іде в тред, помічник робить висновок, статус `waiting_me`.
+  - «Передати у Factory X» — `factory_create_work_item` (опис — що написали, від кого, першоджерело, назви файлів), далі кожен файл — у вкладення картки тим самим bearer-токеном (`POST /web/factory/work-items/:id/attachments`). Картку можна передати один раз.
+  - Права — людини: Глядач (без `run.start`) Factory не спитає й не передасть; відмову Factory помічник показує її словами (502 `factory_failed`).
+- **Файли.** Байти — у наявному `AttachmentBlobStore` (за sha256), записи — `assistant_files`. Байти видаляються, лише коли на sha256 не посилається жоден файл помічника, жодне вкладення Factory і жоден аватар; і навпаки, видалення вкладення Factory не чіпає байти, які ще має помічник (`AttachmentService({ otherReferences })`). Без сховища файлів звернення з файлами відмовляються (503 з поясненням), текстові працюють.
+- **Нотатки** — вкладка «Нотатки», нотатки людини в цій організації.
+- **Налаштування** — Акаунт › «Помічник» (область `personal`): модель з моделей організації, скільки днів тримати закриті звернення (1–365, типово 30), доступ до Factory (дозволити / відкликати), «Очистити помічника».
+- **Очищення.** Тригери: людину прибрали з організації або вона вийшла (усі шляхи better-auth: `remove-member`, `leave`, `remove`/`leave` довідника) — стирається помічник цієї організації; акаунт видалено (хук better-auth `databaseHooks.user.delete.after`; потоку видалення акаунта у Factory поки немає — хук є точкою, куди він прийде) — усіх організацій; «Очистити помічника»; щоденна задача терміну зберігання (закриті звернення, старші за термін власника — з тредом пам'яті й файлами). Порядок: відкликати OAuth-токени помічника → стерти пам'ять Mastra за ресурсом → звернення, треди, нотатки, налаштування, секрети → записи файлів і неспільні байти → тимчасова тека (у фазі 1 її немає: помічник не виконує команд) → запис аудиту `factory.assistant.cleared` (причина й кількість звернень/файлів, без вмісту). Помилка очищення після видалення учасника логується гучно й не скасовує видалення.
+
+## Таблиці
+
+`assistant_requests`, `assistant_messages` (тред для панелі: людина, агент, Factory, події «запитано/передано»), `assistant_notes`, `assistant_settings`, `assistant_files`, `assistant_factory_grants`. Усі з `owner_org_id` + `owner_user_id`; створюються доменом `assistant` при старті (`ensureCollections`), міграцій даних не потрібно. Пам'ять агента — у сховищі Mastra memory (`mastra_threads`/`mastra_messages`) під ресурсом `assistant:<orgId>:<userId>`.
+
+## Маршрути
+
+`/web/assistant/*`: `requests` (GET, POST multipart/JSON), `requests/:id` (GET), `requests/:id/messages|close|ask|check-answer|hand-over` (POST), `files/:id/content`, `notes` (GET, POST), `notes/:id` (PATCH, DELETE), `settings` (GET, PUT), `models`, `factories`, `clear`, `factory-access/start` (POST), `factory-access/callback` (GET), `factory-access` (DELETE). Кожен запис — `self.write` (є в кожної ролі, зокрема Глядача). Маршрути монтуються лише на сервері з входом.
+
+## Чого ще немає
+
+- (б) `factory_ask` у MCP — помічник сам стартує бічну сесію й перевіряє відповідь за кнопкою (без фонового чекання).
+- (г) довгий доступ: access-токен прив'язаний до браузерної сесії, з якої людина дозволила доступ; після виходу треба дозволити знову. Для фази 1 (усе за дією людини) достатньо.
+- (д) `factory_start_session` без репозиторію: у Factory без репозиторію «Спитати» відповідає, що ця Factory поки не приймає питань.
+- Розділ «Помічник» в Акаунті відкривається зі сторінок Factory (як увесь Акаунт сьогодні), хоч дані не належать жодній Factory.
+- Джерела (ClickUp Chat, пошта), відповіді колегам, дайджести — фази 2–4.
+
+## Де в коді
+
+- Ядро: `packages/assistant-core/src/` — `storage.ts` (таблиці), `service.ts` (життєвий цикл, очищення, термін), `agent.ts` (Mastra Agent і пам'ять), `factory-access.ts` (OAuth), `factory-client.ts` (MCP), `routes.ts`, `retention.ts`; межа залежностей — `boundary.test.ts`.
+- Сервер: `packages/server/src/assistant/wiring.ts` (порти: моделі організації, сховище, аудит, хуки видалення), монтування — `packages/server/src/factory.ts`.
+- MCP: документ виявлення — `packages/mcp/src/routes.ts` (`FACTORY_MCP_DISCOVERY_PATH`).
+- Хуки видалення: `packages/auth-better-auth/src/team.ts` (`OrganizationEventRelay.onMemberRemoved/onUserDeleted`), `index.ts`.
+- UI: `packages/assistant-ui/src/` (кнопка, панель, тред, нове звернення, нотатки, налаштування); у застосунку — `apps/ui/src/ui/domains/assistant/AssistantOverlay.tsx`, `ChatOverlays.tsx`, `AccountSettingsSection.tsx`; переклади — `apps/ui/src/ui/i18n/locales/{en,uk}/assistant.json`.

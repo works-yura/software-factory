@@ -1,0 +1,131 @@
+/**
+ * The per-person agent (ADR-0051): one Mastra Agent definition, built for each turn with its
+ * owner's model, remembering under the Mastra memory resource `assistant:<orgId>:<userId>` with
+ * one thread per request. It has no tools and no project context: it reads what the person
+ * brought (screenshots by vision), and reports to the person only.
+ */
+import { Agent } from '@mastra/core/agent';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { MastraCompositeStore } from '@mastra/core/storage';
+import { Memory } from '@mastra/memory';
+
+import { IMAGE_MIMES } from './files.ts';
+import type { AssistantBrain, AssistantMemory, BrainFile, BrainTurn } from './ports.ts';
+import type { AssistantOwner } from './types.ts';
+import { assistantResourceId, assertOwner } from './types.ts';
+
+export const ASSISTANT_AGENT_INSTRUCTIONS = [
+  'You are «Помічник», the personal assistant of one person in their organization.',
+  'Colleagues and clients send this person messages, screenshots and files; the person brings each one to you as a request.',
+  'For a new request: look closely at every screenshot and file, then say briefly who is asking what, what you think the answer or next step is, and whether one of the organization’s Factories (its software agents) should be asked or given the task.',
+  'When a Factory’s answer arrives, give the person a short conclusion from it and what to reply.',
+  'You report to this person only. Never write as if to the colleague or client, and never claim you sent anything to anyone.',
+  'Answer in the language the person writes in. Be brief and concrete; use Markdown lists where they help.',
+].join(' ');
+
+type AgentModel = ConstructorParameters<typeof Agent>[0]['model'];
+
+/** The organization's model for a turn: its credentials, never the server's. */
+export interface AssistantModelResolver {
+  /**
+   * The model to run (`modelId`, or the organization's default when `null`) and the request
+   * context its credentials resolve under. Throws when the organization has no model.
+   */
+  resolve(owner: AssistantOwner, modelId: string | null): Promise<{ model: AgentModel; requestContext?: RequestContext }>;
+}
+
+const TEXT_FILE_LIMIT = 40_000;
+
+/** What the model gets for one file: an image to look at, a PDF to read, text inline, or just its name. */
+function filePart(file: BrainFile): Array<Record<string, unknown>> {
+  if (IMAGE_MIMES.has(file.mime)) return [{ type: 'image', image: file.bytes, mimeType: file.mime }];
+  if (file.mime === 'application/pdf') return [{ type: 'file', data: file.bytes, mimeType: file.mime, filename: file.name }];
+  if (file.mime.startsWith('text/') || file.mime === 'application/json') {
+    const text = new TextDecoder().decode(file.bytes.subarray(0, TEXT_FILE_LIMIT));
+    return [{ type: 'text', text: `File ${file.name}:\n${text}` }];
+  }
+  return [{ type: 'text', text: `(Attached file ${file.name}, ${file.mime}, not readable here.)` }];
+}
+
+/** The user message of a turn: who wrote it, the request's topic line on the first turn, the files. */
+export function turnMessage(turn: BrainTurn) {
+  const { request, input } = turn;
+  const header =
+    input.author === 'factory'
+      ? `Factory ${request.factory?.factoryName ?? ''} answered the question about "${request.topic}":`
+      : [
+          `Request: ${request.topic}`,
+          ...(request.fromName ? [`From: ${request.fromName}`] : []),
+          ...(request.sourceUrl ? [`Original: ${request.sourceUrl}`] : []),
+        ].join('\n');
+  return {
+    role: 'user' as const,
+    content: [
+      { type: 'text', text: input.text ? `${header}\n\n${input.text}` : header },
+      ...input.files.flatMap(filePart),
+    ],
+  };
+}
+
+export function createAssistantMemory(storage: MastraCompositeStore): Memory {
+  return new Memory({
+    storage,
+    options: { lastMessages: 40, semanticRecall: false, generateTitle: false, workingMemory: { enabled: false } },
+  });
+}
+
+/** The agent on Mastra: built per turn with the owner's model, memory per owner, thread per request. */
+export function createMastraAssistantBrain(options: {
+  memory: Memory;
+  models: AssistantModelResolver;
+  instructions?: string;
+}): AssistantBrain {
+  return {
+    async respond(turn) {
+      assertOwner(turn.owner);
+      const { model, requestContext } = await options.models.resolve(turn.owner, turn.modelId);
+      const agent = new Agent({
+        id: 'factory-assistant',
+        name: 'Помічник',
+        instructions: options.instructions ?? ASSISTANT_AGENT_INSTRUCTIONS,
+        model,
+        memory: options.memory,
+      });
+      const result = await agent.generate([turnMessage(turn)] as never, {
+        memory: { resource: assistantResourceId(turn.owner), thread: turn.request.id },
+        ...(requestContext ? { requestContext } : {}),
+      });
+      const text = result.text?.trim();
+      if (!text) throw new Error('The model returned an empty answer.');
+      return { text };
+    },
+  };
+}
+
+/** Erases the agent's memory: every thread under the owner's resource, or one request's thread. */
+export function createAssistantMemoryEraser(storage: MastraCompositeStore): AssistantMemory {
+  const store = async () => {
+    const memory = await storage.getStore('memory');
+    if (!memory) throw new Error('The Mastra memory store is unavailable; the assistant memory cannot be erased.');
+    return memory;
+  };
+  return {
+    async forget(owner) {
+      const resourceId = assistantResourceId(owner);
+      const memory = await store();
+      const { threads } = await memory.listThreads({ filter: { resourceId }, perPage: false });
+      for (const thread of threads) {
+        // Belt and braces: the filter named the resource; never delete a thread of another.
+        if (thread.resourceId !== resourceId) continue;
+        await memory.deleteThread({ threadId: thread.id });
+      }
+    },
+    async forgetThread(owner, requestId) {
+      const resourceId = assistantResourceId(owner);
+      const memory = await store();
+      const thread = await memory.getThreadById({ threadId: requestId });
+      if (!thread || thread.resourceId !== resourceId) return;
+      await memory.deleteThread({ threadId: requestId });
+    },
+  };
+}

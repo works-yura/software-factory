@@ -215,6 +215,46 @@ describe('the membership directory and invitations (adapter for @factory/access)
     await expect(provider.leave(orgId, ada.userId)).rejects.toThrow(/owner cannot leave/);
   });
 
+  it('tells removal listeners on every path a person leaves an organization by (ADR-0051 cleanup)', async () => {
+    const removed: string[] = [];
+    provider.onMemberRemoved(async (organizationId, userId) => {
+      removed.push(`${organizationId}:${userId}`);
+    });
+    const { orgId, ada, bob, carol } = await team();
+
+    expect((await api('/organization/remove-member', ada.cookie, { body: { memberIdOrEmail: carol.memberId, organizationId: orgId } })).status).toBe(200);
+    await provider.leave(orgId, bob.userId);
+
+    expect(removed).toEqual([`${orgId}:${carol.userId}`, `${orgId}:${bob.userId}`]);
+  });
+
+  it('keeps a removal done when a removal listener fails, and says so loudly', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    provider.onMemberRemoved(async () => {
+      throw new Error('cleanup down');
+    });
+    const { orgId, carol } = await team();
+
+    await provider.remove(orgId, carol.memberId);
+
+    expect(await provider.role(orgId, carol.userId)).toBeNull();
+    expect(error.mock.calls.some(([message]) => String(message).includes(carol.userId))).toBe(true);
+    error.mockRestore();
+  });
+
+  it('tells deletion listeners when better-auth deletes an account', async () => {
+    const deleted: string[] = [];
+    provider.onUserDeleted(async userId => {
+      deleted.push(userId);
+    });
+    const { carol } = await team();
+    const ctx = await (google.auth as unknown as { $context: Promise<{ internalAdapter: { deleteUser(id: string): Promise<void> } }> }).$context;
+
+    await ctx.internalAdapter.deleteUser(carol.userId);
+
+    expect(deleted).toEqual([carol.userId]);
+  });
+
   it('reads a person with whether their email is verified', async () => {
     const { ada } = await team();
     expect(await provider.person(ada.userId)).toMatchObject({ id: ada.userId, email: ADA.email, emailVerified: true });

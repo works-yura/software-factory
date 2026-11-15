@@ -156,6 +156,28 @@ describe('MCP clients on Factory OAuth', () => {
     expect((await mcp(adaProject, { authorization: `Bearer ${header}.${payload}.forged` })).status).toBe(401);
   });
 
+  it('lists the person’s own Factories with their MCP endpoints (the discovery document)', async () => {
+    const { accessToken } = await connectTestMcpClient(google, adaCookie);
+    const listed = await app.request(`${TEST_ORIGIN}/web/factory/mcp`, { headers: { authorization: `Bearer ${accessToken}` } });
+
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual({
+      organizationId: expect.any(String),
+      factories: [
+        { id: adaProject, name: 'Ada Factory', mcpUrl: `${TEST_ORIGIN}/web/factory/projects/${adaProject}/mcp` },
+      ],
+    });
+    // Another organization's Factories are not hers to list.
+    const named = await app.request(`${TEST_ORIGIN}/web/factory/mcp`, {
+      headers: { authorization: `Bearer ${accessToken}`, 'X-Mastra-Organization-Id': bobOrg },
+    });
+    expect(named.status).toBe(403);
+  });
+
+  it('answers the discovery document only to a signed-in person', async () => {
+    expect((await app.request(`${TEST_ORIGIN}/web/factory/mcp`)).status).toBe(401);
+  });
+
   it('refuses a token that expired', async () => {
     const { accessToken } = await connectTestMcpClient(google, adaCookie);
     vi.useFakeTimers({ toFake: ['Date'] });

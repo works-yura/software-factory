@@ -44,6 +44,9 @@ export const AUDIT_ACTIONS = {
     'join_link_revoked',
     'join_link_used',
   ],
+  // A person's assistant erased (ADR-0051): removed from the organization, account deleted, cleared
+  // by them, never its content — only why and how many requests and files went.
+  assistant: ['cleared'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

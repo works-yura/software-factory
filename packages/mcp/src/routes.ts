@@ -29,6 +29,12 @@ import { FACTORY_SESSION_TOKEN_HEADER } from './session-token.ts';
 import type { FactorySessionTokenSigner } from './session-token.ts';
 
 export const FACTORY_MCP_PATH = '/web/factory/projects/:projectId/mcp';
+/**
+ * The discovery document: the Factories a signed-in person can reach in their organization, with
+ * each one's MCP endpoint (ADR-0051 (а)). An MCP endpoint is per Factory, so a client that serves
+ * a person across Factories (the assistant) starts here.
+ */
+export const FACTORY_MCP_DISCOVERY_PATH = '/web/factory/mcp';
 const PROTECTED_RESOURCE_PREFIX = '/.well-known/oauth-protected-resource';
 
 /**
@@ -88,7 +94,7 @@ export interface FactoryMcpRoutesDeps {
   authorizationServers: string[];
   /** See {@link FactoryMcpConfig.resource}; the endpoint's URL when unset. */
   resource?: string;
-  projects: Pick<FactoryProjectsStorage, 'get'>;
+  projects: Pick<FactoryProjectsStorage, 'get' | 'list'>;
   /** Source-control handles a connector session can be filed under, tried in order. */
   sourceControls: readonly SourceControlStorageHandle[];
   tools: FactoryMcpToolDependencies;
@@ -422,6 +428,32 @@ async function handleSessionMcp(
   return serveTools(c, mcpPath, { factoryProjectId, projectName: resolved.projectName, tools });
 }
 
+const MEMBER_ROLE_NEEDED = 'Your role cannot use the Factory MCP endpoint. Ask an admin of your organization for the Member role.';
+
+/**
+ * `GET /web/factory/mcp`: the person's Factories and their MCP endpoints, for the organization the
+ * call acts in (`X-Mastra-Organization-Id` picks one of theirs). The same gate as the endpoint
+ * itself: a signed-in person (OAuth access token or session) holding `run.start`.
+ */
+async function handleDiscovery(deps: FactoryMcpRoutesDeps, c: Context): Promise<Response> {
+  await deps.auth.ensureUser(c);
+  const tenant = deps.auth.tenant(c);
+  if (!tenant) return unauthorized(deps, FACTORY_MCP_DISCOVERY_PATH);
+  if (!tenant.orgId) return c.json({ error: 'organization_required' }, 403);
+  if (!(await deps.auth.can(c, 'run.start', tenant.orgId))) {
+    return c.json({ error: 'forbidden', permission: 'run.start', message: MEMBER_ROLE_NEEDED }, 403);
+  }
+  const projects = await deps.projects.list({ orgId: tenant.orgId });
+  return c.json({
+    organizationId: tenant.orgId,
+    factories: projects.map(project => ({
+      id: project.id,
+      name: project.name,
+      mcpUrl: `${deps.publicOrigin}${FACTORY_MCP_PATH.replace(':projectId', encodeURIComponent(project.id))}`,
+    })),
+  });
+}
+
 async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Response> {
   const factoryProjectId = c.req.param('projectId') ?? '';
   const mcpPath = new URL(c.req.url).pathname;
@@ -440,7 +472,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
       {
         error: 'forbidden',
         permission: 'run.start',
-        message: 'Your role cannot use the Factory MCP endpoint. Ask an admin of your organization for the Member role.',
+        message: MEMBER_ROLE_NEEDED,
       },
       403,
     );
@@ -498,6 +530,15 @@ export function buildFactoryMcpRoutes(deps: FactoryMcpRoutesDeps): ApiRoute[] {
     ...(['POST', 'GET', 'DELETE'] as const).map(method =>
       // The endpoint authenticates each caller itself (session token or OAuth) and checks `run.start`.
       withAccess('public', registerApiRoute(FACTORY_MCP_PATH, { method, requiresAuth: false, handler })),
+    ),
+    // Authenticates the caller itself (OAuth access token or session) and checks `run.start`, like the endpoint.
+    withAccess(
+      'public',
+      registerApiRoute(FACTORY_MCP_DISCOVERY_PATH, {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c => handleDiscovery(deps, c as unknown as Context),
+      }),
     ),
     registerApiRoute(`${PROTECTED_RESOURCE_PREFIX}${FACTORY_MCP_PATH}`, {
       method: 'GET',

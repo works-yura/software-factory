@@ -1,0 +1,35 @@
+{
+  "name": "@factory/assistant-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "«Помічник» panel (ADR-0051): the floating button, the requests list and thread, new request, notes, and the Account section — on playground-ui's chat parts, talking to /web/assistant.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.tsx"
+  },
+  "scripts": {
+    "check": "node ../playground-ui/scripts/ensure-built.mjs && tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@mastra/playground-ui": "workspace:*",
+    "@tanstack/react-query": "5.90.21",
+    "lucide-react": "1.37.0",
+    "react": "19.2.7",
+    "react-i18next": "16.2.4"
+  },
+  "devDependencies": {
+    "@mastra/playground-ui": "workspace:*",
+    "@tanstack/react-query": "5.90.21",
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "i18next": "25.6.0",
+    "lucide-react": "1.37.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-i18next": "16.2.4",
+    "typescript": "catalog:ts6",
+    "vitest": "catalog:"
+  }
+}
