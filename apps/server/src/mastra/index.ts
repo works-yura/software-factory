@@ -42,6 +42,7 @@ import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { createGoogleAuth, googleMcpConfig } from './google/google-auth';
+import { createInvitationEmails, createNotifier } from './notifications';
 // Local development: the machine's credential key and a vector store without Postgres.
 import { createLocalVector, ownMachineCredentialKey } from './local';
 
@@ -176,8 +177,10 @@ let auth: IMastraAuthProvider | null | undefined;
 if (process.env.FACTORY_LOCAL_DEV_AUTH?.trim()) {
   throw new Error('FACTORY_LOCAL_DEV_AUTH was removed: Google sign-in is the only sign-in (FACTORY_AUTH=google).');
 }
+// Email and, later, other channels (ADR-0047). Invitations are its first sender.
+const notifier = createNotifier();
 if (googleAuthEnabled) {
-  auth = createGoogleAuth();
+  auth = createGoogleAuth(publicUrl => createInvitationEmails(notifier, publicUrl));
 } else if (authDisabled) {
   auth = null;
 }

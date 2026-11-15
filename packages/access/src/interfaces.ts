@@ -49,11 +49,32 @@ export interface Invitation {
   expiresAt: string;
 }
 
-/** Invitations by email: a link the inviter copies; Factory sends no email. */
+/**
+ * Invitations by email: a link the inviter can copy, and an email with the same link when the
+ * server has a mail channel (`InvitationNotifier`).
+ */
 export interface InvitationService {
   invite(organizationId: string, email: string, role: AssignableRole, inviterUserId: string): Promise<Invitation>;
   cancel(organizationId: string, invitationId: string): Promise<void>;
   list(organizationId: string): Promise<Invitation[]>;
+}
+
+/** An invitation was created or sent again. */
+export interface InvitationCreated {
+  invitationId: string;
+  email: string;
+  role: string;
+  organization: { id: string; name: string };
+  inviter: { userId: string; name?: string; email?: string };
+  expiresAt: Date;
+}
+
+/**
+ * Tells the invited person (`@factory/notifications` sends an email). Never throws: the
+ * invitation exists either way, and its link stays in the team settings to copy.
+ */
+export interface InvitationNotifier {
+  invitationCreated(event: InvitationCreated): Promise<void>;
 }
 
 export type JoinLinkStatus = 'active' | 'expired' | 'revoked' | 'used_up';

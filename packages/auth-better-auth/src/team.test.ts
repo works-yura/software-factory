@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { InvitationCreated, InvitationNotifier } from '@factory/access';
+
 import type { MastraAuthBetterAuth } from './index';
 import { createTestGoogleAuth, TEST_ORIGIN as ORIGIN } from './testing';
 import type { GoogleProfile, TestGoogleAuth } from './testing';
@@ -235,6 +237,52 @@ describe('the membership directory and invitations (adapter for @factory/access)
     await ctx.adapter.update({ model: 'member', where: [{ field: 'id', value: carol.memberId }], update: { role: 'superuser' } });
 
     await expect(provider.role(orgId, carol.userId)).rejects.toThrow(/unknown role "superuser"/);
+  });
+});
+
+describe('invitation notices (InvitationNotifier)', () => {
+  async function owner(invitations: InvitationNotifier) {
+    google = await createTestGoogleAuth({ invitations });
+    provider = google.provider;
+    const cookie = await google.signIn(ADA);
+    const orgId = (await provider.ensureOrganization(await userIdOf(cookie)))!;
+    return { cookie, orgId };
+  }
+
+  it('tells the notifier about each invitation and each resend, with the organization and the inviter', async () => {
+    const sent: InvitationCreated[] = [];
+    const { cookie, orgId } = await owner({ invitationCreated: async event => void sent.push(event) });
+
+    const invited = await api('/organization/invite-member', cookie, { body: { email: 'Bob@Example.com', role: 'member', organizationId: orgId } });
+    expect(invited.status).toBe(200);
+    const { id } = (await invited.json()) as { id: string };
+    const resent = await api('/organization/invite-member', cookie, {
+      body: { email: BOB.email, role: 'member', organizationId: orgId, resend: true },
+    });
+    expect(resent.status).toBe(200);
+
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatchObject({
+      invitationId: id,
+      email: 'bob@example.com',
+      role: 'member',
+      organization: { id: orgId },
+      inviter: { name: 'Ada Lovelace', email: 'ada@example.com' },
+    });
+    expect(sent[0]!.organization.name).toBeTruthy();
+    expect(sent[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(sent[1]!.invitationId).toBe(id);
+  });
+
+  it('keeps the invitation when the notifier throws', async () => {
+    const { cookie, orgId } = await owner({ invitationCreated: async () => Promise.reject(new Error('smtp down')) });
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const invited = await api('/organization/invite-member', cookie, { body: { email: BOB.email, role: 'member', organizationId: orgId } });
+
+    expect(invited.status).toBe(200);
+    expect(await provider.list(orgId)).toHaveLength(1);
+    quiet.mockRestore();
   });
 });
 

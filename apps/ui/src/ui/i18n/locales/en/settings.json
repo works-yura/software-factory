@@ -2001,7 +2001,7 @@
     "invite": {
       "button": "Invite member",
       "title": "Invite member",
-      "description": "Factory sends no email: copy the link and send it yourself. It works for 7 days and only for that email.",
+      "description": "Factory emails the link to that address when the server has email set up; you can also copy it and send it yourself. It works for 7 days and only for that email.",
       "email": "Email",
       "role": "Role",
       "create": "Create link",

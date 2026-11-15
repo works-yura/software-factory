@@ -37,6 +37,7 @@ import { isAssignableRole, isRole } from '@factory/access';
 import type {
   AssignableRole,
   Invitation,
+  InvitationNotifier,
   InvitationService,
   Member,
   MembershipDirectory,
@@ -186,6 +187,13 @@ export interface MastraAuthBetterAuthOptions extends MastraAuthProviderOptions<B
    * `auth`; the provider-built instance gets the provider's own.
    */
   events?: OrganizationEventRelay;
+
+  /**
+   * Tells invited people (an email with the invitation link). Without one, the inviter copies
+   * the link from the team settings. Pass it to `factoryBetterAuthOptions` when bringing your own
+   * `auth`.
+   */
+  invitations?: InvitationNotifier;
 }
 
 /** Host context the provider-built better-auth instance needs. */
@@ -197,17 +205,46 @@ export interface FactoryBetterAuthConfig {
   allowedOrigins?: string[];
   /** Where organization events go (the provider's relay). Without one, events are logged as not audited. */
   events?: OrganizationEventRelay;
+  /** Tells invited people; without one, nobody is told and the inviter shares the link. */
+  invitations?: InvitationNotifier;
 }
 
 /**
- * The better-auth options Factory runs on: Google only, organizations without
- * email sending, account linking for rows that already carry the person's
+ * The better-auth options Factory runs on: Google only, organizations whose
+ * invitations go out through the host's `InvitationNotifier`, account linking for rows that already carry the person's
  * email (users moved over from the previous sign-in).
  *
  * Returned widened to `BetterAuthOptions`: `betterAuth()`'s return type is
  * generic over the exact options object, which would make the instance
  * incompatible with the plain `Auth` alias we store.
  */
+type SendInvitationEmail = NonNullable<OrganizationPluginOptions['sendInvitationEmail']>;
+
+/**
+ * better-auth's `sendInvitationEmail`, handed to the host's notifier. A notifier that throws
+ * anyway is caught here: better-auth would turn it into a failed invite after the row exists.
+ */
+export function invitationSender(notifier: InvitationNotifier): SendInvitationEmail {
+  return async ({ id, email, role, organization, inviter, invitation }) => {
+    try {
+      await notifier.invitationCreated({
+        invitationId: id,
+        email,
+        role,
+        organization: { id: organization.id, name: organization.name },
+        inviter: {
+          userId: inviter.user.id,
+          ...(inviter.user.name ? { name: inviter.user.name } : {}),
+          ...(inviter.user.email ? { email: inviter.user.email } : {}),
+        },
+        expiresAt: new Date(invitation.expiresAt),
+      });
+    } catch (error) {
+      console.error('[BetterAuth] The invitation notifier threw; the invitation stays, its link can be copied.', error);
+    }
+  };
+}
+
 export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): BetterAuthOptions {
   const allowedOrigins = config.allowedOrigins ?? [];
   const crossSite = allowedOrigins.length > 0;
@@ -260,9 +297,13 @@ export function factoryBetterAuthOptions(config: FactoryBetterAuthConfig): Bette
         // deleting one would orphan them.
         disableOrganizationDeletion: true,
         invitationExpiresIn: INVITATION_EXPIRES_IN_SECONDS,
-        // The invitation id travels in a link the inviter sends by hand, so a
+        // The invitation id travels in a link (emailed, or sent by hand), so a
         // verified email (Google's) is what proves the recipient.
         requireEmailVerificationOnInvitation: true,
+        // better-auth awaits this before answering the invite (and again on a
+        // resend). The notifier never throws: a mail outage leaves the
+        // invitation in place with its link to copy.
+        ...(config.invitations ? { sendInvitationEmail: invitationSender(config.invitations) } : {}),
         organizationHooks: {
           // better-auth lets an owner invite another owner; Factory keeps one
           // owner per organization (the one who cannot leave it).
@@ -442,7 +483,7 @@ export class MastraAuthBetterAuth
 {
   #auth: Auth | undefined;
   /** What `init()` builds the instance from; set exactly when no `auth` was passed. */
-  #deferred: { secret: string; google: GoogleClientOptions } | undefined;
+  #deferred: { secret: string; google: GoogleClientOptions; invitations?: InvitationNotifier } | undefined;
   /** True when `init()` built the instance — then we also own its migrations. */
   #ownsInstance = false;
   /** Once-per-process migration latch; reset on failure so a later call retries. */
@@ -487,7 +528,11 @@ export class MastraAuthBetterAuth
       if (!options.google) {
         throw new Error('Better Auth needs the Google client (`google: { clientId, clientSecret }`): Google is the only sign-in.');
       }
-      this.#deferred = { secret: options.secret, google: options.google };
+      this.#deferred = {
+        secret: options.secret,
+        google: options.google,
+        ...(options.invitations ? { invitations: options.invitations } : {}),
+      };
     }
 
     this.#auth = options.auth;
@@ -589,6 +634,7 @@ export class MastraAuthBetterAuth
         publicUrl: ctx.publicUrl,
         allowedOrigins: ctx.allowedOrigins,
         events: this.#events,
+        ...(deferred.invitations ? { invitations: deferred.invitations } : {}),
       }),
     );
     this.#ownsInstance = true;
