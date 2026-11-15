@@ -137,7 +137,7 @@ import {
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/mcp';
 import { AssistantStorage } from '@factory/assistant-core';
 import { ClickUpSourceStorage } from '@factory/assistant-source-clickup';
-import { createFactoryAssistant } from './assistant/wiring.ts';
+import { createFactoryAssistant, createOrgClickUpReader } from './assistant/wiring.ts';
 import type { FactoryAssistant } from './assistant/wiring.ts';
 import type { FactoryMcpConfig } from '@factory/mcp';
 import { resolveDeploymentModelProviders } from '@factory/api';
@@ -1101,6 +1101,10 @@ export class MastraFactory {
       ? createFactoryAssistant({
           storage: assistantStorage,
           clickupStorage: assistantClickUpStorage,
+          orgClickUp: createOrgClickUpReader({
+            connections: integrationStorage.forIntegration('clickup'),
+            links: channelIdentityStorage,
+          }),
           mastraStorage: storage.getMastraStorage(),
           secretEncryption,
           ...(attachmentsConfig ? { blobs: attachmentsConfig.store } : {}),

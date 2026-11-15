@@ -9,7 +9,7 @@ import { createFactoryStorageForTests } from '@factory/store/testing';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import { describe, expect, it } from 'vitest';
 
-import { createFactoryAssistant } from './wiring.ts';
+import { createFactoryAssistant, createOrgClickUpReader } from './wiring.ts';
 
 function fakeProvider() {
   const removed: Array<(orgId: string, userId: string) => Promise<void>> = [];
@@ -114,9 +114,43 @@ describe('the assistant on the Factory server', () => {
         view = await assistant.service.openRequest(owner, created.id);
       }
       expect(view.request.analysing).toBe(false);
-      expect(view.request.lastError).toMatch(/no model connected/);
+      expect(view.request.lastError).toMatchObject({ kind: 'no_model', modelId: null, detail: expect.stringMatching(/no model connected/) });
     } finally {
       assistant.stop();
     }
+  });
+
+  it('reads the organization’s ClickUp connection for the source: who saved the token, its account, and ClickUp identity links in this org only', async () => {
+    const row = {
+      id: 'c1',
+      orgId: 'org-a',
+      userId: 'ada',
+      data: { apiToken: 'pk_1_SECRET' },
+      metadata: { username: 'Yura', userId: '42', workspaces: ['eclipt.ai'], name: 'Yura', connectedBy: 'ada' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const link = (userId: string, externalUserId: string, orgId?: string) => ({
+      platform: 'clickup',
+      externalTeamId: '9001',
+      externalUserId,
+      userId,
+      ...(orgId ? { orgId } : {}),
+      linkedAt: new Date(),
+    });
+    const reader = createOrgClickUpReader({
+      connections: { connections: { get: async (orgId: string) => (orgId === 'org-a' ? row : null) } } as never,
+      links: {
+        listAccountLinksForOrg: async () => [link('ada', '42', 'org-a'), link('bob', '77', 'org-a'), link('eve', '42')],
+      },
+    });
+    expect(await reader.connection('org-a')).toEqual({
+      token: 'pk_1_SECRET',
+      savedBy: 'ada',
+      account: { id: '42', name: 'Yura', workspaces: ['eclipt.ai'] },
+    });
+    expect(await reader.connection('org-b')).toBeNull();
+    // A link without this organization proves nothing here.
+    expect(await reader.linkedUsers('org-a', '42')).toEqual(['ada']);
   });
 });

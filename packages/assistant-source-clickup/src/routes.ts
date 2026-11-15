@@ -30,6 +30,11 @@ export function buildClickUpSourceRoutes(deps: { auth: RouteAuth; source: ClickU
         return c.json({ clickup: await source.connect(owner, body.token) });
       }),
     }),
+    registerApiRoute(`${p}/clickup/org`, {
+      method: 'POST',
+      // Only the person whose own ClickUp account the organization's token is; anyone else gets 403.
+      handler: handle(async (c, owner) => c.json({ clickup: await source.connectOrg(owner) })),
+    }),
     registerApiRoute(`${p}/clickup`, {
       method: 'DELETE',
       handler: handle(async (c, owner) => {
@@ -64,6 +69,7 @@ export function buildClickUpSourceRoutes(deps: { auth: RouteAuth; source: ClickU
 /** Every write is the person's own (ADR-0045 `self.write`). */
 export const CLICKUP_SOURCE_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'POST /web/assistant/sources/clickup': 'self.write',
+  'POST /web/assistant/sources/clickup/org': 'self.write',
   'DELETE /web/assistant/sources/clickup': 'self.write',
   'POST /web/assistant/sources/clickup/sync': 'self.write',
   'PUT /web/assistant/sources/clickup/channels/:workspaceId/:channelId': 'self.write',

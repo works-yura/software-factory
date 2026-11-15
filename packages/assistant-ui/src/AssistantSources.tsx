@@ -17,6 +17,23 @@ function when(iso: string | null, never: string): string {
   return iso ? new Date(iso).toLocaleString() : never;
 }
 
+/**
+ * The organization's ClickUp connection, when its token is this person's own ClickUp account (the
+ * server proves it): read with it instead of pasting a second token.
+ */
+function OrgConnectionRow({ offer }: { offer: NonNullable<ClickUpConnection['orgOffer']> }) {
+  const { t } = useTranslation('assistant');
+  const actions = useSourceActions();
+  return (
+    <SettingsRow label={t('sources.orgTitle')} description={t('sources.orgHelp', { workspaces: offer.workspaces.join(', ') })}>
+      <Button size="sm" variant="primary" disabled={actions.connectOrg.isPending} onClick={() => actions.connectOrg.mutate()}>
+        {t('sources.useOrg', { name: offer.accountName })}
+      </Button>
+      {actions.connectOrg.isError ? <Notice variant="destructive">{actions.connectOrg.error.message}</Notice> : null}
+    </SettingsRow>
+  );
+}
+
 /** Connecting: the person's own personal API token, once; it never comes back from the server. */
 function ConnectRow() {
   const { t } = useTranslation('assistant');
@@ -98,6 +115,7 @@ function Connected({ connection }: { connection: ClickUpConnection }) {
           description={
             <>
               <span data-testid="clickup-account">{t('sources.connectedAs', { name: connection.account?.name ?? '' })}</span>
+              {connection.via === 'org' ? <span>{t('sources.viaOrg')}</span> : null}
               <span>{t('sources.lastSync', { when: when(connection.lastSyncAt, t('sources.never')) })}</span>
             </>
           }
@@ -127,7 +145,7 @@ function Connected({ connection }: { connection: ClickUpConnection }) {
         </SettingsRow>
       </SettingsContainer>
       {connection.status === 'rejected' ? (
-        <Notice variant="destructive">{t('sources.rejected')}</Notice>
+        <Notice variant="destructive">{connection.via === 'org' ? t('sources.orgGone') : t('sources.rejected')}</Notice>
       ) : connection.lastError ? (
         <Notice variant="warning">{t('sources.syncFailed', { error: connection.lastError })}</Notice>
       ) : null}
@@ -135,6 +153,7 @@ function Connected({ connection }: { connection: ClickUpConnection }) {
       {actions.setMode.isError ? <Notice variant="destructive">{actions.setMode.error.message}</Notice> : null}
       {connection.status === 'rejected' ? (
         <SettingsContainer>
+          {connection.orgOffer ? <OrgConnectionRow offer={connection.orgOffer} /> : null}
           <ConnectRow />
         </SettingsContainer>
       ) : null}
@@ -173,6 +192,7 @@ export function AssistantSources() {
   if (!sources.data.connected) {
     return (
       <SettingsContainer>
+        {sources.data.orgOffer ? <OrgConnectionRow offer={sources.data.orgOffer} /> : null}
         <ConnectRow />
       </SettingsContainer>
     );

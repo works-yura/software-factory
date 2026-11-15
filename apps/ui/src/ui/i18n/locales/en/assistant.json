@@ -58,7 +58,6 @@
     "factoryCard": "Card in {{factory}}",
     "factorySession": "Question in {{factory}}",
     "analysing": "The assistant is looking at it…",
-    "failed": "The assistant could not answer: {{message}}",
     "you": "You",
     "agent": "Assistant",
     "factory": "Factory",
@@ -72,7 +71,15 @@
     "created": "Created",
     "rename": "Rename",
     "topic": "Topic",
-    "properties": "Request properties"
+    "properties": "Request properties",
+    "continues": "Continues “{{topic}}”",
+    "continuesUnknown": "Continues an earlier request",
+    "openPrevious": "Open",
+    "notAnalysed": "Not analysed: hourly analysis limit reached",
+    "analyse": "Analyse",
+    "someone": "Someone",
+    "sourceFrom": "Message from {{name}}",
+    "addNote": "Note about this request"
   },
   "actions": {
     "label": "Request actions",
@@ -100,10 +107,28 @@
     "hint": "{{factory}}?"
   },
   "notes": {
-    "empty": "No notes yet.",
-    "placeholder": "A note for yourself…",
-    "add": "Add note",
-    "delete": "Delete note"
+    "empty": "No notes yet",
+    "placeholder": "A note for yourself… Markdown works.",
+    "delete": "Delete note",
+    "title": "Notes",
+    "new": "New note",
+    "untitled": "Untitled",
+    "emptyDescription": "Keep what you want to remember — a reply to send, a call to make. Only you see them.",
+    "select": "Open a note, or start a new one.",
+    "gone": "This note is no longer here.",
+    "text": "Note",
+    "mode": "View",
+    "edit": "Edit",
+    "preview": "Preview",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveFailed": "Not saved — keep typing to retry",
+    "edited": "Edited",
+    "back": "Back to notes",
+    "deleteConfirmTitle": "Delete this note?",
+    "deleteConfirmDescription": "It cannot be brought back.",
+    "about": "About",
+    "someRequest": "a request"
   },
   "settings": {
     "title": "Assistant",
@@ -152,7 +177,8 @@
     "new": "new"
   },
   "source": {
-    "manual": "Brought by you"
+    "manual": "Brought by you",
+    "clickup": "ClickUp"
   },
   "composer": {
     "mode": "Send to",
@@ -198,6 +224,41 @@
       "dm": "Direct message",
       "group_dm": "Group DM"
     },
-    "loading": "Loading sources…"
+    "loading": "Loading sources…",
+    "orgTitle": "Your organization's ClickUp connection",
+    "orgHelp": "The organization's ClickUp connection uses your own ClickUp account ({{workspaces}}), so the assistant can read your chats with it — no second token. Only you see this option.",
+    "useOrg": "Use the organization's connection (ClickUp: {{name}})",
+    "viaOrg": "Through the organization's ClickUp connection",
+    "orgGone": "The organization's ClickUp connection was removed or no longer uses your account, so reading stopped. Connect your own personal token."
+  },
+  "failure": {
+    "defaultModel": "The organization's default model",
+    "retry": "Retry",
+    "pickModel": "Choose another model",
+    "details": "Details",
+    "no_model": {
+      "title": "The organization has no model connected",
+      "fix": "An admin connects one in Settings › Models; then retry."
+    },
+    "rate_limit": {
+      "title": "{{model}}: limit reached or no credits",
+      "fix": "Choose another model in Account › Assistant, or top up this provider, then retry."
+    },
+    "auth": {
+      "title": "{{model}}: the API key was refused",
+      "fix": "The key is invalid or has no access. An admin replaces it in Settings › Models, or choose another model in Account › Assistant."
+    },
+    "model_not_found": {
+      "title": "{{model}}: the provider has no such model",
+      "fix": "Choose another model in Account › Assistant."
+    },
+    "overloaded": {
+      "title": "{{model}}: the provider is overloaded or down",
+      "fix": "Retry in a minute, or choose another model in Account › Assistant."
+    },
+    "unknown": {
+      "title": "{{model}}: the assistant could not answer",
+      "fix": "Retry; if it fails again, choose another model in Account › Assistant."
+    }
   }
 }

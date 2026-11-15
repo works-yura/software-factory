@@ -4,7 +4,7 @@
  * the panel shows it instead of a generic failure.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, createElement, useContext } from 'react';
+import { createContext, createElement, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 export type RequestStatus = 'new' | 'waiting_factory' | 'waiting_me' | 'answered' | 'closed';
@@ -18,16 +18,29 @@ export interface FactoryLink {
   url?: string;
 }
 
+/** What kind of failure an agent turn hit: the thread explains each with its own fix. */
+export type TurnFailureKind = 'no_model' | 'rate_limit' | 'auth' | 'model_not_found' | 'overloaded' | 'unknown';
+
+/** Why the agent's last turn failed: the model it ran on, the kind, the provider's raw words. */
+export interface TurnFailure {
+  kind: TurnFailureKind;
+  modelId: string | null;
+  status: number | null;
+  detail: string;
+}
+
 export interface AssistantRequest {
   id: string;
   topic: string;
   fromName: string | null;
   source: string;
   sourceUrl: string | null;
+  /** The closed request of the same source thread this one continues (phase 2 sources). */
+  previousRequestId?: string | null;
   status: RequestStatus;
   factory: FactoryLink | null;
   analysing: boolean;
-  lastError: string | null;
+  lastError: TurnFailure | null;
   unread: boolean;
   createdAt: string;
   updatedAt: string;
@@ -36,7 +49,9 @@ export interface AssistantRequest {
 
 export interface AssistantMessage {
   id: string;
-  author: 'person' | 'agent' | 'factory' | 'event';
+  author: 'person' | 'agent' | 'factory' | 'event' | 'source';
+  /** Who wrote a `source` entry (a colleague in ClickUp); `null` otherwise. */
+  fromName?: string | null;
   text: string;
   fileIds: string[];
   createdAt: string;
@@ -96,13 +111,24 @@ export class AssistantApiError extends Error {
 
 export interface AssistantApi {
   baseUrl: string;
+  /** The app's Account › «Помічник» page (its model picker), when the host knows it. */
+  settingsHref?: string;
 }
 
 const AssistantApiContext = createContext<AssistantApi | null>(null);
 
-/** Gives the panel the server's base URL (`''` for same-origin). */
-export function AssistantApiProvider({ baseUrl, children }: { baseUrl: string; children: ReactNode }) {
-  return createElement(AssistantApiContext.Provider, { value: { baseUrl } }, children);
+/** Gives the panel the server's base URL (`''` for same-origin) and, when known, where its settings live. */
+export function AssistantApiProvider({
+  baseUrl,
+  settingsHref,
+  children,
+}: {
+  baseUrl: string;
+  settingsHref?: string;
+  children: ReactNode;
+}) {
+  const value = useMemo(() => ({ baseUrl, ...(settingsHref ? { settingsHref } : {}) }), [baseUrl, settingsHref]);
+  return createElement(AssistantApiContext.Provider, { value }, children);
 }
 
 export function useAssistantApi(): AssistantApi {
@@ -250,6 +276,11 @@ export function useRequestAction(id: string) {
       mutationFn: (input: { factoryId: string; title?: string; note?: string }) => call(api, `${path}/hand-over`, json('POST', input)),
       ...done,
     }),
+    /** Runs the agent again on what it has not answered (a failed turn, messages left unread by a limit). */
+    retry: useMutation({
+      mutationFn: () => call<{ request: AssistantRequest }>(api, `${path}/retry`, json('POST', {})),
+      ...done,
+    }),
     checkAnswer: useMutation({
       mutationFn: () => call<{ answered: boolean }>(api, `${path}/check-answer`, json('POST', {})),
       ...done,
@@ -280,10 +311,16 @@ export function useNoteActions() {
   const queryClient = useQueryClient();
   const done = { onSuccess: () => void queryClient.invalidateQueries({ queryKey: assistantKeys.notes() }) };
   return {
-    create: useMutation({ mutationFn: (text: string) => call(api, '/notes', json('POST', { text })), ...done }),
+    create: useMutation({
+      mutationFn: (input: { text: string; requestId?: string | null }) =>
+        call<{ note: AssistantNote }>(api, '/notes', json('POST', input.requestId ? input : { text: input.text })).then(body => body.note),
+      ...done,
+    }),
     update: useMutation({
       mutationFn: (input: { id: string; text: string }) =>
-        call(api, `/notes/${encodeURIComponent(input.id)}`, json('PATCH', { text: input.text })),
+        call<{ note: AssistantNote }>(api, `/notes/${encodeURIComponent(input.id)}`, json('PATCH', { text: input.text })).then(
+          body => body.note,
+        ),
       ...done,
     }),
     remove: useMutation({

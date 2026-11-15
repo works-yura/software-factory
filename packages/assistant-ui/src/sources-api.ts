@@ -22,6 +22,10 @@ export interface SourceChannel {
 
 export interface ClickUpConnection {
   connected: boolean;
+  /** Read with the person's own token, or with the organization's connection (their own ClickUp account). */
+  via?: 'personal' | 'org' | null;
+  /** The organization's ClickUp connection, offered only to the person whose account its token is. */
+  orgOffer?: { accountName: string; workspaces: string[] } | null;
   account: { id: string; name: string } | null;
   status: 'active' | 'rejected' | null;
   lastSyncAt: string | null;
@@ -49,6 +53,12 @@ export function useSourceActions() {
     connect: useMutation({
       mutationFn: (token: string) =>
         call<{ clickup: ClickUpConnection }>(api, '/sources/clickup', json('POST', { token })).then(body => body.clickup),
+      onSuccess: store,
+    }),
+    /** Reads with the organization's ClickUp connection: offered only when its token is this person's account. */
+    connectOrg: useMutation({
+      mutationFn: () =>
+        call<{ clickup: ClickUpConnection }>(api, '/sources/clickup/org', json('POST', {})).then(body => body.clickup),
       onSuccess: store,
     }),
     disconnect: useMutation({
