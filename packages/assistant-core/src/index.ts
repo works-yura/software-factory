@@ -4,6 +4,7 @@ export * from './errors.ts';
 export * from './factory-access.ts';
 export * from './factory-client.ts';
 export * from './files.ts';
+export * from './instructions.ts';
 export * from './ports.ts';
 export * from './retention.ts';
 export * from './routes.ts';

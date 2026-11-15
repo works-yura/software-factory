@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { AssistantError } from './errors.ts';
 import type { FactoryReadTool, SkillSummary } from './ports.ts';
 import type { AssistantService } from './service.ts';
-import type { AssistantOwner, AssistantRequest } from './types.ts';
+import type { AssistantOwner, AssistantRequest, ToolCallRecord } from './types.ts';
 import { REQUEST_STATUSES } from './types.ts';
 
 /** What the tools reach: the service, as the owner. */
@@ -310,3 +310,79 @@ export function createAssistantTools(host: AssistantToolHost, context: Assistant
 }
 
 export type AssistantTools = ReturnType<typeof createAssistantTools>;
+
+/**
+ * What each tool may do, as «What the agent sees» lists it: `read` reads only; `write_own` writes
+ * the person's own assistant data (a note); `proposal` only proposes an outside change the person
+ * confirms in the thread.
+ */
+export type AssistantToolKind = 'read' | 'write_own' | 'proposal';
+
+export const ASSISTANT_TOOL_KINDS: Readonly<Record<string, AssistantToolKind>> = {
+  assistant_search_requests: 'read',
+  assistant_read_request: 'read',
+  assistant_list_notes: 'read',
+  assistant_create_note: 'write_own',
+  source_list_channels: 'read',
+  source_read_channel: 'read',
+  factory_list_factories: 'read',
+  factory_find_work_items: 'read',
+  factory_inspect_work_item: 'read',
+  factory_list_attention: 'read',
+  factory_session_status: 'read',
+  factory_propose_ask: 'proposal',
+  factory_propose_hand_over: 'proposal',
+  assistant_read_skill: 'read',
+};
+
+const SUMMARY_LIMIT = 500;
+
+/** A value as short JSON, for the thread's «Turn details». */
+export function summarize(value: unknown, limit = SUMMARY_LIMIT): string {
+  let text: string;
+  try {
+    text = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+  } catch {
+    text = String(value);
+  }
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+/**
+ * Wraps every tool's `execute` so each call lands in `calls` (name, arguments and answer as short
+ * JSON, error, duration). The tools are built per turn, so wrapping them in place is safe.
+ */
+export function recordToolCalls<T extends Record<string, unknown>>(tools: T, calls: ToolCallRecord[], now: () => number = Date.now): T {
+  for (const [name, tool] of Object.entries(tools)) {
+    const candidate = tool as { execute?: (...args: unknown[]) => Promise<unknown> };
+    const execute = candidate.execute;
+    if (typeof execute !== 'function') continue;
+    candidate.execute = async (...args: unknown[]) => {
+      const started = now();
+      const record: ToolCallRecord = { name, args: summarize(args[0] ?? {}), durationMs: 0 };
+      calls.push(record);
+      try {
+        const result = await execute.apply(tool, args);
+        record.durationMs = now() - started;
+        const failed = result && typeof result === 'object' && 'error' in result ? (result as { error: unknown }).error : undefined;
+        if (typeof failed === 'string') record.error = failed;
+        else record.result = summarize(result);
+        return result;
+      } catch (error) {
+        record.durationMs = now() - started;
+        record.error = error instanceof Error ? error.message : String(error);
+        throw error;
+      }
+    };
+  }
+  return tools;
+}
+
+/** The tools as «What the agent sees» lists them: name, what the model reads about it, what it may do. */
+export function describeTools(tools: Record<string, unknown>): Array<{ name: string; description: string; kind: AssistantToolKind }> {
+  return Object.entries(tools).map(([name, tool]) => ({
+    name,
+    description: String((tool as { description?: unknown }).description ?? ''),
+    kind: ASSISTANT_TOOL_KINDS[name] ?? 'read',
+  }));
+}

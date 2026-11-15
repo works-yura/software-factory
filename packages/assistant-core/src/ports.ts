@@ -49,8 +49,8 @@ export interface BrainTurn {
   first?: boolean;
   /** The model the person chose, or `null` for the organization's default. */
   modelId: string | null;
-  /** The person's own instructions (settings), appended to the base instructions. */
-  instructions?: string;
+  /** The whole system prompt the service composed (base document, skills index, guard). */
+  systemPrompt?: string;
   /** The skills the person picked, by name and description; the agent loads one with a tool. */
   skills?: SkillSummary[];
   /**
@@ -67,8 +67,13 @@ export interface BrainTurn {
  * request. It reports to the person only.
  */
 export interface AssistantBrain {
-  /** The report, and — when asked on a source request's first turn — a short topic for it. */
-  respond(turn: BrainTurn): Promise<{ text: string; topic?: string }>;
+  /**
+   * The report, and — when asked on a source request's first turn — a short topic for it, and the
+   * model that actually ran.
+   */
+  respond(turn: BrainTurn): Promise<{ text: string; topic?: string; modelId?: string }>;
+  /** A tiny call to a model («Check the model»): its answer, or a throw with the provider's refusal. */
+  probe?(owner: AssistantOwner, modelId: string | null): Promise<{ modelId: string | null; text: string }>;
 }
 
 /** The agent's memory: erased per owner. */
@@ -87,6 +92,22 @@ export interface AssistantModelOption {
 /** The organization's models (its credential pool, ADR-0032): there are no personal ones. */
 export interface AssistantModels {
   list(owner: AssistantOwner): Promise<AssistantModelOption[]>;
+}
+
+/** A skill as the settings page lists it: from the Factory catalogue (maybe overridden) or the person's own. */
+export interface AssistantSkillEntry extends SkillSummary {
+  origin: 'factory' | 'personal';
+  /** A catalogue skill the person changed for their assistant only. */
+  overridden: boolean;
+  /** Picked: the agent sees it. */
+  enabled: boolean;
+}
+
+/** One skill opened in full, with the catalogue's original when the person overrode it. */
+export interface AssistantSkillDetail extends AssistantSkillEntry {
+  instructions: string;
+  original: { description: string; instructions: string } | null;
+  updatedAt: Date | null;
 }
 
 /** A Factory the person can reach through MCP. */

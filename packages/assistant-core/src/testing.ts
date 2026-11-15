@@ -59,6 +59,16 @@ export class FakeBrain implements AssistantBrain {
     const topic = turn.first ? this.topic?.(turn) : undefined;
     return topic ? { text, topic } : { text };
   }
+
+  /** What a model check answers: a reply, or a throw (a provider's refusal). */
+  probeAnswer: (modelId: string | null) => string | Promise<string> = () => 'OK';
+  readonly probes: Array<string | null> = [];
+
+  async probe(_owner: AssistantOwner, modelId: string | null) {
+    this.probes.push(modelId);
+    const id = modelId ?? 'test/default-model';
+    return { modelId: id, text: await this.probeAnswer(id) };
+  }
 }
 
 export class FakeMemory implements AssistantMemory {

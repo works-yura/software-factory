@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createAssistantMemory, createAssistantMemoryEraser, createMastraAssistantBrain } from './agent.ts';
 import type { BrainTurn } from './ports.ts';
+import { assistantInstructions } from './instructions.ts';
 import { createAssistantTools } from './tools.ts';
 import { AssistantTurnError, classifyTurnFailure } from './turn-failure.ts';
 import type { AssistantOwner, AssistantRequest } from './types.ts';
@@ -101,7 +102,7 @@ describe('the assistant agent', () => {
   it('reads the screenshot as an image and remembers the turn under the owner, one thread per request', async () => {
     const answer = await brain().respond(turn(ADA, '11111111-1111-4111-8111-111111111111', [{ name: 'shot.png', mime: 'image/png', bytes: PNG }]));
 
-    expect(answer).toEqual({ text: 'Olena asks about checkout.' });
+    expect(answer).toEqual({ text: 'Olena asks about checkout.', modelId: 'test/test-model' });
     expect(resolved).toEqual([{ owner: ADA, modelId: 'test/test-model' }]);
     const prompt = JSON.stringify(prompts[0]);
     expect(prompt).toContain('Request: Checkout fails');
@@ -113,7 +114,7 @@ describe('the assistant agent', () => {
     expect(threads.map(thread => thread.id)).toEqual(['11111111-1111-4111-8111-111111111111']);
   });
 
-  it('gets the person’s instructions and skills after its own, and the turn’s tools', async () => {
+  it('runs on the system prompt the service composed (base document, skills, guard), with the turn’s tools', async () => {
     const tools = createAssistantTools({} as never, {
       owner: ADA,
       requestId: '66666666-6666-4666-8666-666666666666',
@@ -121,7 +122,10 @@ describe('the assistant agent', () => {
     });
     await brain().respond({
       ...turn(ADA, '66666666-6666-4666-8666-666666666666'),
-      instructions: 'Always answer in Ukrainian.',
+      systemPrompt: assistantInstructions({
+        base: 'Always answer in Ukrainian.',
+        skills: [{ name: 'factory-triage', description: 'Sort an incoming issue.' }],
+      }),
       skills: [{ name: 'factory-triage', description: 'Sort an incoming issue.' }],
       tools,
       maxSteps: 4,
@@ -130,7 +134,8 @@ describe('the assistant agent', () => {
     expect(prompt).toContain('You report to this person only');
     expect(prompt).toContain('factory-triage: Sort an incoming issue.');
     expect(prompt).toContain('Always answer in Ukrainian.');
-    expect(prompt.indexOf('report to this person only')).toBeLessThan(prompt.indexOf('Always answer in Ukrainian.'));
+    // The guard comes last: no edit of the base document removes it.
+    expect(prompt.indexOf('Always answer in Ukrainian.')).toBeLessThan(prompt.indexOf('report to this person only'));
     expect(toolNames[0]).toEqual(expect.arrayContaining(['assistant_search_requests', 'factory_propose_ask', 'factory_propose_hand_over', 'assistant_read_skill']));
     // Nothing that creates or starts something in a Factory is a tool of its own.
     expect(toolNames[0]!.filter(name => /factory_(create|start|ask|hand_over)/.test(name))).toEqual([]);
