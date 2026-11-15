@@ -73,21 +73,38 @@ export type SettingsItemProps = Omit<ComponentProps<'div'>, 'title'> & {
   description?: ReactNode;
   /** The item's status or actions, on the right. */
   children?: ReactNode;
+  /** A notice under the item, such as why its last action failed. */
+  notice?: ReactNode;
 };
 
-/** One thing in a settings list (an account, a member, a session, a source). Goes in a `SettingsContainer`. */
-export function SettingsItem({ media, title, description, children, className, ...props }: SettingsItemProps) {
+/**
+ * One thing in a settings list (an account, a member, a session, a source). Goes in a `SettingsContainer`.
+ * The actions stay beside the text (at the right) while the text keeps at least 10rem; on a narrower card
+ * (a phone) they move under it, from the left edge like a stacked row's controls, instead of squeezing
+ * the name to nothing.
+ */
+export function SettingsItem({ media, title, description, children, notice, className, ...props }: SettingsItemProps) {
   return (
-    <div data-slot="settings-item" className={cn('flex min-w-0 items-center gap-3', className)} {...props}>
-      {media}
-      <div className="flex min-w-0 flex-1 flex-col gap-px">
-        {/* A string title truncates, so it also goes in the hover title to stay readable in full. */}
-        <div className="truncate text-label text-foreground" title={typeof title === 'string' ? title : undefined}>
-          {title}
+    <div data-slot="settings-item" className={cn('flex min-w-0 flex-col gap-2', className)} {...props}>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        {media}
+        <div className="flex min-w-40 flex-1 basis-0 flex-col gap-px">
+          {/* A string title truncates, so it also goes in the hover title to stay readable in full. */}
+          <div className="truncate text-label text-foreground" title={typeof title === 'string' ? title : undefined}>
+            {title}
+          </div>
+          {description != null && (
+            <div
+              className="truncate text-caption text-muted-foreground"
+              title={typeof description === 'string' ? description : undefined}
+            >
+              {description}
+            </div>
+          )}
         </div>
-        {description != null && <div className="truncate text-caption text-muted-foreground">{description}</div>}
+        {children != null && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
       </div>
-      {children != null && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {notice}
     </div>
   );
 }

@@ -33,7 +33,7 @@ const headingClassName = 'flex min-w-0 flex-col gap-px';
  * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
  */
 const sideControlClassName =
-  'flex min-w-0 items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0';
+  'flex min-w-0 flex-wrap items-center justify-start gap-2 sm:justify-end [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0';
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
   if (!viewOnly) return children;

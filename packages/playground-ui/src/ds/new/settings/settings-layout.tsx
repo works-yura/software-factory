@@ -23,7 +23,9 @@ export function SettingsLayout({ title, titleAccessory, action, header, children
     <div
       data-slot="settings-layout"
       className={cn(
-        'mx-auto grid min-h-full w-full max-w-160 min-w-0 gap-8 py-6',
+        // One column that may shrink below its content's min width: a wide child (a chart, a table)
+        // must not stretch the page past a phone's width.
+        'mx-auto grid min-h-full w-full max-w-160 min-w-0 grid-cols-1 gap-8 py-6',
         header != null || title != null ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
       )}
     >
@@ -41,7 +43,7 @@ export function SettingsLayout({ title, titleAccessory, action, header, children
       )}
       <div
         data-slot="settings-layout-content"
-        className="grid min-w-0 content-start gap-7 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch"
+        className="grid min-w-0 grid-cols-1 content-start gap-7 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch"
       >
         {children}
       </div>

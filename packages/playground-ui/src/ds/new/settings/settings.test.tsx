@@ -41,7 +41,9 @@ describe('Settings', () => {
     expect(screen.getByText('Theme').classList).toContain('text-label');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
     expect(document.querySelector('[data-slot="settings-row"]')?.classList).toContain('sm:flex-row');
-    expect(document.querySelector('header')?.classList).toContain('sm:items-center');
+    // The action stays beside the title at every width, a phone's included.
+    expect(document.querySelector('header')?.classList).toContain('items-center');
+    expect(document.querySelector('header')?.classList).not.toContain('flex-col');
   });
 
   describe('when multiple groups render on the same page', () => {

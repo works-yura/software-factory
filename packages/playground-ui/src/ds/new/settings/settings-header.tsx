@@ -29,11 +29,10 @@ export function SettingsHeader({
   ...props
 }: ComponentProps<'header'> & { action?: ReactNode }) {
   return (
-    <header
-      className={cn('flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}
-      {...props}
-    >
-      <div className="flex min-w-0 flex-col gap-1">{children}</div>
+    // The action stays beside the title at every width; on a phone the title wraps instead of the
+    // action dropping to a line of its own.
+    <header className={cn('flex items-center justify-between gap-4', className)} {...props}>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
       {action != null && <div className="shrink-0">{action}</div>}
     </header>
   );

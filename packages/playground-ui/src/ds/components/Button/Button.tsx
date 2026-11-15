@@ -53,10 +53,19 @@ const NEUTRAL_ICON_STATE = cn(
   '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground aria-disabled:[&_svg]:text-muted-foreground',
 );
 
+// On a touch screen the small and medium controls (28 and 32 px) are too small to hit reliably: an
+// invisible box at least 40×40 px, centred on the control, takes the tap. It is drawn only for coarse
+// pointers, so mouse layouts and hover areas are unchanged; the control's own size never moves.
+const TOUCH_TARGET = cn(
+  'pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2',
+  'pointer-coarse:after:size-full pointer-coarse:after:min-h-10 pointer-coarse:after:min-w-10',
+  'pointer-coarse:after:-translate-x-1/2 pointer-coarse:after:-translate-y-1/2',
+);
+
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'inline-flex cursor-pointer items-center justify-center whitespace-nowrap',
+    'relative inline-flex cursor-pointer items-center justify-center whitespace-nowrap',
     controlStateColorTransition,
     sharedFormElementDisabledStyle,
     'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground',
@@ -113,14 +122,14 @@ export const buttonVariants = cva(
         ),
       },
       size: {
-        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'gap-1 [--button-px:.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'gap-1.5 [--button-px:.9em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'gap-1 [--button-px:.9em]', TEXT_MODE_ADORNMENTS, TOUCH_TARGET),
+        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'gap-1.5 [--button-px:.9em]', TEXT_MODE_ADORNMENTS, TOUCH_TARGET),
         lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'gap-1.5 [--button-px:1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.
-        'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full'),
-        'icon-md': cn(controlHeight.md, 'w-control-md rounded-full'),
+        'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full', TOUCH_TARGET),
+        'icon-md': cn(controlHeight.md, 'w-control-md rounded-full', TOUCH_TARGET),
         'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
       },
     },
