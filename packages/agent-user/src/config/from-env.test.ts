@@ -18,7 +18,16 @@ describe('agentUserFromEnv', () => {
       home: '/Users/factory',
       profilePath: '/var/factory/agent-factory.sb',
       writableRoots: ['/Volumes/dot/Project/factory/sandboxes'],
-      toolPath: ['/Users/factory/.local/bin', '/Users/factory/.local/node/bin', '/Users/factory/.local/fvm', '/opt/homebrew/bin'],
+      toolPath: [
+        '/Users/factory/.local/bin',
+        '/Users/factory/.local/node/bin',
+        '/Users/factory/.local/fvm',
+        '/opt/homebrew/bin',
+        '/Users/factory/.pub-cache/bin',
+        '/Users/factory/.cargo/bin',
+        '/Users/factory/go/bin',
+        '/Users/factory/.npm-global/bin',
+      ],
       seatbelt: true,
       xcodeConfigPath: '/var/factory/agent-factory.xcconfig',
     });
@@ -43,7 +52,7 @@ describe('agentUserFromEnv', () => {
       home: '/Users/agents/factory',
       profilePath: '/var/factory/custom.sb',
       writableRoots: ['/Volumes/dot/Project/factory/sandboxes', '/Volumes/dot/state'],
-      toolPath: ['/opt/agent/bin'],
+      toolPath: ['/opt/agent/bin', '/Users/agents/factory/.pub-cache/bin', '/Users/agents/factory/.cargo/bin', '/Users/agents/factory/go/bin', '/Users/agents/factory/.npm-global/bin'],
     });
   });
 

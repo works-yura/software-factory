@@ -47,8 +47,23 @@ export function agentUserFromEnv(env: Record<string, string | undefined>, contex
     home,
     profilePath,
     writableRoots: [...new Set(writableRoots)],
-    toolPath: toolPath.length > 0 ? toolPath : [`${home}/.local/bin`, `${home}/.local/node/bin`, `${home}/.local/fvm`, '/opt/homebrew/bin'],
+    toolPath: [
+      ...new Set([
+        ...(toolPath.length > 0 ? toolPath : [`${home}/.local/bin`, `${home}/.local/node/bin`, `${home}/.local/fvm`, '/opt/homebrew/bin']),
+        ...userToolDirs(home),
+      ]),
+    ],
     seatbelt: true,
     xcodeConfigPath,
   };
+}
+
+/**
+ * Where the usual package managers put a user's command-line tools, always on the agent's PATH:
+ * whatever a repository's setup command installs as the agent (`dart pub global activate
+ * flutterfire_cli`, `cargo install`, `go install`, `npm install -g`) is found the next time, the
+ * way it is on a developer's machine or in CI. Factory never lists a project's tools itself.
+ */
+export function userToolDirs(home: string): string[] {
+  return [`${home}/.pub-cache/bin`, `${home}/.cargo/bin`, `${home}/go/bin`, `${home}/.npm-global/bin`];
 }
