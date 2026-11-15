@@ -65,7 +65,9 @@ import { useTranslation } from 'react-i18next';
 import {
   REQUEST_STATUSES,
   assistantUrl,
+  catalogModelLabel,
   useAssistantApi,
+  useAssistantModelCatalog,
   useAssistantFactories,
   useAssistantRequest,
   useAssistantRequests,
@@ -76,6 +78,7 @@ import {
 import type { AssistantFile, AssistantMessage, AssistantRequest, FactoryAccessState, RequestStatus, TurnFailure } from './api';
 import { PendingFiles, pastedFiles } from './NewRequestForm';
 import { RequestTime } from './time';
+import { eventLabel, PendingActionCard, TurnDetailsView } from './TurnTransparency';
 
 export const STATUS_BADGE: Record<RequestStatus, BadgeVariant> = {
   new: 'info',
@@ -483,6 +486,19 @@ function EventLine({ message, onOpenRequest, onAnalyse, analysing }: { message: 
   if (message.text.startsWith('continues:')) {
     return <ContinuesLine previousId={message.text.slice('continues:'.length).trim()} onOpenRequest={onOpenRequest} />;
   }
+  const known = eventLabel(message.text, t as never);
+  if (known) {
+    return (
+      <>
+        <TranscriptDivider label={known.label} />
+        {known.body ? (
+          <Txt as="p" variant="caption" tone="muted" className="line-clamp-3 text-center whitespace-pre-line">
+            {known.body}
+          </Txt>
+        ) : null}
+      </>
+    );
+  }
   if (message.text.startsWith('not_analysed:')) {
     return (
       <TranscriptDivider label={t('thread.notAnalysed')}>
@@ -562,7 +578,13 @@ function ThreadEntry({ message, files, ...actions }: { message: AssistantMessage
       from={message.author === 'person' ? 'user' : 'assistant'}
       aria-label={label}
       attachments={own.length ? <Attachments files={own} /> : undefined}
-      footer={message.author === 'factory' ? <MessageMetadata>{label}</MessageMetadata> : undefined}
+      footer={
+        message.author === 'factory' ? (
+          <MessageMetadata>{label}</MessageMetadata>
+        ) : message.author === 'agent' && message.details ? (
+          <TurnDetailsView details={message.details} />
+        ) : undefined
+      }
     >
       {message.text ? <MarkdownRenderer>{message.text}</MarkdownRenderer> : null}
     </Message>
@@ -584,8 +606,19 @@ const PROVIDER_NAMES: Record<string, string> = {
   togetherai: 'Together AI',
 };
 
-/** `xai/grok-4.5` → `xAI · grok-4.5`, as the thread names the model that failed. */
+/**
+ * The model's name as the organization's catalog gives it (`useModelLabel`); without the catalog,
+ * `xai/grok-4.5` → `xAI · grok-4.5`, `claude-code:claude-opus-5-5` → `claude-code · claude-opus-5-5`.
+ */
+export function useModelLabel(): (modelId: string) => string {
+  const catalog = useAssistantModelCatalog().data;
+  return modelId => catalogModelLabel(catalog, modelId) ?? modelLabel(modelId);
+}
+
+/** `xai/grok-4.5` → `xAI · grok-4.5`, as the thread names the model that failed (no catalog at hand). */
 export function modelLabel(modelId: string): string {
+  const colon = modelId.indexOf(':');
+  if (colon > 0 && (modelId.indexOf('/') < 0 || colon < modelId.indexOf('/'))) return `${modelId.slice(0, colon)} · ${modelId.slice(colon + 1)}`;
   const slash = modelId.indexOf('/');
   if (slash < 0) return modelId;
   const provider = modelId.slice(0, slash);
@@ -604,7 +637,8 @@ function TurnFailureNotice({ failure, request }: { failure: TurnFailure; request
   const { t } = useTranslation('assistant');
   const { settingsHref } = useAssistantApi();
   const actions = useRequestAction(request.id);
-  const model = failure.modelId ? modelLabel(failure.modelId) : t('failure.defaultModel');
+  const label = useModelLabel();
+  const model = failure.modelId ? label(failure.modelId) : t('failure.defaultModel');
   const headline = t(`failure.${failure.kind}.title`, { model });
   const fix = t(`failure.${failure.kind}.fix`);
   const canRetry = request.status !== 'closed' && !request.analysing;
@@ -936,6 +970,7 @@ export function RequestThread({
                     {...(canAnalyse && index > lastAgent ? { onAnalyse: () => actions.retry.mutate() } : {})}
                   />
                 ))}
+                {request.pendingAction ? <PendingActionCard request={request} action={request.pendingAction} /> : null}
                 {request.analysing ? (
                   <Message from="assistant" pending>
                     <Txt as="p" variant="body-sm" tone="muted" role="status">

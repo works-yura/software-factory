@@ -1,12 +1,12 @@
-import { AssistantApiProvider, AssistantLauncher, AssistantSettings, AssistantSources } from '@factory/assistant-ui';
+import { AssistantApiProvider, AssistantLauncher } from '@factory/assistant-ui';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../api/config';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 
-/** Account › «Помічник» (its model picker) under a Factory's settings. */
+/** Settings › «Помічник»: the assistant's own page (personal), under a Factory's settings. */
 export function assistantSettingsHref(factoryId: string): string {
-  return `/factories/${encodeURIComponent(factoryId)}/settings/account#assistant`;
+  return `/factories/${encodeURIComponent(factoryId)}/settings/assistant`;
 }
 
 /** The assistant's API at this app's server; with a Factory, the panel can link to its Account settings. */
@@ -34,24 +34,6 @@ export function AssistantOverlay({ factory }: { factory?: { id: string; name: st
   return (
     <AssistantApi {...(factory ? { factoryId: factory.id } : {})}>
       <AssistantLauncher {...(factory ? { hint: factory } : {})} />
-    </AssistantApi>
-  );
-}
-
-/** Account › «Помічник» › «Джерела»: the person's own source connections (ClickUp Chat), invisible to Factories. */
-export function AssistantAccountSources() {
-  return (
-    <AssistantApi>
-      <AssistantSources />
-    </AssistantApi>
-  );
-}
-
-/** Account › «Помічник»: the person's own settings, invisible to Factories. */
-export function AssistantAccountSettings() {
-  return (
-    <AssistantApi>
-      <AssistantSettings />
     </AssistantApi>
   );
 }

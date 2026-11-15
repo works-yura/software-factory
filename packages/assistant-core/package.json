@@ -10,7 +10,8 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:base-instructions": "node scripts/gen-base-instructions.mjs"
   },
   "dependencies": {
     "@factory/http": "workspace:*",

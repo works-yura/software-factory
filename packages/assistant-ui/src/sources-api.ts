@@ -66,6 +66,16 @@ export function useSourceActions() {
   const queryClient = useQueryClient();
   const store = (clickup: ClickUpConnection) => queryClient.setQueryData(sourcesKey(), clickup);
   return {
+    /** What the assistant does with a new request from a channel: `analyse`, `digest_only`, `analyse_and_ask:<factoryId>`. */
+    setRule: useMutation({
+      mutationFn: (input: { workspaceId: string; channelId: string; rule: string }) =>
+        call<{ clickup: ClickUpConnection }>(
+          api,
+          `/sources/clickup/channels/${encodeURIComponent(input.workspaceId)}/${encodeURIComponent(input.channelId)}`,
+          json('PUT', { rule: input.rule }),
+        ).then(body => body.clickup),
+      onSuccess: store,
+    }),
     connect: useMutation({
       mutationFn: (token: string) =>
         call<{ clickup: ClickUpConnection }>(api, '/sources/clickup', json('POST', { token })).then(body => body.clickup),

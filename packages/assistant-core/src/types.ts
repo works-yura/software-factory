@@ -103,6 +103,31 @@ export interface AssistantRequest {
 export const MESSAGE_AUTHORS = ['person', 'agent', 'factory', 'event', 'source'] as const;
 export type MessageAuthor = (typeof MESSAGE_AUTHORS)[number];
 
+/** One tool call of an agent turn, as the thread's «Turn details» shows it: summaries, never whole payloads. */
+export interface ToolCallRecord {
+  name: string;
+  /** The arguments, as short JSON. */
+  args: string;
+  /** The answer, as short JSON; absent when the call failed. */
+  result?: string;
+  /** Why it failed (a thrown error, or the `{ error }` the tool answered with). */
+  error?: string;
+  durationMs: number;
+}
+
+/**
+ * What drove one agent reply (ADR-0051 transparency): the model that ran, the version of the
+ * system prompt (a hash of the whole effective text), the skills it could load, and every tool
+ * call with its outcome.
+ */
+export interface TurnDetails {
+  modelId: string | null;
+  instructionsVersion: string;
+  skills: string[];
+  toolCalls: ToolCallRecord[];
+  durationMs: number;
+}
+
 /** One entry of a request's thread. */
 export interface AssistantMessage {
   id: string;
@@ -112,6 +137,8 @@ export interface AssistantMessage {
   fromName: string | null;
   text: string;
   fileIds: string[];
+  /** On an agent reply: what drove it. `null` elsewhere (and on replies from before it was kept). */
+  details: TurnDetails | null;
   createdAt: Date;
 }
 
@@ -168,15 +195,40 @@ export interface AssistantSettings {
   modelId: string | null;
   /** Closed requests and their files are erased this many days after closing. */
   retentionDays: number;
-  /** The person's own instructions, appended to the assistant's base instructions. */
-  instructions: string;
-  /** Skills (by name) from the Factory skills catalogue the agent may load. */
+  /** Skills (by name), from the Factory catalogue or the person's own, the agent may load. */
   skills: string[];
   digest: DigestSettings;
 }
 
-export const MAX_INSTRUCTIONS = 4000;
+/** The person's version of the base instructions (one Markdown document) is at most this long. */
+export const MAX_INSTRUCTIONS = 20_000;
 export const MAX_SKILLS = 10;
+/** A skill's text (the person's override or own skill), and its one-line description. */
+export const MAX_SKILL_INSTRUCTIONS = 20_000;
+export const MAX_SKILL_DESCRIPTION = 500;
+/** Skills of the person's own (not overrides) per assistant. */
+export const MAX_OWN_SKILLS = 30;
+/** A skill's name: what the agent loads it by. */
+export const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/**
+ * A skill the person keeps for their assistant only: an `override` of a Factory catalogue skill
+ * (the original and every Factory's edits stay untouched) or a `personal` skill of their own.
+ */
+export interface OwnSkill {
+  name: string;
+  kind: 'override' | 'personal';
+  description: string;
+  instructions: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** The base instructions as the person keeps them: `null` → the shipped default. */
+export interface BehaviorDocument {
+  document: string | null;
+  updatedAt: Date | null;
+}
 
 export const DEFAULT_RETENTION_DAYS = 30;
 export const MIN_RETENTION_DAYS = 1;

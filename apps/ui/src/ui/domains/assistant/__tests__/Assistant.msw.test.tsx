@@ -1,4 +1,10 @@
-import { AssistantApiProvider, AssistantPanel, AssistantSettings } from '@factory/assistant-ui';
+import {
+  AssistantApiProvider,
+  AssistantFactoryAccessSettings,
+  AssistantModelSettings,
+  AssistantPanel,
+  AssistantStorageSettings,
+} from '@factory/assistant-ui';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -306,14 +312,14 @@ describe('the assistant panel', () => {
       }),
     );
     const user = userEvent.setup();
-    renderPanel({}, '/factories/f-1/settings/account#assistant');
+    renderPanel({}, '/factories/f-1/settings/assistant');
     await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
 
     const notice = await screen.findByTestId('assistant-turn-failure');
     // The headline names the provider and model and says what happened, not the raw words.
     expect(within(notice).getByText('xAI · grok-4.5: limit reached or no credits')).toBeInTheDocument();
     expect(within(notice).queryByText(/^Too Many Requests/)).not.toBeInTheDocument();
-    expect(within(notice).getByRole('link', { name: 'Choose another model' })).toHaveAttribute('href', '/factories/f-1/settings/account#assistant');
+    expect(within(notice).getByRole('link', { name: 'Choose another model' })).toHaveAttribute('href', '/factories/f-1/settings/assistant');
     await user.click(within(notice).getByRole('button', { name: 'Details' }));
     expect(await within(notice).findByTestId('assistant-failure-detail')).toHaveTextContent(/HTTP 429\s*Too Many Requests/);
 
@@ -335,7 +341,7 @@ describe('the assistant panel', () => {
     expect(await screen.findByText('OpenAI · gpt-5: the API key was refused')).toBeInTheDocument();
     // Without a settings page to link to, the fix still says where to go.
     expect(screen.queryByRole('link', { name: 'Choose another model' })).not.toBeInTheDocument();
-    expect(screen.getByText(/Account › Assistant/)).toBeInTheDocument();
+    expect(screen.getByText(/Settings › Assistant/)).toBeInTheDocument();
     unmount();
 
     failure = { kind: 'no_model', modelId: null, status: null, detail: 'Your organization has no model connected.' };
@@ -636,7 +642,7 @@ describe('the floating button', () => {
   });
 });
 
-describe('Account › Assistant', () => {
+describe('Settings › Assistant: model, storage, Factory access', () => {
   it('saves the retention, offers only the organization’s models, and clears after confirming', async () => {
     let saved: unknown;
     let cleared = false;
@@ -656,20 +662,16 @@ describe('Account › Assistant', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <AssistantApiProvider baseUrl={TEST_BASE_URL}>
-        <AssistantSettings location={{ pathname: '/factories/f-1/settings/account', search: '', assign: vi.fn() }} />
+        <AssistantModelSettings />
+        <AssistantStorageSettings />
       </AssistantApiProvider>,
     );
 
     const model = await screen.findByRole('combobox', { name: 'Model' });
-    await waitFor(() => expect(model).toHaveTextContent("The organization's default"));
+    expect(model).toHaveAttribute('placeholder', "The organization's default model");
     await waitFor(() => expect(model).toBeEnabled());
     await user.click(model);
-    await waitFor(() =>
-      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
-        "The organization's default",
-        'anthropic/claude-sonnet-4-5',
-      ]),
-    );
+    await waitFor(() => expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([expect.stringContaining('Anthropic · claude-sonnet-4-5')]));
     await user.keyboard('{Escape}');
     const retention = screen.getByRole('spinbutton', { name: 'Keep closed requests' });
     await waitFor(() => expect(retention).toHaveValue(30));
@@ -696,7 +698,7 @@ describe('Account › Assistant', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <AssistantApiProvider baseUrl={TEST_BASE_URL}>
-        <AssistantSettings location={{ pathname: '/factories/f-1/settings/account', search: '?assistantAccess=connected', assign }} />
+        <AssistantFactoryAccessSettings location={{ pathname: '/factories/f-1/settings/account', search: '?assistantAccess=connected', assign }} />
       </AssistantApiProvider>,
     );
     expect(await screen.findByText('The assistant can now reach Factory as you.')).toBeInTheDocument();

@@ -2,6 +2,7 @@ import { i18n } from '../../i18n';
 
 export type SettingsSection =
   | 'account'
+  | 'assistant'
   | 'organization'
   | 'team'
   | 'preferences'
@@ -18,6 +19,7 @@ export type SettingsSection =
 
 const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'account',
+  'assistant',
   'organization',
   'team',
   'preferences',
@@ -54,7 +56,7 @@ export const NEW_CARD_ROUTES_ANCHOR = 'new-cards';
 
 type SettingsAnchor = ModelDefaultsAnchor | typeof NEW_CARD_ROUTES_ANCHOR;
 
-type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor; search?: string };
+type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor | string; search?: string };
 
 /**
  * A connection Settings › Підключення opens by link (`?connection=`): an integration's own view.
@@ -76,9 +78,14 @@ const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
   // Logs and crashes became the Google Cloud connection, MCP servers rows of Підключення.
   ['observability', { section: 'integrations', search: connectionsSearch('google-cloud') }],
   ['mcp-servers', { section: 'integrations' }],
+  ['assistant-sources', { section: 'assistant', anchor: '#sources' }],
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {
+  // «Помічник» and its sources lived in Account (`#assistant`, linked from the panel) before their own page.
+  if (section === 'account' && (hash === '#assistant' || hash === '#assistant-sources')) {
+    return { section: 'assistant', anchor: hash === '#assistant-sources' ? '#sources' : '' };
+  }
   if (section === 'models' && hash === '#model-packs')
     return { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.factory };
   if (!section) return undefined;

@@ -15,9 +15,9 @@ import type { FactoryAccess } from './factory-access.ts';
 import { safeReturnPath } from './factory-access.ts';
 import type { IncomingFile } from './files.ts';
 import { ASSISTANT_MAX_FILES_PER_MESSAGE, isInlineMime } from './files.ts';
-import type { AssistantModels } from './ports.ts';
+import type { AssistantModels, AssistantSkillDetail } from './ports.ts';
 import { selectableAssistantModels } from './ports.ts';
-import type { AssistantService } from './service.ts';
+import type { AssistantService, BehaviorView } from './service.ts';
 import type { AssistantFile, AssistantMessage, AssistantNote, AssistantOwner, AssistantRequest, DigestFrequency } from './types.ts';
 import { isRequestStatus, REQUEST_STATUSES } from './types.ts';
 
@@ -59,8 +59,22 @@ function messageWire(message: AssistantMessage) {
     fromName: message.fromName,
     text: message.text,
     fileIds: message.fileIds,
+    details: message.details,
     createdAt: message.createdAt.toISOString(),
   };
+}
+
+function behaviorWire(view: BehaviorView) {
+  return { ...view, updatedAt: view.updatedAt?.toISOString() ?? null };
+}
+
+function skillWire(skill: AssistantSkillDetail) {
+  return { ...skill, updatedAt: skill.updatedAt?.toISOString() ?? null };
+}
+
+/** A skill's fields from a body: text only. */
+function skillBody(body: Record<string, unknown>) {
+  return { description: optionalString(body, 'description') ?? '', instructions: optionalString(body, 'instructions') ?? '' };
 }
 
 function fileWire(file: AssistantFile) {
@@ -371,6 +385,67 @@ export class AssistantRoutes {
         method: 'GET',
         handler: handle(async (c, owner) => c.json({ skills: await service.skillsCatalogue(owner) })),
       }),
+      registerApiRoute(`${p}/skills`, {
+        method: 'POST',
+        handler: handle(async (c, owner) => {
+          const body = await jsonBody(c);
+          const skill = await service.createSkill(owner, { name: optionalString(body, 'name') ?? '', ...skillBody(body) });
+          return c.json({ skill: skillWire(skill) }, 201);
+        }),
+      }),
+      registerApiRoute(`${p}/skills/:name`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => c.json({ skill: skillWire(await service.getSkill(owner, c.req.param('name') ?? '')) })),
+      }),
+      registerApiRoute(`${p}/skills/:name`, {
+        method: 'PUT',
+        handler: handle(async (c, owner) => {
+          const body = await jsonBody(c);
+          return c.json({ skill: skillWire(await service.saveSkill(owner, c.req.param('name') ?? '', skillBody(body))) });
+        }),
+      }),
+      registerApiRoute(`${p}/skills/:name`, {
+        method: 'DELETE',
+        handler: handle(async (c, owner) => c.json(await service.deleteSkill(owner, c.req.param('name') ?? ''))),
+      }),
+      registerApiRoute(`${p}/behavior`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => c.json({ behavior: behaviorWire(await service.getBehavior(owner)) })),
+      }),
+      registerApiRoute(`${p}/behavior`, {
+        method: 'PUT',
+        handler: handle(async (c, owner) => {
+          const body = await jsonBody(c);
+          const document = optionalString(body, 'document');
+          if (document === undefined) throw new AssistantError('invalid_body', 'Send { document }.', 400);
+          return c.json({ behavior: behaviorWire(await service.saveBehavior(owner, document)) });
+        }),
+      }),
+      registerApiRoute(`${p}/behavior`, {
+        method: 'DELETE',
+        handler: handle(async (c, owner) => c.json({ behavior: behaviorWire(await service.resetBehavior(owner)) })),
+      }),
+      registerApiRoute(`${p}/agent-preview`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => c.json({ preview: await service.agentPreview(owner) })),
+      }),
+      registerApiRoute(`${p}/model-status`, {
+        method: 'GET',
+        handler: handle(async (c, owner) =>
+          c.json({ providers: (await service.providerStates(owner)).map(state => ({ ...state, at: state.at.toISOString() })) }),
+        ),
+      }),
+      registerApiRoute(`${p}/model-test`, {
+        method: 'POST',
+        handler: handle(async (c, owner) => {
+          const body = await jsonBody(c);
+          if ('modelId' in body && body.modelId !== null && typeof body.modelId !== 'string') {
+            throw new AssistantError('invalid_body', 'modelId must be a model id or null.', 400);
+          }
+          const modelId = 'modelId' in body ? ((body.modelId as string | null) || null) : undefined;
+          return c.json({ check: await service.testModel(owner, modelId) });
+        }),
+      }),
       registerApiRoute(`${p}/settings`, {
         method: 'PUT',
         handler: handle(async (c, owner) => {
@@ -387,8 +462,7 @@ export class AssistantRoutes {
             patch.retentionDays = body.retentionDays;
           }
           if ('instructions' in body) {
-            if (typeof body.instructions !== 'string') throw new AssistantError('invalid_body', 'instructions must be text.', 400);
-            patch.instructions = body.instructions;
+            throw new AssistantError('instructions_moved', 'Your instructions are part of the base document now: PUT /web/assistant/behavior.', 400);
           }
           if ('skills' in body) {
             if (!Array.isArray(body.skills) || body.skills.some(name => typeof name !== 'string')) {
@@ -497,6 +571,12 @@ export const ASSISTANT_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'PATCH /web/assistant/notes/:id': 'self.write',
   'DELETE /web/assistant/notes/:id': 'self.write',
   'PUT /web/assistant/settings': 'self.write',
+  'POST /web/assistant/skills': 'self.write',
+  'PUT /web/assistant/skills/:name': 'self.write',
+  'DELETE /web/assistant/skills/:name': 'self.write',
+  'PUT /web/assistant/behavior': 'self.write',
+  'DELETE /web/assistant/behavior': 'self.write',
+  'POST /web/assistant/model-test': 'self.write',
   'POST /web/assistant/clear': 'self.write',
   'POST /web/assistant/factory-access/start': 'self.write',
   'GET /web/assistant/factory-access/callback': 'self.write',
