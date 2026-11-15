@@ -9,6 +9,7 @@ import type { AssistantAuditEvent } from './ports.ts';
 import { AssistantError } from './errors.ts';
 import { AssistantService, assistantTempFolder, deriveTopic } from './service.ts';
 import { AssistantStorage } from './storage.ts';
+import { AssistantTurnError } from './turn-failure.ts';
 import { FakeBrain, FakeFactory, FakeMemory, fakeModels, MemoryBlobStore } from './testing.ts';
 import type { AssistantOwner } from './types.ts';
 
@@ -112,7 +113,40 @@ describe('a request the person brings', () => {
     const created = await service.createRequest(ADA, { text: 'help' });
     await settle();
     const view = await service.openRequest(ADA, created.id);
-    expect(view.request).toMatchObject({ status: 'new', analysing: false, lastError: 'Your organization has no model connected.' });
+    expect(view.request).toMatchObject({
+      status: 'new',
+      analysing: false,
+      lastError: { kind: 'unknown', detail: 'Your organization has no model connected.' },
+    });
+  });
+
+  it('records a provider failure with its kind and model, and runs the same turn again on retry', async () => {
+    brain.answer = () => {
+      throw new AssistantTurnError('xai/grok-4.5', Object.assign(new Error('Too Many Requests'), { statusCode: 429 }));
+    };
+    const created = await service.createRequest(ADA, {
+      text: 'checkout fails',
+      files: [{ name: 'shot.png', declaredMime: 'image/png', bytes: PNG }],
+    });
+    await settle();
+    let view = await service.openRequest(ADA, created.id);
+    expect(view.request.lastError).toMatchObject({ kind: 'rate_limit', modelId: 'xai/grok-4.5', status: 429 });
+    expect(view.request.lastError!.detail).toContain('Too Many Requests');
+
+    brain.answer = turn => `seen: ${turn.input.text}`;
+    const retried = await service.retry(ADA, created.id);
+    expect(retried).toMatchObject({ analysing: true, lastError: null });
+    await settle();
+    view = await service.openRequest(ADA, created.id);
+    expect(view.request).toMatchObject({ analysing: false, lastError: null, status: 'waiting_me' });
+    expect(view.messages.map(message => message.author)).toEqual(['person', 'agent']);
+    const turn = brain.turns.at(-1)!;
+    expect(turn.input).toMatchObject({ author: 'person', text: 'checkout fails' });
+    expect(turn.input.files).toEqual([{ name: 'shot.png', mime: 'image/png', bytes: PNG }]);
+
+    // Everything is answered now: nothing to run again.
+    await expect(service.retry(ADA, created.id)).rejects.toMatchObject({ code: 'nothing_to_retry', status: 409 });
+    await expect(service.retry(BOB, created.id)).rejects.toMatchObject({ code: 'not_found' });
   });
 
   it('refuses an empty request, a bad link, and files without a store', async () => {

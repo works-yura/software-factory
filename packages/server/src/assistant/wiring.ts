@@ -25,7 +25,8 @@ import type {
   RetentionJob,
 } from '@factory/assistant-core';
 import { buildClickUpSourceRoutes, ClickUpChatSource, startClickUpPolling } from '@factory/assistant-source-clickup';
-import type { ClickUpPolling, ClickUpSourceStorage } from '@factory/assistant-source-clickup';
+import type { ClickUpPolling, ClickUpSourceStorage, OrgClickUpReader } from '@factory/assistant-source-clickup';
+import { clickUpMetadataOf, clickUpTokenOf } from '@factory/integration-clickup';
 import {
   buildModelCatalog,
   listSessionScopedCredentials,
@@ -37,6 +38,8 @@ import type { RouteAuth } from '@factory/http';
 import { listFactorySkills } from '@factory/harness-mastra';
 import type {
   AttachmentBlobStore,
+  ChannelIdentityStorage,
+  IntegrationStorageHandle,
   AuditStorage,
   CustomProvidersStorage,
   FactorySecretEncryption,
@@ -77,6 +80,8 @@ export interface FactoryAssistantOptions {
    * `factory-skills/` folder they make the catalogue a person picks the assistant's skills from.
    */
   codeSkills?: readonly InlineSkill[];
+  /** The organization's ClickUp connection, offered to the one person whose own account its token is. */
+  orgClickUp?: OrgClickUpReader;
   mastraStorage: MastraCompositeStore;
   secretEncryption: FactorySecretEncryption;
   /** The attachment blob store; without one, requests take text only and say why files are refused. */
@@ -90,6 +95,31 @@ export interface FactoryAssistantOptions {
   publicOrigin: string;
   /** The auth provider: its authorization server for the assistant's OAuth grant, its removal hooks. */
   authProvider: unknown;
+}
+
+/**
+ * The organization's ClickUp connection (`clickup:org`, Settings › Підключення) and the ADR-0018
+ * identity links, as the assistant's ClickUp source proves whose account the token is.
+ */
+export function createOrgClickUpReader(input: {
+  connections: Pick<IntegrationStorageHandle, 'connections'>;
+  links: Pick<ChannelIdentityStorage, 'listAccountLinksForOrg'>;
+}): OrgClickUpReader {
+  return {
+    async connection(orgId) {
+      const row = await input.connections.connections.get(orgId);
+      const token = clickUpTokenOf(row?.data);
+      const account = clickUpMetadataOf(row?.metadata);
+      if (!row || !token || !account) return null;
+      return { token, savedBy: row.userId, account: { id: account.userId, name: account.username, workspaces: account.workspaces } };
+    },
+    async linkedUsers(orgId, clickUpUserId) {
+      const links = await input.links.listAccountLinksForOrg(orgId, { limit: 1000 });
+      return links
+        .filter(link => link.platform === 'clickup' && link.externalUserId === clickUpUserId && link.orgId === orgId)
+        .map(link => link.userId);
+    },
+  };
 }
 
 export interface FactoryAssistant {
@@ -124,12 +154,30 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     },
   };
 
+  /**
+   * The model a person who has not chosen one runs on: the same pick a new Factory chat makes when
+   * its Factory has no default (Settings › Моделі «built-in default», `/web/config/models`) — the
+   * harness's default-mode model when the organization can run it, otherwise the default model of
+   * the first connected provider in `PROVIDER_DEFAULT_MODELS` order. There is no organization-wide
+   * default setting (defaults are per Factory), so this is the organization-level equivalent. A
+   * failing model is never swapped for another provider: the thread names it and the person picks.
+   */
+  async function organizationDefaultModel(owner: { orgId: string; userId: string }): Promise<string | undefined> {
+    const tenant = { orgId: owner.orgId, userId: owner.userId, credentialScope: 'factory' as const };
+    const modeModelId = catalog?.getDefaultMode?.().defaultModelId;
+    const providerDefault = await resolveTenantProviderDefaultModel(tenant, modeModelId);
+    if (providerDefault) return providerDefault;
+    if (!modeModelId) return undefined;
+    // `undefined` above means either "the mode's model is usable" or "nothing is connected".
+    const listed = await models.list(owner);
+    return listed.some(model => model.id === modeModelId) ? modeModelId : undefined;
+  }
+
   // The organization's credentials, as every Factory run bills them (ADR-0032): never personal ones,
   // never the server's environment. No model at all is a loud refusal the thread shows.
   const resolver: AssistantModelResolver = {
     async resolve(owner, modelId) {
-      const tenant = { orgId: owner.orgId, userId: owner.userId, credentialScope: 'factory' as const };
-      const id = modelId ?? (await resolveTenantProviderDefaultModel(tenant, undefined));
+      const id = modelId ?? (await organizationDefaultModel(owner));
       if (!id) {
         throw new AssistantError(
           'no_org_model',
@@ -144,6 +192,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
         model: ({ requestContext: context }: { requestContext: RequestContext }) =>
           resolveModel(id, { remapForCodexOAuth: true, requestContext: context }),
         requestContext,
+        modelId: id,
       };
     },
   };
@@ -192,6 +241,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     ? new ClickUpChatSource({
         storage: options.clickupStorage,
         cipher: options.secretEncryption,
+        ...(options.orgClickUp ? { orgClickUp: options.orgClickUp } : {}),
         ingest: {
           ingestSourceMessage: (owner, message) => ingest!.ingestSourceMessage(owner, message),
           hasOpenSourceRequest: (owner, key) => ingest!.hasOpenSourceRequest(owner, key),

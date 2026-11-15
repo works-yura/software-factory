@@ -119,4 +119,41 @@ describe('Account › Assistant › Sources', () => {
     renderSources();
     expect(await screen.findByText('No chats yet')).toBeInTheDocument();
   });
+
+  it('offers the organization’s ClickUp connection to the person whose account it is, instead of a second token', async () => {
+    let usedOrg = false;
+    let state: Record<string, unknown> = { ...disconnected, orgOffer: { accountName: 'Yura', workspaces: ['eclipt.ai'] } };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/sources`, () => HttpResponse.json({ clickup: state })),
+      http.post(`${TEST_BASE_URL}/web/assistant/sources/clickup/org`, () => {
+        usedOrg = true;
+        state = connected({ via: 'org', orgOffer: null, account: { id: '42', name: 'Yura' } });
+        return HttpResponse.json({ clickup: state });
+      }),
+    );
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(await screen.findByRole('button', { name: "Use the organization's connection (ClickUp: Yura)" }));
+    await waitFor(() => expect(usedOrg).toBe(true));
+    expect(await screen.findByText('Connected as Yura')).toBeInTheDocument();
+    expect(screen.getByText("Through the organization's ClickUp connection")).toBeInTheDocument();
+  });
+
+  it('does not offer it to anyone else: they paste their own token', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/assistant/sources`, () => HttpResponse.json({ clickup: { ...disconnected, orgOffer: null } })));
+    renderSources();
+    expect(await screen.findByRole('form', { name: 'Connect ClickUp' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /organization's connection/ })).not.toBeInTheDocument();
+  });
+
+  it('says reading stopped when the organization’s connection was removed, and offers a personal token', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/sources`, () =>
+        HttpResponse.json({ clickup: connected({ via: 'org', orgOffer: null, status: 'rejected', lastError: 'gone', nextPollAt: null }) }),
+      ),
+    );
+    renderSources();
+    expect(await screen.findByText(/organization's ClickUp connection was removed/)).toBeInTheDocument();
+    expect(screen.getByRole('form', { name: 'Connect ClickUp' })).toBeInTheDocument();
+  });
 });

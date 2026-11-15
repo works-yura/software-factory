@@ -10,6 +10,9 @@ import { useTranslation } from 'react-i18next';
 import { useAssistantRequests } from './api';
 import { AssistantPanel } from './AssistantPanel';
 
+/** The only ways the desktop panel closes on its own: its button, Escape. Not a press outside, not focus leaving. */
+const LAUNCHER_CLOSE_REASONS: ReadonlySet<string> = new Set(['trigger-press', 'escape-key']);
+
 /** Where the floating button sits: over every page, in the bottom-right corner. */
 const LAUNCHER_PLACE = 'fixed right-4 bottom-4 z-40';
 
@@ -56,9 +59,10 @@ export function AssistantLauncher({ hint }: { hint?: { id: string; name: string 
     <Popover
       open={open}
       onOpenChange={(next, details) => {
-        // The panel stays open while the person works on the page beside it (copying what to paste);
-        // the button, Escape and its own close button close it.
-        if (!next && details.reason === 'outside-press') return;
+        // The panel stays open while the person works on the page beside it (copying what to paste),
+        // and while focus wanders (a click inside on Safari focuses nothing; a picker's portal takes
+        // focus): only the button and Escape close it, and its own close button (`close`).
+        if (!next && !LAUNCHER_CLOSE_REASONS.has(details.reason)) return;
         setOpen(next);
       }}
     >

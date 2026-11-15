@@ -1,8 +1,17 @@
+import {
+  ChatAnnotationsProvider,
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  TranscriptAnnotations,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
 import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
@@ -24,7 +33,6 @@ import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Message, MessageMetadata } from '@mastra/playground-ui/components/Message';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
@@ -42,10 +50,13 @@ import {
   Forward,
   MessageCircleQuestion,
   MoreHorizontal,
+  NotebookPen,
   Paperclip,
   Pencil,
   RefreshCw,
   RotateCcw,
+  Settings2,
+  Sparkles,
 } from 'lucide-react';
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import type { ComponentProps, DragEvent, FormEvent, ReactNode } from 'react';
@@ -57,12 +68,14 @@ import {
   useAssistantApi,
   useAssistantFactories,
   useAssistantRequest,
+  useAssistantRequests,
   usePostMessage,
   useRequestAction,
   useUpdateRequest,
 } from './api';
-import type { AssistantFile, AssistantMessage, AssistantRequest, FactoryAccessState, RequestStatus } from './api';
+import type { AssistantFile, AssistantMessage, AssistantRequest, FactoryAccessState, RequestStatus, TurnFailure } from './api';
 import { PendingFiles, pastedFiles } from './NewRequestForm';
+import { RequestTime } from './time';
 
 export const STATUS_BADGE: Record<RequestStatus, BadgeVariant> = {
   new: 'info',
@@ -281,7 +294,7 @@ function MetaLine({ request }: { request: AssistantRequest }) {
         </Button>
       ) : null}
       <Txt as="span" variant="caption" tone="muted">
-        <RelativeTimestamp value={request.createdAt} label={t('thread.created')} />
+        <RequestTime value={request.createdAt} label={t('thread.created')} />
       </Txt>
       {factory?.url ? (
         <Button variant="link" size="sm" iconEnd={<ExternalLink />} render={<a href={factory.url} />}>
@@ -304,6 +317,7 @@ function ThreadHeader({
   target,
   onTarget,
   onDone,
+  onAddNote,
 }: {
   request: AssistantRequest;
   compact: boolean;
@@ -311,6 +325,7 @@ function ThreadHeader({
   target: FactoryTarget | undefined;
   onTarget: (id: string) => void;
   onDone?: () => void;
+  onAddNote?: (requestId: string) => void;
 }) {
   const { t } = useTranslation('assistant');
   const update = useUpdateRequest();
@@ -367,6 +382,12 @@ function ThreadHeader({
           <Pencil />
           {t('thread.rename')}
         </DropdownMenu.Item>
+        {onAddNote ? (
+          <DropdownMenu.Item onSelect={() => onAddNote(request.id)}>
+            <NotebookPen />
+            {t('thread.addNote')}
+          </DropdownMenu.Item>
+        ) : null}
         {waitingOnQuestion ? (
           <DropdownMenu.Item onSelect={() => actions.checkAnswer.mutate()}>
             <RefreshCw />
@@ -428,9 +449,51 @@ function ThreadHeader({
 
 // ─── Thread ──────────────────────────────────────────────────────────────────
 
-/** An `event` entry: `asked:<Factory>\n<question>` or `handed:<Factory>[\n<note>][\nfiles_failed\n…]`. */
-function EventLine({ message }: { message: AssistantMessage }) {
+/** What a thread entry can do beyond showing itself: open another request, run the agent again. */
+interface ThreadEntryActions {
+  /** Opens another request of the person's (the one a source request continues). */
+  onOpenRequest?: (id: string) => void;
+  /** Runs the agent on what it has not answered; absent when that is not possible now. */
+  onAnalyse?: () => void;
+  analysing?: boolean;
+}
+
+/** `continues:<id>`: this request picks up a source thread whose earlier request was closed. */
+function ContinuesLine({ previousId, onOpenRequest }: { previousId: string; onOpenRequest?: (id: string) => void }) {
   const { t } = useTranslation('assistant');
+  const previous = useAssistantRequests().data?.find(request => request.id === previousId);
+  const label = previous ? t('thread.continues', { topic: previous.topic }) : t('thread.continuesUnknown');
+  return (
+    <TranscriptDivider label={label}>
+      {onOpenRequest ? (
+        <Button variant="ghost" size="sm" onClick={() => onOpenRequest(previousId)}>
+          {t('thread.openPrevious')}
+        </Button>
+      ) : null}
+    </TranscriptDivider>
+  );
+}
+
+/**
+ * An `event` entry: `asked:<Factory>\n<question>`, `handed:<Factory>[\n<note>][\nfiles_failed\n…]`,
+ * `continues:<request id>`, or `not_analysed:limit` (a source message kept but not read by the agent).
+ */
+function EventLine({ message, onOpenRequest, onAnalyse, analysing }: { message: AssistantMessage } & ThreadEntryActions) {
+  const { t } = useTranslation('assistant');
+  if (message.text.startsWith('continues:')) {
+    return <ContinuesLine previousId={message.text.slice('continues:'.length).trim()} onOpenRequest={onOpenRequest} />;
+  }
+  if (message.text.startsWith('not_analysed:')) {
+    return (
+      <TranscriptDivider label={t('thread.notAnalysed')}>
+        {onAnalyse ? (
+          <Button variant="ghost" size="sm" icon={<Sparkles />} disabled={analysing} onClick={onAnalyse}>
+            {t('thread.analyse')}
+          </Button>
+        ) : null}
+      </TranscriptDivider>
+    );
+  }
   const [head = '', ...rest] = message.text.split('\n');
   const [kind, ...name] = head.split(':');
   const factory = name.join(':');
@@ -453,10 +516,46 @@ function EventLine({ message }: { message: AssistantMessage }) {
   );
 }
 
-function ThreadEntry({ message, files }: { message: AssistantMessage; files: AssistantFile[] }) {
+/**
+ * A message read from a source (a colleague's in ClickUp): an incoming message from that person,
+ * as a helpdesk shows a customer's — their avatar and name, on the left — never as the assistant's reply.
+ */
+function SourceEntry({ message, files }: { message: AssistantMessage; files: AssistantFile[] }) {
   const { t } = useTranslation('assistant');
-  if (message.author === 'event') return <EventLine message={message} />;
+  const name = message.fromName?.trim() || t('thread.someone');
+  return (
+    <Message
+      from="assistant"
+      data-author="source"
+      aria-label={t('thread.sourceFrom', { name })}
+      className="my-3 flex w-fit max-w-[85%] items-start gap-2"
+      avatar={<Avatar name={name} size="sm" />}
+    >
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="flex items-center gap-2">
+          <Txt as="span" variant="label">
+            {name}
+          </Txt>
+          <Txt as="span" variant="caption" tone="muted">
+            <RequestTime value={message.createdAt} />
+          </Txt>
+        </span>
+        {files.length ? <Attachments files={files} /> : null}
+        {message.text ? (
+          <div className="border-border min-w-0 rounded-xl border px-4 py-2 [&>:last-child]:mb-0">
+            <MarkdownRenderer>{message.text}</MarkdownRenderer>
+          </div>
+        ) : null}
+      </div>
+    </Message>
+  );
+}
+
+function ThreadEntry({ message, files, ...actions }: { message: AssistantMessage; files: AssistantFile[] } & ThreadEntryActions) {
+  const { t } = useTranslation('assistant');
+  if (message.author === 'event') return <EventLine message={message} {...actions} />;
   const own = files.filter(file => message.fileIds.includes(file.id));
+  if (message.author === 'source') return <SourceEntry message={message} files={own} />;
   const label = message.author === 'person' ? t('thread.you') : message.author === 'factory' ? t('thread.factory') : t('thread.agent');
   return (
     <Message
@@ -467,6 +566,90 @@ function ThreadEntry({ message, files }: { message: AssistantMessage; files: Ass
     >
       {message.text ? <MarkdownRenderer>{message.text}</MarkdownRenderer> : null}
     </Message>
+  );
+}
+
+// ─── A failed turn ───────────────────────────────────────────────────────────
+
+const PROVIDER_NAMES: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  xai: 'xAI',
+  google: 'Google',
+  openrouter: 'OpenRouter',
+  mistral: 'Mistral',
+  groq: 'Groq',
+  deepseek: 'DeepSeek',
+  cerebras: 'Cerebras',
+  togetherai: 'Together AI',
+};
+
+/** `xai/grok-4.5` → `xAI · grok-4.5`, as the thread names the model that failed. */
+export function modelLabel(modelId: string): string {
+  const slash = modelId.indexOf('/');
+  if (slash < 0) return modelId;
+  const provider = modelId.slice(0, slash);
+  return `${PROVIDER_NAMES[provider] ?? provider} · ${modelId.slice(slash + 1)}`;
+}
+
+/** Failures another model would get past: the fix is to pick one in Account › Assistant. */
+const MODEL_FIXES = new Set<TurnFailure['kind']>(['rate_limit', 'auth', 'model_not_found', 'overloaded']);
+
+/**
+ * Why the agent could not answer, as a person can act on it: the provider and model named, what
+ * went wrong in words, the fix — try again, or pick another model — and the provider's raw words
+ * kept under «Details». Never another model behind the person's back.
+ */
+function TurnFailureNotice({ failure, request }: { failure: TurnFailure; request: AssistantRequest }) {
+  const { t } = useTranslation('assistant');
+  const { settingsHref } = useAssistantApi();
+  const actions = useRequestAction(request.id);
+  const model = failure.modelId ? modelLabel(failure.modelId) : t('failure.defaultModel');
+  const headline = t(`failure.${failure.kind}.title`, { model });
+  const fix = t(`failure.${failure.kind}.fix`);
+  const canRetry = request.status !== 'closed' && !request.analysing;
+  const pickModel = MODEL_FIXES.has(failure.kind) || failure.kind === 'unknown';
+  return (
+    <div role="alert" data-testid="assistant-turn-failure">
+      <Notice
+        variant="destructive"
+        action={
+          <span className="flex flex-wrap items-center gap-3">
+            {canRetry ? (
+              <Notice.Button icon={<RotateCcw />} disabled={actions.retry.isPending} onClick={() => actions.retry.mutate()}>
+                {t('failure.retry')}
+              </Notice.Button>
+            ) : null}
+            {pickModel && settingsHref ? (
+              <Notice.Button icon={<Settings2 />} render={<a href={settingsHref} />}>
+                {t('failure.pickModel')}
+              </Notice.Button>
+            ) : null}
+          </span>
+        }
+      >
+        {/* The headline wraps (a title would truncate it on a phone). */}
+        <Txt as="span" variant="label">
+          {headline}
+        </Txt>
+        <span>{fix}</span>
+        {actions.retry.isError ? <span>{actions.retry.error.message}</span> : null}
+        {failure.detail ? (
+          <Collapsible>
+            <CollapsibleTrigger className="group flex items-center gap-1 rounded-sm">
+              <DisclosureChevron />
+              {t('failure.details')}
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <pre className="mt-1 max-h-40 overflow-auto font-mono text-xs whitespace-pre-wrap" data-testid="assistant-failure-detail">
+                {failure.status ? `HTTP ${failure.status}\n` : ''}
+                {failure.detail}
+              </pre>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : null}
+      </Notice>
+    </div>
   );
 }
 
@@ -516,7 +699,9 @@ function ReplyComposer({
   const mutation = effective === 'ask' ? actions.ask : effective === 'handOver' ? actions.handOver : post;
   const factoryReady = Boolean(access?.connected && target);
   const busy = mutation.isPending || (effective === 'assistant' && request.analysing);
-  const canSend = !busy && (toFactory ? factoryReady : text.trim().length > 0 || files.length > 0);
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
+  const canSend =
+    !busy && (toFactory ? factoryReady : text.trim().length > 0 || files.length > 0 || annotations.length > 0);
   const addFiles = (added: File[]) => setFiles(current => [...current, ...added]);
   const reset = () => {
     setText('');
@@ -526,10 +711,14 @@ function ReplyComposer({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!canSend) return;
-    const typed = text.trim();
-    if (effective === 'assistant') post.mutate({ text, files }, { onSuccess: reset });
-    else if (effective === 'ask') actions.ask.mutate({ factoryId: target!.id, ...(typed ? { question: typed } : {}) }, { onSuccess: reset });
-    else actions.handOver.mutate({ factoryId: target!.id, ...(typed ? { note: typed } : {}) }, { onSuccess: reset });
+    // Passages the person marked in the thread go first, as in a Factory chat: quoted, each with its comment.
+    const sent = takeAnnotations();
+    const message = formatAnnotatedMessage(text, sent);
+    const typed = message.trim();
+    const done = { onSuccess: reset, onError: () => restoreAnnotations(sent) };
+    if (effective === 'assistant') post.mutate({ text: message, files }, done);
+    else if (effective === 'ask') actions.ask.mutate({ factoryId: target!.id, ...(typed ? { question: typed } : {}) }, done);
+    else actions.handOver.mutate({ factoryId: target!.id, ...(typed ? { note: typed } : {}) }, done);
   };
   const drop = (event: DragEvent<HTMLFormElement>) => {
     const dropped = Array.from(event.dataTransfer?.files ?? []);
@@ -591,6 +780,7 @@ function ReplyComposer({
       </ComposerHeader>
       <ComposerRing busy={busy} tone={MODE_TONE[effective]}>
         <ComposerBox>
+          <ComposerAnnotations />
           {toFactory ? null : <PendingFiles files={files} onRemove={index => setFiles(current => current.filter((_, at) => at !== index))} />}
           <ComposerInput
             aria-label={placeholder}
@@ -680,16 +870,23 @@ export function RequestThread({
   hint,
   compact = false,
   onDone,
+  onOpenRequest,
+  onAddNote,
 }: {
   requestId: string;
   hint?: FactoryTarget;
   compact?: boolean;
   /** Called once the person closed the request here, so the panel can move on to the next one. */
   onDone?: () => void;
+  /** Opens another request (the earlier one a source request continues). */
+  onOpenRequest?: (id: string) => void;
+  /** Starts a note about this request in the Notes tab. */
+  onAddNote?: (requestId: string) => void;
 }) {
   const { t } = useTranslation('assistant');
   const view = useAssistantRequest(requestId);
   const factories = useAssistantFactories();
+  const actions = useRequestAction(requestId);
   const [picked, setPicked] = useState('');
   if (view.isError) return <Notice variant="destructive">{view.error.message}</Notice>;
   if (!view.data) {
@@ -704,38 +901,60 @@ export function RequestThread({
   }
   const { request, messages, files } = view.data;
   const target = resolveTarget(factories.data, picked, request, hint);
+  // «Analyse» on a message the hourly limit left unread: only while nothing after it was answered.
+  const lastAgent = messages.findLastIndex(message => message.author === 'agent');
+  const canAnalyse = request.status !== 'closed' && !request.analysing;
   return (
-    <ChatShell
-      data-testid="assistant-thread"
-      className="flex-1 [--chat-surface:var(--assistant-surface,var(--color-card))]"
-      scroller={{ autoScroll: true, defaultScrollPosition: 'end' }}
-    >
-      <ThreadHeader request={request} compact={compact} access={factories.data} target={target} onTarget={setPicked} onDone={onDone} />
-      <ChatShell.Stage>
-        <ChatShell.Viewport>
-          <ChatShell.Content role="log" aria-label={t('thread.label')} className="pt-4">
-            <ChatShell.Transcript>
-              {messages.map(message => (
-                <ThreadEntry key={message.id} message={message} files={files} />
-              ))}
-              {request.analysing ? (
-                <Message from="assistant" pending>
-                  <Txt as="p" variant="body-sm" tone="muted" role="status">
-                    <Shimmer>{t('thread.analysing')}</Shimmer>
-                  </Txt>
-                </Message>
-              ) : null}
-              {request.lastError ? <Notice variant="destructive">{t('thread.failed', { message: request.lastError })}</Notice> : null}
-            </ChatShell.Transcript>
-          </ChatShell.Content>
-          <ChatShell.Dock>
-            <ChatShell.ScrollButton />
-            <ChatShell.Column>
-              <ReplyComposer request={request} compact={compact} access={factories.data} target={target} />
-            </ChatShell.Column>
-          </ChatShell.Dock>
-        </ChatShell.Viewport>
-      </ChatShell.Stage>
-    </ChatShell>
+    // Marked passages belong to this thread: the provider lives (and goes) with it.
+    <ChatAnnotationsProvider>
+      <ChatShell
+        data-testid="assistant-thread"
+        className="flex-1 [--chat-surface:var(--assistant-surface,var(--color-card))]"
+        scroller={{ autoScroll: true, defaultScrollPosition: 'end' }}
+      >
+        <ThreadHeader
+          request={request}
+          compact={compact}
+          access={factories.data}
+          target={target}
+          onTarget={setPicked}
+          onDone={onDone}
+          onAddNote={onAddNote}
+        />
+        <ChatShell.Stage>
+          <ChatShell.Viewport>
+            <ChatShell.Content role="log" aria-label={t('thread.label')} className="pt-4">
+              <ChatShell.Transcript>
+                <TranscriptAnnotations />
+                {messages.map((message, index) => (
+                  <ThreadEntry
+                    key={message.id}
+                    message={message}
+                    files={files}
+                    onOpenRequest={onOpenRequest}
+                    analysing={actions.retry.isPending}
+                    {...(canAnalyse && index > lastAgent ? { onAnalyse: () => actions.retry.mutate() } : {})}
+                  />
+                ))}
+                {request.analysing ? (
+                  <Message from="assistant" pending>
+                    <Txt as="p" variant="body-sm" tone="muted" role="status">
+                      <Shimmer>{t('thread.analysing')}</Shimmer>
+                    </Txt>
+                  </Message>
+                ) : null}
+                {request.lastError && !request.analysing ? <TurnFailureNotice failure={request.lastError} request={request} /> : null}
+              </ChatShell.Transcript>
+            </ChatShell.Content>
+            <ChatShell.Dock>
+              <ChatShell.ScrollButton />
+              <ChatShell.Column>
+                <ReplyComposer request={request} compact={compact} access={factories.data} target={target} />
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </ChatShell.Viewport>
+        </ChatShell.Stage>
+      </ChatShell>
+    </ChatAnnotationsProvider>
   );
 }

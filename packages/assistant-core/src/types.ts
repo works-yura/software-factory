@@ -3,6 +3,8 @@
  * organization. A person in two organizations has two assistants that never see each other.
  */
 
+import type { TurnFailure } from './turn-failure.ts';
+
 /** Who an assistant belongs to: the pair, never one half of it. */
 export interface AssistantOwner {
   orgId: string;
@@ -79,7 +81,7 @@ export interface AssistantRequest {
   /** The agent is working on the latest message now. */
   analysing: boolean;
   /** Why the agent's last turn failed, shown in the thread; cleared by the next turn. */
-  lastError: string | null;
+  lastError: TurnFailure | null;
   /** True until the person opened the thread after the agent last wrote to it. */
   unread: boolean;
   /**

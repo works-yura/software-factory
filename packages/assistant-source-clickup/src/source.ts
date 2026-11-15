@@ -19,6 +19,8 @@ import type {
 
 import type { ChatChannel, ChatMessage, ClickUpChatClientOptions } from './client.ts';
 import { channelUrl, ClickUpBudgetSpent, ClickUpChatClient, ClickUpChatError, fileLinks, isPersonalToken } from './client.ts';
+import type { OrgClickUpReader } from './org-connection.ts';
+import { orgConnectionFor } from './org-connection.ts';
 import type { ChannelKind, ClickUpSourceStorage, SourceChannel, SourceConnection } from './storage.ts';
 import { PLATFORM } from './storage.ts';
 
@@ -77,6 +79,11 @@ export interface ClickUpSourceDeps {
    * core's `checkChannelRule`. Throws an `AssistantError` saying why not.
    */
   checkRule?: (owner: AssistantOwner, rule: ChannelRule) => Promise<void>;
+  /**
+   * The organization's ClickUp connection (Settings › Підключення), offered to the one person whose
+   * own account its token is; absent, everyone connects a personal token.
+   */
+  orgClickUp?: OrgClickUpReader;
   maxFileBytes?: number;
   now?: () => Date;
 }
@@ -106,6 +113,13 @@ export interface PollResult {
 /** The person's connection as the settings show it: never the token. */
 export interface ConnectionView {
   connected: boolean;
+  /** Read with the person's own personal token, or with the organization's connection (their own account). */
+  via: 'personal' | 'org' | null;
+  /**
+   * The organization's ClickUp connection, offered only to the person whose ClickUp account its token
+   * is (proved by an identity link or by having saved it); `null` for everyone else.
+   */
+  orgOffer: { accountName: string; workspaces: string[] } | null;
   account: { id: string; name: string } | null;
   status: 'active' | 'rejected' | null;
   lastSyncAt: string | null;
@@ -123,6 +137,12 @@ export interface ConnectionView {
     lastError: string | null;
   }>;
 }
+
+/** What the stored secret holds: the person's own token, or a pointer to the organization's connection. */
+type StoredSecret = { token: string } | { org: true };
+
+export const ORG_CONNECTION_GONE =
+  "The organization's ClickUp connection was removed or is no longer your account, so the assistant stopped reading ClickUp. Connect your own personal token.";
 
 /** Sliding one-hour window of agent turns per person. In memory: a restart forgives, never overspends much. */
 class TurnLimiter {
@@ -207,6 +227,48 @@ export class ClickUpChatSource implements AssistantSource {
     return this.view(owner);
   }
 
+  /**
+   * Reads ClickUp with the organization's connection instead of a pasted token — only for the person
+   * whose own ClickUp account that token is. Nothing of the token is copied: each read takes the
+   * organization's current token and checks the proof again.
+   */
+  async connectOrg(owner: AssistantOwner): Promise<ConnectionView> {
+    await this.#ready();
+    const offered = this.#deps.orgClickUp ? await orgConnectionFor(this.#deps.orgClickUp, owner) : null;
+    if (!offered) {
+      throw new AssistantError(
+        'org_connection_not_yours',
+        "The organization's ClickUp connection is not your ClickUp account. Connect your own personal token.",
+        403,
+      );
+    }
+    const { account, token } = offered.connection;
+    await this.#deps.storage.putConnection(
+      owner,
+      { secret: await this.#deps.cipher.encrypt<StoredSecret>({ org: true }), accountId: account.id, accountName: account.name },
+      this.#now(),
+    );
+    try {
+      await this.#listChannels(owner, this.#client(token));
+    } catch (error) {
+      await this.#deps.storage.patchConnection(owner, { lastError: errorText(error) }, this.#now());
+    }
+    return this.view(owner);
+  }
+
+  /** The token a read uses: the person's own, or the organization's while it is still provably theirs. */
+  async #token(owner: AssistantOwner, connection: SourceConnection): Promise<{ token: string; via: 'personal' | 'org' } | null> {
+    const { value } = await this.#deps.cipher.decrypt<StoredSecret>(connection.secret);
+    if ('token' in value) return { token: value.token, via: 'personal' };
+    const offered = this.#deps.orgClickUp ? await orgConnectionFor(this.#deps.orgClickUp, owner) : null;
+    return offered ? { token: offered.connection.token, via: 'org' } : null;
+  }
+
+  async #via(connection: SourceConnection): Promise<'personal' | 'org'> {
+    const { value } = await this.#deps.cipher.decrypt<StoredSecret>(connection.secret);
+    return 'token' in value ? 'personal' : 'org';
+  }
+
   /** Forgets the connection, channel modes and cursors (the token first). Requests stay the person's. */
   async disconnect(owner: AssistantOwner): Promise<void> {
     await this.#ready();
@@ -222,9 +284,22 @@ export class ClickUpChatSource implements AssistantSource {
   async view(owner: AssistantOwner): Promise<ConnectionView> {
     await this.#ready();
     const connection = await this.#deps.storage.getConnection(owner);
+    const offered = this.#deps.orgClickUp ? await orgConnectionFor(this.#deps.orgClickUp, owner) : null;
+    const orgOffer = offered ? { accountName: offered.connection.account.name, workspaces: offered.connection.account.workspaces } : null;
     if (!connection) {
-      return { connected: false, account: null, status: null, lastSyncAt: null, lastError: null, nextPollAt: null, channels: [] };
+      return {
+        connected: false,
+        via: null,
+        orgOffer,
+        account: null,
+        status: null,
+        lastSyncAt: null,
+        lastError: null,
+        nextPollAt: null,
+        channels: [],
+      };
     }
+    const via = await this.#via(connection);
     // DMs first (they are what reaches the person), then channels, each by name.
     const order: Record<ChannelKind, number> = { dm: 0, group_dm: 1, channel: 2 };
     const channels = (await this.#deps.storage.listChannels(owner))
@@ -232,6 +307,8 @@ export class ClickUpChatSource implements AssistantSource {
       .sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name));
     return {
       connected: true,
+      via,
+      orgOffer: via === 'org' ? null : orgOffer,
       account: { id: connection.accountId, name: connection.accountName },
       status: connection.status,
       lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
@@ -292,7 +369,7 @@ export class ClickUpChatSource implements AssistantSource {
 
   /**
    * The latest messages of a chat the person turned on — or of one thread in it — read now with the
-   * person's own token, within `callsPerRead` ClickUp calls. A chat that is off, gone or unknown
+   * person's connection (own token, or the organization's while provably theirs), within `callsPerRead` ClickUp calls. A chat that is off, gone or unknown
    * is refused: the agent reads only what the person chose to let the assistant read.
    */
   async readChannel(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages> {
@@ -304,8 +381,10 @@ export class ClickUpChatSource implements AssistantSource {
     if (!channel || channel.mode === 'ignore' || channel.gone) throw refused();
     const connection = await this.#deps.storage.getConnection(owner);
     if (!connection || connection.status !== 'active') throw new AssistantError('not_connected', 'ClickUp is not connected (or no longer accepts the token).', 409);
-    const { value } = await this.#deps.cipher.decrypt<{ token: string }>(connection.secret);
-    const client = this.#client(value.token, this.limits.callsPerRead);
+    // The person's own token, or the organization's while it is still provably theirs — as polling.
+    const access = await this.#token(owner, connection);
+    if (!access) throw new AssistantError('not_connected', ORG_CONNECTION_GONE, 409);
+    const client = this.#client(access.token, this.limits.callsPerRead);
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 30);
     try {
       const members = await this.#members(client);
@@ -377,8 +456,14 @@ export class ClickUpChatSource implements AssistantSource {
     const started = this.#now();
     let client: ClickUpChatClient | undefined;
     try {
-      const { value } = await this.#deps.cipher.decrypt<{ token: string }>(connection.secret);
-      client = this.#client(value.token, this.limits.callsPerPoll);
+      const access = await this.#token(owner, connection);
+      if (!access) {
+        // The organization's connection went (or is no longer this person's): stop, and say so.
+        await storage.patchConnection(owner, { status: 'rejected', lastError: ORG_CONNECTION_GONE, nextPollAt: null }, this.#now());
+        result.error = ORG_CONNECTION_GONE;
+        return result;
+      }
+      client = this.#client(access.token, this.limits.callsPerPoll);
       const listedAt = connection.channelsListedAt?.getTime() ?? 0;
       if (started.getTime() - listedAt >= this.limits.channelsRefreshMs) await this.#listChannels(owner, client);
       const members = await this.#members(client);

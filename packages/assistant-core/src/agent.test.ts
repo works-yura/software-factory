@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createAssistantMemory, createAssistantMemoryEraser, createMastraAssistantBrain } from './agent.ts';
 import type { BrainTurn } from './ports.ts';
 import { createAssistantTools } from './tools.ts';
+import { AssistantTurnError, classifyTurnFailure } from './turn-failure.ts';
 import type { AssistantOwner, AssistantRequest } from './types.ts';
 
 const ADA: AssistantOwner = { orgId: 'org-a', userId: 'ada' };
@@ -145,6 +146,39 @@ describe('the assistant agent', () => {
       },
     });
     await expect(failing.respond(turn(ADA, '22222222-2222-4222-8222-222222222222'))).rejects.toThrow('no model connected');
+  });
+
+  it('names the resolved model when the provider refuses the turn (xAI 429), keeping its words as the cause', async () => {
+    const limited = {
+      ...model,
+      async doGenerate() {
+        throw Object.assign(new Error('Too Many Requests'), {
+          statusCode: 429,
+          responseBody: '{"code":"Some resource has been exhausted"}',
+          isRetryable: false,
+        });
+      },
+      async doStream() {
+        throw Object.assign(new Error('Too Many Requests'), {
+          statusCode: 429,
+          responseBody: '{"code":"Some resource has been exhausted"}',
+          isRetryable: false,
+        });
+      },
+    };
+    const failing = createMastraAssistantBrain({
+      memory: createAssistantMemory(backend.getMastraStorage()),
+      models: {
+        async resolve() {
+          return { model: limited as never, modelId: 'xai/grok-4.5' };
+        },
+      },
+    });
+    const error = await failing
+      .respond({ ...turn(ADA, '66666666-6666-4666-8666-666666666666'), modelId: null })
+      .then(() => undefined, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(AssistantTurnError);
+    expect(classifyTurnFailure(error)).toMatchObject({ kind: 'rate_limit', modelId: 'xai/grok-4.5', status: 429 });
   });
 
   it('erases one owner’s memory, and one request’s thread, never another’s', async () => {
