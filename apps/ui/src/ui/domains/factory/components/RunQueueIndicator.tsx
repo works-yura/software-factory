@@ -46,7 +46,9 @@ export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; que
         tooltip={slotsLabel(queue.slots) ?? tk('runQueue.tooltip')}
       >
         <Hourglass aria-hidden />
-        <span className="tabular-nums">{tk('runQueue.count', { count: queue.queuedCount })}</span>
+        {/* A phone's board toolbar keeps the search field: the hourglass and the number say it there. */}
+        <span className="tabular-nums max-sm:hidden">{tk('runQueue.count', { count: queue.queuedCount })}</span>
+        <span className="tabular-nums sm:hidden">{queue.queuedCount}</span>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-[min(24rem,calc(100vw-1.5rem))]">
         <DropdownMenu.Label>{tk('runQueue.heading')}</DropdownMenu.Label>
@@ -60,7 +62,7 @@ export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; que
               <span className="w-7 shrink-0 tabular-nums">#{run.position}</span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{card?.title ?? tk('runQueue.cardGone')}</span>
-                <span className="flex min-w-0 gap-2">
+                <span className="flex min-w-0 flex-wrap gap-x-2">
                   {details.map(detail => (
                     <Txt key={detail} as="span" variant="caption" tone="muted" className="truncate">
                       {detail}
