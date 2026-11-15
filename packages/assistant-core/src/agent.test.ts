@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createAssistantMemory, createAssistantMemoryEraser, createMastraAssistantBrain } from './agent.ts';
 import type { BrainTurn } from './ports.ts';
+import { createAssistantTools } from './tools.ts';
 import type { AssistantOwner, AssistantRequest } from './types.ts';
 
 const ADA: AssistantOwner = { orgId: 'org-a', userId: 'ada' };
@@ -14,6 +15,7 @@ const BOB: AssistantOwner = { orgId: 'org-a', userId: 'bob' };
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2]);
 
 let prompts: unknown[];
+let toolNames: string[][];
 let resolved: Array<{ owner: AssistantOwner; modelId: string | null }>;
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -22,12 +24,14 @@ const model = {
   provider: 'test',
   modelId: 'test-model',
   supportedUrls: {},
-  async doGenerate(options: { prompt: unknown }) {
+  async doGenerate(options: { prompt: unknown; tools?: Array<{ name: string }> }) {
     prompts.push(options.prompt);
+    toolNames.push((options.tools ?? []).map(tool => tool.name));
     return { content: [{ type: 'text', text: 'Olena asks about checkout.' }], finishReason: 'stop', usage, warnings: [] };
   },
-  async doStream(options: { prompt: unknown }) {
+  async doStream(options: { prompt: unknown; tools?: Array<{ name: string }> }) {
     prompts.push(options.prompt);
+    toolNames.push((options.tools ?? []).map(tool => tool.name));
     return {
       stream: new ReadableStream({
         start(controller) {
@@ -72,6 +76,7 @@ beforeEach(async () => {
   backend = new LibSQLFactoryStorage({ id: 'assistant-agent', url: ':memory:' });
   await backend.init();
   prompts = [];
+  toolNames = [];
   resolved = [];
 });
 
@@ -105,6 +110,29 @@ describe('the assistant agent', () => {
     const memory = await backend.getMastraStorage().getStore('memory');
     const { threads } = await memory!.listThreads({ filter: { resourceId: 'assistant:org-a:ada' }, perPage: false });
     expect(threads.map(thread => thread.id)).toEqual(['11111111-1111-4111-8111-111111111111']);
+  });
+
+  it('gets the person’s instructions and skills after its own, and the turn’s tools', async () => {
+    const tools = createAssistantTools({} as never, {
+      owner: ADA,
+      requestId: '66666666-6666-4666-8666-666666666666',
+      skills: [{ name: 'factory-triage', description: 'Sort an incoming issue.' }],
+    });
+    await brain().respond({
+      ...turn(ADA, '66666666-6666-4666-8666-666666666666'),
+      instructions: 'Always answer in Ukrainian.',
+      skills: [{ name: 'factory-triage', description: 'Sort an incoming issue.' }],
+      tools,
+      maxSteps: 4,
+    });
+    const prompt = JSON.stringify(prompts[0]);
+    expect(prompt).toContain('You report to this person only');
+    expect(prompt).toContain('factory-triage: Sort an incoming issue.');
+    expect(prompt).toContain('Always answer in Ukrainian.');
+    expect(prompt.indexOf('report to this person only')).toBeLessThan(prompt.indexOf('Always answer in Ukrainian.'));
+    expect(toolNames[0]).toEqual(expect.arrayContaining(['assistant_search_requests', 'factory_propose_ask', 'factory_propose_hand_over', 'assistant_read_skill']));
+    // Nothing that creates or starts something in a Factory is a tool of its own.
+    expect(toolNames[0]!.filter(name => /factory_(create|start|ask|hand_over)/.test(name))).toEqual([]);
   });
 
   it('fails loudly when the organization has no model', async () => {

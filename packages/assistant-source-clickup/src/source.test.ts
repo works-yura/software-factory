@@ -27,6 +27,7 @@ let pending: Array<Promise<void>>;
 let now: number;
 let service: AssistantService;
 let source: ClickUpChatSource;
+let factory: FakeFactory;
 
 function build(limits: Partial<ClickUpPollLimits> = {}) {
   source = new ClickUpChatSource({
@@ -35,9 +36,10 @@ function build(limits: Partial<ClickUpPollLimits> = {}) {
     ingest: { ingestSourceMessage: (o, m) => service.ingestSourceMessage(o, m), hasOpenSourceRequest: (o, k) => service.hasOpenSourceRequest(o, k) },
     client: options => new ClickUpChatClient({ ...options, fetch: clickup.fetch }),
     limits,
+    checkRule: (owner, rule) => service.checkChannelRule(owner, rule),
     now: () => new Date(now),
   });
-  const factory = new FakeFactory();
+  factory = new FakeFactory();
   service = new AssistantService({
     storage: core,
     blobs,
@@ -53,6 +55,8 @@ function build(limits: Partial<ClickUpPollLimits> = {}) {
     schedule: task => {
       pending.push(task());
     },
+    // The answer is checked by hand here; the background checks are the core's tests.
+    limits: { answerPollTimeoutMs: 0 },
   });
 }
 
@@ -401,5 +405,75 @@ describe('the client', () => {
     expect(fileLinks('![a](https://app.clickup.com/9001/v/l/abc) ![b](https://x.clickup-attachments.com/f/b.pdf)')).toEqual([
       { name: 'b', url: 'https://x.clickup-attachments.com/f/b.pdf' },
     ]);
+  });
+});
+
+describe('phase 3: channel rules and reading on demand', () => {
+  it('a rule is set by the person, shown in the view; asking a Factory needs one they reach', async () => {
+    await source.connect(ADA, clickup.token);
+    expect((await source.view(ADA)).channels.every(channel => channel.rule === 'analyse')).toBe(true);
+    await expect(
+      source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } }),
+    ).rejects.toMatchObject({ code: 'factory_not_connected' });
+    factory.connect(ADA);
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } });
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-general', rule: { kind: 'digest_only' } });
+    const view = await source.view(ADA);
+    expect(view.channels.map(channel => [channel.name, channel.mode, channel.rule])).toEqual([
+      ['Olena', 'addressed', 'analyse'],
+      ['general', 'ignore', 'digest_only'],
+      ['support', 'watch', 'analyse_and_ask:f-1'],
+    ]);
+    // Bob's channels are untouched.
+    await source.connect(BOB, clickup.token);
+    expect((await source.view(BOB)).channels.every(channel => channel.rule === 'analyse')).toBe(true);
+  });
+
+  it('digest_only: a new message becomes a request without an agent turn or a spent turn', async () => {
+    await connectAndWatch('ch-general');
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-general', rule: { kind: 'digest_only' } });
+    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'FYI: deploy at 5', date: T0 + 5000 });
+    now += 60_000;
+    await poll();
+    const [request] = await core.listRequests(ADA);
+    expect(request).toMatchObject({ status: 'waiting_me', fromName: 'Olena' });
+    expect(brain.turns).toEqual([]);
+    expect((await core.listMessages(ADA, request!.id)).map(message => message.text)).toContain('not_analysed:digest');
+  });
+
+  it('analyse_and_ask: the channel’s Factory is asked after the report', async () => {
+    factory.connect(ADA);
+    await connectAndWatch('ch-support');
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } });
+    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'Checkout fails for client X', date: T0 + 5000 });
+    now += 60_000;
+    await poll();
+    expect(factory.asked).toHaveLength(1);
+    expect(factory.asked[0]!.question).toContain('Checkout fails for client X');
+    expect((await core.listRequests(ADA))[0]!.status).toBe('waiting_factory');
+  });
+
+  it('the agent reads only chats its owner turned on, within the read budget', async () => {
+    await source.connect(ADA, clickup.token);
+    await source.connect(BOB, clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch' });
+    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'is checkout fixed?', date: T0 + 5000 });
+    clickup.post({ id: 'm2', channel: 'ch-general', user: '7', content: 'lunch?', date: T0 + 6000 });
+
+    expect((await source.enabledChannels(ADA)).map(channel => channel.ref).sort()).toEqual([`clickup:${WS}:ch-support`, `clickup:${WS}:dm-olena`]);
+    clickup.calls.length = 0;
+    const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
+    expect(read.messages).toMatchObject([{ id: 'm1', from: 'Olena', text: 'is checkout fixed?' }]);
+    expect(clickup.calls.length).toBeLessThanOrEqual(source.limits.callsPerRead);
+
+    // Off for Ada, and Bob never turned support on: refused, nothing read.
+    clickup.calls.length = 0;
+    await expect(source.readChannel(ADA, { ref: `clickup:${WS}:ch-general` })).rejects.toMatchObject({ status: 404 });
+    await expect(source.readChannel(BOB, { ref: `clickup:${WS}:ch-support` })).rejects.toMatchObject({ status: 404 });
+    await expect(source.readChannel(ADA, { ref: 'clickup:other:thing:extra' })).rejects.toMatchObject({ status: 404 });
+    expect(clickup.calls).toEqual([]);
+
+    // Through the core, as the agent's tool does.
+    expect((await service.listEnabledChannels(BOB)).map(channel => channel.name)).toEqual(['Olena']);
   });
 });
