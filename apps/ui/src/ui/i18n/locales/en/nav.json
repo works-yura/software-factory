@@ -63,8 +63,7 @@
   "user": {
     "checkingSignIn": "Checking sign-in",
     "fallbackName": "User",
-    "settings": "Settings",
-    "settingsFor": "Settings for {{name}}"
+    "settings": "Settings"
   },
   "newSession": "New session",
   "searchAndNavigate": "Search and navigate",
@@ -77,10 +76,17 @@
   "organization": {
     "fallbackName": "Organization",
     "subtitle": "Organization",
-    "menuFor": "Organization: {{name}}",
     "list": "Organizations",
     "settings": "Organization settings",
     "loadFailed": "Couldn't load organizations: {{message}}",
-    "switchFailed": "Couldn't switch organization: {{message}}"
+    "switchFailed": "Couldn't switch organization: {{message}}",
+    "current": "Current organization: {{name}}",
+    "switchFrom": "Switch organization from {{name}}"
+  },
+  "account": {
+    "menuFor": "Account menu: {{name}}",
+    "theme": "Theme",
+    "profileSettings": "Profile settings",
+    "logOut": "Log out"
   }
 }
