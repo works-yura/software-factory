@@ -22,6 +22,7 @@ import {
   CONNECTIONS_CONTRACT_VERSION,
   contractMajor,
   DEFAULT_CONNECTION_PERMISSIONS,
+  authorizationCodeSchema,
   connectRequestSchema,
   reconnectRequestSchema,
   renameConnectionSchema,
@@ -29,6 +30,7 @@ import {
 } from '@factory/contracts';
 import type {
   AuthFlowStatus,
+  AuthorizationPrompt,
   ConnectionActivityCall,
   ConnectionActivityResponse,
   ConnectionActionsView,
@@ -138,7 +140,17 @@ export interface IntegrationConnections {
    * Where an `authorize` flow stands, by the `authId` it returned (`ToolProvider.getAuthStatus`), with
    * why it failed when the connector knows; null: unknown.
    */
-  getAuthStatus?(request: ConnectionRequest, authId: string): Promise<AuthFlowStatus | { status: AuthFlowStatus; message?: string } | null>;
+  getAuthStatus?(
+    request: ConnectionRequest,
+    authId: string,
+  ): Promise<AuthFlowStatus | { status: AuthFlowStatus; message?: string; prompt?: AuthorizationPrompt } | null>;
+  /**
+   * Hands the code the provider's page showed the person to their pending flow (its status said
+   * `prompt.acceptsCode`). The connector checks the flow is the caller's own.
+   */
+  submitAuthCode?(request: ConnectionRequest, authId: string, code: string): Promise<ConnectionOutcome<{ status: AuthFlowStatus }>>;
+  /** Stops the caller's own pending flow (a CLI's sign-in it runs); false when there was none to stop. */
+  cancelAuth?(request: ConnectionRequest, authId: string): Promise<boolean>;
   reconnect?(
     request: ConnectionRequest,
     id: string,
@@ -577,6 +589,39 @@ function buildConnectionRoutesUndeclared(options: ConnectionRoutesOptions): ApiR
         return c.json(typeof status === 'string' ? { status } : status);
       },
     }),
+    registerApiRoute('/web/connections/authorizations/:authId/code', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const connectorId = c.req.query('connector') ?? '';
+        const resolved = await resolve(c, connectorId);
+        if ('response' in resolved) return resolved.response;
+        const copy = localize(COPY, resolved.language);
+        const connector = byId.get(connectorId);
+        if (!connector) return refuse(c, 404, { error: 'unknown_connector', message: copy.unknownConnector });
+        if (!connector.connections.submitAuthCode) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
+        const parsed = authorizationCodeSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) return refuse(c, 400, { error: 'invalid_body', message: copy.invalidBody });
+        const outcome = await connector.connections.submitAuthCode(resolved.request, c.req.param('authId'), parsed.data.code);
+        return respond(c, outcome, value => value);
+      },
+    }),
+    registerApiRoute('/web/connections/authorizations/:authId', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        const connectorId = c.req.query('connector') ?? '';
+        const resolved = await resolve(c, connectorId);
+        if ('response' in resolved) return resolved.response;
+        const copy = localize(COPY, resolved.language);
+        const connector = byId.get(connectorId);
+        if (!connector) return refuse(c, 404, { error: 'unknown_connector', message: copy.unknownConnector });
+        if (!connector.connections.cancelAuth) return refuse(c, 409, { error: 'unsupported', message: copy.unsupported });
+        const cancelled = await connector.connections.cancelAuth(resolved.request, c.req.param('authId'));
+        if (!cancelled) return refuse(c, 404, { error: 'not_found', message: copy.notFound });
+        return c.json({ status: 'failed' as const });
+      },
+    }),
     registerApiRoute('/web/connections/:id/reconnect', {
       method: 'POST',
       requiresAuth: false,
@@ -672,6 +717,9 @@ function buildConnectionRoutesUndeclared(options: ConnectionRoutesOptions): ApiR
 /** What each route that changes something needs (ADR-0045, `@factory/access`). */
 const ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'POST /web/connections': 'factory.configure',
+  // Finishing or stopping a sign-in the caller started with the route above.
+  'POST /web/connections/authorizations/:authId/code': 'factory.configure',
+  'DELETE /web/connections/authorizations/:authId': 'factory.configure',
   'POST /web/connections/:id/reconnect': 'factory.configure',
   'PATCH /web/connections/:id': 'factory.configure',
   'DELETE /web/connections/:id': 'factory.configure',

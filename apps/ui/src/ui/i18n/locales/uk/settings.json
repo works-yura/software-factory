@@ -11,7 +11,7 @@
     "account": "Мій акаунт",
     "organization": "Організація",
     "preferences": "Налаштування",
-    "factory": "Керування Factory",
+    "factory": "Керування",
     "analytics": "Аналітика",
     "repositories": "Репозиторії",
     "environment": "Середовище",
@@ -29,7 +29,6 @@
     "account": "Акаунт",
     "organization": "Організація",
     "factory": "Factory",
-    "factoryNamed": "Factory «{{name}}»",
     "server": "Сервер"
   },
   "intake": {
@@ -653,9 +652,6 @@
       "label": "Агенти працюють на",
       "note": "Діє для нових сесій; картки, що вже виконуються, завершаться на своєму харнесі.",
       "changeFailed": "Не вдалося змінити харнес",
-      "connectHeading": "Харнеси, які треба підключити",
-      "notOffered": "{{name}} не пропонується: немає вашого акаунта для нього.",
-      "notOfferedBecause": "{{name}} не пропонується: {{reason}}",
       "connect": "Підключити {{name}}"
     },
     "agentAccounts": {
@@ -1817,7 +1813,15 @@
       "errorTitle": "Не вдалося підключити",
       "pickFile": "Вибрати файл",
       "submit": "Підключити",
-      "connecting": "Підключаю…"
+      "connecting": "Підключаю…",
+      "preparingSignIn": "Отримую сторінку входу…",
+      "openSignInPage": "Відкрити сторінку входу",
+      "userCodeLabel": "Введіть цей код на тій сторінці",
+      "pasteCodeLabel": "Код зі сторінки входу",
+      "pasteCodeHint": "Після входу сторінка покаже код. Вставте його сюди.",
+      "submitCode": "Надіслати",
+      "codeSent": "Код надіслано. Завершую вхід…",
+      "codeFailed": "Не вдалося надіслати код"
     },
     "addDialog": {
       "title": "Додати підключення",

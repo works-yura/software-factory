@@ -11,7 +11,7 @@
     "account": "My account",
     "organization": "Organization",
     "preferences": "Preferences",
-    "factory": "Manage Factory",
+    "factory": "Manage",
     "analytics": "Analytics",
     "repositories": "Repositories",
     "environment": "Environment",
@@ -29,7 +29,6 @@
     "account": "Account",
     "organization": "Organization",
     "factory": "Factory",
-    "factoryNamed": "Factory “{{name}}”",
     "server": "Server"
   },
   "intake": {
@@ -643,9 +642,6 @@
       "label": "Agents run on",
       "note": "Applies to new sessions; cards already running finish on their harness.",
       "changeFailed": "Couldn’t switch the harness",
-      "connectHeading": "Harnesses to connect",
-      "notOffered": "{{name}} isn’t offered: no account of yours to run it.",
-      "notOfferedBecause": "{{name}} isn’t offered: {{reason}}",
       "connect": "Connect {{name}}"
     },
     "agentAccounts": {
@@ -1779,7 +1775,15 @@
       "errorTitle": "Couldn't connect",
       "pickFile": "Pick a file",
       "submit": "Connect",
-      "connecting": "Connecting…"
+      "connecting": "Connecting…",
+      "preparingSignIn": "Getting the sign-in page…",
+      "openSignInPage": "Open sign-in page",
+      "userCodeLabel": "Enter this code on that page",
+      "pasteCodeLabel": "Code from the sign-in page",
+      "pasteCodeHint": "After you sign in, the page shows a code. Paste it here.",
+      "submitCode": "Submit",
+      "codeSent": "Code sent. Finishing the sign-in…",
+      "codeFailed": "Couldn't send the code"
     },
     "addDialog": {
       "title": "Add connection",

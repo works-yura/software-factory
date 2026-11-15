@@ -39,12 +39,6 @@ export interface MastraFactoryCodexConfig
   storeDir?: string;
   /** Opens a file the CLI names (a generated image) with the agent's rights, when agents run as their own user. */
   openAgentFile?: AgentFileOpener;
-  /**
-   * Local development: the server and the person's browser share a machine, so ChatGPT sign-in
-   * (`codex login`, which opens the CLI's browser page here) is offered. Runs still use only the
-   * stored accounts.
-   */
-  localDevelopment?: boolean;
   /** Replaces the default credentials (`createCodexCredentials`: the members' ChatGPT sign-ins). */
   credentials?: CodexCredentials;
   /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
@@ -55,14 +49,13 @@ export interface MastraFactoryCodexConfig
 
 /**
  * The deployment's Codex: each session in its own CODEX_HOME beside the store
- * (FACTORY_CODEX_STORE_DIR), signed in only with the members' ChatGPT sign-ins (a development server
- * adds "Sign in with ChatGPT", a `codex login` in a throwaway home). The machine's own `codex login`
+ * (FACTORY_CODEX_STORE_DIR), signed in only with the members' ChatGPT sign-ins ("Sign in with
+ * ChatGPT": a device-code `codex login` in a throwaway home, finished in the person's own browser). The machine's own `codex login`
  * (`~/.codex`) is never read. As the agent user: its own `codex`, session homes and the Factory
  * chat's folders where it can reach them.
  */
-export const codexConfigFromEnv: HarnessConfigFromEnv<MastraFactoryCodexConfig> = ({ env, home, ownMachine, agentUser }) => ({
+export const codexConfigFromEnv: HarnessConfigFromEnv<MastraFactoryCodexConfig> = ({ env, home, agentUser }) => ({
   storeDir: env.FACTORY_CODEX_STORE_DIR?.trim() || join(home, '.mastracode', 'web', 'codex-sessions'),
-  localDevelopment: ownMachine,
   ...(env.FACTORY_CODEX_COMMAND?.trim() ? { command: env.FACTORY_CODEX_COMMAND.trim() } : {}),
   ...(agentUser ? agentUser.codex() : {}),
 });
@@ -135,14 +128,12 @@ export const codexHarnessModule: TurnHarnessModule<MastraFactoryCodexConfig, 'co
           onSession: session => host.onSession(session, 'codex'),
           parkOnUsageLimit: session => host.parkOnUsageLimit(session),
         });
-        const signIn =
-          config.localDevelopment === true
-            ? createCodexSignInService({
-                credentials: boot.credentials,
-                ...((executable ?? config.command) ? { command: executable ?? config.command } : {}),
-                ...(config.env ? { env: config.env } : {}),
-              })
-            : undefined;
+        // Finished in the person's own browser (a device code), so offered wherever the server runs.
+        const signIn = createCodexSignInService({
+          credentials: boot.credentials,
+          ...((executable ?? config.command) ? { command: executable ?? config.command } : {}),
+          ...(config.env ? { env: config.env } : {}),
+        });
         return {
           descriptor: CODEX_HARNESS,
           harness: codex.harness,
@@ -187,8 +178,8 @@ export const codexHarnessModule: TurnHarnessModule<MastraFactoryCodexConfig, 'co
           // Codex has no way to ask a person mid-turn: its «ask» tools are left out rather than run unasked.
           asksMidCall: false,
           api: {
-            features: { codex: true, codexSignIn: signIn !== undefined },
-            connectors: context => signInAccountsConnector(context, { harness: CODEX_HARNESS, ...(signIn ? { signIn } : {}) }),
+            features: { codex: true, codexSignIn: true },
+            connectors: context => signInAccountsConnector(context, { harness: CODEX_HARNESS, signIn }),
           },
         };
       },

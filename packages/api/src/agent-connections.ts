@@ -5,9 +5,12 @@
  * every such harness, parameterized by its descriptor (`HarnessDescriptor.setup.accounts`), its
  * sign-in flow and its usage facet: a new harness with accounts is a new registration, never new UI.
  *
- * - Connect: the harness CLI's own sign-in (`claude auth login`, `codex login`) run by the server;
- *   its page opens in a browser on the server's machine, so the connect result is an `authorize`
- *   with only an `authId` and a `waiting` note, and `getAuthStatus` says when it ended.
+ * - Connect: the harness CLI's own sign-in (`claude auth login`, `codex login --device-auth`) run by
+ *   the server, which may be another machine than the person's browser: the connect result is an
+ *   `authorize` with an `authId` and a `waiting` note; `getAuthStatus` brings the page the CLI
+ *   printed (`prompt.url`, opened in the person's own browser) and a device code to enter there
+ *   (`prompt.userCode`), or takes the code that page shows back (`prompt.acceptsCode`,
+ *   `submitAuthCode`), and says when it ended; `cancelAuth` stops it.
  * - List: one connection per account of the organization; state says whether it runs, is out of
  *   usage until a time, needs a new sign-in, is off, or is a pasted token from before (runs nothing).
  * - Who may change what, declared as permissions the registry enforces: any member connects (signs
@@ -58,7 +61,7 @@ export interface AgentAccountsConnectorOptions {
   /** How the provider names its sign-in ("Claude", "ChatGPT"). */
   signInName: string;
   credentials: ModelCredentialsStorage | undefined;
-  /** The CLI sign-in on this host; unset where its browser would open on a machine nobody sits at. */
+  /** The CLI sign-in on this host, finished in the person's own browser; unset where the server runs none. */
   signIn?: AccountSignInFlows;
   /** Allowance windows and recorded turns, when the server keeps usage. */
   usage?: { storage: Pick<UsageStorage, 'listAccountLimits' | 'saveAccountLimits' | 'listTurns'>; facet?: HarnessUsage };
@@ -77,6 +80,8 @@ type Copy = {
   provides: (harness: string) => string;
   waitingTitle: (signIn: string) => string;
   waitingMessage: string;
+  codeNotWaiting: string;
+  codeInvalid: string;
   ownerOnlyReconnect: string;
   manageOwnOnly: string;
   legacyReconnect: string;
@@ -156,11 +161,13 @@ const COPY: ConnectionCopy<Copy> = {
   en: {
     description: (harness, signIn) => `The ${signIn} accounts ${harness} sessions run on. Each member signs in with their own; sessions rotate to the next when one runs out of usage.`,
     methodLabel: signIn => `Sign in with ${signIn}`,
-    methodDescription: signIn => `Opens the ${signIn} sign-in page in a browser on the server's machine.`,
-    signInUnavailable: signIn => `Signing in to ${signIn} here works only where the Factory server runs on your own machine.`,
+    methodDescription: signIn => `Gives you the ${signIn} sign-in page to open in this browser.`,
+    signInUnavailable: signIn => `Signing in to ${signIn} is not available on this server.`,
     provides: harness => `Runs ${harness} sessions`,
-    waitingTitle: signIn => `Finish signing in to ${signIn} in the browser that opened`,
-    waitingMessage: 'The page opened on the machine the Factory server runs on. This updates once you are signed in.',
+    waitingTitle: signIn => `Finish signing in to ${signIn}`,
+    waitingMessage: 'Open the sign-in page and sign in. This updates once you are signed in.',
+    codeNotWaiting: 'This sign-in is not waiting for a code. Start it again.',
+    codeInvalid: 'Paste the code exactly as the page shows it.',
     ownerOnlyReconnect: 'Only its owner can sign in to this account again.',
     manageOwnOnly: 'Only its owner or an organization admin can change this account.',
     legacyReconnect: 'A pasted token from before sign-ins cannot be renewed; remove it and sign in instead.',
@@ -240,11 +247,13 @@ const COPY: ConnectionCopy<Copy> = {
   uk: {
     description: (harness, signIn) => `Акаунти ${signIn}, на яких працюють сесії ${harness}. Кожен учасник входить у свій; коли в одного закінчується ліміт, сесії переходять на наступний.`,
     methodLabel: signIn => `Увійти через ${signIn}`,
-    methodDescription: signIn => `Відкриває сторінку входу ${signIn} у браузері на машині сервера.`,
-    signInUnavailable: signIn => `Увійти в ${signIn} звідси можна лише там, де сервер Factory працює на вашій машині.`,
+    methodDescription: signIn => `Дає сторінку входу ${signIn}, яку ви відкриєте в цьому браузері.`,
+    signInUnavailable: signIn => `Увійти в ${signIn} на цьому сервері не можна.`,
     provides: harness => `Запускає сесії ${harness}`,
-    waitingTitle: signIn => `Завершіть вхід у ${signIn} у браузері, що відкрився`,
-    waitingMessage: 'Сторінка відкрилась на машині, де працює сервер Factory. Тут оновиться, щойно ви ввійдете.',
+    waitingTitle: signIn => `Завершіть вхід у ${signIn}`,
+    waitingMessage: 'Відкрийте сторінку входу й увійдіть. Тут оновиться, щойно ви ввійдете.',
+    codeNotWaiting: 'Цей вхід не чекає коду. Почніть його знову.',
+    codeInvalid: 'Вставте код точно так, як його показує сторінка.',
     ownerOnlyReconnect: 'Увійти в цей акаунт знову може лише його власник.',
     manageOwnOnly: 'Змінювати цей акаунт можуть лише його власник або адміністратор організації.',
     legacyReconnect: 'Вставлений колись токен не оновити: видаліть його й увійдіть.',
@@ -561,9 +570,25 @@ export function createAgentAccountsConnections(options: AgentAccountsConnectorOp
       const flow = options.signIn?.get(authId);
       // Another person's sign-in is not there for this caller.
       if (!flow || flow.orgId !== request.orgId || flow.userId !== request.userId) return null;
-      if (flow.status === 'pending') return 'pending';
+      if (flow.status === 'pending') return flow.prompt ? { status: 'pending', prompt: { ...flow.prompt } } : 'pending';
       if (flow.status === 'done') return 'completed';
       return { status: 'failed', message: flow.error ?? localize(COPY, request.language).signInFailed(signInName) };
+    },
+
+    async submitAuthCode(request, authId, code) {
+      const copy = localize(COPY, request.language);
+      const result = options.signIn?.submitCode(authId, { orgId: request.orgId, userId: request.userId }, code) ?? 'not_found';
+      if (result === 'not_found') return connectionRefused(404, { error: 'not_found', message: copy.notFound });
+      if (result === 'not_waiting') return connectionRefused(409, { error: 'not_waiting', message: copy.codeNotWaiting });
+      if (result === 'invalid') return connectionRefused(400, { error: 'invalid_code', message: copy.codeInvalid });
+      return connectionOk({ status: 'pending' as const });
+    },
+
+    async cancelAuth(request, authId) {
+      const flow = options.signIn?.get(authId);
+      // Another person's sign-in is not there for this caller.
+      if (!flow || flow.orgId !== request.orgId || flow.userId !== request.userId) return false;
+      return options.signIn!.cancel(authId);
     },
 
     async reconnect(request, id) {

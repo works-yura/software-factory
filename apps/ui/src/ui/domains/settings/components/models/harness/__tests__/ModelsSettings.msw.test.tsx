@@ -179,27 +179,24 @@ describe('Models settings per harness', () => {
     expect(screen.queryByText('Robo Agent accounts')).not.toBeInTheDocument();
   });
 
-  it('does not offer a harness without a connection of yours, and links to connect one', async () => {
+  it('leaves out a harness without a connection of yours, with no hint about it', async () => {
     stubFactory({ harness: 'mastra' }, { robo: false });
     renderModels();
 
     const control = await harnessSwitch();
-    expect(await screen.findByText(/Robo Agent isn’t offered/)).toBeInTheDocument();
+    expect(within(control).getByRole('radio', { name: 'Mastra' })).toBeInTheDocument();
     expect(within(control).queryByRole('radio', { name: 'Robo Agent' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Connect Robo Agent' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/integrations?add=1&step=connector%3Arobo',
-    );
+    expect(screen.queryByText(/Robo Agent/)).not.toBeInTheDocument();
   });
 
-  it('does not offer a harness whose CLI is not installed on the server, and says so without a connect link', async () => {
+  it('leaves out a harness whose CLI is not installed on the server, with no hint about it', async () => {
     stubFactory({ harness: 'mastra' }, { roboInstalled: false });
     renderModels();
 
     const control = await harnessSwitch();
-    expect(await screen.findByText('Robo Agent isn’t offered: Robo Agent isn’t installed on this server.')).toBeInTheDocument();
+    expect(within(control).getByRole('radio', { name: 'Mastra' })).toBeInTheDocument();
     expect(within(control).queryByRole('radio', { name: 'Robo Agent' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Connect Robo Agent' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Robo Agent/)).not.toBeInTheDocument();
   });
 
   it("keeps a Factory's own harness readable when its connection is gone, but not pickable", async () => {
@@ -209,12 +206,11 @@ describe('Models settings per harness', () => {
     const robo = within(await harnessSwitch()).getByRole('radio', { name: 'Robo Agent' });
     expect(robo).toBeChecked();
     expect(robo).toHaveAttribute('aria-disabled', 'true');
-    // The hint under the switch and the accounts section both send the person to connect one.
-    const links = await screen.findAllByRole('link', { name: 'Connect Robo Agent' });
-    expect(links.map(link => link.getAttribute('href'))).toEqual([
+    // The accounts section sends the person to connect one.
+    expect(await screen.findByRole('link', { name: 'Connect Robo Agent' })).toHaveAttribute(
+      'href',
       '/factories/fp-1/settings/integrations?add=1&step=connector%3Arobo',
-      '/factories/fp-1/settings/integrations?add=1&step=connector%3Arobo',
-    ]);
+    );
   });
 });
 

@@ -36,7 +36,7 @@ export type { AuthFlowStatus, ConnectionField, ToolProviderCapabilities, ToolPro
  * anything raises the major. The registry serves only connectors of its major (others are named in
  * `failures`); a client that meets an unknown major says it needs an update instead of guessing.
  */
-export const CONNECTIONS_CONTRACT_VERSION = '1.3.0';
+export const CONNECTIONS_CONTRACT_VERSION = '1.4.0';
 
 /** The major of a contract version (`'1.2.0'` → 1); NaN when it is not one. */
 export function contractMajor(version: string): number {
@@ -337,11 +337,27 @@ export type ConnectResult =
   | { type: 'authorize'; url?: string; authId?: string; session?: ConnectSession; waiting?: ConnectWaiting }
   | { type: 'connected'; connection: ConnectionView; title: string; message?: string };
 
+/**
+ * What the person does in their own browser while a `pending` flow waits (a CLI's sign-in run by the
+ * server, which may be another machine): open `url` in a new tab, and either enter `userCode` there
+ * (a device-code sign-in) or paste back the code that page shows (`acceptsCode`:
+ * `POST /web/connections/authorizations/:authId/code`).
+ */
+export interface AuthorizationPrompt {
+  url: string;
+  userCode?: string;
+  acceptsCode?: boolean;
+}
+
 export interface AuthorizationStatusResponse {
   status: AuthFlowStatus;
   /** Why a `failed` flow failed, in the request's language, when the connector knows. */
   message?: string;
+  /** While `pending`: what to open and enter in the person's browser (since 1.4). */
+  prompt?: AuthorizationPrompt;
 }
+
+
 
 /** A refusal: the code, what to tell the person, and per-field messages for a form. */
 export interface ConnectionErrorBody {
@@ -398,6 +414,10 @@ export const reconnectRequestSchema = z.object({
 });
 
 export const renameConnectionSchema = z.object({ name: z.string().max(80) });
+
+/** `POST /web/connections/authorizations/:authId/code`: the code the provider's page showed the person. */
+export const authorizationCodeSchema = z.object({ code: z.string().trim().min(1).max(2048) });
+export type AuthorizationCodeRequest = z.infer<typeof authorizationCodeSchema>;
 
 export const updateConnectionSettingsSchema = z.object({
   section: z.string().min(1).max(64),

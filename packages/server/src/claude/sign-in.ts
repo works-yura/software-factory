@@ -5,9 +5,12 @@
  * dir and Keychain item removed again. The pair is the server's from then on:
  * it refreshes it (`oauth.ts`) and hands a run the access token alone.
  *
- * The CLI opens the sign-in page in a browser on the machine it runs on, so
- * this is offered only where that machine is the person's own (local
- * development).
+ * The server may run on another machine than the person's browser, so the CLI
+ * opens no browser here (`BROWSER` is a no-op: the CLI runs `$BROWSER <url>`,
+ * else `open`): the authorize URL it prints is shown to the person
+ * (`onPrompt`), who signs in in their own browser; the provider's page then
+ * shows a code, which the person pastes back and the server writes to the
+ * CLI's stdin (`Paste code here if prompted >` reads it from a pipe; no pty).
  *
  * Where the CLI files the pair:
  * - macOS: the Keychain item `Claude Code-credentials-<8 hex of sha256(dir)>`
@@ -20,8 +23,9 @@
  * subscriptionType } }`. Who signed in is the `oauthAccount` the CLI writes to
  * `<dir>/.claude.json`.
  *
- * No secret is ever logged; a Keychain secret travels on the `security`
- * command line only while the default item is put back.
+ * No secret is ever logged — neither the pasted code nor the URL (its `state`
+ * and `code_challenge`); a Keychain secret travels on the `security` command
+ * line only while the default item is put back.
  */
 
 import { createHash } from 'node:crypto';
@@ -33,15 +37,19 @@ import { buildClaudeEnv } from '@factory/harness-claude-code';
 import { harnessCommandPath, isHarnessExecutableUnavailable, type HarnessCommand } from '@factory/harness/executable';
 import type { ClaudeLoginOAuth, ModelCredentialsStorage } from '@factory/store';
 
-import { createSignInCommandRunner } from '../accounts/sign-in-command.ts';
-import type { SignInCommandResult, SignInCommandRunner } from '../accounts/sign-in-command.ts';
+import { createSignInCommandRunner, NO_BROWSER } from '../accounts/sign-in-command.ts';
+import type { SignInCommandInput, SignInCommandResult, SignInCommandRunner } from '../accounts/sign-in-command.ts';
+import { findSignInUrl, stripTerminalEscapes } from '../accounts/sign-in-output.ts';
 import { createAccountSignInService } from '../accounts/sign-in.ts';
-import type { AccountSignInFlow, AccountSignInService, AccountSignInStatus } from '../accounts/sign-in.ts';
+import type { AccountSignInCapture, AccountSignInCapturePrompt, AccountSignInFlow, AccountSignInService, AccountSignInStatus } from '../accounts/sign-in.ts';
 
 import { CLAUDE_CODE_ACCOUNT_PROVIDER } from './credentials.ts';
 
 /** The CLI's Keychain service for its default config dir; a custom dir appends `-<hash>`. */
 export const CLAUDE_KEYCHAIN_SERVICE = 'Claude Code-credentials';
+
+/** Where the CLI's authorize page lives; a URL elsewhere is never shown to the person. */
+export const CLAUDE_SIGN_IN_HOSTS: readonly string[] = ['claude.com', 'claude.ai', 'anthropic.com'];
 
 /** How long a person gets to finish signing in in the browser. */
 export const CLAUDE_SIGN_IN_TIMEOUT_MS = 5 * 60_000;
@@ -101,6 +109,8 @@ export interface CaptureClaudeSignInOptions {
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Told once the CLI printed its authorize page, with what writes the pasted code to it. */
+  onPrompt?: (prompt: AccountSignInCapturePrompt) => void;
 }
 
 function keychainUser(): string {
@@ -121,6 +131,8 @@ export async function captureClaudeSignIn(options: CaptureClaudeSignInOptions = 
   // The resolved path: the CLI hashes the dir it is given, and macOS temp dirs sit behind a symlink.
   const dir = await realpath(await mkdtemp(join(options.tempRoot ?? tmpdir(), 'factory-claude-sign-in-')));
   const env = buildClaudeEnv(options.env ?? process.env, { CLAUDE_CONFIG_DIR: dir, CLAUDE_SECURESTORAGE_CONFIG_DIR: dir });
+  // Only for the login: the CLI opens its page with `$BROWSER`, so nothing opens on the server's machine.
+  const loginEnv = { ...env, BROWSER: NO_BROWSER };
   const keychain = (args: string[]) => run('security', args, { env, timeoutMs: KEYCHAIN_TIMEOUT_MS });
   const readItem = async (service: string) => {
     const result = await keychain(['find-generic-password', '-s', service, '-a', user, '-w']);
@@ -132,12 +144,25 @@ export async function captureClaudeSignIn(options: CaptureClaudeSignInOptions = 
   // The person's own login, to put back if the sign-in overwrites it.
   const ownLogin = darwin ? await readItem(CLAUDE_KEYCHAIN_SERVICE).catch(() => null) : undefined;
   try {
+    let output = '';
+    let input: SignInCommandInput | undefined;
+    let prompted = false;
     const login = await run(command, ['auth', 'login', '--claudeai'], {
-      env,
+      env: loginEnv,
       timeoutMs: options.timeoutMs ?? CLAUDE_SIGN_IN_TIMEOUT_MS,
       ...(options.signal ? { signal: options.signal } : {}),
+      onStarted: started => (input = started),
+      onOutput: text => {
+        if (prompted) return;
+        output += text;
+        const url = findSignInUrl(output, CLAUDE_SIGN_IN_HOSTS);
+        if (!url) return;
+        prompted = true;
+        output = '';
+        options.onPrompt?.({ url, submitCode: code => input?.write(`${code}\n`) });
+      },
     });
-    if (login.code !== 0) throw new ClaudeSignInError(`Claude sign-in did not finish (claude exited with ${login.code}).`);
+    if (login.code !== 0) throw new ClaudeSignInError(claudeLoginFailure(login));
     const stored = darwin
       ? await readItem(claudeKeychainService(dir))
       : await readFile(join(dir, '.credentials.json'), 'utf8').catch(() => undefined);
@@ -160,6 +185,12 @@ export async function captureClaudeSignIn(options: CaptureClaudeSignInOptions = 
     }
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/** Why the CLI's login failed, in its own words when it said (`Login failed: That code wasn't accepted…`). */
+function claudeLoginFailure(login: SignInCommandResult): string {
+  const said = /Login failed:\s*([^\n]+)/.exec(stripTerminalEscapes(`${login.stderr}\n${login.stdout}`))?.[1]?.trim();
+  return said ? `Claude sign-in failed: ${said}` : `Claude sign-in did not finish (claude exited with ${login.code}).`;
 }
 
 /** The path to run; a CLI the server cannot find is the person's to read, not a generic failure. */
@@ -217,7 +248,7 @@ export function createClaudeSignInService({
   credentials: ModelCredentialsStorage;
   /** The `claude` the sign-in runs: the harness's own (`harnessExecutableFor`); `claude` on the PATH by default. */
   command?: HarnessCommand;
-  capture?: (options: { signal: AbortSignal }) => Promise<ClaudeLoginOAuth>;
+  capture?: (options: Parameters<AccountSignInCapture>[0]) => Promise<ClaudeLoginOAuth>;
   now?: () => number;
 }): ClaudeSignInService {
   return createAccountSignInService({
@@ -225,7 +256,7 @@ export function createClaudeSignInService({
     provider: CLAUDE_CODE_ACCOUNT_PROVIDER,
     kind: 'claude_login',
     name: 'Claude',
-    capture: ({ signal }) => capture({ signal }),
+    capture: ({ signal, onPrompt }) => capture({ signal, ...(onPrompt ? { onPrompt } : {}) }),
     isUserFacing: (error): error is Error => error instanceof ClaudeSignInError,
     ...(now ? { now } : {}),
   });

@@ -35,6 +35,8 @@
 
 - Кожен harness — модуль (ADR-0044): `packages/server/src/<harness>/module.ts` реалізує `TurnHarnessModule` (`FactoryHarnessModule` з `@factory/harness/module`) і стоїть одним рядком у `SERVER_HARNESS_MODULES` (`packages/server/src/harnesses/registry.ts`). Сервер, API (`/web/config/features`, підключення, власні маршрути) і `apps/server` (конфіг з env) проходять цей список і harness не називають. Новий harness: модуль + рядок у реєстрі + дескриптор у `HARNESSES` (`@factory/contracts`) і id у `FACTORY_HARNESSES` (`@factory/store`); тест реєстру звіряє їх.
 
+- Вхід в акаунти агентів (ADR-0036, [ADR-0046](../../adr/0046-cli-sign-in-finished-in-the-persons-browser.md)): «Увійти через Claude/ChatGPT» у Налаштуваннях › Підключення працює, де б не був сервер (Mac mini теж). CLI запускається на сервері без браузера (`BROWSER` — no-op); UI показує «Відкрити сторінку входу» (нова вкладка в браузері людини). Claude: `claude auth login --claudeai`, сторінка показує код — людина вставляє його в діалог, сервер пише його в stdin CLI (`POST /web/connections/authorizations/:authId/code`). Codex: `codex login --device-auth` — діалог показує одноразовий код для сторінки `auth.openai.com/codex/device`. «Назад»/закриття скасовує вхід (`DELETE /web/connections/authorizations/:authId`). Код: `packages/server/src/accounts/sign-in*.ts`, `claude/sign-in.ts`, `codex/sign-in.ts`, `packages/api/src/agent-connections.ts`, UI — `ConnectorSteps.tsx`.
+
 - Рядок мови агентів додається в інструкції обох harness щоходу (`packages/server/src/agent-language.ts`).
 - Сесії карток працюють у пісочниці картки: одна папка на картку, спільна для її сесій.
 

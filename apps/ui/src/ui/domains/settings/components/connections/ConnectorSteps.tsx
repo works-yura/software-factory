@@ -1,4 +1,4 @@
-import type { ConnectFormField, ConnectMethod, ConnectResult, ConnectorView, ConnectWaiting } from '@factory/contracts';
+import type { AuthorizationPrompt, ConnectFormField, ConnectMethod, ConnectResult, ConnectorView, ConnectWaiting } from '@factory/contracts';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -6,14 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, RotateCw } from 'lucide-react';
+import { ChevronRight, ExternalLink, RotateCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../../api/config';
 import { useAuthorize, useReconnect } from '../../../../../hooks/useConnections';
-import { ConnectionApiError, finishAuthorize } from '../../connections/api';
+import { ConnectionApiError, connectionsApi, finishAuthorize } from '../../connections/api';
 import type { ConnectionTarget } from './ConnectSteps';
 import { StepFrame } from './ConnectSteps';
 
@@ -125,6 +125,107 @@ export function FormField({
 }
 
 /**
+ * What the person does in this browser while a sign-in the server runs waits (the server may be another
+ * machine): open the provider's page in a new tab, enter the code shown here on it (a device code), or
+ * paste back the code that page shows them.
+ */
+function AuthorizationPromptPanel({
+  prompt,
+  onSubmitCode,
+}: {
+  prompt: AuthorizationPrompt | undefined;
+  onSubmitCode: (code: string) => Promise<void>;
+}) {
+  const { t } = useTranslation('settings');
+  const codeId = useId();
+  const hintId = useId();
+  const [code, setCode] = useState('');
+  const [sending, setSending] = useState<'idle' | 'sending' | 'sent' | { error: string }>('idle');
+  // Only a page of the provider's, over https, is ever a link here.
+  const url = prompt?.url && /^https:\/\//i.test(prompt.url) ? prompt.url : undefined;
+  if (!url) {
+    return (
+      <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2" role="status">
+        <Spinner size="sm" aria-hidden />
+        {t('connections.connect.preparingSignIn')}
+      </Txt>
+    );
+  }
+  const submit = async () => {
+    if (!code.trim() || sending === 'sending') return;
+    setSending('sending');
+    try {
+      await onSubmitCode(code.trim());
+      setSending('sent');
+    } catch (error) {
+      setSending({ error: errorMessage(error) });
+    }
+  };
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <Button
+        render={<a href={url} target="_blank" rel="noopener noreferrer" />}
+        size="sm"
+        variant="primary"
+        icon={<ExternalLink aria-hidden />}
+        className="self-start"
+      >
+        {t('connections.connect.openSignInPage')}
+      </Button>
+      {prompt?.userCode && (
+        <div className="flex flex-col gap-1">
+          <Txt as="span" variant="label" tone="ink">
+            {t('connections.connect.userCodeLabel')}
+          </Txt>
+          <code className="text-body-sm font-mono tracking-widest select-all" aria-label={t('connections.connect.userCodeLabel')}>
+            {prompt.userCode}
+          </code>
+        </div>
+      )}
+      {(prompt?.acceptsCode || sending !== 'idle') && (
+        <form
+          className="flex min-w-0 flex-col gap-1.5"
+          onSubmit={event => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <label htmlFor={codeId}>
+            <Txt as="span" variant="label" tone="ink">
+              {t('connections.connect.pasteCodeLabel')}
+            </Txt>
+          </label>
+          <div className="flex min-w-0 gap-2">
+            <Input
+              id={codeId}
+              value={code}
+              spellCheck={false}
+              autoComplete="off"
+              aria-describedby={hintId}
+              disabled={sending === 'sending' || sending === 'sent'}
+              className="min-w-0 flex-1 font-mono"
+              onChange={event => setCode(event.target.value)}
+            />
+            <Button type="submit" size="sm" variant="default" disabled={!code.trim() || sending === 'sending' || sending === 'sent'}>
+              {sending === 'sending' && <Spinner size="sm" aria-hidden />}
+              {t('connections.connect.submitCode')}
+            </Button>
+          </div>
+          <Txt as="p" id={hintId} variant="caption" tone="muted">
+            {sending === 'sent' ? t('connections.connect.codeSent') : t('connections.connect.pasteCodeHint')}
+          </Txt>
+          {typeof sending === 'object' && (
+            <Notice variant="destructive" title={t('connections.connect.codeFailed')} role="alert">
+              <Notice.Message>{sending.error}</Notice.Message>
+            </Notice>
+          )}
+        </form>
+      )}
+    </div>
+  );
+}
+
+/**
  * Connect (or reconnect) through one connector, entirely from the server's descriptors: with several
  * methods it first asks which (an unavailable one says why); a redirect method opens the URL the
  * server returns; a form method renders its fields, shows a refusal on the field it concerns, and on
@@ -166,6 +267,9 @@ export function ConnectorConnect({
   const [authorizing, setAuthorizing] = useState<'running' | 'completed' | 'pending' | { error: string }>();
   /** What to tell the person while a flow finishes elsewhere (a CLI's sign-in page on the server's machine). */
   const [waiting, setWaiting] = useState<ConnectWaiting>();
+  /** The flow that waits, and what its latest status asks of the person (the page to open, a code). */
+  const [flow, setFlow] = useState<{ authId: string; controller: AbortController }>();
+  const [prompt, setPrompt] = useState<AuthorizationPrompt>();
   const queryClient = useQueryClient();
   const frame = {
     kind: connector.icon,
@@ -183,13 +287,21 @@ export function ConnectorConnect({
         }
         if (result.session || result.waiting) setAuthorizing('running');
         setWaiting(result.waiting);
-        finishAuthorize(baseUrl, connector.id, result).then(
+        setPrompt(undefined);
+        const controller = new AbortController();
+        if (result.waiting && result.authId) setFlow({ authId: result.authId, controller });
+        finishAuthorize(baseUrl, connector.id, result, {
+          signal: controller.signal,
+          onStatus: status => setPrompt(status.status === 'pending' ? status.prompt : undefined),
+        }).then(
           outcome => {
-            if (outcome === 'redirected') return;
+            if (outcome === 'redirected' || controller.signal.aborted) return;
             setAuthorizing(outcome);
             void queryClient.invalidateQueries();
           },
-          (error: unknown) => setAuthorizing({ error: errorMessage(error) }),
+          (error: unknown) => {
+            if (!controller.signal.aborted) setAuthorizing({ error: errorMessage(error) });
+          },
         );
       },
     };
@@ -197,7 +309,34 @@ export function ConnectorConnect({
     else connect.mutate({ connector: connector.id, method: method.id, input }, handle);
   };
 
+  // Closing the dialog while a sign-in waits stops it too.
+  const waitingFlow = useRef<typeof flow>(undefined);
+  useEffect(() => {
+    waitingFlow.current = authorizing === 'running' ? flow : undefined;
+  }, [authorizing, flow]);
+  useEffect(
+    () => () => {
+      const open = waitingFlow.current;
+      if (!open) return;
+      open.controller.abort();
+      void connectionsApi.cancelAuth(baseUrl, connector.id, open.authId).catch(() => undefined);
+    },
+    [baseUrl, connector.id],
+  );
+
+  /** Going back from a sign-in that still waits stops it: the server's CLI would otherwise wait out its timeout. */
+  const stopWaiting = () => {
+    if (!flow || authorizing !== 'running') return;
+    waitingFlow.current = undefined;
+    flow.controller.abort();
+    void connectionsApi.cancelAuth(baseUrl, connector.id, flow.authId).catch(() => undefined);
+    setFlow(undefined);
+    setPrompt(undefined);
+    setAuthorizing(undefined);
+  };
+
   const back = () => {
+    stopWaiting();
     mutation.reset();
     if (method && !single) setChosenIdState(undefined);
     else onBack();
@@ -296,6 +435,15 @@ export function ConnectorConnect({
         <Notice variant="info" title={waiting.title} role="status">
           {waiting.message && <Notice.Message>{waiting.message}</Notice.Message>}
         </Notice>
+      )}
+      {authorizing === 'running' && waiting && flow && (
+        <AuthorizationPromptPanel
+          key={flow.authId}
+          prompt={prompt}
+          onSubmitCode={async code => {
+            await connectionsApi.submitAuthCode(baseUrl, connector.id, flow.authId, code);
+          }}
+        />
       )}
       {failure && Object.keys(fieldErrors).length === 0 && (
         <Notice variant="destructive" title={t('connections.connect.errorTitle')} role="alert">

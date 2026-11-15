@@ -13,7 +13,6 @@ import { isFactoryHarness } from '../../../../workspaces/services/github';
 import type { FactoryHarness } from '../../../../workspaces/services/github';
 import { useHarness } from '../../../../../../hooks/useHarness';
 import { SettingsSubsection } from '../../SettingsSubsection';
-import { ConnectAgentHint } from './ConnectAgentHint';
 
 const tk = translator('settings');
 
@@ -64,8 +63,7 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
               <SkeletonRows label={t('models.harness.title')} rows={1} />
             )
           ) : (
-            <div className="flex flex-col items-start gap-1 sm:items-end">
-              <SegmentedControl
+            <SegmentedControl
                 aria-label={t('models.harness.label')}
                 size="sm"
                 value={harness}
@@ -83,8 +81,6 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
                   </SegmentedControlItem>
                 ))}
               </SegmentedControl>
-              <ConnectAgentHint factoryId={factoryId} choices={choices} />
-            </div>
           )}
         </SettingsRow>
       </SettingsContainer>

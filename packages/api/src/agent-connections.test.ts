@@ -22,6 +22,7 @@ const now = new Date('2026-11-12T12:00:00.000Z');
  */
 function fakeCliSignIn(file: (owner: { orgId: string; userId: string }) => Promise<string>) {
   const flows = new Map<string, AccountSignInFlowView>();
+  const codes: Array<{ id: string; code: string }> = [];
   let next = 0;
   const service: AccountSignInFlows = {
     start: owner => {
@@ -30,10 +31,30 @@ function fakeCliSignIn(file: (owner: { orgId: string; userId: string }) => Promi
       return { ...flow };
     },
     get: id => (flows.has(id) ? { ...flows.get(id)! } : undefined),
-    cancel: () => false,
+    cancel: id => {
+      const flow = flows.get(id);
+      if (flow?.status !== 'pending') return false;
+      Object.assign(flow, { status: 'error', error: 'cancelled' });
+      delete flow.prompt;
+      return true;
+    },
+    submitCode: (id, owner, code) => {
+      const flow = flows.get(id);
+      if (!flow || flow.orgId !== owner.orgId || flow.userId !== owner.userId) return 'not_found';
+      if (flow.status !== 'pending' || !flow.prompt?.acceptsCode) return 'not_waiting';
+      if (/\s/.test(code.trim())) return 'invalid';
+      codes.push({ id, code: code.trim() });
+      flow.prompt = { ...flow.prompt, acceptsCode: false };
+      return 'accepted';
+    },
   };
   return {
     service,
+    codes,
+    /** The CLI printed its page (and, for a device sign-in, a code to enter there). */
+    prompt(id: string, prompt: NonNullable<AccountSignInFlowView['prompt']>) {
+      flows.get(id)!.prompt = prompt;
+    },
     async finish(id: string, outcome: 'done' | { error: string } = 'done') {
       const flow = flows.get(id)!;
       if (outcome === 'done') Object.assign(flow, { status: 'done', accountId: await file(flow) });
@@ -141,7 +162,7 @@ describe.each(CASES)('$harness.label accounts as a connector', harnessCase => {
   it('offers the sign-in disabled with a reason where the server cannot run it', async () => {
     const { send } = await setup(harnessCase, { signIn: false });
     const { body } = await send('alice', 'GET', '/web/connections/methods');
-    expect(body.connectors[0].methods[0].available).toEqual({ reason: expect.stringContaining('your own machine') });
+    expect(body.connectors[0].methods[0].available).toEqual({ reason: `Signing in to ${signInName} is not available on this server.` });
     const refused = await send('alice', 'POST', '/web/connections', { connector: harness.setup.accounts!.connector, method: 'sign-in' });
     expect(refused.status).toBe(409);
     expect(refused.body.error).toBe('sign_in_unavailable');
@@ -162,6 +183,54 @@ describe.each(CASES)('$harness.label accounts as a connector', harnessCase => {
     await cli.finish('flow-1');
     expect((await status('bob')).body).toEqual({ status: 'completed' });
     expect((await seed.credentials.listAccounts('org1', provider)).map(account => account.ownerUserId)).toEqual(['bob']);
+  });
+
+  it('brings the page the CLI printed to the person’s browser, and takes the code it shows back from its owner only', async () => {
+    const { send, cli, connector } = await setup(harnessCase);
+    const started = await send('bob', 'POST', '/web/connections', { connector, method: 'sign-in', input: {} });
+    expect(started.body.waiting.title).toBe(`Finish signing in to ${signInName}`);
+    const status = (userId: string) => send(userId, 'GET', `/web/connections/authorizations/flow-1?connector=${connector}`);
+    const submit = (userId: string, body: unknown) => send(userId, 'POST', `/web/connections/authorizations/flow-1/code?connector=${connector}`, body);
+
+    // Before the CLI printed its page there is nothing to open, and no code to take.
+    expect((await submit('bob', { code: 'abc#def' })).body).toMatchObject({ error: 'not_waiting' });
+
+    const url = 'https://claude.com/cai/oauth/authorize?code=true&state=s1';
+    cli.prompt('flow-1', { url, acceptsCode: true });
+    expect((await status('bob')).body).toEqual({ status: 'pending', prompt: { url, acceptsCode: true } });
+
+    // Someone else's flow is not there for them, and a code is one line of text.
+    expect((await submit('alice', { code: 'abc#def' })).status).toBe(404);
+    expect((await submit('bob', {})).status).toBe(400);
+    expect((await submit('bob', { code: '   ' })).status).toBe(400);
+    const invalid = await submit('bob', { code: 'two words' });
+    expect(invalid).toMatchObject({ status: 400, body: { error: 'invalid_code', message: 'Paste the code exactly as the page shows it.' } });
+    expect(cli.codes).toEqual([]);
+
+    expect(await submit('bob', { code: ' abc#def ' })).toEqual({ status: 200, body: { status: 'pending' } });
+    expect(cli.codes).toEqual([{ id: 'flow-1', code: 'abc#def' }]);
+    expect((await status('bob')).body).toEqual({ status: 'pending', prompt: { url, acceptsCode: false } });
+    const again = await submit('bob', { code: 'abc#def' });
+    expect(again).toMatchObject({ status: 409, body: { error: 'not_waiting' } });
+    const uk = await send('bob', 'POST', `/web/connections/authorizations/flow-1/code?connector=${connector}`, { code: 'abc#def' }, 'uk');
+    expect(uk.body.message).toBe('Цей вхід не чекає коду. Почніть його знову.');
+
+    await cli.finish('flow-1');
+    expect((await status('bob')).body).toEqual({ status: 'completed' });
+  });
+
+  it('shows a device sign-in’s code to enter, and lets only its owner cancel a sign-in', async () => {
+    const { send, cli, connector } = await setup(harnessCase);
+    await send('bob', 'POST', '/web/connections', { connector, method: 'sign-in', input: {} });
+    cli.prompt('flow-1', { url: 'https://auth.openai.com/codex/device', userCode: 'ABCD-EFGH1', acceptsCode: false });
+    const status = await send('bob', 'GET', `/web/connections/authorizations/flow-1?connector=${connector}`);
+    expect(status.body).toEqual({ status: 'pending', prompt: { url: 'https://auth.openai.com/codex/device', userCode: 'ABCD-EFGH1', acceptsCode: false } });
+
+    const cancel = (userId: string) => send(userId, 'DELETE', `/web/connections/authorizations/flow-1?connector=${connector}`);
+    expect((await cancel('alice')).status).toBe(404);
+    expect(await cancel('bob')).toEqual({ status: 200, body: { status: 'failed' } });
+    expect((await cancel('bob')).status).toBe(404);
+    expect((await send('bob', 'GET', `/web/connections/authorizations/flow-1?connector=${connector}`)).body).toMatchObject({ status: 'failed' });
   });
 
   it('says why a sign-in failed', async () => {

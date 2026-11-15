@@ -271,6 +271,52 @@ describe('session work safety, with real git', () => {
     expect(meta.owner).toEqual({ orgId: 'org-9', repositoryId: 'repo-9' });
   });
 
+  // Production, 2026-11-15: a GitLab session opened when checkouts were `--depth=1`; its mirror was
+  // created empty by a save (the fetch that should fill it had died), and every sleep then failed
+  // with "shallow update not allowed", keeping the folder for good.
+  describe('a shallow checkout and a mirror without its history', () => {
+    const shallowSession = async (folderName: string) => {
+      const remote = path.join(fx.root, `${folderName}.git`);
+      fx.git(fx.root, 'clone', '--quiet', '--bare', fx.origin, remote);
+      const cloneUrl = `file://${remote}`;
+      const folder = path.join(fx.root, 'sandboxes', folderName);
+      const dir = path.join(folder, 'repo');
+      fx.git(fx.root, 'clone', '--quiet', '--depth=1', cloneUrl, dir);
+      expect(fx.git(dir, 'rev-parse', '--is-shallow-repository')).toBe('true');
+      fx.git(dir, 'config', 'factory.orgId', 'org-1');
+      fx.git(dir, 'config', 'factory.repositoryId', 'repo-1');
+      fx.git(dir, 'checkout', '--quiet', '-b', `user/${folderName}`);
+      // What a save made before: the mirror exists, empty, with no network.
+      const mirror = await mirrorsOf(template).ensureExists({ cloneUrl });
+      expect(fx.git(mirror, 'for-each-ref', 'refs/heads')).toBe('');
+      return { folder, dir, cloneUrl, mirror };
+    };
+
+    it('puts it to sleep: the mirror is filled from the remote first, then holds the session branch', async () => {
+      const { folder, dir, mirror } = await shallowSession('shallow-untouched');
+      await template.sleepFolder(folder);
+      expect(fx.git(mirror, 'rev-parse', 'refs/factory/wip/heads/user/shallow-untouched')).toBe(fx.git(dir, 'rev-parse', 'HEAD'));
+      expect(fx.git(mirror, 'rev-parse', '--is-shallow-repository')).toBe('false');
+    });
+
+    it('keeps its commits and uncommitted work too', async () => {
+      const { folder, dir, mirror } = await shallowSession('shallow-worked');
+      const head = await fx.commit(dir, 'work.txt', 'work\n');
+      await writeFile(path.join(dir, 'draft.txt'), 'draft\n');
+      await template.sleepFolder(folder);
+      expect(fx.git(mirror, 'rev-parse', 'refs/factory/wip/heads/user/shallow-worked')).toBe(head);
+      const tree = fx.git(mirror, 'rev-parse', 'refs/factory/wip/tree/user/shallow-worked');
+      expect(fx.git(mirror, 'show', `${tree}:draft.txt`)).toBe('draft');
+    });
+
+    it('says why when the remote cannot fill the mirror, and the folder stays', async () => {
+      const { folder, cloneUrl } = await shallowSession('shallow-offline');
+      await rm(cloneUrl.replace('file://', ''), { recursive: true, force: true });
+      await expect(template.sleepFolder(folder)).rejects.toThrow(/shallow.*mirror/s);
+      await expect(readFile(path.join(folder, 'repo', '.git', 'HEAD'), 'utf8')).resolves.toContain('user/shallow-offline');
+    });
+  });
+
   it('a session never waits behind a mirror being created: no mirror yet answers network at once', async () => {
     const other = path.join(fx.root, 'other.git');
     fx.git(fx.root, 'clone', '--quiet', '--bare', fx.origin, other);

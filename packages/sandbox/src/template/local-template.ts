@@ -6,7 +6,7 @@
  * ({@link SessionWork}). `LocalFactorySandbox` owns one and hands its ports to
  * materialization through {@link FactorySandboxCheckoutServices}.
  *
- * The cache and the session work stores are ports (ADR-0045): the options can
+ * The cache and the session work stores are ports (ADR-0049): the options can
  * replace them; by default they are the local mirrors. What needs the cache to
  * keep local repositories (builds, kept-ref housekeeping) asks for the
  * {@link LocalRepositories} capability and fails loudly without it.
@@ -215,7 +215,15 @@ export class LocalEnvironmentTemplate implements FactorySandboxCheckoutServices 
           `LocalEnvironmentTemplate: the default session work store keeps work in local mirrors; the repository cache '${cache.kind}' is not one, so pass sessionWorkStore`,
         );
       }
-      store = new MirrorSessionWorkStore(cache);
+      // A shallow checkout's save may need the mirror filled from the remote first: with the
+      // repository's credentials when its owner is known, else anonymously (a public repository).
+      store = new MirrorSessionWorkStore(cache, {
+        credentials: async checkout => {
+          const owner = checkout.owner ?? (await cache.ownerOf(checkout.cloneUrl));
+          if (!owner || !this.#repositoryAccess) return undefined;
+          return (await this.#withCredentials(checkout)).authEnv;
+        },
+      });
     }
     if (!store.hasSaved) {
       throw new Error(`LocalEnvironmentTemplate: the session work store '${store.kind}' cannot tell whether a branch has saved work (hasSaved)`);

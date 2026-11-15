@@ -198,8 +198,6 @@ describe('production boot guards (src/mastra/index.ts)', () => {
       expect(machineKeyReads.count).toBe(1);
       expect(config.secretEncryption).toBeDefined();
       expect(config.storage?.constructor.name).toBe('LibSQLFactoryStorage');
-      expect(config.claudeCode).toMatchObject({ localDevelopment: true });
-      expect(config.codex).toMatchObject({ localDevelopment: true });
       expect(config.device).toBeDefined();
     });
 
