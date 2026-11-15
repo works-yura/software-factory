@@ -97,32 +97,66 @@ describe('the assistant panel', () => {
     expect((sent!.get('files') as File).name).toBe('shot.png');
 
     const thread = await screen.findByTestId('assistant-thread');
-    expect(within(screen.getByTestId('assistant-topic-line')).getByText('New')).toBeInTheDocument();
+    expect(within(screen.getByTestId('assistant-topic-line')).getByRole('combobox', { name: 'Status' })).toHaveTextContent('New');
     expect(within(thread).getByText('The assistant is looking at it…')).toBeInTheDocument();
     expect(await screen.findByTestId('assistant-new-count')).toHaveTextContent('1 new');
   });
 
-  it('shows a thread with its topic line, the agent’s report and the screenshot', async () => {
+  it('shows a thread with its header — topic, who and when, status, target Factory — the report and the screenshot', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request({ unread: true })] })),
       http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view())),
+      http.get(`${TEST_BASE_URL}/web/assistant/factories`, () =>
+        HttpResponse.json({ connected: true, pending: false, factories: [{ id: 'f-0', name: 'Ops' }, { id: 'f-1', name: 'Shop' }] }),
+      ),
     );
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
-    const topic = await screen.findByTestId('assistant-topic-line');
-    expect(within(topic).getByText('From Olena')).toBeInTheDocument();
-    expect(within(topic).getByRole('link', { name: /Original/ })).toHaveAttribute('href', 'https://app.clickup.com/t/123');
-    expect(within(topic).getByText('Waiting for me')).toBeInTheDocument();
+    const row = await screen.findByRole('button', { name: /Checkout fails/ });
+    expect(row).toHaveTextContent('unread');
+    await user.click(row);
+    const header = await screen.findByTestId('assistant-topic-line');
+    expect(within(header).getByRole('heading', { name: 'Checkout fails for Olena’s client' })).toBeInTheDocument();
+    expect(within(header).getByText('From Olena')).toBeInTheDocument();
+    expect(within(header).getByRole('link', { name: /Original/ })).toHaveAttribute('href', 'https://app.clickup.com/t/123');
+    expect(within(header).getByRole('combobox', { name: 'Status' })).toHaveTextContent('Waiting for me');
+    // The page's Factory is the default target, by name.
+    await waitFor(() => expect(within(header).getByRole('combobox', { name: 'Factory' })).toHaveTextContent('Shop'));
+    expect(within(header).getByRole('button', { name: 'Close' })).toHaveAttribute('aria-keyshortcuts', 'E');
     expect(await screen.findByText('checkout')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', `${TEST_BASE_URL}/web/assistant/files/f1/content`);
-    expect(screen.getByText('Shop?')).toBeInTheDocument();
   });
 
-  it('asks a Factory the person allowed it to reach, and closes the request', async () => {
+  it('sets the status from the header and renames the topic in place', async () => {
+    const patches: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view())),
+      http.patch(`${TEST_BASE_URL}/web/assistant/requests/req-1`, async ({ request: incoming }) => {
+        const patch = (await incoming.json()) as Record<string, unknown>;
+        patches.push(patch);
+        return HttpResponse.json({ request: request(patch) });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    const header = await screen.findByTestId('assistant-topic-line');
+
+    await user.click(within(header).getByRole('combobox', { name: 'Status' }));
+    await user.click(await screen.findByRole('option', { name: 'Answered' }));
+    await waitFor(() => expect(patches).toContainEqual({ status: 'answered' }));
+
+    await user.click(within(header).getByRole('button', { name: 'Rename' }));
+    const topic = within(header).getByRole('textbox', { name: 'Topic' });
+    await user.clear(topic);
+    await user.type(topic, 'Checkout for Olena{Enter}');
+    await waitFor(() => expect(patches).toContainEqual({ topic: 'Checkout for Olena' }));
+  });
+
+  it('asks the chosen Factory from the composer, with what is typed as the question', async () => {
     let asked: unknown;
-    let closed = false;
     server.use(
       http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),
       http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view())),
@@ -133,29 +167,77 @@ describe('the assistant panel', () => {
         asked = await incoming.json();
         return HttpResponse.json({ request: request({ status: 'waiting_factory' }) });
       }),
-      http.post(`${TEST_BASE_URL}/web/assistant/requests/req-1/close`, () => {
-        closed = true;
-        return HttpResponse.json({ request: request({ status: 'closed' }) });
-      }),
     );
     const user = userEvent.setup();
     renderPanel();
     await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
     await screen.findByTestId('assistant-topic-line');
 
-    await user.click(screen.getByRole('button', { name: 'Ask Factory' }));
-    const dialog = await screen.findByRole('form', { name: 'Ask Factory' });
-    // The page's Factory is offered first.
-    expect(within(dialog).getByRole('combobox', { name: 'Factory' })).toHaveTextContent('Shop');
-    await user.type(within(dialog).getByLabelText('Question'), 'Why does checkout fail?');
-    await user.click(within(dialog).getByRole('button', { name: 'Ask' }));
+    await user.click(screen.getByRole('radio', { name: /Ask Factory/ }));
+    const input = await screen.findByRole('textbox', { name: /Question for Shop/ });
+    await user.type(input, 'Why does checkout fail?');
+    await user.click(screen.getByRole('button', { name: 'Ask Shop' }));
     await waitFor(() => expect(asked).toEqual({ factoryId: 'f-1', question: 'Why does checkout fail?' }));
+    // Sent: the composer is back to writing to the assistant.
+    expect(await screen.findByRole('textbox', { name: 'Write to the assistant…' })).toHaveValue('');
+  });
 
-    // The dialog closes once the Factory was asked; only the request's own Close is left.
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Ask Factory' })).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1));
-    await user.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(closed).toBe(true));
+  it('hands the request to another Factory picked in the header, with a note', async () => {
+    let handed: unknown;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view())),
+      http.get(`${TEST_BASE_URL}/web/assistant/factories`, () =>
+        HttpResponse.json({ connected: true, pending: false, factories: [{ id: 'f-0', name: 'Ops' }, { id: 'f-1', name: 'Shop' }] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/assistant/requests/req-1/hand-over`, async ({ request: incoming }) => {
+        handed = await incoming.json();
+        return HttpResponse.json({ request: request({ status: 'waiting_factory' }) });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    const header = await screen.findByTestId('assistant-topic-line');
+
+    const picker = within(header).getByRole('combobox', { name: 'Factory' });
+    await waitFor(() => expect(picker).toHaveTextContent('Shop'));
+    await user.click(picker);
+    await user.click(await screen.findByRole('option', { name: 'Ops' }));
+    await waitFor(() => expect(picker).toHaveTextContent('Ops'));
+
+    await user.click(screen.getByRole('radio', { name: /Hand to Factory/ }));
+    await user.type(await screen.findByRole('textbox', { name: /card in Ops/ }), 'Only on mobile{Enter}');
+    await waitFor(() => expect(handed).toEqual({ factoryId: 'f-0', note: 'Only on mobile' }));
+  });
+
+  it('closes with E from the list and opens the next request', async () => {
+    const patches: Array<{ id: string; body: unknown }> = [];
+    let requests = [request(), request({ id: 'req-2', topic: 'Invoice is wrong' })];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/:id`, ({ params }) =>
+        HttpResponse.json({ ...view(), request: requests.find(item => item.id === params.id) }),
+      ),
+      http.patch(`${TEST_BASE_URL}/web/assistant/requests/:id`, async ({ params, request: incoming }) => {
+        const body = (await incoming.json()) as Record<string, unknown>;
+        patches.push({ id: String(params.id), body });
+        requests = requests.map(item => (item.id === params.id ? { ...item, ...body } : item));
+        return HttpResponse.json({ request: requests.find(item => item.id === params.id) });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+
+    // j opens the first request and keeps focus on its row.
+    (await screen.findByRole('button', { name: /Checkout fails/ })).focus();
+    await user.keyboard('j');
+    expect(within(await screen.findByTestId('assistant-topic-line')).getByRole('heading')).toHaveTextContent('Checkout fails');
+    await user.keyboard('e');
+    await waitFor(() => expect(patches).toEqual([{ id: 'req-1', body: { status: 'closed' } }]));
+    // Inbox zero: the closed one leaves the open list and the next one is open.
+    await waitFor(() => expect(within(screen.getByTestId('assistant-topic-line')).getByRole('heading')).toHaveTextContent('Invoice is wrong'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Checkout fails/ })).not.toBeInTheDocument());
   });
 
   it('says to allow Factory access first when the person has not', async () => {
@@ -166,7 +248,7 @@ describe('the assistant panel', () => {
     const user = userEvent.setup();
     renderPanel();
     await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
-    await user.click(await screen.findByRole('button', { name: 'Hand to Factory' }));
+    await user.click(await screen.findByRole('radio', { name: /Hand to Factory/ }));
     expect(await screen.findByText(/Allow the assistant to reach Factory first/)).toBeInTheDocument();
   });
 
@@ -193,6 +275,12 @@ describe('the assistant panel', () => {
     await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
     expect(await screen.findByTestId('assistant-thread')).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Requests' })).not.toBeInTheDocument();
+    // A compact header: the status and the Factory move into «More».
+    const header = screen.getByTestId('assistant-topic-line');
+    expect(within(header).queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+    await user.click(within(header).getByRole('button', { name: 'More actions' }));
+    expect(await screen.findByRole('menuitem', { name: /Status/ })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Back to requests' }));
     expect(await screen.findByRole('button', { name: /Checkout fails/ })).toBeInTheDocument();
   });
