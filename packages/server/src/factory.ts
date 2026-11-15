@@ -135,6 +135,9 @@ import {
   routeExternalSessions,
 } from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/mcp';
+import { AssistantStorage } from '@factory/assistant-core';
+import { createFactoryAssistant } from './assistant/wiring.ts';
+import type { FactoryAssistant } from './assistant/wiring.ts';
 import type { FactoryMcpConfig } from '@factory/mcp';
 import { resolveDeploymentModelProviders } from '@factory/api';
 import {
@@ -622,6 +625,8 @@ export class MastraFactory {
   #stopSandboxActivity: (() => void) | undefined;
   #stopSandboxSleeper: (() => void) | undefined;
   #mcpServers: McpServerHub | undefined;
+  /** «Помічник» (ADR-0051): the person's own requests desk; only on a server with sign-in. */
+  #assistant: FactoryAssistant | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
@@ -975,6 +980,8 @@ export class MastraFactory {
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
+    // The assistant's own tables (`assistant_*`, ADR-0051): requests, threads, notes, settings, files, its OAuth grant.
+    const assistantStorage = storage.registerDomain(new AssistantStorage());
     const intakeRouteFiresStorage = storage.registerDomain(new IntakeRouteFiresStorage());
     const usageStorage = storage.registerDomain(new UsageStorage());
     const bootMigrationsStorage = storage.registerDomain(new BootMigrationsStorage());
@@ -1079,7 +1086,28 @@ export class MastraFactory {
       ? new AttachmentService({
           records: attachmentsStorage,
           blobs: attachmentsConfig.store,
+          // The assistant's files share the blob store: bytes go only once neither names them.
+          otherReferences: [sha256 => assistantStorage.isBlobReferenced(sha256)],
           ...(attachmentsConfig.maxBytes !== undefined ? { maxBytes: attachmentsConfig.maxBytes } : {}),
+        })
+      : undefined;
+    // «Помічник» (ADR-0051): a person's requests desk in their organization. It needs sign-in (an owner
+    // is a person in an organization) and reaches Factory only through the MCP endpoint as that person.
+    this.#assistant?.stop();
+    this.#assistant = auth
+      ? createFactoryAssistant({
+          storage: assistantStorage,
+          mastraStorage: storage.getMastraStorage(),
+          secretEncryption,
+          ...(attachmentsConfig ? { blobs: attachmentsConfig.store } : {}),
+          blobReferencedElsewhere: async sha256 =>
+            (await attachmentsStorage.isBlobReferenced(sha256)) || ((await avatarsStorage?.isBlobReferenced(sha256)) ?? false),
+          modelCredentials: modelCredentialsStorage,
+          customProviders: customProvidersStorage,
+          deploymentProviders: deploymentModelProviders,
+          audit: auditStorage,
+          publicOrigin,
+          authProvider: auth,
         })
       : undefined;
     const workItemsInitError = storage.domainInitError('work-items');
@@ -3231,6 +3259,8 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
+          // «Помічник» (ADR-0051): the person's own assistant, `/web/assistant/*` (self.write, owner's data only).
+          ...(this.#assistant ? this.#assistant.routes({ auth: routeAuth, controller }) : []),
           // Last: a JSON 404 for any `/web` or `/auth` path the routes above do not answer, before the
           // deployer's catch-all answers it with its HTML welcome page (see `buildUnknownServerRoutes`).
           ...buildUnknownServerRoutes(),
@@ -3655,6 +3685,7 @@ export class MastraFactory {
         ),
       );
     this.#usageLimitResumer?.stop();
+    this.#assistant?.stop();
     this.#stopSandboxSleeper?.();
     this.#stopSandboxActivity?.();
     this.#unsubscribeSandboxSetupProgress?.();
