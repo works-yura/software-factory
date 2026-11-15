@@ -24,6 +24,12 @@ import type { OrganizationSummary } from '../services/organization';
 /** The footer trigger's id: closing settings returns focus here (`useCloseSettings`). */
 const TRIGGER_ID = 'sidebar-settings-link';
 
+/** The design system's trailing-indicator box (check, chevron) for a menu row. */
+/** A menu row led by an avatar takes the inset a row led by an icon gets, so both line up. */
+const LEADING_AVATAR = 'pl-2';
+
+const TRAILING_ICON = 'ml-auto flex size-[1.1em] shrink-0 items-center justify-center [&>svg]:size-full';
+
 /**
  * The sidebar footer: one row and one menu. Signed in, the row names the organization you work in
  * (or you, without organizations) and opens the account menu: your email, the theme, the organization
@@ -217,6 +223,7 @@ function OrganizationRow({
 }) {
   const { t } = useTranslation('nav');
   const { baseUrl } = useApiConfig();
+  const { isMobile } = useSidebar();
   const label = (
     <>
       <Avatar src={image} name={name} size="inline" />
@@ -239,38 +246,52 @@ function OrganizationRow({
     );
   }
 
+  const items = (
+    <>
+      <DropdownMenu.Label>{t('organization.list')}</DropdownMenu.Label>
+      {loadError !== undefined ? (
+        <DropdownMenu.Item disabled role="alert">
+          <AlertTriangle aria-hidden="true" />
+          {t('organization.loadFailed', { message: errorText(loadError) })}
+        </DropdownMenu.Item>
+      ) : (
+        list.map(organization => (
+          <DropdownMenu.Item
+            key={organization.id}
+            className={LEADING_AVATAR}
+            aria-current={organization.id === activeId ? 'true' : undefined}
+            onClick={() => {
+              if (organization.id !== activeId) onSwitch(organization.id);
+            }}
+          >
+            <Avatar src={avatarSrc(baseUrl, organization.logo)} name={organization.name} size="inline" />
+            <span className="truncate">{organization.name}</span>
+            {organization.id === activeId ? (
+              // Wrapped, never a direct svg: the menu row's `has-[>svg]` inset is for a leading icon,
+              // and a bare trailing check would shift only the active row's avatar left.
+              <span className={TRAILING_ICON}>
+                <Check aria-hidden="true" />
+              </span>
+            ) : null}
+          </DropdownMenu.Item>
+        ))
+      )}
+      {switchError !== undefined ? (
+        <DropdownMenu.Item disabled role="alert">
+          <AlertTriangle aria-hidden="true" />
+          {t('organization.switchFailed', { message: errorText(switchError) })}
+        </DropdownMenu.Item>
+      ) : null}
+    </>
+  );
+
+  // On a phone a side submenu has no room beside the menu and lands over it; the list sits inline.
+  if (isMobile) return <DropdownMenu.Group>{items}</DropdownMenu.Group>;
+
   return (
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger aria-label={t('organization.switchFrom', { name })}>{label}</DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent className="w-64">
-        <DropdownMenu.Label>{t('organization.list')}</DropdownMenu.Label>
-        {loadError !== undefined ? (
-          <DropdownMenu.Item disabled role="alert">
-            <AlertTriangle aria-hidden="true" />
-            {t('organization.loadFailed', { message: errorText(loadError) })}
-          </DropdownMenu.Item>
-        ) : (
-          list.map(organization => (
-            <DropdownMenu.Item
-              key={organization.id}
-              aria-current={organization.id === activeId ? 'true' : undefined}
-              onClick={() => {
-                if (organization.id !== activeId) onSwitch(organization.id);
-              }}
-            >
-              <Avatar src={avatarSrc(baseUrl, organization.logo)} name={organization.name} size="inline" />
-              <span className="truncate">{organization.name}</span>
-              {organization.id === activeId ? <Check aria-hidden="true" className="ml-auto" /> : null}
-            </DropdownMenu.Item>
-          ))
-        )}
-        {switchError !== undefined ? (
-          <DropdownMenu.Item disabled role="alert">
-            <AlertTriangle aria-hidden="true" />
-            {t('organization.switchFailed', { message: errorText(switchError) })}
-          </DropdownMenu.Item>
-        ) : null}
-      </DropdownMenu.SubContent>
+      <DropdownMenu.SubTrigger className={LEADING_AVATAR} aria-label={t('organization.switchFrom', { name })}>{label}</DropdownMenu.SubTrigger>
+      <DropdownMenu.SubContent className="w-64">{items}</DropdownMenu.SubContent>
     </DropdownMenu.Sub>
   );
 }
