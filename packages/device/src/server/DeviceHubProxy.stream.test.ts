@@ -84,10 +84,16 @@ const echoHub = () => {
   return { server, handshakes, sockets };
 };
 
-const proxyServer = async (hubPort: number, authorize?: () => boolean) => {
+const proxyServer = async (
+  hubPort: number,
+  authorize?: () => boolean,
+  hubHeaders?: Readonly<Record<string, string>>,
+) => {
   const service = {
     currentReadiness: async (hostId?: string) =>
-      hostId === LOCAL_DEVICE_HOST_ID ? { hostId, hub: { origin: `http://127.0.0.1:${hubPort}` } } : null,
+      hostId === LOCAL_DEVICE_HOST_ID
+        ? { hostId, hub: { origin: `http://127.0.0.1:${hubPort}`, ...(hubHeaders ? { headers: hubHeaders } : {}) } }
+        : null,
   } as unknown as DeviceService;
   const server = NodeHttp.createServer((_, response) => response.writeHead(404).end());
   attachDeviceHubUpgrade(server, { service, basePath: '/api/device', ...(authorize ? { authorize } : {}) });
@@ -153,6 +159,21 @@ it('rewrites the origin and drops credentials on the forwarded handshake', async
   expect(hub.handshakes[0]?.headers).not.toHaveProperty('cookie');
   expect(hub.handshakes[0]?.headers).not.toHaveProperty('authorization');
   expect(hub.handshakes[0]?.headers).not.toHaveProperty('x-forwarded-proto');
+});
+
+it("sends the hub's session token on the forwarded handshake instead of the caller's", async () => {
+  const hub = echoHub();
+  const hubPort = await listen(hub.server);
+  const port = await proxyServer(hubPort, undefined, { authorization: 'Bearer hub-token' });
+  const socket = NodeNet.connect(port, '127.0.0.1');
+  cleanups.push(() => void socket.destroy());
+  await new Promise<void>((resolve) => socket.once('connect', resolve));
+  const head = new Promise<string>((resolve) => socket.once('data', (chunk) => resolve(chunk.toString('latin1'))));
+  socket.write(
+    `GET /api/device/hub/local/vendor/serve-sim/helper/ws?device=test HTTP/1.1\r\nHost: relay.test\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nAuthorization: Bearer private\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n`,
+  );
+  expect(await head).toMatch(/^HTTP\/1\.1 101 /);
+  expect(hub.handshakes[0]?.headers.authorization).toBe('Bearer hub-token');
 });
 
 it.each([

@@ -24,6 +24,7 @@ afterEach(async () => {
 });
 
 const noopPhase = () => undefined;
+const HUB_TOKEN = 'hub-session-token';
 
 const rejection = <T>(promise: Promise<T>) =>
   promise.then(
@@ -38,7 +39,7 @@ const agentFixture = async (
 ) => {
   const { directory: baseDir, cleanup } = await tempDir('device-agent-start-');
   cleanups.push(cleanup);
-  const hub = { running: true, spawnFails: false };
+  const hub = { running: true, spawnFails: false, args: [] as ReadonlyArray<string> };
   const stateDir = agentDeviceStateDir(NodePath.join(baseDir, 'userdata'));
   const daemonHealthy = { value: true };
   const runs: Array<ProcessRunInput> = [];
@@ -64,6 +65,7 @@ const agentFixture = async (
       isExecutable: false,
       platform: 'darwin',
       spawn: async (command, args) => {
+        hub.args = args;
         if (hub.spawnFails) {
           throw new ProcessSpawnError({
             command,
@@ -76,7 +78,7 @@ const agentFixture = async (
           isRunning: () => hub.running,
           exited: new Promise<void>(() => undefined),
           kill: () => undefined,
-          onOutputLine: () => undefined,
+          onOutputLine: (listener) => listener(`  Local:   http://localhost:1/?token=${HUB_TOKEN}`),
         } satisfies ChildHandle;
       },
       runner: {
@@ -101,6 +103,15 @@ const agentFixture = async (
 const mustNotStart = async (): Promise<ProcessRunOutput> => {
   throw new Error('A session that never readies agent tools must not start the daemon');
 };
+
+describe('device hub session token', () => {
+  it('starts the hub with a required token and sends it on every request to the hub', async () => {
+    const { host, hub } = await agentFixture(mustNotStart);
+    expect(hub.args).toContain('--require-token');
+    const ready = await host.ensureReady(noopPhase);
+    expect(ready.hub.headers).toEqual({ authorization: `Bearer ${HUB_TOKEN}` });
+  });
+});
 
 describe('AgentDevice startup', () => {
   it('restarts a cached daemon that no longer answers its health check', async () => {

@@ -70,6 +70,11 @@ export class AgentDeviceStartError extends Error {
 
 export interface DeviceHubEndpoint {
   readonly origin: string;
+  /**
+   * Headers every request to the hub carries: its session token. The hub listens on loopback, where
+   * any local process (an agent running as another user among them) could otherwise drive it.
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export interface AgentDeviceEndpoint {
