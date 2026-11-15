@@ -1,11 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FileDropZone } from '@mastra/playground-ui/components/FileDropZone';
+import { Header } from '@mastra/playground-ui/components/Header';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Paperclip, X } from 'lucide-react';
-import { useId, useState } from 'react';
+import { ImageEntry } from '@mastra/playground-ui/domains/chat/attachments/attachment-preview-dialog';
+import { ComposerAttachment } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentEntry } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-entry';
+import { ComposerAttachmentList } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-list';
+import { attachmentInfo } from '@mastra/playground-ui/domains/chat/attachments/message-attachment-info';
+import { useEffect, useId, useState } from 'react';
 import type { ClipboardEvent, FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -25,29 +31,50 @@ export function pastedFiles(event: ClipboardEvent): File[] {
   });
 }
 
-export function FileChips({ files, onRemove }: { files: File[]; onRemove: (index: number) => void }) {
+/** A local preview of a picked image, released when the file leaves the draft. */
+function useObjectUrl(file: File): string | undefined {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    if (!file.type.startsWith('image/') || typeof URL.createObjectURL !== 'function') return;
+    const created = URL.createObjectURL(file);
+    setUrl(created);
+    return () => URL.revokeObjectURL(created);
+  }, [file]);
+  return url;
+}
+
+function PendingFile({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const { t } = useTranslation('assistant');
+  const preview = useObjectUrl(file);
+  const { Icon, label } = attachmentInfo(file.name, file.type);
+  return (
+    <ComposerAttachment
+      name={file.name}
+      variant={preview ? 'thumbnail' : 'inline'}
+      removeLabel={t('newRequest.removeFile', { name: file.name })}
+      onRemove={onRemove}
+    >
+      {preview ? (
+        <ImageEntry src={preview} name={file.name} />
+      ) : (
+        <ComposerAttachmentEntry description={label}>
+          <Icon size={16} aria-hidden />
+        </ComposerAttachmentEntry>
+      )}
+    </ComposerAttachment>
+  );
+}
+
+/** The files a draft carries: the app composer's attachment cards, removable before sending. */
+export function PendingFiles({ files, onRemove }: { files: File[]; onRemove: (index: number) => void }) {
   const { t } = useTranslation('assistant');
   if (files.length === 0) return null;
   return (
-    <ul className="flex flex-wrap gap-1.5" aria-label={t('newRequest.files')}>
+    <ComposerAttachmentList aria-label={t('newRequest.files')}>
       {files.map((file, index) => (
-        <li key={`${file.name}-${index}`} className="bg-surface3 flex items-center gap-1 rounded-full py-0.5 pr-0.5 pl-2">
-          <Paperclip className="size-3" aria-hidden="true" />
-          <Txt as="span" variant="caption" className="max-w-48 truncate">
-            {file.name}
-          </Txt>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t('newRequest.removeFile', { name: file.name })}
-            onClick={() => onRemove(index)}
-          >
-            <X aria-hidden="true" />
-          </Button>
-        </li>
+        <PendingFile key={`${file.name}-${file.lastModified}-${index}`} file={file} onRemove={() => onRemove(index)} />
       ))}
-    </ul>
+    </ComposerAttachmentList>
   );
 }
 
@@ -75,53 +102,43 @@ export function NewRequestForm({ onCreated, onCancel }: { onCreated: (request: A
   };
 
   return (
-    <form className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" aria-label={t('newRequest.title')} onSubmit={submit}>
-      <Txt as="h3" variant="heading" className="font-medium">
-        {t('newRequest.title')}
-      </Txt>
-      <div className="flex flex-col gap-1">
-        <label htmlFor={ids.text}>
-          <Txt as="span" variant="label">
-            {t('newRequest.text')}
-          </Txt>
-        </label>
-        <Textarea
-          id={ids.text}
-          value={text}
-          rows={6}
-          placeholder={t('newRequest.textPlaceholder')}
-          onChange={event => setText(event.target.value)}
-          onPaste={event => {
-            const pasted = pastedFiles(event);
-            if (pasted.length === 0) return;
-            event.preventDefault();
-            setFiles(current => [...current, ...pasted]);
-          }}
+    <form className="flex min-h-0 flex-1 flex-col" aria-label={t('newRequest.title')} onSubmit={submit}>
+      <Header>
+        <Txt as="h3" variant="heading">
+          {t('newRequest.title')}
+        </Txt>
+      </Header>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <Field>
+          <FieldLabel htmlFor={ids.text}>{t('newRequest.text')}</FieldLabel>
+          <Textarea
+            id={ids.text}
+            value={text}
+            rows={6}
+            placeholder={t('newRequest.textPlaceholder')}
+            onChange={event => setText(event.target.value)}
+            onPaste={event => {
+              const pasted = pastedFiles(event);
+              if (pasted.length === 0) return;
+              event.preventDefault();
+              setFiles(current => [...current, ...pasted]);
+            }}
+          />
+        </Field>
+        <FileDropZone
+          title={t('newRequest.dropTitle')}
+          description={t('newRequest.dropDescription')}
+          buttonLabel={t('newRequest.dropButton')}
+          multiple
+          onFiles={dropped => setFiles(current => [...current, ...dropped])}
         />
-      </div>
-      <FileDropZone
-        title={t('newRequest.dropTitle')}
-        description={t('newRequest.dropDescription')}
-        buttonLabel={t('newRequest.dropButton')}
-        multiple
-        onFiles={dropped => setFiles(current => [...current, ...dropped])}
-      />
-      <FileChips files={files} onRemove={index => setFiles(current => current.filter((_, at) => at !== index))} />
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1">
-          <label htmlFor={ids.from}>
-            <Txt as="span" variant="label">
-              {t('newRequest.from')}
-            </Txt>
-          </label>
+        <PendingFiles files={files} onRemove={index => setFiles(current => current.filter((_, at) => at !== index))} />
+        <Field>
+          <FieldLabel htmlFor={ids.from}>{t('newRequest.from')}</FieldLabel>
           <Input id={ids.from} value={fromName} placeholder={t('newRequest.fromPlaceholder')} onChange={event => setFromName(event.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={ids.source}>
-            <Txt as="span" variant="label">
-              {t('newRequest.source')}
-            </Txt>
-          </label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor={ids.source}>{t('newRequest.source')}</FieldLabel>
           <Input
             id={ids.source}
             type="url"
@@ -129,16 +146,16 @@ export function NewRequestForm({ onCreated, onCancel }: { onCreated: (request: A
             placeholder={t('newRequest.sourcePlaceholder')}
             onChange={event => setSourceUrl(event.target.value)}
           />
+        </Field>
+        {create.isError ? <Notice variant="destructive">{create.error.message}</Notice> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            {t('newRequest.cancel')}
+          </Button>
+          <Button type="submit" variant="primary" disabled={!canSend}>
+            {create.isPending ? t('newRequest.sending') : t('newRequest.submit')}
+          </Button>
         </div>
-      </div>
-      {create.isError ? <Notice variant="destructive">{create.error.message}</Notice> : null}
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          {t('newRequest.cancel')}
-        </Button>
-        <Button type="submit" variant="primary" disabled={!canSend}>
-          {create.isPending ? t('newRequest.sending') : t('newRequest.submit')}
-        </Button>
       </div>
     </form>
   );

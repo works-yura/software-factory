@@ -2,6 +2,7 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useEffect, useState } from 'react';
@@ -11,6 +12,8 @@ import { useAssistantFactories, useAssistantModels, useAssistantSettings, useSet
 
 const ACCESS_RESULTS = ['connected', 'denied', 'failed', 'signed_out'] as const;
 type AccessResult = (typeof ACCESS_RESULTS)[number];
+/** The Select's value for «the organization's default» (no model of the person's own). */
+const DEFAULT_MODEL = 'default';
 
 /** What the consent round trip came back with (`?assistantAccess=`), if anything. */
 function accessResult(search: string): AccessResult | undefined {
@@ -55,20 +58,23 @@ export function AssistantSettings({ location = typeof window === 'undefined' ? u
             {t('settings.noModels')}
           </Txt>
         ) : (
-          <select
-            aria-label={t('settings.model')}
-            className="border-border bg-surface2 text-body-sm h-8 max-w-64 rounded-md border px-2"
-            value={settings.data?.modelId ?? ''}
+          <Select
+            value={settings.data?.modelId ?? DEFAULT_MODEL}
             disabled={!settings.data || actions.save.isPending}
-            onChange={event => actions.save.mutate({ modelId: event.target.value || null })}
+            onValueChange={value => actions.save.mutate({ modelId: value === DEFAULT_MODEL ? null : value })}
           >
-            <option value="">{t('settings.modelDefault')}</option>
-            {models.data?.map(model => (
-              <option key={model.id} value={model.id}>
-                {model.id}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger size="sm" aria-label={t('settings.model')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT_MODEL}>{t('settings.modelDefault')}</SelectItem>
+              {models.data?.map(model => (
+                <SelectItem key={model.id} value={model.id}>
+                  {model.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
       </SettingsRow>
       <SettingsRow label={t('settings.retention')} description={t('settings.retentionDescription')}>
