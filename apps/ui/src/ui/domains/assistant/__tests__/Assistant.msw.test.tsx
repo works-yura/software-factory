@@ -146,11 +146,14 @@ describe('the assistant panel', () => {
     await user.click(screen.getByRole('button', { name: 'Ask Factory' }));
     const dialog = await screen.findByRole('form', { name: 'Ask Factory' });
     // The page's Factory is offered first.
-    expect(within(dialog).getByLabelText('Factory')).toHaveValue('f-1');
+    expect(within(dialog).getByRole('combobox', { name: 'Factory' })).toHaveTextContent('Shop');
     await user.type(within(dialog).getByLabelText('Question'), 'Why does checkout fail?');
     await user.click(within(dialog).getByRole('button', { name: 'Ask' }));
     await waitFor(() => expect(asked).toEqual({ factoryId: 'f-1', question: 'Why does checkout fail?' }));
 
+    // The dialog closes once the Factory was asked; only the request's own Close is left.
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Ask Factory' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1));
     await user.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(closed).toBe(true));
   });
@@ -259,12 +262,16 @@ describe('Account › Assistant', () => {
     );
 
     const model = await screen.findByRole('combobox', { name: 'Model' });
+    await waitFor(() => expect(model).toHaveTextContent("The organization's default"));
+    await waitFor(() => expect(model).toBeEnabled());
+    await user.click(model);
     await waitFor(() =>
-      expect(within(model).getAllByRole('option').map(option => option.textContent)).toEqual([
+      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
         "The organization's default",
         'anthropic/claude-sonnet-4-5',
       ]),
     );
+    await user.keyboard('{Escape}');
     const retention = screen.getByRole('spinbutton', { name: 'Keep closed requests' });
     await waitFor(() => expect(retention).toHaveValue(30));
     await user.clear(retention);
