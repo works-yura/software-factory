@@ -642,9 +642,6 @@
       "label": "Agents run on",
       "note": "Applies to new sessions; cards already running finish on their harness.",
       "changeFailed": "Couldn’t switch the harness",
-      "connectHeading": "Harnesses to connect",
-      "notOffered": "To pick {{name}}, it needs your account.",
-      "notOfferedBecause": "{{name}} isn’t offered: {{reason}}",
       "connect": "Connect {{name}}"
     },
     "agentAccounts": {

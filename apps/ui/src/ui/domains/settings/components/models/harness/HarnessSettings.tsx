@@ -13,7 +13,6 @@ import { isFactoryHarness } from '../../../../workspaces/services/github';
 import type { FactoryHarness } from '../../../../workspaces/services/github';
 import { useHarness } from '../../../../../../hooks/useHarness';
 import { SettingsSubsection } from '../../SettingsSubsection';
-import { ConnectAgentHint } from './ConnectAgentHint';
 
 const tk = translator('settings');
 
@@ -54,15 +53,7 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
   return (
     <SettingsSubsection scope="factory" title={t('models.harness.title')} description={t('models.harness.description')}>
       <SettingsContainer>
-        <SettingsRow
-          label={t('models.harness.label')}
-          description={
-            <>
-              {t('models.harness.note')}
-              {harness !== undefined && <ConnectAgentHint factoryId={factoryId} choices={choices} />}
-            </>
-          }
-        >
+        <SettingsRow label={t('models.harness.label')} description={t('models.harness.note')}>
           {harness === undefined ? (
             projectQuery.isError ? (
               <Txt as="span" variant="caption" tone="muted">
