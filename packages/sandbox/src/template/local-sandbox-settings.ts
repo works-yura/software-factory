@@ -12,7 +12,7 @@ import type { SleepPolicy } from './sleep-policy.ts';
 export const DEFAULT_HIDDEN_REF_RETENTION_DAYS = 30;
 
 /**
- * How agents of this Factory are kept from the rest of the machine (ADR-0041, ADR-0048):
+ * How agents of this Factory are kept from the rest of the machine (ADR-0041, ADR-0050):
  * `seatbelt` — the separate macOS user plus the Seatbelt profile (writes only in the card folder and
  * the agent's home, no other disk, no Factory port; Xcode and SwiftPM build inside it);
  * `user` — the separate user alone. Only where agents run as a separate user (FACTORY_AGENT_USER).

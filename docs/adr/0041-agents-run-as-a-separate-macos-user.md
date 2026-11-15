@@ -18,7 +18,7 @@
 - **Codex**: так само, але без профілю Seatbelt: команди, які він запускає, Codex кладе у власну пісочницю Seatbelt, а macOS не вкладає пісочниці (`sandbox_apply: Operation not permitted`). Межа для самого CLI — користувач. `CODEX_HOME` сесій — у `.agent-state/codex-home`.
 - **Mastra**: усі команди `LocalSandbox` (агента, налаштування сесії, git чекауту) йдуть через `processes.spawn` як рядок `sh`; він стає програмою (`ShellCommandBridge`), що відкриває оточення з приватного файлу сервера на fd 3, видаляє файл і запускає той самий ланцюжок. Значення не потрапляють у командний рядок.
 - **Збірки шаблону**: команди налаштування (код репозиторію: `pnpm install`, `postinstall`) — від імені агента; git дзеркал лишається серверу.
-- ~~`FACTORY_AGENT_SEATBELT=off`~~ (замінено [ADR-0048](0048-seatbelt-is-a-factory-setting-xcode-inside.md)): Seatbelt — налаштування Фабрики, Xcode і SwiftPM збираються всередині профілю, як у sandvault.
+- ~~`FACTORY_AGENT_SEATBELT=off`~~ (замінено [ADR-0050](0050-seatbelt-is-a-factory-setting-xcode-inside.md)): Seatbelt — налаштування Фабрики, Xcode і SwiftPM збираються всередині профілю, як у sandvault.
 
 **Що лишається.**
 - Від імені сервера досі: браузер (Chromium), хаб пристроїв, MCP-сервери, файлові інструменти Mastra (у процесі сервера, межа — тека робочого простору).
