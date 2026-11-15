@@ -45,7 +45,7 @@ export function AssistantLauncher({ hint }: { hint?: { id: string; name: string 
     return (
       <Drawer open={open} onOpenChange={setOpen} side="bottom">
         {open ? null : <Button variant="primary" size="icon-lg" className={LAUNCHER_PLACE} onClick={() => setOpen(true)} {...trigger} />}
-        <DrawerContent showCloseButton={false} aria-label={t('panel.title')} className="h-[85dvh] pb-[env(safe-area-inset-bottom)]">
+        <DrawerContent showCloseButton={false} aria-label={t('panel.title')} className="h-[calc(85dvh+3rem)] pb-[calc(3rem+env(safe-area-inset-bottom))]">
           <AssistantPanel compact hint={hint} onClose={close} />
         </DrawerContent>
       </Drawer>
