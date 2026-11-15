@@ -20,7 +20,10 @@
     "newCount_one": "{{count}} нове",
     "newCount_few": "{{count}} нові",
     "newCount_many": "{{count}} нових",
-    "newCount_other": "{{count}} нових"
+    "newCount_other": "{{count}} нових",
+    "unread": "непрочитане",
+    "inboxZero": "Усе розібрано",
+    "emptyFilter": "Тут порожньо"
   },
   "filter": {
     "label": "Показати",
@@ -32,7 +35,8 @@
     "waiting_factory": "Чекає Factory",
     "waiting_me": "Чекає мене",
     "answered": "Відповіли",
-    "closed": "Закрите"
+    "closed": "Закрите",
+    "label": "Статус"
   },
   "newRequest": {
     "title": "Нове звернення",
@@ -68,7 +72,11 @@
     "reply": "Напишіть помічнику…",
     "send": "Надіслати",
     "attach": "Додати файли",
-    "closedNotice": "Звернення закрите."
+    "closedNotice": "Звернення закрите.",
+    "created": "Створено",
+    "rename": "Перейменувати",
+    "topic": "Тема",
+    "properties": "Властивості звернення"
   },
   "actions": {
     "label": "Дії зі зверненням",
@@ -78,15 +86,16 @@
     "checkAnswer": "Перевірити відповідь",
     "noAnswerYet": "Factory ще не відповіла.",
     "factory": "Factory",
-    "question": "Питання",
-    "questionPlaceholder": "Залиште порожнім, щоб надіслати звернення як є",
-    "title": "Назва картки",
-    "confirmAsk": "Спитати",
-    "confirmHandOver": "Передати",
     "cancel": "Скасувати",
     "connectFirst": "Спершу дозвольте помічнику доступ до Factory: Акаунт › Помічник.",
     "noFactories": "Немає жодної Factory, до якої у вас є доступ.",
-    "hint": "{{factory}}?"
+    "reopen": "Відкрити знову",
+    "closeHint": "Закрити звернення",
+    "more": "Інші дії",
+    "openOriginal": "Відкрити першоджерело",
+    "openInFactory": "Відкрити у {{factory}}",
+    "notConnected": "Factory не дозволено",
+    "searchFactory": "Знайти Factory…"
   },
   "notes": {
     "empty": "Нотаток ще немає.",
@@ -124,5 +133,43 @@
     "clearConfirmDescription": "Усе, що він зберігав у цій організації, буде стерто. Це не можна скасувати.",
     "cleared": "Помічника очищено.",
     "saveRetention": "Зберегти термін"
+  },
+  "time": {
+    "now": "щойно",
+    "minutes_one": "{{count}} хв",
+    "minutes_few": "{{count}} хв",
+    "minutes_many": "{{count}} хв",
+    "minutes_other": "{{count}} хв",
+    "hours_one": "{{count}} год",
+    "hours_few": "{{count}} год",
+    "hours_many": "{{count}} год",
+    "hours_other": "{{count}} год",
+    "days_one": "{{count}} дн",
+    "days_few": "{{count}} дн",
+    "days_many": "{{count}} дн",
+    "days_other": "{{count}} дн"
+  },
+  "keys": {
+    "move": "перейти",
+    "reply": "відповісти",
+    "close": "закрити",
+    "new": "нове"
+  },
+  "source": {
+    "manual": "Додали ви"
+  },
+  "composer": {
+    "mode": "Кому",
+    "modes": {
+      "assistant": "Помічнику",
+      "ask": "Спитати Factory",
+      "handOver": "Передати у Factory"
+    },
+    "askPlaceholder": "Питання для {{factory}} — порожнє надішле звернення як є",
+    "handOverPlaceholder": "Примітка до картки у {{factory}} (необов'язково)",
+    "factoryHint": "Піде від вашого імені, з вашою роллю.",
+    "sendAsk": "Спитати {{factory}}",
+    "sendHandOver": "Передати у {{factory}}",
+    "actions": "Надіслати"
   }
 }

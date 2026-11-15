@@ -22,7 +22,7 @@ import type {
   FactoryGrant,
   RequestView,
 } from './ports.ts';
-import type { AssistantStorage } from './storage.ts';
+import type { AssistantStorage, RequestPatch } from './storage.ts';
 import type {
   AssistantClearReason,
   AssistantFile,
@@ -30,6 +30,7 @@ import type {
   AssistantOwner,
   AssistantRequest,
   AssistantSettings,
+  RequestStatus,
 } from './types.ts';
 import { assertOwner, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from './types.ts';
 
@@ -194,6 +195,31 @@ export class AssistantService {
     return closed;
   }
 
+  /**
+   * The person's own edits from the thread header: a new topic, or a status they set by hand
+   * (as in any inbox: back to «waiting for me», answered, closed, reopened).
+   */
+  async updateRequest(owner: AssistantOwner, id: string, input: { topic?: string; status?: RequestStatus }): Promise<AssistantRequest> {
+    await this.#ready();
+    const request = await this.#require(owner, id);
+    const patch: RequestPatch = {};
+    if (input.topic !== undefined) {
+      const topic = input.topic.replace(/\s+/g, ' ').trim();
+      if (!topic) throw new AssistantError('invalid_topic', 'The topic cannot be empty.', 400);
+      patch.topic = topic.slice(0, MAX_TOPIC);
+    }
+    if (input.status !== undefined && input.status !== request.status) {
+      const now = this.#now();
+      patch.status = input.status;
+      if (input.status === 'closed') Object.assign(patch, { closedAt: now, unread: false });
+      else if (request.status === 'closed') patch.closedAt = null;
+    }
+    if (Object.keys(patch).length === 0) return request;
+    const updated = await this.#deps.storage.updateRequest(owner, id, patch, this.#now());
+    if (!updated) throw notFound();
+    return updated;
+  }
+
   // Factory
 
   /** Asks a Factory: a side session with the question; the request waits for Factory. */
@@ -257,7 +283,7 @@ export class AssistantService {
   }
 
   /** Hands the request to a Factory as a card (its files attached, the original linked). */
-  async handOver(owner: AssistantOwner, id: string, input: { factoryId: string; title?: string }): Promise<AssistantRequest> {
+  async handOver(owner: AssistantOwner, id: string, input: { factoryId: string; title?: string; note?: string }): Promise<AssistantRequest> {
     await this.#ready();
     const request = await this.#require(owner, id);
     if (request.status === 'closed') throw new AssistantError('request_closed', 'This request is closed.', 409);
@@ -266,7 +292,9 @@ export class AssistantService {
     }
     const factory = await this.#factoryRef(owner, input.factoryId);
     const title = (input.title?.trim() || request.topic).slice(0, 512);
-    const description = await this.#summary(owner, request);
+    const note = input.note?.trim() ?? '';
+    if (note.length > 4000) throw new AssistantError('note_too_long', 'The note is longer than 4000 characters.', 400);
+    const description = [note, await this.#summary(owner, request)].filter(Boolean).join('\n\n').slice(0, 8000);
     const files = await Promise.all(
       (await this.#deps.storage.listFiles(owner, id)).map(async file => ({
         name: file.name,
@@ -281,7 +309,7 @@ export class AssistantService {
     await this.#deps.storage.addMessage(owner, {
       requestId: id,
       author: 'event',
-      text: [`handed:${factory.name}`, ...(failed.length ? ['files_failed', ...failed] : [])].join('\n'),
+      text: [`handed:${factory.name}`, ...(note ? [note] : []), ...(failed.length ? ['files_failed', ...failed] : [])].join('\n'),
       now: this.#now(),
     });
     const updated = await this.#deps.storage.updateRequest(

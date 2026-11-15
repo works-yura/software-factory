@@ -107,10 +107,18 @@ describe('/web/assistant routes', () => {
     expect(content.status).toBe(200);
     expect(content.headers.get('content-type')).toBe('image/png');
 
+    expect((await json(`/web/assistant/requests/${request.id}`, 'PATCH', { status: 'done' }, as('ada'))).status).toBe(400);
+    const renamed = await json(`/web/assistant/requests/${request.id}`, 'PATCH', { topic: 'Checkout for Olena', status: 'answered' }, as('ada'));
+    expect(((await renamed.json()) as { request: { topic: string; status: string } }).request).toMatchObject({
+      topic: 'Checkout for Olena',
+      status: 'answered',
+    });
+
     for (const stranger of [as('bob'), as('ada', 'org-b')]) {
       expect((await call(`/web/assistant/requests/${request.id}`, { who: stranger })).status).toBe(404);
       expect((await call(view.files[0]!.contentUrl, { who: stranger })).status).toBe(404);
       expect((await json(`/web/assistant/requests/${request.id}/close`, 'POST', {}, stranger)).status).toBe(404);
+      expect((await json(`/web/assistant/requests/${request.id}`, 'PATCH', { status: 'closed' }, stranger)).status).toBe(404);
       expect((await json(`/web/assistant/requests/${request.id}/messages`, 'POST', { text: 'x' }, stranger)).status).toBe(404);
       const list = (await (await call('/web/assistant/requests', { who: stranger })).json()) as { requests: unknown[] };
       expect(list.requests).toEqual([]);

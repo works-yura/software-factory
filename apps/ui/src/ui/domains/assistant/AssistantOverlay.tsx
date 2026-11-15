@@ -18,7 +18,7 @@ export function useHasAssistant(): boolean {
 
 /**
  * «Помічник» (ADR-0051) over every page: the floating button and its panel. The Factory the page
- * belongs to is only a hint («Factory X?») for asking or handing over.
+ * belongs to is the default target Factory for asking or handing over.
  */
 export function AssistantOverlay({ factory }: { factory?: { id: string; name: string } }) {
   if (!useHasAssistant()) return null;
