@@ -3,15 +3,15 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { MessagesSquare } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ChannelMode, ClickUpConnection, SourceChannel } from './sources-api';
-import { CHANNEL_MODES, useAssistantSources, useSourceActions } from './sources-api';
+import { SourceChannelList } from './SourceChannelList';
+import type { ClickUpConnection } from './sources-api';
+import { useAssistantSources, useSourceActions } from './sources-api';
 
 function when(iso: string | null, never: string): string {
   return iso ? new Date(iso).toLocaleString() : never;
@@ -63,43 +63,6 @@ function ConnectRow() {
         </Button>
       </form>
       {actions.connect.isError ? <Notice variant="destructive">{actions.connect.error.message}</Notice> : null}
-    </SettingsRow>
-  );
-}
-
-function ChannelRow({ channel }: { channel: SourceChannel }) {
-  const { t } = useTranslation('assistant');
-  const actions = useSourceActions();
-  const label = channel.kind === 'channel' ? `#${channel.name}` : channel.name;
-  return (
-    <SettingsRow
-      label={label}
-      description={
-        <>
-          <span>{t(`sources.kind.${channel.kind}`)}</span>
-          {channel.mode !== 'ignore' ? <span>{t('sources.lastSync', { when: when(channel.lastSyncAt, t('sources.never')) })}</span> : null}
-          {channel.lastError ? <span className="text-destructive-foreground">{channel.lastError}</span> : null}
-        </>
-      }
-    >
-      <Select
-        value={channel.mode}
-        disabled={actions.setMode.isPending}
-        onValueChange={value =>
-          actions.setMode.mutate({ workspaceId: channel.workspaceId, channelId: channel.channelId, mode: value as ChannelMode })
-        }
-      >
-        <SelectTrigger size="sm" aria-label={t('sources.modeFor', { channel: label })}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {CHANNEL_MODES.map(mode => (
-            <SelectItem key={mode} value={mode}>
-              {t(`sources.mode.${mode}`)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
     </SettingsRow>
   );
 }
@@ -163,11 +126,7 @@ function Connected({ connection }: { connection: ClickUpConnection }) {
       {connection.channels.length === 0 ? (
         <EmptyState iconSlot={<MessagesSquare />} titleSlot={t('sources.noChannels')} descriptionSlot={t('sources.noChannelsHint')} />
       ) : (
-        <SettingsContainer role="group" aria-label={t('sources.channels')}>
-          {connection.channels.map(channel => (
-            <ChannelRow key={`${channel.workspaceId}:${channel.channelId}`} channel={channel} />
-          ))}
-        </SettingsContainer>
+        <SourceChannelList channels={connection.channels} />
       )}
     </>
   );

@@ -8,11 +8,14 @@
  *   until its agent has answered (ADR-0051 (б) — `factory_ask` — is not there yet).
  * - Hand over: `factory_create_work_item`, then each file to the card's attachments with the
  *   same bearer token (ADR-0051 (в)).
+ * - Reads for the agent's tools (phase 3): the read-only MCP tools `factory_list_work_items`,
+ *   `factory_inspect_work_item`, `factory_list_attention`, with their own arguments.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
-import type { FactoryAnswer, FactoryClient, FactoryHandover, FactoryQuestion, FactoryRef } from './ports.ts';
+import type { FactoryAnswer, FactoryClient, FactoryHandover, FactoryQuestion, FactoryReadTool, FactoryRef } from './ports.ts';
+import { FACTORY_READ_TOOLS } from './ports.ts';
 import type { AssistantOwner } from './types.ts';
 
 /** The path of the discovery document listing a person's Factories and their MCP endpoints. */
@@ -149,6 +152,15 @@ export class McpFactoryClient implements FactoryClient {
       afterPosition = read.nextPosition;
     }
     return { text: answerFromThread(items) };
+  }
+
+  /** One read-only tool of the Factory's MCP (never one that changes anything). */
+  async read(
+    owner: AssistantOwner,
+    input: { factoryId: string; tool: FactoryReadTool; args: Record<string, unknown> },
+  ): Promise<Record<string, unknown>> {
+    if (!(FACTORY_READ_TOOLS as readonly string[]).includes(input.tool)) throw new Error(`${input.tool} is not a read-only Factory tool.`);
+    return this.#callTool(owner, input.factoryId, input.tool, input.args);
   }
 
   async handOver(

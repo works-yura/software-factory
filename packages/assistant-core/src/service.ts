@@ -5,9 +5,11 @@
  * Every method takes the owner first and reads only that owner's rows: another person's (or the
  * same person's in another organization) request is simply not found.
  */
+import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
+import { nextDigestAt, isTimeZone } from './digest.ts';
 import { AssistantError } from './errors.ts';
 import type { IncomingFile } from './files.ts';
 import { ASSISTANT_FILE_MAX_BYTES, ASSISTANT_MAX_FILES_PER_MESSAGE, cleanFileName, sniffMime } from './files.ts';
@@ -17,16 +19,23 @@ import type {
   AssistantBrain,
   AssistantMemory,
   AssistantModels,
+  AssistantSkills,
   AssistantSource,
   BrainFile,
   BrainTurn,
   FactoryClient,
   FactoryGrant,
+  FactoryReadTool,
   IngestOutcome,
   RequestView,
+  SkillSummary,
+  SourceChannelInfo,
+  SourceChannelMessages,
   SourceMessage,
 } from './ports.ts';
+import { FACTORY_READ_TOOLS } from './ports.ts';
 import type { AssistantStorage, RequestPatch } from './storage.ts';
+import { createAssistantTools } from './tools.ts';
 import type {
   AssistantClearReason,
   AssistantFile,
@@ -34,10 +43,21 @@ import type {
   AssistantOwner,
   AssistantRequest,
   AssistantSettings,
+  ChannelRule,
+  DigestSettings,
+  PendingAction,
+  PendingActionKind,
   RequestStatus,
 } from './types.ts';
 import { classifyTurnFailure } from './turn-failure.ts';
-import { assertOwner, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from './types.ts';
+import {
+  assertOwner,
+  DIGEST_FREQUENCIES,
+  MAX_INSTRUCTIONS,
+  MAX_RETENTION_DAYS,
+  MAX_SKILLS,
+  MIN_RETENTION_DAYS,
+} from './types.ts';
 
 const notFound = () => new AssistantError('not_found', 'Request not found.', 404);
 
@@ -45,6 +65,44 @@ const MAX_TEXT = 20_000;
 const MAX_TOPIC = 120;
 const MAX_NOTE = 10_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The cost guards of phase 3: how much the agent's tools, rules and digests may do. */
+export interface AssistantLimits {
+  /** Model steps (tool calls and answers) in one agent turn. */
+  stepsPerTurn: number;
+  /** Factory questions channel rules may ask on their own per person per day; past it, they are proposed. */
+  autoAsksPerDay: number;
+  /** How often a Factory's side session is checked for its answer after asking. */
+  answerPollIntervalMs: number;
+  /** How long it is checked; after that the person checks by hand ("Check answer"). 0 turns the checks off. */
+  answerPollTimeoutMs: number;
+  /** Open requests one digest looks at. */
+  digestRequests: number;
+}
+
+export const DEFAULT_ASSISTANT_LIMITS: AssistantLimits = {
+  stepsPerTurn: 8,
+  autoAsksPerDay: 10,
+  answerPollIntervalMs: 20_000,
+  answerPollTimeoutMs: 15 * 60_000,
+  digestRequests: 40,
+};
+
+/** A sliding window of events per owner, in memory: a restart forgives, never overspends much. */
+class OwnerWindow {
+  readonly #events = new Map<string, number[]>();
+  allow(owner: AssistantOwner, limit: number, windowMs: number, now: number): boolean {
+    const key = `${owner.orgId}\u0000${owner.userId}`;
+    const recent = (this.#events.get(key) ?? []).filter(at => now - at < windowMs);
+    const allowed = recent.length < limit;
+    if (allowed) recent.push(now);
+    this.#events.set(key, recent);
+    return allowed;
+  }
+  forget(owner: AssistantOwner) {
+    this.#events.delete(`${owner.orgId}\u0000${owner.userId}`);
+  }
+}
 
 export interface AssistantServiceDeps {
   storage: AssistantStorage;
@@ -57,6 +115,11 @@ export interface AssistantServiceDeps {
   grant: FactoryGrant;
   /** The person's own source connections (ClickUp Chat …): disconnected first when the assistant is erased. */
   sources?: AssistantSource[];
+  /** The Factory skills catalogue the person picks skills from; without it, no skills are offered. */
+  skills?: AssistantSkills;
+  limits?: Partial<AssistantLimits>;
+  /** Waits between checks of a Factory's answer; tests pass one that does not wait. */
+  sleep?: (ms: number) => Promise<void>;
   audit: AssistantAudit;
   /** Whether bytes are still named by anything outside the assistant (Factory attachments, avatars). */
   blobReferencedElsewhere: (sha256: string) => Promise<boolean>;
@@ -107,9 +170,19 @@ export class AssistantService {
   readonly #schedule: (task: () => Promise<void>) => void;
   /** Turns of one request run one after another; the count says when the last one is done. */
   readonly #turns = new Map<string, { tail: Promise<void>; pending: number }>();
+  readonly #autoAsks = new OwnerWindow();
+  readonly #sleep: (ms: number) => Promise<void>;
+  readonly limits: AssistantLimits;
 
   constructor(deps: AssistantServiceDeps) {
     this.#deps = deps;
+    this.limits = { ...DEFAULT_ASSISTANT_LIMITS, ...deps.limits };
+    this.#sleep =
+      deps.sleep ??
+      (ms =>
+        new Promise(resolve => {
+          setTimeout(resolve, ms).unref?.();
+        }));
     this.#now = deps.now ?? (() => new Date());
     this.#schedule =
       deps.schedule ??
@@ -333,6 +406,12 @@ export class AssistantService {
       if (message.fromMe) {
         return { outcome, request: (await storage.updateRequest(owner, request.id, {}, this.#now())) ?? request };
       }
+      if (message.rule?.kind === 'digest_only') {
+        // The channel goes into the digest: kept, never a turn of its own.
+        await storage.addMessage(owner, { requestId: request.id, author: 'event', text: 'not_analysed:digest', now: this.#now() });
+        const waiting = await storage.updateRequest(owner, request.id, { status: 'waiting_me', unread: true }, this.#now());
+        return { outcome, request: waiting ?? request };
+      }
       if (!message.analyse) {
         await storage.addMessage(owner, { requestId: request.id, author: 'event', text: 'not_analysed:limit', now: this.#now() });
         const waiting = await storage.updateRequest(owner, request.id, { status: 'waiting_me', unread: true }, this.#now());
@@ -345,6 +424,8 @@ export class AssistantService {
         fromName,
         first: outcome !== 'appended',
         ...(message.where ? { where: message.where } : {}),
+        // A new request of a channel whose rule asks a Factory: asked once the agent has reported.
+        ...(message.rule?.kind === 'analyse_and_ask' && outcome !== 'appended' ? { autoAsk: message.rule.factoryId } : {}),
       });
       return { outcome, request: started };
     } catch (error) {
@@ -398,6 +479,7 @@ export class AssistantService {
       this.#now(),
     );
     if (!updated) throw notFound();
+    this.#watchAnswer(owner, id, asked.sessionId);
     return updated;
   }
 
@@ -475,6 +557,246 @@ export class AssistantService {
     return { connected: true as const, factories: await this.#factoryCall(() => this.#deps.factory.listFactories(owner)) };
   }
 
+  /** One read-only tool of a Factory's MCP, as the person (the agent's Factory tools). */
+  async factoryRead(
+    owner: AssistantOwner,
+    input: { factoryId: string; tool: FactoryReadTool; args: Record<string, unknown> },
+  ): Promise<Record<string, unknown>> {
+    if (!(FACTORY_READ_TOOLS as readonly string[]).includes(input.tool)) {
+      throw new AssistantError('not_read_only', `${input.tool} is not a read-only Factory tool.`, 400);
+    }
+    const factory = await this.#factoryRef(owner, input.factoryId);
+    return this.#factoryCall(() => this.#deps.factory.read(owner, { factoryId: factory.id, tool: input.tool, args: input.args }));
+  }
+
+  /** Whether a side session answered yet. */
+  async factorySessionStatus(owner: AssistantOwner, input: { factoryId: string; sessionId: string }) {
+    const factory = await this.#factoryRef(owner, input.factoryId);
+    const answer = await this.#factoryCall(() => this.#deps.factory.readAnswer(owner, { factoryId: factory.id, sessionId: input.sessionId }));
+    return { answered: answer.text !== null, answer: answer.text };
+  }
+
+  /** Whether a channel rule can run: a rule that asks a Factory needs one the person can reach. */
+  async checkChannelRule(owner: AssistantOwner, rule: ChannelRule): Promise<void> {
+    if (rule.kind === 'analyse_and_ask') await this.#factoryRef(owner, rule.factoryId);
+  }
+
+  // Proposed actions (phase 3): asking a Factory and handing over change something outside, so the
+  // agent only proposes them; the person's Confirm runs them.
+
+  /**
+   * Proposes a Factory action on a request: stored on it (replacing an older proposal), with an
+   * event line in the thread. Nothing runs until the person confirms.
+   */
+  async proposeAction(
+    owner: AssistantOwner,
+    id: string,
+    input: {
+      kind: PendingActionKind;
+      factoryId: string;
+      question?: string;
+      title?: string;
+      note?: string;
+      reason?: string;
+      proposedBy: 'agent' | 'rule';
+    },
+  ): Promise<PendingAction> {
+    await this.#ready();
+    const request = await this.#require(owner, id);
+    if (request.status === 'closed') throw new AssistantError('request_closed', 'This request is closed.', 409);
+    if (input.kind === 'hand_over' && request.factory?.workItemId) {
+      throw new AssistantError('already_handed_over', 'This request was already handed to a Factory.', 409);
+    }
+    const question = input.question?.trim();
+    if (input.kind === 'ask' && !question) throw new AssistantError('invalid_action', 'Asking a Factory needs a question.', 400);
+    if ((question?.length ?? 0) > 8000) throw new AssistantError('question_too_long', 'The question is longer than 8000 characters.', 400);
+    if ((input.note?.length ?? 0) > 4000) throw new AssistantError('note_too_long', 'The note is longer than 4000 characters.', 400);
+    const factory = await this.#factoryRef(owner, input.factoryId);
+    const action: PendingAction = {
+      id: randomUUID(),
+      kind: input.kind,
+      factoryId: factory.id,
+      factoryName: factory.name,
+      ...(question ? { question } : {}),
+      ...(input.title?.trim() ? { title: input.title.trim().slice(0, 512) } : {}),
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      ...(input.reason?.trim() ? { reason: input.reason.trim().slice(0, 500) } : {}),
+      proposedBy: input.proposedBy,
+      proposedAt: this.#now(),
+    };
+    await this.#deps.storage.addMessage(owner, {
+      requestId: id,
+      author: 'event',
+      text: [`proposed:${action.kind}:${factory.name}`, action.question ?? action.title ?? action.note ?? ''].filter(Boolean).join('\n'),
+      now: this.#now(),
+    });
+    const updated = await this.#deps.storage.updateRequest(owner, id, { pendingAction: action, unread: true }, this.#now());
+    if (!updated) throw notFound();
+    return action;
+  }
+
+  /**
+   * The person confirms the proposed action: it runs now, as the person. The action is taken off
+   * the request atomically first, so it runs at most once; if it fails, it goes back for a retry.
+   */
+  async confirmAction(owner: AssistantOwner, id: string, actionId: string): Promise<AssistantRequest> {
+    await this.#ready();
+    await this.#require(owner, id);
+    const action = await this.#deps.storage.takePendingAction(owner, id, actionId, this.#now());
+    if (!action) throw new AssistantError('no_pending_action', 'There is no such proposed action on this request any more.', 409);
+    try {
+      const done =
+        action.kind === 'ask'
+          ? await this.askFactory(owner, id, { factoryId: action.factoryId, question: action.question ?? '' })
+          : await this.handOver(owner, id, {
+              factoryId: action.factoryId,
+              ...(action.title ? { title: action.title } : {}),
+              ...(action.note ? { note: action.note } : {}),
+            });
+      await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text: `confirmed:${action.kind}`, now: this.#now() });
+      return (await this.#deps.storage.getRequest(owner, id)) ?? done;
+    } catch (error) {
+      await this.#deps.storage.updateRequest(owner, id, { pendingAction: action }, this.#now()).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /** The person cancels the proposed action: nothing runs. */
+  async cancelAction(owner: AssistantOwner, id: string, actionId: string): Promise<AssistantRequest> {
+    await this.#ready();
+    await this.#require(owner, id);
+    const action = await this.#deps.storage.takePendingAction(owner, id, actionId, this.#now());
+    if (!action) throw new AssistantError('no_pending_action', 'There is no such proposed action on this request any more.', 409);
+    await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text: `cancelled:${action.kind}`, now: this.#now() });
+    return this.#require(owner, id);
+  }
+
+  // The agent's reads (tools): the owner's own data only.
+
+  /** The owner's requests by text in the topic or sender, and/or status; newest activity first. */
+  async searchRequests(owner: AssistantOwner, input: { query?: string; status?: RequestStatus; limit?: number }): Promise<AssistantRequest[]> {
+    await this.#ready();
+    const text = input.query?.trim().toLowerCase();
+    return (await this.#deps.storage.listRequests(owner))
+      .filter(request => !input.status || request.status === input.status)
+      .filter(request => !text || request.topic.toLowerCase().includes(text) || (request.fromName ?? '').toLowerCase().includes(text))
+      .slice(0, Math.min(Math.max(input.limit ?? 10, 1), 50));
+  }
+
+  /** A request with its latest thread entries, for the agent: unlike opening it, it stays unread. */
+  async readThread(owner: AssistantOwner, id: string, input: { lastMessages?: number } = {}): Promise<RequestView> {
+    await this.#ready();
+    const request = await this.#require(owner, id);
+    const messages = await this.#deps.storage.listMessages(owner, id);
+    return {
+      request,
+      messages: messages.slice(-Math.min(Math.max(input.lastMessages ?? 15, 1), 50)),
+      files: await this.#deps.storage.listFiles(owner, id),
+    };
+  }
+
+  /** A note the agent keeps for the person (shown as the agent's). */
+  async createAgentNote(owner: AssistantOwner, input: { text: string; requestId?: string | null }): Promise<AssistantNote> {
+    await this.#ready();
+    const text = this.#noteText(input.text);
+    const requestId = input.requestId ?? null;
+    if (requestId) await this.#require(owner, requestId);
+    return this.#deps.storage.createNote(owner, { text, requestId, author: 'agent', now: this.#now() });
+  }
+
+  /** The chats the person turned on, in every source that can list them. */
+  async listEnabledChannels(owner: AssistantOwner): Promise<SourceChannelInfo[]> {
+    const channels: SourceChannelInfo[] = [];
+    for (const source of this.#deps.sources ?? []) {
+      if (source.enabledChannels) channels.push(...(await source.enabledChannels(owner)));
+    }
+    return channels;
+  }
+
+  /** Recent messages of one chat the person turned on, read now by its source. */
+  async readSourceChannel(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages> {
+    const platform = input.ref.split(':')[0];
+    const source = (this.#deps.sources ?? []).find(candidate => candidate.platform === platform);
+    if (!source?.readChannel) throw new AssistantError('not_found', 'No such chat among the ones you turned on.', 404);
+    return source.readChannel(owner, input);
+  }
+
+  // Skills
+
+  /** The Factory skills catalogue the person picks from. */
+  async skillsCatalogue(owner: AssistantOwner): Promise<SkillSummary[]> {
+    if (!this.#deps.skills) return [];
+    return this.#deps.skills.list(owner);
+  }
+
+  /** A skill's instructions, only when the person picked it. */
+  async readSkill(owner: AssistantOwner, name: string) {
+    const settings = await this.getSettings(owner);
+    if (!settings.skills.includes(name) || !this.#deps.skills) return null;
+    return this.#deps.skills.read(owner, name);
+  }
+
+  // Digests
+
+  /** Writes the digest of every owner whose digest is due (at most `limit`); how many were due. */
+  async runDueDigests(limit = 20): Promise<number> {
+    await this.#ready();
+    const due = await this.#deps.storage.dueDigests(this.#now(), limit);
+    for (const { owner } of due) {
+      try {
+        await this.writeDigest(owner);
+      } catch (error) {
+        // Loud, without content; the next one is scheduled anyway so a broken one does not spin.
+        console.error(`[assistant] The digest of ${owner.orgId}/${owner.userId} failed:`, errorText(error));
+        const settings = await this.#deps.storage.getSettings(owner);
+        await this.#deps.storage.patchSettings(owner, { digestNextAt: nextDigestAt(this.#now(), settings.digest) }, this.#now());
+      }
+    }
+    return due.length;
+  }
+
+  /**
+   * One digest now: a request (source `digest`) listing what is open — topic, sender, status, the
+   * latest words, which requests a digest-only channel brought — for the agent to sum up. Nothing
+   * open, no request. The next one is scheduled either way.
+   */
+  async writeDigest(owner: AssistantOwner): Promise<AssistantRequest | null> {
+    await this.#ready();
+    const { storage } = this.#deps;
+    const settings = await storage.getSettings(owner);
+    const now = this.#now();
+    const open = (await storage.listRequests(owner))
+      .filter(request => request.source !== 'digest' && request.status !== 'closed')
+      .slice(0, this.limits.digestRequests);
+    await storage.patchSettings(owner, { digestLastAt: now, digestNextAt: nextDigestAt(now, settings.digest) }, now);
+    if (open.length === 0) return null;
+    const lines: string[] = [];
+    for (const request of open) {
+      const messages = await storage.listMessages(owner, request.id);
+      const latest = [...messages].reverse().find(message => (message.author === 'source' || message.author === 'person') && message.text);
+      const digestOnly = messages.some(message => message.author === 'event' && message.text === 'not_analysed:digest');
+      lines.push(
+        [
+          `- [${request.status}] ${request.topic}`,
+          request.fromName ? ` — from ${request.fromName}` : '',
+          digestOnly ? ' (digest-only channel, not analysed yet)' : '',
+          request.pendingAction ? ` (waits for the person to confirm: ${request.pendingAction.kind} ${request.pendingAction.factoryName})` : '',
+          latest ? `\n  "${latest.text.replace(/\s+/g, ' ').slice(0, 300)}"` : '',
+        ].join(''),
+      );
+    }
+    const label = settings.digest.frequency === 'hourly' ? 'Hourly digest' : 'Daily digest';
+    const request = await storage.createRequest(owner, {
+      topic: `${label} · ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+      fromName: null,
+      source: 'digest',
+      sourceUrl: null,
+      now,
+    });
+    await storage.addMessage(owner, { requestId: request.id, author: 'event', text: `digest:${open.length}`, now });
+    return this.#startTurn(owner, request, { author: 'digest', text: lines.join('\n'), files: [] });
+  }
+
   // Notes
 
   async listNotes(owner: AssistantOwner): Promise<AssistantNote[]> {
@@ -509,8 +831,59 @@ export class AssistantService {
     return this.#deps.storage.getSettings(owner);
   }
 
-  async patchSettings(owner: AssistantOwner, patch: { modelId?: string | null; retentionDays?: number }): Promise<AssistantSettings> {
+  /** The digest schedule: when the last one was written, when the next is due. */
+  async digestSchedule(owner: AssistantOwner): Promise<{ lastAt: Date | null; nextAt: Date | null }> {
     await this.#ready();
+    const state = await this.#deps.storage.getDigestState(owner);
+    return { lastAt: state.lastAt, nextAt: state.nextAt };
+  }
+
+  async patchSettings(
+    owner: AssistantOwner,
+    patch: {
+      modelId?: string | null;
+      retentionDays?: number;
+      instructions?: string;
+      skills?: string[];
+      digest?: Partial<DigestSettings>;
+    },
+  ): Promise<AssistantSettings> {
+    await this.#ready();
+    const stored: Parameters<AssistantStorage['patchSettings']>[1] = {};
+    if (patch.modelId !== undefined) stored.modelId = patch.modelId;
+    if (patch.retentionDays !== undefined) stored.retentionDays = patch.retentionDays;
+    if (patch.instructions !== undefined) {
+      const instructions = patch.instructions.trim();
+      if (instructions.length > MAX_INSTRUCTIONS) {
+        throw new AssistantError('instructions_too_long', `Instructions are at most ${MAX_INSTRUCTIONS} characters.`, 400);
+      }
+      stored.instructions = instructions;
+    }
+    if (patch.skills !== undefined) {
+      const names = [...new Set(patch.skills.map(name => name.trim()).filter(Boolean))];
+      if (names.length > MAX_SKILLS) throw new AssistantError('too_many_skills', `Pick at most ${MAX_SKILLS} skills.`, 400);
+      if (names.length > 0) {
+        const catalogue = new Set((await this.skillsCatalogue(owner)).map(skill => skill.name));
+        const unknown = names.filter(name => !catalogue.has(name));
+        if (unknown.length) throw new AssistantError('unknown_skill', `There is no skill ${unknown.join(', ')} in the catalogue.`, 400);
+      }
+      stored.skills = names;
+    }
+    if (patch.digest !== undefined) {
+      const current = (await this.#deps.storage.getSettings(owner)).digest;
+      const digest: DigestSettings = { ...current, ...patch.digest };
+      if (!(DIGEST_FREQUENCIES as readonly string[]).includes(digest.frequency)) {
+        throw new AssistantError('invalid_digest', `The digest is ${DIGEST_FREQUENCIES.join(', ')}.`, 400);
+      }
+      if (!Number.isInteger(digest.hour) || digest.hour < 0 || digest.hour > 23) {
+        throw new AssistantError('invalid_digest', 'The digest hour is 0–23.', 400);
+      }
+      if (typeof digest.timeZone !== 'string' || !isTimeZone(digest.timeZone)) {
+        throw new AssistantError('invalid_digest', `Unknown time zone ${String(digest.timeZone)}.`, 400);
+      }
+      stored.digest = digest;
+      stored.digestNextAt = nextDigestAt(this.#now(), digest);
+    }
     if (patch.retentionDays !== undefined) {
       if (!Number.isInteger(patch.retentionDays) || patch.retentionDays < MIN_RETENTION_DAYS || patch.retentionDays > MAX_RETENTION_DAYS) {
         throw new AssistantError(
@@ -526,7 +899,7 @@ export class AssistantService {
         throw new AssistantError('unknown_model', `The organization has no model ${patch.modelId}.`, 400);
       }
     }
-    return this.#deps.storage.patchSettings(owner, patch, this.#now());
+    return this.#deps.storage.patchSettings(owner, stored, this.#now());
   }
 
   // Files
@@ -558,6 +931,7 @@ export class AssistantService {
     await this.#deps.grant.revoke(owner);
     for (const source of this.#deps.sources ?? []) await source.disconnect(owner);
     await this.#deps.memory.forget(owner);
+    this.#autoAsks.forget(owner);
     await storage.deleteOwnerRows(owner);
     for (const file of files) await storage.deleteFile(owner, file.id);
     await this.#dropUnreferenced(files);
@@ -675,12 +1049,14 @@ export class AssistantService {
     owner: AssistantOwner,
     request: AssistantRequest,
     input: {
-      author: 'person' | 'factory' | 'source';
+      author: 'person' | 'factory' | 'source' | 'digest';
       text: string;
       files: Array<AssistantFile & { bytes: Uint8Array }>;
       fromName?: string | null;
       first?: boolean;
       where?: string;
+      /** A channel rule asks this Factory once the agent has reported. */
+      autoAsk?: string;
     },
   ): Promise<AssistantRequest> {
     const started = await this.#deps.storage.updateRequest(owner, request.id, { analysing: true, lastError: null }, this.#now());
@@ -703,19 +1079,39 @@ export class AssistantService {
       return chain.pending === 0;
     };
     this.#schedule(() => {
-      const run = chain.tail.then(() => this.#runTurn(owner, started, turn, Boolean(input.first), finish));
+      const run = chain.tail.then(() => this.#runTurn(owner, started, turn, Boolean(input.first), finish, input.autoAsk));
       chain.tail = run;
       return run;
     });
     return started;
   }
 
-  async #runTurn(owner: AssistantOwner, request: AssistantRequest, input: BrainTurn['input'], first: boolean, finish: () => boolean) {
+  async #runTurn(
+    owner: AssistantOwner,
+    request: AssistantRequest,
+    input: BrainTurn['input'],
+    first: boolean,
+    finish: () => boolean,
+    autoAsk?: string,
+  ) {
+    let reported: string | undefined;
     try {
       const settings = await this.#deps.storage.getSettings(owner);
       const before = (await this.#deps.storage.getRequest(owner, request.id)) ?? request;
-      const answer = await this.#deps.brain.respond({ owner, request: before, input, modelId: settings.modelId, first });
+      const skills = await this.#pickedSkills(owner, settings.skills);
+      const answer = await this.#deps.brain.respond({
+        owner,
+        request: before,
+        input,
+        modelId: settings.modelId,
+        first,
+        ...(settings.instructions ? { instructions: settings.instructions } : {}),
+        ...(skills.length ? { skills } : {}),
+        tools: createAssistantTools(this, { owner, requestId: request.id, skills }),
+        maxSteps: this.limits.stepsPerTurn,
+      });
       await this.#deps.storage.addMessage(owner, { requestId: request.id, author: 'agent', text: answer.text, now: this.#now() });
+      reported = answer.text;
       const last = finish();
       const current = await this.#deps.storage.getRequest(owner, request.id);
       if (!current) return;
@@ -746,12 +1142,91 @@ export class AssistantService {
         )
         .catch(stored => console.error(`[assistant] Could not record the failure on request ${request.id}:`, stored));
     }
+    if (autoAsk) await this.#autoAsk(owner, request.id, autoAsk, reported);
   }
 
-  /** The request in words for a Factory: what was asked, by whom, the original link. */
+  /** The person's picked skills that the catalogue still has (a removed skill is dropped quietly from the turn). */
+  async #pickedSkills(owner: AssistantOwner, names: string[]): Promise<SkillSummary[]> {
+    if (names.length === 0 || !this.#deps.skills) return [];
+    try {
+      const catalogue = await this.#deps.skills.list(owner);
+      return catalogue.filter(skill => names.includes(skill.name));
+    } catch (error) {
+      console.error('[assistant] The skills catalogue could not be read; the turn runs without skills:', errorText(error));
+      return [];
+    }
+  }
+
+  /**
+   * A channel rule's own question to a Factory (`analyse_and_ask`), after the agent's report. It
+   * starts a side session, which costs, so it runs only for channels the person opted in, within
+   * the daily limit; past the limit it becomes a proposal the person confirms, never a silent run.
+   * A Factory that cannot be reached leaves an `auto_ask_failed` line in the thread.
+   */
+  async #autoAsk(owner: AssistantOwner, id: string, factoryId: string, report: string | undefined): Promise<void> {
+    try {
+      const request = await this.#deps.storage.getRequest(owner, id);
+      if (!request || request.status === 'closed' || request.factory?.sessionId) return;
+      const summary = await this.#summary(owner, request);
+      const question = [
+        summary,
+        ...(report ? [`The assistant's first reading:\n${report}`] : []),
+        'What is the answer, or the next step?',
+      ]
+        .join('\n\n')
+        .slice(0, 8000);
+      const allowed = this.#autoAsks.allow(owner, this.limits.autoAsksPerDay, DAY_MS, this.#now().getTime());
+      if (!allowed) {
+        await this.proposeAction(owner, id, {
+          kind: 'ask',
+          factoryId,
+          question,
+          reason: `The channel's rule asks this Factory, but today's limit of ${this.limits.autoAsksPerDay} automatic questions is spent.`,
+          proposedBy: 'rule',
+        });
+        return;
+      }
+      await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text: 'rule:analyse_and_ask', now: this.#now() });
+      await this.askFactory(owner, id, { factoryId, question });
+    } catch (error) {
+      console.error(`[assistant] The channel rule could not ask a Factory on request ${id}:`, errorText(error));
+      await this.#deps.storage
+        .addMessage(owner, { requestId: id, author: 'event', text: `auto_ask_failed\n${errorText(error)}`, now: this.#now() })
+        .catch(() => undefined);
+    }
+  }
+
+  /**
+   * After a question to a Factory: checks its side session every `answerPollIntervalMs` until it
+   * answered (the answer goes into the thread and the agent concludes) or `answerPollTimeoutMs`
+   * passed (an event says so; "Check answer" still works). Stops once the request no longer waits
+   * on that session.
+   */
+  #watchAnswer(owner: AssistantOwner, id: string, sessionId: string): void {
+    if (this.limits.answerPollTimeoutMs <= 0) return;
+    const attempts = Math.max(1, Math.ceil(this.limits.answerPollTimeoutMs / this.limits.answerPollIntervalMs));
+    this.#schedule(async () => {
+      try {
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          await this.#sleep(this.limits.answerPollIntervalMs);
+          const request = await this.#deps.storage.getRequest(owner, id);
+          if (!request || request.status !== 'waiting_factory' || request.factory?.sessionId !== sessionId) return;
+          const checked = await this.checkFactoryAnswer(owner, id);
+          if (checked.answered) return;
+        }
+        await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text: 'answer_timeout', now: this.#now() });
+      } catch (error) {
+        console.error(`[assistant] Waiting for the Factory's answer on request ${id} stopped:`, errorText(error));
+      }
+    });
+  }
+
+  /** The request in words for a Factory: what was asked (by the person, or read from a source), by whom, the original link. */
   async #summary(owner: AssistantOwner, request: AssistantRequest): Promise<string> {
     const messages = await this.#deps.storage.listMessages(owner, request.id);
-    const said = messages.filter(message => message.author === 'person' && message.text).map(message => message.text);
+    const said = messages
+      .filter(message => (message.author === 'person' || message.author === 'source') && message.text)
+      .map(message => (message.author === 'source' && message.fromName ? `${message.fromName}: ${message.text}` : message.text));
     const files = await this.#deps.storage.listFiles(owner, request.id);
     return [
       ...said,

@@ -1116,6 +1116,7 @@ export class MastraFactory {
           audit: auditStorage,
           publicOrigin,
           authProvider: auth,
+          codeSkills: this.#skills,
         })
       : undefined;
     const workItemsInitError = storage.domainInitError('work-items');

@@ -13,9 +13,17 @@ import {
   createMastraAssistantBrain,
   FactoryAccess,
   McpFactoryClient,
+  startAssistantDigests,
   startAssistantRetention,
 } from '@factory/assistant-core';
-import type { AssistantModelResolver, AssistantModels, AssistantStorage, RetentionJob } from '@factory/assistant-core';
+import type {
+  AssistantModelResolver,
+  AssistantModels,
+  AssistantSkills,
+  AssistantStorage,
+  DigestJob,
+  RetentionJob,
+} from '@factory/assistant-core';
 import { buildClickUpSourceRoutes, ClickUpChatSource, startClickUpPolling } from '@factory/assistant-source-clickup';
 import type { ClickUpPolling, ClickUpSourceStorage, OrgClickUpReader } from '@factory/assistant-source-clickup';
 import { clickUpMetadataOf, clickUpTokenOf } from '@factory/integration-clickup';
@@ -27,6 +35,7 @@ import {
 } from '@factory/credentials';
 import type { ModelCatalog } from '@factory/credentials';
 import type { RouteAuth } from '@factory/http';
+import { listFactorySkills } from '@factory/harness-mastra';
 import type {
   AttachmentBlobStore,
   ChannelIdentityStorage,
@@ -39,6 +48,7 @@ import type {
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 
 /** The auth provider's hooks the assistant's cleanup listens to (`@factory/auth-better-auth`). */
@@ -63,6 +73,13 @@ export interface FactoryAssistantOptions {
   clickupStorage?: ClickUpSourceStorage;
   /** Polling of ClickUp; tests and servers without a background loop turn it off. */
   pollClickUp?: boolean;
+  /** The digest timer (phase 3); tests turn it off and tick by hand. */
+  runDigests?: boolean;
+  /**
+   * The app's own skills (`MastraFactory({ skills })`): with the bundled skills and the app's
+   * `factory-skills/` folder they make the catalogue a person picks the assistant's skills from.
+   */
+  codeSkills?: readonly InlineSkill[];
   /** The organization's ClickUp connection, offered to the one person whose own account its token is. */
   orgClickUp?: OrgClickUpReader;
   mastraStorage: MastraCompositeStore;
@@ -201,6 +218,22 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     connected: async owner => (await access.status(owner)).connected,
   });
 
+  // The Factory skills catalogue (phase 3): the same SKILL.md files Factory sessions load — bundled,
+  // the app's `factory-skills/` folder, `MastraFactory({ skills })` — read through the same loader.
+  // Skills are deployment-wide, with edits per Factory project; the assistant belongs to no project,
+  // so it gets the originals (no project's edits). Skills that do not load are not offered.
+  const skills: AssistantSkills = {
+    async list() {
+      return (await listFactorySkills(options.codeSkills ?? []))
+        .filter(skill => !skill.error)
+        .map(skill => ({ name: skill.name, description: skill.description }));
+    },
+    async read(_owner, name) {
+      const skill = (await listFactorySkills(options.codeSkills ?? [])).find(candidate => candidate.name === name && !candidate.error);
+      return skill ? { name: skill.name, description: skill.description, instructions: skill.content } : null;
+    },
+  };
+
   // ClickUp Chat, read with the person's own personal token (ADR-0051 phase 2). The core takes its
   // messages in; the source is erased first when the assistant is.
   let ingest: AssistantService | undefined;
@@ -213,12 +246,14 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
           ingestSourceMessage: (owner, message) => ingest!.ingestSourceMessage(owner, message),
           hasOpenSourceRequest: (owner, key) => ingest!.hasOpenSourceRequest(owner, key),
         },
+        checkRule: (owner, rule) => ingest!.checkChannelRule(owner, rule),
       })
     : undefined;
 
   const service = new AssistantService({
     storage: options.storage,
     ...(clickup ? { sources: [clickup] } : {}),
+    skills,
     ...(options.blobs ? { blobs: options.blobs } : {}),
     brain: createMastraAssistantBrain({ memory: createAssistantMemory(options.mastraStorage), models: resolver }),
     memory: createAssistantMemoryEraser(options.mastraStorage),
@@ -255,6 +290,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
 
   const retention: RetentionJob = startAssistantRetention(service);
   const polling: ClickUpPolling | undefined = clickup && options.pollClickUp !== false ? startClickUpPolling(clickup) : undefined;
+  const digests: DigestJob | undefined = options.runDigests !== false ? startAssistantDigests(service) : undefined;
 
   return {
     service,
@@ -269,6 +305,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     stop() {
       retention.stop();
       polling?.stop();
+      digests?.stop();
     },
   };
 }

@@ -3,8 +3,9 @@
  * offers is recorded in `docs/features/assistant/clickup-chat.md`; in short:
  *
  * - v2 `GET /user` (who the token is) and `GET /team` (workspaces with their members);
- * - v3 `GET /workspaces/{ws}/chat/channels` (channels, DMs and group DMs as one list, by type),
- *   `…/channels/{id}/messages` and `…/messages/{id}/replies` (newest first, cursor-paged, no
+ * - v3 `GET /workspaces/{ws}/chat/channels` (channels, DMs and group DMs as one list, by type;
+ *   `is_follower=true` for the ones in the person's sidebar), `…/channels/{id}/members` (who is in
+ *   a DM: its only names), `…/channels/{id}/messages` and `…/messages/{id}/replies` (newest first, cursor-paged, no
  *   "since" filter), `…/messages/{id}/tagged_users` (mentions);
  * - no chat webhooks, no attachment field on chat messages.
  *
@@ -50,6 +51,25 @@ export interface ClickUpWorkspaceInfo {
   name: string;
   /** Member names by user id, for naming who wrote a message. */
   members: Map<string, string>;
+  /** Member profile pictures by user id, where ClickUp has one. */
+  avatars: Map<string, string>;
+}
+
+/**
+ * Where a location channel lives: ClickUp's location type numbers (as its Docs API names them —
+ * 4 Space, 5 Folder, 6 List). The chat spec only says `parent.type` is a number; anything else is
+ * a plain channel.
+ */
+export type ChannelLocationKind = 'space' | 'folder' | 'list';
+
+export function locationKindOf(parentType: number | null): ChannelLocationKind | null {
+  return parentType === 4 ? 'space' : parentType === 5 ? 'folder' : parentType === 6 ? 'list' : null;
+}
+
+/** A person in a channel (`ChatSimpleUser`). */
+export interface ChatMember {
+  id: string;
+  name: string;
 }
 
 export type ChatChannelType = 'CHANNEL' | 'DM' | 'GROUP_DM';
@@ -60,6 +80,11 @@ export interface ChatChannel {
   type: ChatChannelType;
   workspaceId: string;
   archived: boolean;
+  visibility: 'PUBLIC' | 'PRIVATE' | null;
+  /** The location (Space, Folder, List) a location channel belongs to; `null` for a plain channel or a DM. */
+  location: { kind: ChannelLocationKind; id: string } | null;
+  /** The person hid this DM from their sidebar. */
+  hidden: boolean;
 }
 
 export interface ChatMessage {
@@ -127,7 +152,16 @@ function toChannel(raw: unknown, workspaceId: string): ChatChannel | null {
     type: type === 'DM' || type === 'GROUP_DM' ? type : 'CHANNEL',
     workspaceId: str(row.workspace_id) || workspaceId,
     archived: row.archived === true,
+    visibility: row.visibility === 'PUBLIC' || row.visibility === 'PRIVATE' ? row.visibility : null,
+    location: locationOf(record(row.parent)),
+    hidden: row.is_hidden === true,
   };
+}
+
+function locationOf(parent: Record<string, unknown>): ChatChannel['location'] {
+  const id = str(parent.id);
+  const kind = locationKindOf(typeof parent.type === 'number' ? parent.type : Number(parent.type));
+  return id && kind ? { kind, id } : null;
 }
 
 function toMessage(raw: unknown, channelId: string): ChatMessage | null {
@@ -185,24 +219,62 @@ export class ClickUpChatClient {
       const id = str(team.id);
       if (!id) return [];
       const members = new Map<string, string>();
+      const avatars = new Map<string, string>();
       for (const member of array(team.members)) {
         const user = record(record(member).user);
         const userId = str(user.id);
-        if (userId) members.set(userId, str(user.username) || str(user.email) || userId);
+        if (!userId) continue;
+        members.set(userId, str(user.username) || str(user.email) || userId);
+        const picture = str(user.profilePicture);
+        if (/^https:\/\//.test(picture)) avatars.set(userId, picture);
       }
-      return [{ id, name: str(team.name) || id, members }];
+      return [{ id, name: str(team.name) || id, members, avatars }];
     });
   }
 
-  /** v3: one page of the channels, DMs and group DMs the person is in. */
-  async channels(workspaceId: string, input: { cursor?: string | null; limit?: number } = {}): Promise<Page<ChatChannel>> {
-    const query = new URLSearchParams({ limit: String(input.limit ?? 100), is_follower: 'false' });
+  /**
+   * v3: one page of the channels, DMs and group DMs the person can see; with `following`, only the
+   * ones they follow (what their ClickUp sidebar shows).
+   */
+  async channels(
+    workspaceId: string,
+    input: { cursor?: string | null; limit?: number; following?: boolean } = {},
+  ): Promise<Page<ChatChannel>> {
+    const query = new URLSearchParams({ limit: String(input.limit ?? 100), is_follower: input.following ? 'true' : 'false' });
     if (input.cursor) query.set('cursor', input.cursor);
     const body = await this.#get(`/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/channels?${query}`);
     return {
       items: array(body.data).flatMap(raw => toChannel(raw, workspaceId) ?? []),
       nextCursor: str(body.next_cursor) || null,
     };
+  }
+
+  /** v3: the people in a channel (for a DM, the only way to its names); the first page. */
+  async channelMembers(workspaceId: string, channelId: string): Promise<ChatMember[]> {
+    const body = await this.#get(
+      `/api/v3/workspaces/${encodeURIComponent(workspaceId)}/chat/channels/${encodeURIComponent(channelId)}/members?limit=100`,
+    );
+    return array(body.data).flatMap(raw => {
+      const user = record(raw);
+      const id = str(user.id);
+      return id ? [{ id, name: str(user.name) || str(user.username) || str(user.email) || id }] : [];
+    });
+  }
+
+  /**
+   * v2: the path of a location (names, outermost first): a List → Space › Folder › List (a
+   * folderless list's hidden folder is left out), a Folder → Space › Folder, a Space → Space.
+   */
+  async locationPath(kind: ChannelLocationKind, id: string): Promise<string[]> {
+    const path = `/api/v2/${kind}/${encodeURIComponent(id)}`;
+    const body = await this.#get(path);
+    const name = str(body.name);
+    if (kind === 'space') return [name].filter(Boolean);
+    const space = str(record(body.space).name);
+    if (kind === 'folder') return [space, name].filter(Boolean);
+    const folder = record(body.folder);
+    const folderName = folder.hidden === true ? '' : str(folder.name);
+    return [space, folderName, name].filter(Boolean);
   }
 
   /** v3: one page of a channel's top-level messages, newest first. */

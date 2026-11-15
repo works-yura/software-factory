@@ -50,6 +50,9 @@ function build(extra: Partial<ConstructorParameters<typeof AssistantService>[0]>
     schedule: task => {
       pending.push(task());
     },
+    // The phase-1 tests check the answer by hand; the phase-3 tests turn the background checks on.
+    limits: { answerPollTimeoutMs: 0 },
+    sleep: async () => undefined,
     ...extra,
   });
 }
@@ -288,14 +291,14 @@ describe('Factory', () => {
 
 describe('settings', () => {
   it('keeps 30 days by default and only the organization’s models', async () => {
-    expect(await service.getSettings(ADA)).toEqual({ modelId: null, retentionDays: 30 });
+    expect(await service.getSettings(ADA)).toMatchObject({ modelId: null, retentionDays: 30, instructions: '', skills: [] });
     await expect(service.patchSettings(ADA, { retentionDays: 0 })).rejects.toMatchObject({ code: 'invalid_retention' });
     await expect(service.patchSettings(ADA, { modelId: 'openai/gpt-x' })).rejects.toMatchObject({ code: 'unknown_model' });
-    expect(await service.patchSettings(ADA, { modelId: 'anthropic/claude-sonnet-4-5', retentionDays: 7 })).toEqual({
+    expect(await service.patchSettings(ADA, { modelId: 'anthropic/claude-sonnet-4-5', retentionDays: 7 })).toMatchObject({
       modelId: 'anthropic/claude-sonnet-4-5',
       retentionDays: 7,
     });
-    expect(await service.getSettings(BOB)).toEqual({ modelId: null, retentionDays: 30 });
+    expect(await service.getSettings(BOB)).toMatchObject({ modelId: null, retentionDays: 30, instructions: '', skills: [] });
     // The agent runs on the chosen model.
     const created = await service.createRequest(ADA, { text: 'q' });
     await settle();
@@ -341,7 +344,7 @@ describe('erasing an assistant', () => {
     expect(await stat(tempRoot)).toBeTruthy();
     expect(audits).toEqual([{ orgId: 'org-a', userId: 'ada', actorId: 'admin-1', reason: 'member_removed', counts: { requests: 1, files: 1 } }]);
     expect(JSON.stringify(audits)).not.toContain('private words');
-    expect(await storage.getSettings(ADA)).toEqual({ modelId: null, retentionDays: 30 });
+    expect(await storage.getSettings(ADA)).toMatchObject({ modelId: null, retentionDays: 30, instructions: '', skills: [] });
     expect(blobs.blobs.size).toBe(0);
   });
 

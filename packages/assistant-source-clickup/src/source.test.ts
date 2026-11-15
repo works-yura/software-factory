@@ -28,6 +28,7 @@ let pending: Array<Promise<void>>;
 let now: number;
 let service: AssistantService;
 let source: ClickUpChatSource;
+let factory: FakeFactory;
 
 function build(limits: Partial<ClickUpPollLimits> = {}, orgClickUp?: OrgClickUpReader) {
   source = new ClickUpChatSource({
@@ -37,9 +38,10 @@ function build(limits: Partial<ClickUpPollLimits> = {}, orgClickUp?: OrgClickUpR
     ingest: { ingestSourceMessage: (o, m) => service.ingestSourceMessage(o, m), hasOpenSourceRequest: (o, k) => service.hasOpenSourceRequest(o, k) },
     client: options => new ClickUpChatClient({ ...options, fetch: clickup.fetch }),
     limits,
+    checkRule: (owner, rule) => service.checkChannelRule(owner, rule),
     now: () => new Date(now),
   });
-  const factory = new FakeFactory();
+  factory = new FakeFactory();
   service = new AssistantService({
     storage: core,
     blobs,
@@ -55,6 +57,8 @@ function build(limits: Partial<ClickUpPollLimits> = {}, orgClickUp?: OrgClickUpR
     schedule: task => {
       pending.push(task());
     },
+    // The answer is checked by hand here; the background checks are the core's tests.
+    limits: { answerPollTimeoutMs: 0 },
   });
 }
 
@@ -186,6 +190,18 @@ describe('the organization’s ClickUp connection', () => {
     now += 60_000;
     await poll();
     expect(await source.view(ADA)).toMatchObject({ status: 'rejected', lastError: ORG_CONNECTION_GONE });
+  });
+
+  it('the agent’s on-demand read and channel rules work on the organization’s connection too', async () => {
+    await source.connectOrg(ADA);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch' });
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'digest_only' } });
+    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'is checkout fixed?', date: T0 + 5000 });
+    const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
+    expect(read.messages).toMatchObject([{ id: 'm1', from: 'Olena' }]);
+    expect(read.channel.rule).toEqual({ kind: 'digest_only' });
+    org = null;
+    await expect(source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` })).rejects.toMatchObject({ code: 'not_connected' });
   });
 
   it('keeps the personal-token path', async () => {
@@ -473,5 +489,187 @@ describe('the client', () => {
     expect(fileLinks('![a](https://app.clickup.com/9001/v/l/abc) ![b](https://x.clickup-attachments.com/f/b.pdf)')).toEqual([
       { name: 'b', url: 'https://x.clickup-attachments.com/f/b.pdf' },
     ]);
+  });
+});
+
+describe('phase 3: channel rules and reading on demand', () => {
+  it('a rule is set by the person, shown in the view; asking a Factory needs one they reach', async () => {
+    await source.connect(ADA, clickup.token);
+    expect((await source.view(ADA)).channels.every(channel => channel.rule === 'analyse')).toBe(true);
+    await expect(
+      source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } }),
+    ).rejects.toMatchObject({ code: 'factory_not_connected' });
+    factory.connect(ADA);
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } });
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-general', rule: { kind: 'digest_only' } });
+    const view = await source.view(ADA);
+    expect(view.channels.map(channel => [channel.name, channel.mode, channel.rule])).toEqual([
+      ['Olena', 'addressed', 'analyse'],
+      ['general', 'ignore', 'digest_only'],
+      ['support', 'watch', 'analyse_and_ask:f-1'],
+    ]);
+    // Bob's channels are untouched.
+    await source.connect(BOB, clickup.token);
+    expect((await source.view(BOB)).channels.every(channel => channel.rule === 'analyse')).toBe(true);
+  });
+
+  it('digest_only: a new message becomes a request without an agent turn or a spent turn', async () => {
+    await connectAndWatch('ch-general');
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-general', rule: { kind: 'digest_only' } });
+    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'FYI: deploy at 5', date: T0 + 5000 });
+    now += 60_000;
+    await poll();
+    const [request] = await core.listRequests(ADA);
+    expect(request).toMatchObject({ status: 'waiting_me', fromName: 'Olena' });
+    expect(brain.turns).toEqual([]);
+    expect((await core.listMessages(ADA, request!.id)).map(message => message.text)).toContain('not_analysed:digest');
+  });
+
+  it('analyse_and_ask: the channel’s Factory is asked after the report', async () => {
+    factory.connect(ADA);
+    await connectAndWatch('ch-support');
+    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } });
+    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'Checkout fails for client X', date: T0 + 5000 });
+    now += 60_000;
+    await poll();
+    expect(factory.asked).toHaveLength(1);
+    expect(factory.asked[0]!.question).toContain('Checkout fails for client X');
+    expect((await core.listRequests(ADA))[0]!.status).toBe('waiting_factory');
+  });
+
+  it('the agent reads only chats its owner turned on, within the read budget', async () => {
+    await source.connect(ADA, clickup.token);
+    await source.connect(BOB, clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch' });
+    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'is checkout fixed?', date: T0 + 5000 });
+    clickup.post({ id: 'm2', channel: 'ch-general', user: '7', content: 'lunch?', date: T0 + 6000 });
+
+    expect((await source.enabledChannels(ADA)).map(channel => channel.ref).sort()).toEqual([`clickup:${WS}:ch-support`, `clickup:${WS}:dm-olena`]);
+    clickup.calls.length = 0;
+    const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
+    expect(read.messages).toMatchObject([{ id: 'm1', from: 'Olena', text: 'is checkout fixed?' }]);
+    expect(clickup.calls.length).toBeLessThanOrEqual(source.limits.callsPerRead);
+
+    // Off for Ada, and Bob never turned support on: refused, nothing read.
+    clickup.calls.length = 0;
+    await expect(source.readChannel(ADA, { ref: `clickup:${WS}:ch-general` })).rejects.toMatchObject({ status: 404 });
+    await expect(source.readChannel(BOB, { ref: `clickup:${WS}:ch-support` })).rejects.toMatchObject({ status: 404 });
+    await expect(source.readChannel(ADA, { ref: 'clickup:other:thing:extra' })).rejects.toMatchObject({ status: 404 });
+    expect(clickup.calls).toEqual([]);
+
+    // Through the core, as the agent's tool does.
+    expect((await service.listEnabledChannels(BOB)).map(channel => channel.name)).toEqual(['Olena']);
+  });
+});
+
+describe('the channel list as the person’s ClickUp sidebar shows it', () => {
+  /**
+   * Shaped like the person's workspace: plain channels they follow, «Bugs» and «Development» as
+   * List/Folder channels in several places (same name, different location), DMs without names,
+   * a group DM, a DM they hid.
+   */
+  function sidebarFixture() {
+    clickup.workspaces[0]!.members.push({ user: { id: 9, username: 'Iryna', email: 'iryna@example.com' } });
+    clickup.channels = [
+      { id: 'ch-albi', name: 'Albi', type: 'CHANNEL', following: true, parent: { id: 'sp-albi', type: 4 }, is_canonical_channel: true },
+      { id: 'ch-bookfate', name: 'BookFate', type: 'CHANNEL', following: true },
+      { id: 'ch-bugs-1', name: 'Bugs', type: 'CHANNEL', following: true, parent: { id: 'l-1', type: 6 } },
+      { id: 'ch-bugs-2', name: 'Bugs', type: 'CHANNEL', following: false, parent: { id: 'l-2', type: 6 } },
+      { id: 'ch-bugs-3', name: 'Bugs', type: 'CHANNEL', following: false, parent: { id: 'l-3', type: 6 } },
+      { id: 'ch-dev-1', name: 'Development', type: 'CHANNEL', following: false, parent: { id: 'f-1', type: 5 } },
+      { id: 'ch-dev-2', name: 'Development', type: 'CHANNEL', following: false, parent: { id: 'f-2', type: 5 } },
+      { id: 'dm-olena', name: '', type: 'DM', following: true, members: ['42', '7'] },
+      { id: 'dm-taras', name: '', type: 'DM', following: true, members: ['42', '8'] },
+      { id: 'dm-old', name: '', type: 'DM', following: false, is_hidden: true, members: ['42', '9'] },
+      { id: 'gdm-1', name: '', type: 'GROUP_DM', following: true, members: ['42', '7', '8'] },
+    ];
+    clickup.locations = {
+      'space:sp-albi': { id: 'sp-albi', name: 'Albi' },
+      'list:l-1': { id: 'l-1', name: 'Bugs', folder: { id: 'f-a', name: 'Syncta', hidden: false }, space: { id: 's-1', name: 'Clients' } },
+      'list:l-2': { id: 'l-2', name: 'Bugs', folder: { id: 'f-b', name: 'KidNation', hidden: false }, space: { id: 's-1', name: 'Clients' } },
+      'list:l-3': { id: 'l-3', name: 'Bugs', folder: { id: 'hidden', name: 'hidden', hidden: true }, space: { id: 's-2', name: 'Internal' } },
+      'folder:f-1': { id: 'f-1', name: 'Development', space: { id: 's-1', name: 'Clients' } },
+      'folder:f-2': { id: 'f-2', name: 'Development', space: { id: 's-2', name: 'Internal' } },
+    };
+  }
+
+  const lookups = () => clickup.calls.filter(call => /\/members|\/api\/v2\/(space|folder|list)\//.test(call)).length;
+
+  it('names each DM after its people, tells location channels apart by path, and marks the sidebar', async () => {
+    sidebarFixture();
+    const view = await source.connect(ADA, clickup.token);
+    const rows = view.channels.map(channel => ({
+      name: channel.name,
+      kind: channel.kind,
+      location: channel.location ? `${channel.location.kind}:${channel.location.path.join(' › ')}` : null,
+      inSidebar: channel.inSidebar,
+    }));
+    expect(rows).toEqual([
+      { name: 'Iryna', kind: 'dm', location: null, inSidebar: false },
+      { name: 'Olena', kind: 'dm', location: null, inSidebar: true },
+      { name: 'Taras', kind: 'dm', location: null, inSidebar: true },
+      { name: 'Olena, Taras', kind: 'group_dm', location: null, inSidebar: true },
+      { name: 'Albi', kind: 'channel', location: 'space:Albi', inSidebar: true },
+      { name: 'BookFate', kind: 'channel', location: null, inSidebar: true },
+      { name: 'Bugs', kind: 'channel', location: 'list:Clients › KidNation › Bugs', inSidebar: false },
+      { name: 'Bugs', kind: 'channel', location: 'list:Clients › Syncta › Bugs', inSidebar: true },
+      { name: 'Bugs', kind: 'channel', location: 'list:Internal › Bugs', inSidebar: false },
+      { name: 'Development', kind: 'channel', location: 'folder:Clients › Development', inSidebar: false },
+      { name: 'Development', kind: 'channel', location: 'folder:Internal › Development', inSidebar: false },
+    ]);
+    // Never two rows that read the same.
+    const labels = rows.map(row => `${row.kind}|${row.name}|${row.location}`);
+    expect(new Set(labels).size).toBe(labels.length);
+    // The person themself is not one of a DM's people; the avatar comes from the workspace member.
+    expect(view.channels.find(channel => channel.channelId === 'dm-olena')!.members).toEqual([
+      { id: '7', name: 'Olena', avatarUrl: 'https://attachments.clickup.com/profilePictures/7_olena.jpg' },
+    ]);
+  });
+
+  it('looks details up within its limit, sidebar first, keeps them, and asks again only after a day', async () => {
+    sidebarFixture();
+    build({ detailsPerListing: 3 });
+    await source.connect(ADA, clickup.token);
+    expect(lookups()).toBe(3);
+    // Sidebar rows first: a followed DM is named even with the small budget; the hidden one is not yet.
+    const first = await source.view(ADA);
+    expect(first.channels.filter(channel => channel.kind !== 'channel' && channel.members.length > 0).every(channel => channel.inSidebar)).toBe(true);
+    build();
+    clickup.calls.length = 0;
+    await source.syncNow(ADA);
+    // The other 7 of the 10 that need a lookup (BookFate has no location); none twice.
+    expect(lookups()).toBe(7);
+    clickup.calls.length = 0;
+    await source.syncNow(ADA);
+    expect(lookups()).toBe(0);
+    now += 25 * 60 * 60 * 1000;
+    clickup.calls.length = 0;
+    await source.syncNow(ADA);
+    expect(lookups()).toBe(10);
+  });
+
+  it('sets every DM to one mode at once, channels untouched', async () => {
+    sidebarFixture();
+    await source.connect(ADA, clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-albi', mode: 'watch' });
+    expect(await source.setDmModes(ADA, 'watch')).toBe(4);
+    const modes = Object.fromEntries((await source.view(ADA)).channels.map(channel => [channel.channelId, channel.mode]));
+    expect(modes).toMatchObject({ 'dm-olena': 'watch', 'dm-taras': 'watch', 'dm-old': 'watch', 'gdm-1': 'watch', 'ch-albi': 'watch', 'ch-bugs-1': 'ignore' });
+    await expect(source.setDmModes(BOB, 'watch')).rejects.toMatchObject({ code: 'not_connected' });
+  });
+
+  it('names where a request came from with its location, and a DM by its person', async () => {
+    sidebarFixture();
+    await source.connect(ADA, clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-bugs-2', mode: 'watch' });
+    now += 1000;
+    await poll();
+    clickup.post({ id: 'b1', channel: 'ch-bugs-2', user: '7', content: 'crash on login', date: now + 5000 });
+    now += 60_000;
+    await poll();
+    expect(brain.turns.at(-1)!.input.text).toContain('(#Clients › KidNation › Bugs)');
+    expect((await source.enabledChannels(ADA)).map(channel => channel.name)).toEqual(
+      expect.arrayContaining(['Olena', 'Olena, Taras', 'Bugs']),
+    );
   });
 });

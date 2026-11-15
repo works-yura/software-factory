@@ -17,7 +17,7 @@ import type { IncomingFile } from './files.ts';
 import { ASSISTANT_MAX_FILES_PER_MESSAGE, isInlineMime } from './files.ts';
 import type { AssistantModels } from './ports.ts';
 import type { AssistantService } from './service.ts';
-import type { AssistantFile, AssistantMessage, AssistantNote, AssistantOwner, AssistantRequest } from './types.ts';
+import type { AssistantFile, AssistantMessage, AssistantNote, AssistantOwner, AssistantRequest, DigestFrequency } from './types.ts';
 import { isRequestStatus, REQUEST_STATUSES } from './types.ts';
 
 export const ASSISTANT_ROUTE_PREFIX = '/web/assistant';
@@ -42,6 +42,9 @@ export function requestWire(request: AssistantRequest) {
     analysing: request.analysing,
     lastError: request.lastError,
     unread: request.unread,
+    pendingAction: request.pendingAction
+      ? { ...request.pendingAction, proposedAt: request.pendingAction.proposedAt.toISOString() }
+      : null,
     createdAt: request.createdAt.toISOString(),
     updatedAt: request.updatedAt.toISOString(),
     closedAt: request.closedAt?.toISOString() ?? null,
@@ -78,6 +81,16 @@ function noteWire(note: AssistantNote) {
     author: note.author,
     createdAt: note.createdAt.toISOString(),
     updatedAt: note.updatedAt.toISOString(),
+  };
+}
+
+/** The settings with the digest's schedule (when the last one was written, when the next is due). */
+async function settingsWire(service: AssistantService, owner: AssistantOwner) {
+  const settings = await service.getSettings(owner);
+  const schedule = await service.digestSchedule(owner);
+  return {
+    settings,
+    digestSchedule: { lastAt: schedule.lastAt?.toISOString() ?? null, nextAt: schedule.nextAt?.toISOString() ?? null },
   };
 }
 
@@ -290,6 +303,20 @@ export class AssistantRoutes {
           return c.json({ request: requestWire(request) });
         }),
       }),
+      registerApiRoute(`${p}/requests/:id/actions/:actionId/confirm`, {
+        method: 'POST',
+        handler: handle(async (c, owner) => {
+          const request = await service.confirmAction(owner, c.req.param('id') ?? '', c.req.param('actionId') ?? '');
+          return c.json({ request: requestWire(request) });
+        }),
+      }),
+      registerApiRoute(`${p}/requests/:id/actions/:actionId/cancel`, {
+        method: 'POST',
+        handler: handle(async (c, owner) => {
+          const request = await service.cancelAction(owner, c.req.param('id') ?? '', c.req.param('actionId') ?? '');
+          return c.json({ request: requestWire(request) });
+        }),
+      }),
       registerApiRoute(`${p}/files/:id/content`, {
         method: 'GET',
         handler: handle(async (c, owner) => {
@@ -337,13 +364,17 @@ export class AssistantRoutes {
       }),
       registerApiRoute(`${p}/settings`, {
         method: 'GET',
-        handler: handle(async (c, owner) => c.json({ settings: await service.getSettings(owner) })),
+        handler: handle(async (c, owner) => c.json(await settingsWire(service, owner))),
+      }),
+      registerApiRoute(`${p}/skills`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => c.json({ skills: await service.skillsCatalogue(owner) })),
       }),
       registerApiRoute(`${p}/settings`, {
         method: 'PUT',
         handler: handle(async (c, owner) => {
           const body = await jsonBody(c);
-          const patch: { modelId?: string | null; retentionDays?: number } = {};
+          const patch: Parameters<AssistantService['patchSettings']>[1] = {};
           if ('modelId' in body) {
             if (body.modelId !== null && typeof body.modelId !== 'string') {
               throw new AssistantError('invalid_body', 'modelId must be a model id or null.', 400);
@@ -354,7 +385,30 @@ export class AssistantRoutes {
             if (typeof body.retentionDays !== 'number') throw new AssistantError('invalid_body', 'retentionDays must be a number.', 400);
             patch.retentionDays = body.retentionDays;
           }
-          return c.json({ settings: await service.patchSettings(owner, patch) });
+          if ('instructions' in body) {
+            if (typeof body.instructions !== 'string') throw new AssistantError('invalid_body', 'instructions must be text.', 400);
+            patch.instructions = body.instructions;
+          }
+          if ('skills' in body) {
+            if (!Array.isArray(body.skills) || body.skills.some(name => typeof name !== 'string')) {
+              throw new AssistantError('invalid_body', 'skills must be a list of skill names.', 400);
+            }
+            patch.skills = body.skills as string[];
+          }
+          if ('digest' in body) {
+            const digest = body.digest;
+            if (!digest || typeof digest !== 'object' || Array.isArray(digest)) {
+              throw new AssistantError('invalid_body', 'digest must be an object { frequency, hour, timeZone }.', 400);
+            }
+            const { frequency, hour, timeZone } = digest as Record<string, unknown>;
+            patch.digest = {
+              ...(frequency !== undefined ? { frequency: frequency as DigestFrequency } : {}),
+              ...(hour !== undefined ? { hour: hour as number } : {}),
+              ...(timeZone !== undefined ? { timeZone: timeZone as string } : {}),
+            };
+          }
+          await service.patchSettings(owner, patch);
+          return c.json(await settingsWire(service, owner));
         }),
       }),
       registerApiRoute(`${p}/models`, {
@@ -431,6 +485,8 @@ export const ASSISTANT_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'POST /web/assistant/requests/:id/ask': 'self.write',
   'POST /web/assistant/requests/:id/check-answer': 'self.write',
   'POST /web/assistant/requests/:id/hand-over': 'self.write',
+  'POST /web/assistant/requests/:id/actions/:actionId/confirm': 'self.write',
+  'POST /web/assistant/requests/:id/actions/:actionId/cancel': 'self.write',
   'POST /web/assistant/notes': 'self.write',
   'PATCH /web/assistant/notes/:id': 'self.write',
   'DELETE /web/assistant/notes/:id': 'self.write',
