@@ -1,7 +1,14 @@
 export * from './api';
 export { AssistantLauncher } from './AssistantLauncher';
 export { AssistantPanel, filterRequests } from './AssistantPanel';
-export { AssistantSettings } from './AssistantSettings';
+export { AssistantFactoryAccessSettings, AssistantModelSettings, AssistantStorageSettings } from './AssistantSettings';
+export type { AssistantModelPickerProps } from './AssistantSettings';
+export { AssistantAgentPreview } from './AgentPreviewSettings';
+export { AssistantBehaviorSettings, MarkdownDocumentEditor } from './BehaviorSettings';
+export { AssistantProactivitySettings } from './ProactivitySettings';
+export { AssistantSkillEditorDialog, AssistantSkillsSettings } from './SkillsSettings';
+export * from './settings-api';
+export { eventLabel, PendingActionCard, TurnDetailsView } from './TurnTransparency';
 export { AssistantSources } from './AssistantSources';
 export * from './sources-api';
 export { NewRequestForm } from './NewRequestForm';

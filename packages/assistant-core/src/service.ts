@@ -12,6 +12,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { nextDigestAt, isTimeZone } from './digest.ts';
 import { AssistantError } from './errors.ts';
 import type { IncomingFile } from './files.ts';
+import { ASSISTANT_AGENT_INSTRUCTIONS, assistantInstructions, instructionsVersion } from './instructions.ts';
 import { ASSISTANT_FILE_MAX_BYTES, ASSISTANT_MAX_FILES_PER_MESSAGE, cleanFileName, sniffMime } from './files.ts';
 import type {
   AssistantAudit,
@@ -19,6 +20,8 @@ import type {
   AssistantBrain,
   AssistantMemory,
   AssistantModels,
+  AssistantSkillDetail,
+  AssistantSkillEntry,
   AssistantSkills,
   AssistantSource,
   BrainFile,
@@ -35,7 +38,8 @@ import type {
 } from './ports.ts';
 import { FACTORY_READ_TOOLS } from './ports.ts';
 import type { AssistantStorage, RequestPatch } from './storage.ts';
-import { createAssistantTools } from './tools.ts';
+import { createAssistantTools, describeTools, recordToolCalls } from './tools.ts';
+import type { AssistantToolKind } from './tools.ts';
 import type {
   AssistantClearReason,
   AssistantFile,
@@ -45,19 +49,73 @@ import type {
   AssistantSettings,
   ChannelRule,
   DigestSettings,
+  OwnSkill,
   PendingAction,
   PendingActionKind,
   RequestStatus,
+  ToolCallRecord,
+  TurnDetails,
 } from './types.ts';
 import { classifyTurnFailure } from './turn-failure.ts';
+import type { TurnFailure } from './turn-failure.ts';
 import {
   assertOwner,
   DIGEST_FREQUENCIES,
   MAX_INSTRUCTIONS,
+  MAX_OWN_SKILLS,
   MAX_RETENTION_DAYS,
+  MAX_SKILL_DESCRIPTION,
+  MAX_SKILL_INSTRUCTIONS,
   MAX_SKILLS,
   MIN_RETENTION_DAYS,
+  SKILL_NAME,
 } from './types.ts';
+
+/** The base instructions as the settings page shows them: the person's version, the default, the version hash. */
+export interface BehaviorView {
+  document: string;
+  defaultDocument: string;
+  customized: boolean;
+  updatedAt: Date | null;
+  /** The version of the whole system prompt a turn would run on now (`instructionsVersion`). */
+  version: string;
+}
+
+/** «What the agent sees»: the whole system prompt and every tool with what it may do. */
+export interface AgentPreview {
+  systemPrompt: string;
+  version: string;
+  modelId: string | null;
+  skills: SkillSummary[];
+  tools: Array<{ name: string; description: string; kind: AssistantToolKind }>;
+}
+
+/** How a provider fared last for this person: a turn or a model check that worked, or how it failed. */
+export interface ProviderState {
+  provider: string;
+  modelId: string | null;
+  state: 'ok' | TurnFailure['kind'];
+  detail: string | null;
+  at: Date;
+}
+
+/** A model check: the model's answer, or how it failed. */
+export interface ModelCheck {
+  ok: boolean;
+  modelId: string | null;
+  reply: string | null;
+  failure: TurnFailure | null;
+  durationMs: number;
+}
+
+/** `xai/grok-4.5` → `xai`; a harness model `claude-code:claude-opus-5-5` → `claude-code`. */
+export function providerOf(modelId: string | null): string | null {
+  if (!modelId) return null;
+  const colon = modelId.indexOf(':');
+  const slash = modelId.indexOf('/');
+  if (colon > 0 && (slash < 0 || colon < slash)) return modelId.slice(0, colon);
+  return slash > 0 ? modelId.slice(0, slash) : modelId;
+}
 
 const notFound = () => new AssistantError('not_found', 'Request not found.', 404);
 
@@ -78,6 +136,8 @@ export interface AssistantLimits {
   answerPollTimeoutMs: number;
   /** Open requests one digest looks at. */
   digestRequests: number;
+  /** Model checks («Check the model») per person per hour. */
+  modelChecksPerHour: number;
 }
 
 export const DEFAULT_ASSISTANT_LIMITS: AssistantLimits = {
@@ -86,6 +146,7 @@ export const DEFAULT_ASSISTANT_LIMITS: AssistantLimits = {
   answerPollIntervalMs: 20_000,
   answerPollTimeoutMs: 15 * 60_000,
   digestRequests: 40,
+  modelChecksPerHour: 20,
 };
 
 /** A sliding window of events per owner, in memory: a restart forgives, never overspends much. */
@@ -171,6 +232,9 @@ export class AssistantService {
   /** Turns of one request run one after another; the count says when the last one is done. */
   readonly #turns = new Map<string, { tail: Promise<void>; pending: number }>();
   readonly #autoAsks = new OwnerWindow();
+  readonly #modelChecks = new OwnerWindow();
+  /** The latest outcome per provider per owner (turns and model checks), in memory. */
+  readonly #providerStates = new Map<string, Map<string, ProviderState>>();
   readonly #sleep: (ms: number) => Promise<void>;
   readonly limits: AssistantLimits;
 
@@ -723,17 +787,225 @@ export class AssistantService {
 
   // Skills
 
-  /** The Factory skills catalogue the person picks from. */
-  async skillsCatalogue(owner: AssistantOwner): Promise<SkillSummary[]> {
-    if (!this.#deps.skills) return [];
-    return this.#deps.skills.list(owner);
+  /**
+   * Every skill the person can pick: the Factory catalogue (with their overrides' descriptions) and
+   * their own, each with whether it is picked.
+   */
+  async skillsCatalogue(owner: AssistantOwner): Promise<AssistantSkillEntry[]> {
+    await this.#ready();
+    const [catalogue, own, settings] = await Promise.all([
+      this.#catalogue(owner),
+      this.#deps.storage.listOwnSkills(owner),
+      this.#deps.storage.getSettings(owner),
+    ]);
+    const picked = new Set(settings.skills);
+    const overrides = new Map(own.filter(skill => skill.kind === 'override').map(skill => [skill.name, skill]));
+    const names = new Set(catalogue.map(skill => skill.name));
+    return [
+      ...catalogue.map(skill => {
+        const override = overrides.get(skill.name);
+        return {
+          name: skill.name,
+          description: override?.description ?? skill.description,
+          origin: 'factory' as const,
+          overridden: Boolean(override),
+          enabled: picked.has(skill.name),
+        };
+      }),
+      ...own
+        .filter(skill => skill.kind === 'personal' && !names.has(skill.name))
+        .map(skill => ({ name: skill.name, description: skill.description, origin: 'personal' as const, overridden: false, enabled: picked.has(skill.name) })),
+    ];
   }
 
-  /** A skill's instructions, only when the person picked it. */
+  /** One skill in full: the text the agent would load, and the catalogue's original when overridden. */
+  async getSkill(owner: AssistantOwner, name: string): Promise<AssistantSkillDetail> {
+    await this.#ready();
+    const own = await this.#deps.storage.getOwnSkill(owner, name);
+    const original = this.#deps.skills ? await this.#deps.skills.read(owner, name).catch(() => null) : null;
+    const picked = (await this.#deps.storage.getSettings(owner)).skills.includes(name);
+    if (original) {
+      const override = own?.kind === 'override' ? own : null;
+      return {
+        name,
+        description: override?.description ?? original.description,
+        instructions: override?.instructions ?? original.instructions,
+        origin: 'factory',
+        overridden: Boolean(override),
+        enabled: picked,
+        original: { description: original.description, instructions: original.instructions },
+        updatedAt: override?.updatedAt ?? null,
+      };
+    }
+    if (own?.kind === 'personal') {
+      return {
+        name,
+        description: own.description,
+        instructions: own.instructions,
+        origin: 'personal',
+        overridden: false,
+        enabled: picked,
+        original: null,
+        updatedAt: own.updatedAt,
+      };
+    }
+    throw new AssistantError('skill_not_found', `There is no skill ${name}.`, 404);
+  }
+
+  /**
+   * Saves the person's text of a skill for their assistant only: an override of a catalogue skill
+   * (the original and every Factory's edits stay as they are), or their own skill's new text.
+   */
+  async saveSkill(owner: AssistantOwner, name: string, input: { description: string; instructions: string }): Promise<AssistantSkillDetail> {
+    await this.#ready();
+    const fields = this.#skillFields(input);
+    const inCatalogue = (await this.#catalogue(owner)).some(skill => skill.name === name);
+    const own = await this.#deps.storage.getOwnSkill(owner, name);
+    if (!inCatalogue && own?.kind !== 'personal') throw new AssistantError('skill_not_found', `There is no skill ${name}.`, 404);
+    await this.#deps.storage.putOwnSkill(owner, { name, kind: inCatalogue ? 'override' : 'personal', ...fields }, this.#now());
+    return this.getSkill(owner, name);
+  }
+
+  /** A skill of the person's own, for their assistant only. */
+  async createSkill(owner: AssistantOwner, input: { name: string; description: string; instructions: string }): Promise<AssistantSkillDetail> {
+    await this.#ready();
+    const name = (input.name ?? '').trim();
+    if (!SKILL_NAME.test(name)) {
+      throw new AssistantError('invalid_skill_name', 'A skill name is lowercase letters, digits and dashes, up to 64.', 400);
+    }
+    const fields = this.#skillFields(input);
+    if ((await this.#catalogue(owner)).some(skill => skill.name === name) || (await this.#deps.storage.getOwnSkill(owner, name))) {
+      throw new AssistantError('skill_exists', `There is already a skill ${name}.`, 409);
+    }
+    const own = (await this.#deps.storage.listOwnSkills(owner)).filter(skill => skill.kind === 'personal');
+    if (own.length >= MAX_OWN_SKILLS) throw new AssistantError('too_many_own_skills', `Keep at most ${MAX_OWN_SKILLS} skills of your own.`, 400);
+    await this.#deps.storage.putOwnSkill(owner, { name, kind: 'personal', ...fields }, this.#now());
+    return this.getSkill(owner, name);
+  }
+
+  /**
+   * An override goes back to the catalogue's original; a skill of the person's own is deleted (and
+   * unpicked).
+   */
+  async deleteSkill(owner: AssistantOwner, name: string): Promise<{ reverted: boolean; deleted: boolean }> {
+    await this.#ready();
+    const own = await this.#deps.storage.getOwnSkill(owner, name);
+    if (!own) throw new AssistantError('skill_not_found', `You have no own text of ${name}.`, 404);
+    await this.#deps.storage.deleteOwnSkill(owner, name);
+    if (own.kind === 'override') return { reverted: true, deleted: false };
+    const settings = await this.#deps.storage.getSettings(owner);
+    if (settings.skills.includes(name)) {
+      await this.#deps.storage.patchSettings(owner, { skills: settings.skills.filter(skill => skill !== name) }, this.#now());
+    }
+    return { reverted: false, deleted: true };
+  }
+
+  /** A skill's instructions, only when the person picked it: their own text first, then the catalogue's. */
   async readSkill(owner: AssistantOwner, name: string) {
     const settings = await this.getSettings(owner);
-    if (!settings.skills.includes(name) || !this.#deps.skills) return null;
+    if (!settings.skills.includes(name)) return null;
+    const own = await this.#deps.storage.getOwnSkill(owner, name);
+    if (own) return { name, description: own.description, instructions: own.instructions };
+    if (!this.#deps.skills) return null;
     return this.#deps.skills.read(owner, name);
+  }
+
+  // Behaviour: the base instructions as one document the person edits
+
+  /**
+   * The base instructions: the person's version or the shipped default. A person who wrote «own
+   * instructions» before (phase 3) gets them merged into their document once, on first read.
+   */
+  async getBehavior(owner: AssistantOwner): Promise<BehaviorView> {
+    await this.#ready();
+    const stored = await this.#behaviorDocument(owner);
+    const skills = await this.#pickedSkills(owner, (await this.#deps.storage.getSettings(owner)).skills);
+    return {
+      document: stored.document ?? ASSISTANT_AGENT_INSTRUCTIONS,
+      defaultDocument: ASSISTANT_AGENT_INSTRUCTIONS,
+      customized: stored.document !== null,
+      updatedAt: stored.updatedAt,
+      version: instructionsVersion(assistantInstructions({ ...(stored.document ? { base: stored.document } : {}), skills })),
+    };
+  }
+
+  /** Saves the person's version; the default text itself is kept as «not customized». */
+  async saveBehavior(owner: AssistantOwner, document: string): Promise<BehaviorView> {
+    await this.#ready();
+    const text = (document ?? '').trim();
+    if (!text) throw new AssistantError('empty', 'The instructions cannot be empty; use «Restore default» instead.', 400);
+    if (text.length > MAX_INSTRUCTIONS) {
+      throw new AssistantError('instructions_too_long', `Instructions are at most ${MAX_INSTRUCTIONS} characters.`, 400);
+    }
+    const now = this.#now();
+    const custom = text === ASSISTANT_AGENT_INSTRUCTIONS ? null : text;
+    await this.#deps.storage.patchSettings(owner, { behavior: { document: custom, updatedAt: custom ? now : null } }, now);
+    return this.getBehavior(owner);
+  }
+
+  /** Back to the shipped default. */
+  async resetBehavior(owner: AssistantOwner): Promise<BehaviorView> {
+    await this.#ready();
+    await this.#deps.storage.patchSettings(owner, { behavior: { document: null, updatedAt: null } }, this.#now());
+    return this.getBehavior(owner);
+  }
+
+  /** «What the agent sees»: the system prompt a turn would run on now, and its tools. */
+  async agentPreview(owner: AssistantOwner): Promise<AgentPreview> {
+    await this.#ready();
+    const settings = await this.#deps.storage.getSettings(owner);
+    const skills = await this.#pickedSkills(owner, settings.skills);
+    const stored = await this.#behaviorDocument(owner);
+    const systemPrompt = assistantInstructions({ ...(stored.document ? { base: stored.document } : {}), skills });
+    return {
+      systemPrompt,
+      version: instructionsVersion(systemPrompt),
+      modelId: settings.modelId,
+      skills,
+      tools: describeTools(createAssistantTools(this, { owner, requestId: 'preview', skills })),
+    };
+  }
+
+  // Models: how each provider fared, and a check
+
+  /** The latest outcome per provider: from this server's turns and checks, else the requests' last failures. */
+  async providerStates(owner: AssistantOwner): Promise<ProviderState[]> {
+    await this.#ready();
+    const states = new Map<string, ProviderState>();
+    for (const request of await this.#deps.storage.listRequests(owner)) {
+      const failure = request.lastError;
+      const provider = providerOf(failure?.modelId ?? null);
+      if (!failure || !provider) continue;
+      const known = states.get(provider);
+      if (known && known.at >= request.updatedAt) continue;
+      states.set(provider, { provider, modelId: failure.modelId, state: failure.kind, detail: failure.detail, at: request.updatedAt });
+    }
+    for (const [provider, state] of this.#providerStates.get(this.#ownerKey(owner)) ?? []) {
+      const known = states.get(provider);
+      if (!known || known.at <= state.at) states.set(provider, state);
+    }
+    return [...states.values()].sort((a, b) => a.provider.localeCompare(b.provider));
+  }
+
+  /** «Check the model»: a tiny call to the model (the chosen one, or the organization's default). */
+  async testModel(owner: AssistantOwner, modelId?: string | null): Promise<ModelCheck> {
+    await this.#ready();
+    const probe = this.#deps.brain.probe;
+    if (!probe) throw new AssistantError('model_check_unavailable', 'This server cannot check a model.', 503);
+    if (!this.#modelChecks.allow(owner, this.limits.modelChecksPerHour, 60 * 60_000, this.#now().getTime())) {
+      throw new AssistantError('too_many_checks', `At most ${this.limits.modelChecksPerHour} model checks an hour.`, 409);
+    }
+    const chosen = modelId === undefined ? (await this.#deps.storage.getSettings(owner)).modelId : modelId;
+    const started = Date.now();
+    try {
+      const answer = await probe.call(this.#deps.brain, owner, chosen);
+      this.#noteProvider(owner, answer.modelId, null);
+      return { ok: true, modelId: answer.modelId, reply: answer.text, failure: null, durationMs: Date.now() - started };
+    } catch (error) {
+      const failure = classifyTurnFailure(error, chosen);
+      this.#noteProvider(owner, failure.modelId, failure);
+      return { ok: false, modelId: failure.modelId, reply: null, failure, durationMs: Date.now() - started };
+    }
   }
 
   // Digests
@@ -843,7 +1115,6 @@ export class AssistantService {
     patch: {
       modelId?: string | null;
       retentionDays?: number;
-      instructions?: string;
       skills?: string[];
       digest?: Partial<DigestSettings>;
     },
@@ -852,13 +1123,6 @@ export class AssistantService {
     const stored: Parameters<AssistantStorage['patchSettings']>[1] = {};
     if (patch.modelId !== undefined) stored.modelId = patch.modelId;
     if (patch.retentionDays !== undefined) stored.retentionDays = patch.retentionDays;
-    if (patch.instructions !== undefined) {
-      const instructions = patch.instructions.trim();
-      if (instructions.length > MAX_INSTRUCTIONS) {
-        throw new AssistantError('instructions_too_long', `Instructions are at most ${MAX_INSTRUCTIONS} characters.`, 400);
-      }
-      stored.instructions = instructions;
-    }
     if (patch.skills !== undefined) {
       const names = [...new Set(patch.skills.map(name => name.trim()).filter(Boolean))];
       if (names.length > MAX_SKILLS) throw new AssistantError('too_many_skills', `Pick at most ${MAX_SKILLS} skills.`, 400);
@@ -940,6 +1204,8 @@ export class AssistantService {
     for (const source of this.#deps.sources ?? []) await source.disconnect(owner);
     await this.#deps.memory.forget(owner);
     this.#autoAsks.forget(owner);
+    this.#modelChecks.forget(owner);
+    this.#providerStates.delete(this.#ownerKey(owner));
     await storage.deleteOwnerRows(owner);
     for (const file of files) await storage.deleteFile(owner, file.id);
     await this.#dropUnreferenced(files);
@@ -1107,18 +1373,37 @@ export class AssistantService {
       const settings = await this.#deps.storage.getSettings(owner);
       const before = (await this.#deps.storage.getRequest(owner, request.id)) ?? request;
       const skills = await this.#pickedSkills(owner, settings.skills);
-      const answer = await this.#deps.brain.respond({
-        owner,
-        request: before,
-        input,
-        modelId: settings.modelId,
-        first,
-        ...(settings.instructions ? { instructions: settings.instructions } : {}),
-        ...(skills.length ? { skills } : {}),
-        tools: createAssistantTools(this, { owner, requestId: request.id, skills }),
-        maxSteps: this.limits.stepsPerTurn,
-      });
-      await this.#deps.storage.addMessage(owner, { requestId: request.id, author: 'agent', text: answer.text, now: this.#now() });
+      const behavior = await this.#behaviorDocument(owner);
+      const systemPrompt = assistantInstructions({ ...(behavior.document ? { base: behavior.document } : {}), skills });
+      const calls: ToolCallRecord[] = [];
+      const started = Date.now();
+      let answer: Awaited<ReturnType<AssistantBrain['respond']>>;
+      try {
+        answer = await this.#deps.brain.respond({
+          owner,
+          request: before,
+          input,
+          modelId: settings.modelId,
+          first,
+          systemPrompt,
+          ...(skills.length ? { skills } : {}),
+          tools: recordToolCalls(createAssistantTools(this, { owner, requestId: request.id, skills }), calls),
+          maxSteps: this.limits.stepsPerTurn,
+        });
+      } catch (error) {
+        const failure = classifyTurnFailure(error);
+        this.#noteProvider(owner, failure.modelId, failure);
+        throw error;
+      }
+      const details: TurnDetails = {
+        modelId: answer.modelId ?? settings.modelId,
+        instructionsVersion: instructionsVersion(systemPrompt),
+        skills: skills.map(skill => skill.name),
+        toolCalls: calls,
+        durationMs: Date.now() - started,
+      };
+      this.#noteProvider(owner, details.modelId, null);
+      await this.#deps.storage.addMessage(owner, { requestId: request.id, author: 'agent', text: answer.text, details, now: this.#now() });
       reported = answer.text;
       const last = finish();
       const current = await this.#deps.storage.getRequest(owner, request.id);
@@ -1155,14 +1440,68 @@ export class AssistantService {
 
   /** The person's picked skills that the catalogue still has (a removed skill is dropped quietly from the turn). */
   async #pickedSkills(owner: AssistantOwner, names: string[]): Promise<SkillSummary[]> {
-    if (names.length === 0 || !this.#deps.skills) return [];
+    if (names.length === 0) return [];
+    let catalogue: SkillSummary[] = [];
     try {
-      const catalogue = await this.#deps.skills.list(owner);
-      return catalogue.filter(skill => names.includes(skill.name));
+      catalogue = await this.#catalogue(owner);
     } catch (error) {
-      console.error('[assistant] The skills catalogue could not be read; the turn runs without skills:', errorText(error));
-      return [];
+      console.error('[assistant] The skills catalogue could not be read; the turn runs without its skills:', errorText(error));
     }
+    const own = new Map<string, OwnSkill>((await this.#deps.storage.listOwnSkills(owner)).map(skill => [skill.name, skill]));
+    const listed = [
+      ...catalogue.map(skill => ({ name: skill.name, description: own.get(skill.name)?.description ?? skill.description })),
+      ...[...own.values()].filter(skill => skill.kind === 'personal').map(skill => ({ name: skill.name, description: skill.description })),
+    ];
+    return listed.filter(skill => names.includes(skill.name));
+  }
+
+  /** The Factory skills catalogue (originals), or nothing without one. */
+  async #catalogue(owner: AssistantOwner): Promise<SkillSummary[]> {
+    return this.#deps.skills ? this.#deps.skills.list(owner) : [];
+  }
+
+  #skillFields(input: { description: string; instructions: string }) {
+    const description = (input.description ?? '').replace(/\s+/g, ' ').trim();
+    const instructions = (input.instructions ?? '').trim();
+    if (!description) throw new AssistantError('invalid_skill', 'A skill needs a description: the agent decides by it when to load it.', 400);
+    if (description.length > MAX_SKILL_DESCRIPTION) {
+      throw new AssistantError('invalid_skill', `A skill's description is at most ${MAX_SKILL_DESCRIPTION} characters.`, 400);
+    }
+    if (!instructions) throw new AssistantError('invalid_skill', 'A skill needs instructions.', 400);
+    if (instructions.length > MAX_SKILL_INSTRUCTIONS) {
+      throw new AssistantError('invalid_skill', `A skill's instructions are at most ${MAX_SKILL_INSTRUCTIONS} characters.`, 400);
+    }
+    return { description, instructions };
+  }
+
+  /** The stored base document; «own instructions» from phase 3 are merged into it once. */
+  async #behaviorDocument(owner: AssistantOwner): Promise<{ document: string | null; updatedAt: Date | null }> {
+    const stored = await this.#deps.storage.getBehavior(owner);
+    if (stored.document !== null || !stored.legacyInstructions) return { document: stored.document, updatedAt: stored.updatedAt };
+    const now = this.#now();
+    const document = `${ASSISTANT_AGENT_INSTRUCTIONS}\n\n## My instructions\n\n${stored.legacyInstructions}`;
+    await this.#deps.storage.patchSettings(owner, { behavior: { document, updatedAt: now } }, now);
+    return { document, updatedAt: now };
+  }
+
+  #ownerKey(owner: AssistantOwner): string {
+    return `${owner.orgId}\u0000${owner.userId}`;
+  }
+
+  /** Remembers how a provider fared for this person (a turn, a check): «ok», or the failure. */
+  #noteProvider(owner: AssistantOwner, modelId: string | null, failure: TurnFailure | null): void {
+    const provider = providerOf(modelId);
+    if (!provider) return;
+    const key = this.#ownerKey(owner);
+    const states = this.#providerStates.get(key) ?? new Map<string, ProviderState>();
+    states.set(provider, {
+      provider,
+      modelId,
+      state: failure ? failure.kind : 'ok',
+      detail: failure?.detail ?? null,
+      at: this.#now(),
+    });
+    this.#providerStates.set(key, states);
   }
 
   /**
