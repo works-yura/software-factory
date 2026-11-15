@@ -7,6 +7,7 @@ import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { AuthUnavailableError, openGoogleSignIn, redirectToLogin, signInWithGoogle } from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
+import { FactoryMark } from '../ui/brand/FactoryMark';
 import { isSignedOAuthQuery } from '../domains/auth/services/oauth-consent';
 import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
@@ -84,6 +85,7 @@ export function SignInPage() {
     <main className="bg-background text-foreground min-h-dvh">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
+          <FactoryMark className="mb-8 size-10" animate="enter" aria-label="Factory" />
           <Txt as="h1" variant="hero" className="max-w-xl text-balance">
             {t('hero.title')}
           </Txt>

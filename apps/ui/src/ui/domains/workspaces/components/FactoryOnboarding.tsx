@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
@@ -37,6 +36,7 @@ import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { translator } from '../../../i18n/t';
+import { FactoryMark } from '../../../ui/brand/FactoryMark';
 import './onboarding/onboarding.css';
 
 const tk = translator('workspaces');
@@ -173,7 +173,7 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
       <div className="flex min-h-dvh flex-col">
         <header className="flex items-center justify-between gap-3 px-6 py-4">
           <div className="flex items-center gap-3">
-            <LogoWithoutText className="w-6" aria-hidden="true" />
+            <FactoryMark className="size-6" animate="enter" />
             <Txt as="span" variant="label">
               Factory
             </Txt>

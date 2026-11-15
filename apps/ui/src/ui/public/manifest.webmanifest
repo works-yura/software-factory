@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Factory",
   "short_name": "Factory",
-  "description": "Build and manage software with MastraCode agents.",
+  "description": "Build and manage software with agents.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

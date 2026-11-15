@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -23,6 +22,7 @@ import {
 } from '../domains/supervisor/components/SupervisorFindingsPanel';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, DOCK_MIN_REM, threadGeometryClass } from '../domains/workspace-viewer/layout';
+import { FactoryMark } from '../ui/brand/FactoryMark';
 
 import '../domains/chat/components/chat-enter.css';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
@@ -156,7 +156,7 @@ function SupervisorEmptyState() {
       className="flex w-full max-w-full min-w-0 flex-1 flex-col items-center justify-center px-6 py-12 text-center"
       aria-labelledby="supervisor-empty-title"
     >
-      <Logo size="md" aria-label="Mastra Code" />
+      <FactoryMark className="size-10" animate="enter" aria-label="Factory" />
       <Txt as="h1" variant="display" tone="ink" id="supervisor-empty-title" className="mt-7 text-balance">
         {t('empty.title')}
       </Txt>

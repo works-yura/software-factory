@@ -19,7 +19,7 @@ function setFavicon(href: string) {
 }
 
 export interface SessionFaviconProps {
-  /** Omitted leaves the default Mastra favicon in place. */
+  /** Omitted leaves the default Factory favicon in place. */
   state?: ChatSessionPhase;
 }
 
