@@ -40,6 +40,39 @@ describe.skipIf(process.platform === 'win32')('createSignInCommandRunner', () =>
     expect(result).toEqual({ code: 3, stdout: 'signed in\n', stderr: 'warn\n' });
   });
 
+  it('hands output over as it comes and writes a pasted code to the waiting CLI’s stdin', async () => {
+    // Like `claude auth login`: prints the prompt, reads one line from a pipe, and answers with it.
+    const script =
+      "process.stdout.write('Paste code here if prompted > ');" +
+      "process.stdin.once('data', d => { process.stdout.write('got ' + String(d).trim() + '\\n'); process.exit(0); });";
+    const seen: string[] = [];
+    let input: { write(text: string): void } | undefined;
+    const result = run(process.execPath, ['-e', script], {
+      env,
+      timeoutMs: 5_000,
+      onStarted: started => (input = started),
+      onOutput: text => {
+        seen.push(text);
+        if (text.includes('Paste code')) input!.write('code-1#state-1\n');
+      },
+    });
+    await expect(result).resolves.toMatchObject({ code: 0, stdout: 'Paste code here if prompted > got code-1#state-1\n' });
+    expect(seen.join('')).toContain('got code-1#state-1');
+    // After it ended, a late write goes nowhere and throws nothing.
+    expect(() => input!.write('late\n')).not.toThrow();
+  });
+
+  it('keeps running when an output reader throws', async () => {
+    const result = await run('/bin/sh', ['-c', 'echo one; echo two'], {
+      env,
+      timeoutMs: 5_000,
+      onOutput: () => {
+        throw new Error('reader failed');
+      },
+    });
+    expect(result).toMatchObject({ code: 0, stdout: 'one\ntwo\n' });
+  });
+
   it('says why a command cannot start', async () => {
     await expect(run('/nowhere/claude', ['auth', 'login'], { env, timeoutMs: 5_000 })).rejects.toThrow(
       new ProviderError('/nowhere/claude could not start: spawn /nowhere/claude ENOENT'),

@@ -5,13 +5,15 @@
  * `createAccountSignInService`), and the throwaway home removed. The pair is the server's from then
  * on: it refreshes it (`oauth.ts`) and hands a run the access token alone.
  *
- * The CLI opens the sign-in page in a browser on the machine it runs on and waits for it on its own
- * localhost callback, so this is offered only where that machine is the person's own (local
- * development).
+ * The server may run on another machine than the person's browser, so the CLI signs in with a device
+ * code (`codex login --device-auth`): it prints a page (`https://auth.openai.com/codex/device`) and a
+ * one-time code, both shown to the person (`onPrompt`), who opens the page in their own browser and
+ * enters the code; the CLI polls until they did. Nothing opens a browser or listens on a localhost
+ * callback on the server's machine. The person's ChatGPT workspace must allow device-code sign-in.
  *
  * The throwaway home is created 0700 and the sign-in is filed as a file (`cli_auth_credentials_store
  * = "file"`, both on the command line and in the home's `config.toml`), never the OS keyring, and
- * never the person's own `~/.codex`. No secret is logged.
+ * never the person's own `~/.codex`. No secret is logged, nor the one-time code.
  */
 
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
@@ -23,12 +25,16 @@ import { harnessCommandPath, isHarnessExecutableUnavailable, type HarnessCommand
 import { CODEX_FILE_CREDENTIALS_ARGS } from '@factory/harness-codex/launchArgs';
 import type { ModelCredentialsStorage, SignInOAuth } from '@factory/store';
 
-import { createSignInCommandRunner } from '../accounts/sign-in-command.ts';
+import { createSignInCommandRunner, NO_BROWSER } from '../accounts/sign-in-command.ts';
 import type { SignInCommandResult, SignInCommandRunner } from '../accounts/sign-in-command.ts';
+import { findDeviceCode, findSignInUrl, stripTerminalEscapes } from '../accounts/sign-in-output.ts';
 import { createAccountSignInService } from '../accounts/sign-in.ts';
-import type { AccountSignInService } from '../accounts/sign-in.ts';
+import type { AccountSignInCapture, AccountSignInCapturePrompt, AccountSignInService } from '../accounts/sign-in.ts';
 import { CODEX_ACCOUNT_PROVIDER } from './credentials.ts';
 import { parseCodexAuthJson } from './oauth.ts';
+
+/** Where the device page lives; a URL elsewhere is never shown to the person. */
+export const CODEX_SIGN_IN_HOSTS: readonly string[] = ['openai.com', 'chatgpt.com'];
 
 /** How long a person gets to finish signing in in the browser. */
 export const CODEX_SIGN_IN_TIMEOUT_MS = 5 * 60_000;
@@ -54,9 +60,9 @@ export const runCodexSignInCommand: CodexSignInRunner = createSignInCommandRunne
   error: message => new CodexSignInError(message),
 });
 
-/** The `codex login` arguments: the browser sign-in, filed as a file in `CODEX_HOME`. */
+/** The `codex login` arguments: the device-code sign-in, filed as a file in `CODEX_HOME`. */
 export function codexSignInArgs(): string[] {
-  return ['login', ...CODEX_FILE_CREDENTIALS_ARGS];
+  return ['login', '--device-auth', ...CODEX_FILE_CREDENTIALS_ARGS];
 }
 
 export interface CaptureCodexSignInOptions {
@@ -69,6 +75,8 @@ export interface CaptureCodexSignInOptions {
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Told once the CLI printed its device page and one-time code. */
+  onPrompt?: (prompt: AccountSignInCapturePrompt) => void;
 }
 
 /** Sign in once with the CLI in a throwaway home and return the pair it filed, with who signed in. */
@@ -79,12 +87,25 @@ export async function captureCodexSignIn(options: CaptureCodexSignInOptions = {}
   const home = await realpath(await mkdtemp(join(options.tempRoot ?? tmpdir(), 'factory-codex-sign-in-')));
   try {
     await writeFile(join(home, 'config.toml'), CODEX_FILE_CREDENTIALS_CONFIG, { mode: 0o600 });
+    let output = '';
+    let prompted = false;
     const login = await run(signInCommand(options.command), codexSignInArgs(), {
-      env: buildCodexEnv(options.env ?? process.env, { CODEX_HOME: home }),
+      // `BROWSER`: should a CLI ever open one, nothing opens on the server's machine.
+      env: { ...buildCodexEnv(options.env ?? process.env, { CODEX_HOME: home }), BROWSER: NO_BROWSER },
       timeoutMs: options.timeoutMs ?? CODEX_SIGN_IN_TIMEOUT_MS,
       ...(options.signal ? { signal: options.signal } : {}),
+      onOutput: text => {
+        if (prompted) return;
+        output += text;
+        const url = findSignInUrl(output, CODEX_SIGN_IN_HOSTS);
+        const userCode = url ? findDeviceCode(output) : undefined;
+        if (!url || !userCode) return;
+        prompted = true;
+        output = '';
+        options.onPrompt?.({ url, userCode });
+      },
     });
-    if (login.code !== 0) throw new CodexSignInError(`ChatGPT sign-in did not finish (codex exited with ${login.code}).`);
+    if (login.code !== 0) throw new CodexSignInError(codexLoginFailure(login));
     const stored = await readFile(join(home, 'auth.json'), 'utf8').catch(() => undefined);
     const oauth = stored ? parseCodexAuthJson(stored) : undefined;
     if (!oauth) throw new CodexSignInError('ChatGPT sign-in finished without a stored ChatGPT login.');
@@ -92,6 +113,18 @@ export async function captureCodexSignIn(options: CaptureCodexSignInOptions = {}
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+}
+
+/** Why `codex login` failed, with its last line of error output when it wrote one. */
+function codexLoginFailure(login: SignInCommandResult): string {
+  const said = stripTerminalEscapes(login.stderr)
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .at(-1);
+  return said
+    ? `ChatGPT sign-in failed: ${said.slice(0, 300)}`
+    : `ChatGPT sign-in did not finish (codex exited with ${login.code}).`;
 }
 
 /** The path to run; a CLI the server cannot find is the person's to read, not a generic failure. */
@@ -118,7 +151,7 @@ export function createCodexSignInService({
   now,
 }: {
   credentials: ModelCredentialsStorage;
-  capture?: (options: { signal: AbortSignal }) => Promise<SignInOAuth>;
+  capture?: AccountSignInCapture;
   command?: HarnessCommand;
   run?: CodexSignInRunner;
   env?: Record<string, string | undefined>;
@@ -131,9 +164,10 @@ export function createCodexSignInService({
     name: 'ChatGPT',
     capture:
       capture ??
-      (({ signal }) =>
+      (({ signal, onPrompt }) =>
         captureCodexSignIn({
           signal,
+          ...(onPrompt ? { onPrompt } : {}),
           ...(command ? { command } : {}),
           ...(run ? { run } : {}),
           ...(env ? { env } : {}),

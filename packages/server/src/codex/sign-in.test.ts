@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { HarnessExecutableUnavailableError } from '@factory/harness/executable';
 import { createFactoryStorageForTests } from '@factory/testing';
 
+import { NO_BROWSER } from '../accounts/sign-in-command.ts';
 import {
   captureCodexSignIn,
   CODEX_SIGN_IN_TIMEOUT_MS,
@@ -28,6 +29,14 @@ const authJson = JSON.stringify({
     account_id: 'ws-1',
   },
 });
+
+/** What `codex login --device-auth` 0.166 prints, in the pieces a pipe may hand over. */
+const DEVICE_OUTPUT = [
+  '\nWelcome to Codex [v\x1b[90m0.166.0\x1b[0m]\n\nFollow these steps to sign in with ChatGPT using device code authorization:\n\n',
+  '1. Open this link in your browser and sign in to your account\n   \x1b[94mhttps://auth.openai.com/co',
+  'dex/device\x1b[0m\n\n2. Enter this one-time code \x1b[90m(expires in 15 minutes)\x1b[0m\n   \x1b[94mABCD-EF',
+  'GH1\x1b[0m\n\n',
+];
 
 interface Call {
   command: string;
@@ -93,7 +102,9 @@ describe('captureCodexSignIn', () => {
       expiresAt: 2_000_000_000_000,
     });
     const [call] = cli.calls;
-    expect(call).toMatchObject({ command: 'codex', args: ['login', '-c', 'cli_auth_credentials_store="file"'], timeoutMs: 1234 });
+    expect(call).toMatchObject({ command: 'codex', args: ['login', '--device-auth', '-c', 'cli_auth_credentials_store="file"'], timeoutMs: 1234 });
+    // Nothing opens a browser on the server's machine.
+    expect(call!.env.BROWSER).toBe(NO_BROWSER);
     expect(call!.signal).toBe(controller.signal);
     // Never the person's own home or keyring, nothing of the server's keys.
     expect(call!.env.CODEX_HOME!.startsWith(await realpath(tempRoot))).toBe(true);
@@ -143,6 +154,24 @@ describe('captureCodexSignIn', () => {
     };
     await expect(captureCodexSignIn({ run: slow, tempRoot, env: {}, timeoutMs: 1 })).rejects.toThrow('timed out');
     expect(await readdir(tempRoot)).toEqual([]);
+  });
+
+  it('shows the device page and one-time code the CLI prints, once both are whole', async () => {
+    const prompts: unknown[] = [];
+    const run: CodexSignInRunner = async (_command, _args, options) => {
+      for (const piece of DEVICE_OUTPUT) options.onOutput?.(piece);
+      await writeFile(join(options.env.CODEX_HOME!, 'auth.json'), authJson);
+      return { code: 0, stdout: DEVICE_OUTPUT.join(''), stderr: '' };
+    };
+    await captureCodexSignIn({ run, tempRoot, env: {}, onPrompt: prompt => prompts.push(prompt) });
+    expect(prompts).toEqual([{ url: 'https://auth.openai.com/codex/device', userCode: 'ABCD-EFGH1' }]);
+  });
+
+  it('says why `codex login` failed in its last line of error output', async () => {
+    const run: CodexSignInRunner = async () => ({ code: 1, stdout: '', stderr: '\x1b[31mError:\x1b[0m device code login is not enabled for this workspace\n\n' });
+    await expect(captureCodexSignIn({ run, tempRoot, env: {} })).rejects.toThrow(
+      new CodexSignInError('ChatGPT sign-in failed: Error: device code login is not enabled for this workspace'),
+    );
   });
 
   it('does not start the CLI for a sign-in already cancelled', async () => {

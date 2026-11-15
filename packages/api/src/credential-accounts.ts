@@ -28,13 +28,20 @@ export interface AccountSignInFlowView {
   status: 'pending' | 'done' | 'error';
   error?: string;
   accountId?: string;
+  /** While pending, once the CLI printed it: the page to open in the person's browser, and what to enter. */
+  prompt?: { url: string; userCode?: string; acceptsCode: boolean };
 }
 
-/** Runs a provider's sign-in for a person (`claude auth login`, `codex login`), on the server's machine. */
+/**
+ * Runs a provider's sign-in for a person (`claude auth login`, `codex login --device-auth`) on the
+ * server's machine, finished in the person's own browser wherever it is.
+ */
 export interface AccountSignInFlows {
   start(owner: { orgId: string; userId: string }): AccountSignInFlowView;
   get(id: string): AccountSignInFlowView | undefined;
   cancel(id: string): boolean;
+  /** Hands a pasted code to the owner's own pending sign-in. */
+  submitCode(id: string, owner: { orgId: string; userId: string }, code: string): 'accepted' | 'not_found' | 'not_waiting' | 'invalid';
 }
 
 /** @deprecated Claude's alone; see {@link AccountSignInFlowView}. */

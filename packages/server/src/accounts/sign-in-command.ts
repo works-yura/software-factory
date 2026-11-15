@@ -1,8 +1,10 @@
 /**
- * Runs a harness CLI's own sign-in command (`claude auth login`, `codex login`) to its end, for a
- * sign-in the server runs on its machine (see `../claude/sign-in.ts`, `../codex/sign-in.ts`). The
- * CLI opens the sign-in page in a browser there and waits for it; this only starts it, keeps its
- * output, and stops it on a timeout or a cancel so it cannot finish the sign-in afterwards.
+ * Runs a harness CLI's own sign-in command (`claude auth login`, `codex login --device-auth`) to its
+ * end, for a sign-in the server runs on its machine (see `../claude/sign-in.ts`,
+ * `../codex/sign-in.ts`). The CLI prints the sign-in page (which the person opens in their own
+ * browser, wherever that is) and waits; this starts it, hands its output over as it comes
+ * (`onOutput`) and its stdin to write a pasted code to (`onStarted`), keeps its output, and stops it
+ * on a timeout or a cancel so it cannot finish the sign-in afterwards.
  */
 
 import { spawn as nodeSpawn } from 'node:child_process';
@@ -13,12 +15,26 @@ export interface SignInCommandResult {
   stderr: string;
 }
 
+/** The running command's stdin: a sign-in code the person pasted goes here, one line. */
+export interface SignInCommandInput {
+  write(text: string): void;
+}
+
+export interface SignInCommandOptions {
+  env: Record<string, string>;
+  timeoutMs: number;
+  signal?: AbortSignal;
+  /** Each piece of output as it comes (stdout and stderr), for a sign-in page the CLI prints before it waits. */
+  onOutput?: (text: string) => void;
+  /** The command started: what writes to its stdin. */
+  onStarted?: (input: SignInCommandInput) => void;
+}
+
 /** Runs one command to its end. Rejects only when it cannot start, runs past its timeout, or is cancelled. */
-export type SignInCommandRunner = (
-  command: string,
-  args: string[],
-  options: { env: Record<string, string>; timeoutMs: number; signal?: AbortSignal },
-) => Promise<SignInCommandResult>;
+export type SignInCommandRunner = (command: string, args: string[], options: SignInCommandOptions) => Promise<SignInCommandResult>;
+
+/** A `BROWSER` that opens nothing: a CLI's sign-in must not open a page on the server's machine. */
+export const NO_BROWSER = '/usr/bin/true';
 
 /** How long a CLI that was told to stop (SIGTERM) gets before it is killed. */
 const STOP_GRACE_MS = 5_000;
@@ -42,7 +58,7 @@ export function createSignInCommandRunner({
   error: (message: string) => Error;
   stopGraceMs?: number;
 }): SignInCommandRunner {
-  return (command, args, { env, timeoutMs, signal }) =>
+  return (command, args, { env, timeoutMs, signal, onOutput, onStarted }) =>
     new Promise((resolve, reject) => {
       const cancelled = () => error(`${name} sign-in was cancelled.`);
       // Cancelled before it started: nothing to run (an abort listener would never fire).
@@ -75,8 +91,28 @@ export function createSignInCommandRunner({
       const timer = setTimeout(() => stop(error(`${command} ${args[0] ?? ''} timed out.`)), timeoutMs);
       const abort = () => stop(cancelled());
       signal?.addEventListener('abort', abort, { once: true });
-      child.stdout?.on('data', chunk => (stdout += String(chunk)));
-      child.stderr?.on('data', chunk => (stderr += String(chunk)));
+      const output = (text: string) => {
+        try {
+          onOutput?.(text);
+        } catch {
+          // A reader's failure is its own; the command runs on.
+        }
+      };
+      child.stdout?.on('data', chunk => {
+        stdout += String(chunk);
+        output(String(chunk));
+      });
+      child.stderr?.on('data', chunk => {
+        stderr += String(chunk);
+        output(String(chunk));
+      });
+      // A write after the CLI exited is dropped: the outcome is its exit.
+      child.stdin?.on('error', () => undefined);
+      onStarted?.({
+        write: text => {
+          if (!settled && !stopped && child.stdin && !child.stdin.destroyed) child.stdin.write(text);
+        },
+      });
       child.on('error', cause => finish(() => reject(stopped ?? error(`${command} could not start: ${cause.message}`))));
       // A stopped CLI is done once it exited, even if something it started still holds its pipes.
       child.on('exit', () => {

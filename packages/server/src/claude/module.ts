@@ -2,7 +2,7 @@
  * Claude Code as a Factory harness module (ADR-0044): its sessions live in the Claude harness, reach
  * the Factory's tools over MCP with per-turn session tokens, and show in the chat through the turn
  * harnesses' session UI. Each turn signs in with one of its owner's Claude sign-ins (the
- * organization's `anthropic` accounts); a development server adds "Sign in with Claude".
+ * organization's `anthropic` accounts), added with "Sign in with Claude".
  */
 import { join } from 'node:path';
 
@@ -45,11 +45,6 @@ export interface MastraFactoryClaudeCodeConfig
   /** Where session records live; required unless `store` is given. */
   storeDir?: string;
   store?: ClaudeFactoryHarnessOptions['store'];
-  /**
-   * Local development: the server and the person's browser share a machine, so Claude sign-in
-   * (which opens the CLI's browser page here) is offered. Turns still use only the stored accounts.
-   */
-  localDevelopment?: boolean;
   /** Replaces the default credentials (`createClaudeCodeCredentials`: the organization's Anthropic accounts). */
   credentials?: ClaudeCodeCredentialsHook;
   /** Goes with a replaced `credentials` hook: told when a turn's account ran out of usage or was refused. */
@@ -67,9 +62,8 @@ export interface MastraFactoryClaudeCodeConfig
  * (FACTORY_CLAUDE_CODE_STORE_DIR), the CLI FACTORY_CLAUDE_CODE_COMMAND names, as the agent user when
  * one is configured (its own `claude` on its PATH, config dirs and turn files where it can read them).
  */
-export const claudeCodeConfigFromEnv: HarnessConfigFromEnv<MastraFactoryClaudeCodeConfig> = ({ env, home, ownMachine, agentUser }) => ({
+export const claudeCodeConfigFromEnv: HarnessConfigFromEnv<MastraFactoryClaudeCodeConfig> = ({ env, home, agentUser }) => ({
   storeDir: env.FACTORY_CLAUDE_CODE_STORE_DIR?.trim() || join(home, '.mastracode', 'web', 'claude-code-sessions'),
-  localDevelopment: ownMachine,
   ...(env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
   ...(agentUser ? agentUser.claudeCode() : {}),
 });
@@ -138,13 +132,11 @@ export const claudeCodeHarnessModule: TurnHarnessModule<MastraFactoryClaudeCodeC
         if (!models) throw new Error('The Claude Code harness has no model facet: it needs the Factories (`projects`).');
         // The Factory chat (supervisor) of a Claude Code Factory is a Claude session too, created when the chat first reaches it.
         const supervisorSessions = createClaudeSupervisorSessions({ harness: claudeCode.harness, projects: { getById: args => host.projectById(args) } });
-        const signIn =
-          config.localDevelopment === true
-            ? createClaudeSignInService({
-                credentials: boot.credentials,
-                ...((executable ?? config.command) ? { command: executable ?? config.command } : {}),
-              })
-            : undefined;
+        // Finished in the person's own browser (they paste the page's code back), so offered wherever the server runs.
+        const signIn = createClaudeSignInService({
+          credentials: boot.credentials,
+          ...((executable ?? config.command) ? { command: executable ?? config.command } : {}),
+        });
         return {
           descriptor: CLAUDE_CODE_HARNESS,
           harness: claudeCode.harness,
@@ -191,8 +183,8 @@ export const claudeCodeHarnessModule: TurnHarnessModule<MastraFactoryClaudeCodeC
           asksMidCall: true,
           mcpSessionTools: { skillDirectories: claudeFactorySkillDirectories(config.skillsDir) },
           api: {
-            features: { claudeCode: true, claudeSignIn: signIn !== undefined },
-            connectors: context => signInAccountsConnector(context, { harness: CLAUDE_CODE_HARNESS, ...(signIn ? { signIn } : {}) }),
+            features: { claudeCode: true, claudeSignIn: true },
+            connectors: context => signInAccountsConnector(context, { harness: CLAUDE_CODE_HARNESS, signIn }),
           },
         };
       },

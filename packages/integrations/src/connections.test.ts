@@ -263,6 +263,14 @@ describe('/web/connections', () => {
     expect((await t.request('/web/connections/authorizations/flow-1?connector=nope')).status).toBe(404);
   });
 
+  it('refuses a pasted code and a cancel for a connector that takes neither, and an unknown connector', async () => {
+    const t = app();
+    expect((await t.request('/web/connections/authorizations/flow-1/code?connector=fake', t.json('POST', { code: 'abc' }))).status).toBe(409);
+    expect((await t.request('/web/connections/authorizations/flow-1/code?connector=nope', t.json('POST', { code: 'abc' }))).status).toBe(404);
+    expect((await t.request('/web/connections/authorizations/flow-1?connector=fake', { method: 'DELETE' })).status).toBe(409);
+    expect((await t.request('/web/connections/authorizations/flow-1?connector=nope', { method: 'DELETE' })).status).toBe(404);
+  });
+
   it('refuses a request without an organization', async () => {
     expect((await app({ orgId: null }).request('/web/connections')).status).toBe(401);
     expect((await app({ orgId: '' }).request('/web/connections')).status).toBe(403);
