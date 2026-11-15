@@ -1,10 +1,11 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
+import { TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
 import { Brain, MessageSquare } from 'lucide-react';
 import { useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { lazyLabels } from '../../../../i18n/lazy';
+import { formatTokens } from '../../../usage/format';
 import { translator } from '../../../../i18n/t';
 
 import { ChatSessionContext } from '../../context/ChatSessionContext';
@@ -19,7 +20,7 @@ const messageLabel = lazyLabels(OM_WORK, work => `chat:memory.messages.${work}`)
 const observationLabel = lazyLabels(OM_WORK, work => `chat:memory.observations.${work}`);
 
 function reading(tokens: number, threshold: number) {
-  return tk('memory.reading', { tokens: formatCompactTokens(tokens), threshold: formatCompactTokens(threshold) });
+  return tk('memory.reading', { tokens: formatTokens(tokens), threshold: formatTokens(threshold) });
 }
 
 export function OperationalMemoryStatus() {
@@ -42,9 +43,11 @@ export function OperationalMemoryStatus() {
     showMem && `${observationLabel[work.observations]}, ${reading(om.observationTokens, om.reflectionThreshold)}`,
   ].filter(Boolean);
 
+  const label = t('memory.budgets', { budgets: spoken.join('. ') });
+
   return (
     <Popover>
-      <PopoverTrigger variant="ghost" size="sm" aria-label={t('memory.budgets', { budgets: spoken.join('. ') })} className="gap-3">
+      <PopoverTrigger variant="ghost" size="sm" aria-label={label} tooltip={label} className="gap-3">
         {showMsg && (
           <TokenBudget
             label={messageLabel[work.messages]}
@@ -52,6 +55,7 @@ export function OperationalMemoryStatus() {
             tokens={om.pendingTokens}
             tone={messageTone}
             working={work.messages !== 'idle'}
+            format={formatTokens}
           />
         )}
         {showMem && (
@@ -61,6 +65,7 @@ export function OperationalMemoryStatus() {
             tokens={om.observationTokens}
             tone={observationTone}
             working={work.observations !== 'idle'}
+            format={formatTokens}
           />
         )}
       </PopoverTrigger>
@@ -73,6 +78,7 @@ export function OperationalMemoryStatus() {
             threshold={om.threshold}
             tokens={om.pendingTokens}
             tone={messageTone}
+            format={formatTokens}
           />
         )}
         {showMem && (
@@ -83,6 +89,7 @@ export function OperationalMemoryStatus() {
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}
             tone={observationTone}
+            format={formatTokens}
           />
         )}
       </PopoverContent>

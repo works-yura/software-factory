@@ -46,7 +46,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select value={preset} disabled={disabled} onValueChange={next => setSpec(specFor(next as SchedulePreset, spec))}>
-        <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.preset')} className="w-auto">
+        <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.preset')} className="w-auto max-w-full">
           <Txt as="span" variant="caption">
             {t(`intakeTriggers.schedule.presets.${preset}`)}
           </Txt>
@@ -66,7 +66,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
           disabled={disabled}
           onValueChange={next => setSpec({ ...spec, weekday: Number(next) })}
         >
-          <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.weekday')} className="w-auto">
+          <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.weekday')} className="w-auto max-w-full">
             <Txt as="span" variant="caption">
               {t(`intakeTriggers.schedule.weekdays.${(typeof spec.weekday === 'number' ? spec.weekday : 1) as (typeof WEEKDAYS)[number]}`)}
             </Txt>
@@ -100,7 +100,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
             disabled={disabled}
             onValueChange={next => setSpec({ ...spec, everyHours: Number(next) })}
           >
-            <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.everyHours')} className="w-auto">
+            <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.everyHours')} className="w-auto max-w-full">
               <Txt as="span" variant="caption">
                 {t('intakeTriggers.schedule.hours', { count: Number(spec.everyHours ?? 1) })}
               </Txt>
@@ -130,7 +130,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
       {preset === 'cron' && (
         <Input
           size="sm"
-          className="w-48 font-mono"
+          className="w-48 max-w-full font-mono"
           aria-label={t('intakeTriggers.schedule.cron')}
           placeholder="0 9 * * 1-5"
           value={typeof spec.cron === 'string' ? spec.cron : ''}
@@ -141,7 +141,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
 
       <Input
         size="sm"
-        className="w-44"
+        className="w-44 max-w-full"
         aria-label={t('intakeTriggers.schedule.timezone')}
         placeholder="Europe/Kyiv"
         value={timezone}

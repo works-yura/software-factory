@@ -225,7 +225,7 @@ export function describeUserAgent(userAgent: string | null | undefined): { brows
   return { browser, os, mobile: /Mobile|iPhone|Android/.test(ua) };
 }
 
-/** An avatar URL as stored (`/auth/api/factory/avatars/<id>` or a provider's absolute URL), ready for `<img>`. */
+/** An avatar URL as stored (`/web/avatars/<id>` or a provider's absolute URL), ready for `<img>`. */
 export function avatarSrc(baseUrl: string, url: string | null | undefined): string | undefined {
   if (!url) return undefined;
   return url.startsWith('/') ? `${baseUrl}${url}` : url;

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
+import { errorText } from '../../../../lib/errorText';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useOrganizationsQuery, useSwitchOrganizationMutation } from '../../../../hooks/useOrganizations';
 import { useThemeOptions } from '../../../i18n/useThemeOptions';
@@ -17,6 +18,7 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SettingsSection } from '../../settings/settingsSections';
 import { clearMastraCodeStorage, redirectToLogout } from '../services/auth';
 import type { FactoryAuthState } from '../services/auth';
+import { avatarSrc } from '../services/team';
 import type { OrganizationSummary } from '../services/organization';
 
 /** The footer trigger's id: closing settings returns focus here (`useCloseSettings`). */
@@ -109,8 +111,9 @@ function AccountMenu({ factoryId, account }: { factoryId: string; account: Facto
   // With organizations the row names the one you work in; without them, you.
   const triggerName = activeOrganizationId ? organizationName : userName;
   const triggerSubtitle = activeOrganizationId ? t('organization.subtitle') : user?.email;
-  // Organizations have no picture yet: their initial stands in.
-  const triggerImage = activeOrganizationId ? undefined : user?.avatarUrl;
+  // The organization's avatar (its initial until an admin sets one), or yours without organizations.
+  const organizationImage = avatarSrc(baseUrl, activeOrganization?.logo);
+  const triggerImage = activeOrganizationId ? organizationImage : user?.avatarUrl;
 
   const openSettings = (section: SettingsSection) => {
     setOpenMobile(false);
@@ -162,6 +165,7 @@ function AccountMenu({ factoryId, account }: { factoryId: string; account: Facto
             <OrganizationRow
               activeId={activeOrganizationId}
               name={organizationName}
+              image={organizationImage}
               organizations={organizations.data}
               loadError={organizations.isError ? organizations.error : undefined}
               switchError={switchTo.isError ? switchTo.error : undefined}
@@ -201,6 +205,7 @@ function AccountMenu({ factoryId, account }: { factoryId: string; account: Facto
 function OrganizationRow({
   activeId,
   name,
+  image,
   organizations,
   loadError,
   switchError,
@@ -208,15 +213,17 @@ function OrganizationRow({
 }: {
   activeId: string;
   name: string;
+  image: string | undefined;
   organizations: OrganizationSummary[] | undefined;
   loadError: unknown;
   switchError: unknown;
   onSwitch: (organizationId: string) => void;
 }) {
   const { t } = useTranslation('nav');
+  const { baseUrl } = useApiConfig();
   const label = (
     <>
-      <Avatar name={name} size="inline" />
+      <Avatar src={image} name={name} size="inline" />
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{name}</span>
         <Txt as="span" variant="caption" tone="muted" className="truncate">
@@ -229,9 +236,10 @@ function OrganizationRow({
 
   if (loadError === undefined && list.length <= 1 && switchError === undefined) {
     return (
-      <div className="flex items-center gap-2 px-2 py-1.5 text-sm" aria-label={t('organization.current', { name })}>
-        {label}
-      </div>
+      // Nothing to switch to: the organization you work in, as a labelled group rather than a dead item.
+      <DropdownMenu.Group aria-label={t('organization.current', { name })}>
+        <div className="flex min-w-0 items-center gap-2 px-2 py-1.5 text-sm">{label}</div>
+      </DropdownMenu.Group>
     );
   }
 
@@ -254,7 +262,7 @@ function OrganizationRow({
                 if (organization.id !== activeId) onSwitch(organization.id);
               }}
             >
-              <Avatar name={organization.name} size="inline" />
+              <Avatar src={avatarSrc(baseUrl, organization.logo)} name={organization.name} size="inline" />
               <span className="truncate">{organization.name}</span>
               {organization.id === activeId ? <Check aria-hidden="true" className="ml-auto" /> : null}
             </DropdownMenu.Item>
@@ -269,8 +277,4 @@ function OrganizationRow({
       </DropdownMenu.SubContent>
     </DropdownMenu.Sub>
   );
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

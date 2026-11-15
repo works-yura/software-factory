@@ -205,7 +205,7 @@
       "background": "Спостереження ущільнюються у фоні",
       "blocking": "Спостереження ущільнюються"
     },
-    "reading": "{{tokens}} з {{threshold}}k",
+    "reading": "{{tokens}} з {{threshold}}",
     "budgets": "Бюджети пам’яті: {{budgets}}",
     "messagesDescription": "Коли заповниться, переноситься в пам’ять",
     "messagesLabel": "Повідомлення",

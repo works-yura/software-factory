@@ -94,16 +94,26 @@ export function SessionUsageStatus() {
   const last = usage.turns.at(-1);
   const context = usage.context;
   const tokens = formatTokens(usage.total.totalTokens);
+  const tooltip = context?.window
+    ? t('session.tooltipContext', { tokens, used: formatTokens(context.tokens), window: formatTokens(context.window) })
+    : t('session.tooltip', { tokens });
 
   return (
     <Popover>
-      <PopoverTrigger variant="ghost" size="sm" aria-label={t('session.trigger', { tokens })} className="gap-2">
-        <span className="text-muted-foreground inline-flex items-center gap-1 tabular-nums">
+      <PopoverTrigger
+        variant="ghost"
+        size="sm"
+        aria-label={t('session.trigger', { tokens })}
+        tooltip={tooltip}
+        className="gap-2"
+      >
+        {/* A narrow status line keeps the ring and drops the session total; the tooltip and popover still say it. */}
+        <span className="text-muted-foreground inline-flex items-center gap-1 tabular-nums @max-md/status:hidden">
           <Coins className="size-3.5" aria-hidden />
           {tokens}
         </span>
         {context?.window ? (
-          <TokenBudget label={t('session.context')} tokens={context.tokens} threshold={context.window} />
+          <TokenBudget label={t('session.context')} tokens={context.tokens} threshold={context.window} format={formatTokens} />
         ) : null}
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="flex w-80 flex-col gap-3">
@@ -123,6 +133,7 @@ export function SessionUsageStatus() {
               label={t('session.context')}
               tokens={context.tokens}
               threshold={context.window}
+              format={formatTokens}
               description={t('session.contextValue', {
                 tokens: formatTokens(context.tokens),
                 window: formatTokens(context.window),

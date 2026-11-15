@@ -65,7 +65,9 @@
         "disabled": "{{repository}}: Dependabot alerts are switched off in the repository settings.",
         "not_found": "{{repository}}: the GitHub connection can't see this repository's alerts.",
         "error": "{{repository}}: {{message}}"
-      }
+      },
+      "loadFailed": "Couldn't read the intake settings: {{message}}",
+      "statusFailed": "Couldn't read which repositories have Dependabot alerts: {{message}}"
     }
   },
   "intakeSource": {

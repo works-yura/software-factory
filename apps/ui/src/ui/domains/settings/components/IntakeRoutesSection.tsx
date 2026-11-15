@@ -67,7 +67,7 @@ import { INTAKE_SOURCES } from '../services/intakeSources';
 import { NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
 import { ConditionRows } from './ConditionRows';
 import { describeConditions, factsFor, intakeRouteFacts } from './conditionFields';
-import { ScheduleRouteEditor } from './IntakeRouteEditor';
+import { ScheduleRouteEditor } from './ScheduleRouteEditor';
 import { describeTarget, describeWhen, routeName, sourceLabel } from './intakeRouteLabels';
 import type { IntakeOrigins } from './intakeRouteLabels';
 import { TriggerStatus } from './IntakeRouteTriggerStatus';

@@ -19,7 +19,7 @@ export interface OrganizationSummary {
   id: string;
   name: string;
   slug: string;
-  /** Avatar URL (`/auth/api/factory/avatars/<id>`), when one was set. */
+  /** Avatar URL (`/web/avatars/<id>`), when one was set. */
   logo?: string | null;
 }
 

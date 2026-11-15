@@ -18,7 +18,19 @@ export interface TokenBudgetProps {
   tone?: TokenBudgetTone;
   /** Runs the light around the ring while something fills or drains the budget. */
   working?: boolean;
+  /**
+   * Writes a token count in the reader's own locale (e.g. `Intl.NumberFormat` compact). Without
+   * it the reading is thousands with a trailing `k`, as before.
+   */
+  format?: (tokens: number) => string;
   className?: string;
+}
+
+/** `tokens/threshold` as read: the host's formatter, or thousands with one trailing `k`. */
+export function tokenBudgetReading(tokens: number, threshold: number, format?: (tokens: number) => string) {
+  return format
+    ? { value: format(tokens), limit: `/${format(threshold)}` }
+    : { value: formatCompactTokens(tokens), limit: `/${formatCompactTokens(threshold)}k` };
 }
 
 /** A token budget as a ring, with its reading beside it. */
@@ -28,9 +40,11 @@ export function TokenBudget({
   label,
   tone = 'messages',
   working = false,
+  format,
   className,
 }: TokenBudgetProps) {
   const id = useId();
+  const reading = tokenBudgetReading(tokens, threshold, format);
   const fill = threshold > 0 ? Math.min(100, Math.round((tokens / threshold) * 100)) : 0;
   const wedge = `${((CIRCUMFERENCE * fill) / 100).toFixed(2)} ${CIRCUMFERENCE.toFixed(2)}`;
 
@@ -40,7 +54,7 @@ export function TokenBudget({
       aria-valuemax={threshold}
       aria-valuemin={0}
       aria-valuenow={Math.min(tokens, threshold)}
-      aria-valuetext={`${formatCompactTokens(tokens)}/${formatCompactTokens(threshold)}k`}
+      aria-valuetext={`${reading.value}${reading.limit}`}
       className={cn('inline-flex items-center gap-1.5 tabular-nums', toneClass[tone], className)}
       role="meter"
     >
@@ -83,8 +97,8 @@ export function TokenBudget({
         )}
       </svg>
       <span className="text-muted-foreground">
-        {formatCompactTokens(tokens)}
-        <span className="text-placeholder">/{formatCompactTokens(threshold)}k</span>
+        {reading.value}
+        <span className="text-placeholder">{reading.limit}</span>
       </span>
     </span>
   );

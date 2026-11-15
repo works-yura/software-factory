@@ -1,24 +1,19 @@
-import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 
-import { useApiConfig } from '../../api/config';
-import { queryKeys } from '../../api/keys';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import { clearMastraCodeStorage, redirectToLogout } from '../domains/auth/services/auth';
+import { useInvitation } from '../../hooks/useOrganizationLinks';
+import { errorText } from '../../lib/errorText';
 import {
-  acceptInvitation,
-  getInvitation,
-  OrganizationRequestError,
-  reloadIntoOrganization,
-  rejectInvitation,
-} from '../domains/auth/services/organization';
+  OrganizationLinkActions,
+  OrganizationLinkLoading,
+  OrganizationLinkPage,
+  OrganizationLinkProblem,
+  OrganizationLinkSignedInAs,
+} from '../domains/auth/components/OrganizationLinkPage';
+import { OrganizationRequestError } from '../domains/auth/services/organization';
 
 /** better-auth error codes that mean "signed in with another (or an unverified) email". */
 const WRONG_EMAIL_CODES = new Set([
@@ -47,37 +42,20 @@ function invitationProblemKind(error: unknown): InvitationProblemKind {
 
 function InvitationProblem({ error, email }: { error: unknown; email: string }) {
   const { t } = useTranslation('auth');
-  const { baseUrl } = useApiConfig();
-  const navigate = useNavigate();
   const kind = invitationProblemKind(error);
-  const wrongEmail = kind === 'wrongEmail';
-  const notFound = kind === 'notFound';
-  const message = wrongEmail
-    ? t('invite.wrongEmail', { email })
-    : notFound
-      ? t('invite.notFound')
-      : t('invite.failed', { message: error instanceof Error ? error.message : String(error) });
-
+  const message =
+    kind === 'wrongEmail'
+      ? t('invite.wrongEmail', { email })
+      : kind === 'notFound'
+        ? t('invite.notFound')
+        : t('invite.failed', { message: errorText(error) });
   return (
-    <div className="flex flex-col gap-4">
-      <Notice variant="destructive" role="alert">
-        {message}
-      </Notice>
-      <div className="flex gap-2">
-        {wrongEmail ? (
-          <Button
-            variant="primary"
-            onClick={() => {
-              clearMastraCodeStorage();
-              redirectToLogout(baseUrl);
-            }}
-          >
-            {t('invite.signOut')}
-          </Button>
-        ) : null}
-        <Button onClick={() => navigate('/')}>{t('invite.goHome')}</Button>
-      </div>
-    </div>
+    <OrganizationLinkProblem
+      message={message}
+      offerSignOut={kind === 'wrongEmail'}
+      signOutLabel={t('invite.signOut')}
+      homeLabel={t('invite.goHome')}
+    />
   );
 }
 
@@ -90,79 +68,52 @@ function InvitationProblem({ error, email }: { error: unknown; email: string }) 
 export function InvitePage() {
   const { t } = useTranslation('auth');
   const { invitationId = '' } = useParams();
-  const { baseUrl } = useApiConfig();
   const navigate = useNavigate();
-  const auth = useFactoryAuth();
-  const email = auth.data?.user?.email ?? '';
-  const invitation = useQuery({
-    queryKey: queryKeys.invitation(invitationId),
-    queryFn: () => getInvitation(baseUrl, invitationId),
-    retry: false,
-  });
-  const accept = useMutation({
-    mutationFn: () => acceptInvitation(baseUrl, invitationId),
-    onSuccess: () => reloadIntoOrganization(),
-  });
-  const decline = useMutation({ mutationFn: () => rejectInvitation(baseUrl, invitationId) });
+  const email = useFactoryAuth().data?.user?.email ?? '';
+  const { invitation, accept, decline } = useInvitation(invitationId);
 
   const details = invitation.data;
   const title = details ? t('invite.title', { organization: details.organizationName }) : t('invite.loading');
+  const busy = accept.isPending || decline.isPending;
 
   return (
-    <PageLayout
-      variant="narrow"
-      header={
-        <div className="mx-auto w-full max-w-2xl pb-8">
-          <PageHeader>
-            <PageHeader.Title>{title}</PageHeader.Title>
-          </PageHeader>
+    <OrganizationLinkPage title={title}>
+      {invitation.isPending ? (
+        <OrganizationLinkLoading label={t('invite.loading')} />
+      ) : invitation.isError ? (
+        <InvitationProblem error={invitation.error} email={email} />
+      ) : decline.isSuccess ? (
+        <div className="flex flex-col gap-4">
+          <Txt as="p" variant="body">
+            {t('invite.declined')}
+          </Txt>
+          <OrganizationLinkActions>
+            <Button onClick={() => navigate('/')}>{t('invite.goHome')}</Button>
+          </OrganizationLinkActions>
         </div>
-      }
-    >
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-        {invitation.isPending ? (
-          <BrandLoader size="lg" aria-label={t('invite.loading')} />
-        ) : invitation.isError ? (
-          <InvitationProblem error={invitation.error} email={email} />
-        ) : decline.isSuccess ? (
-          <div className="flex flex-col gap-4">
-            <Txt as="p" variant="body">
-              {t('invite.declined')}
-            </Txt>
-            <div>
-              <Button onClick={() => navigate('/')}>{t('invite.goHome')}</Button>
-            </div>
-          </div>
-        ) : details ? (
-          <>
-            <Txt as="p" variant="body">
-              {t('invite.description', {
-                inviter: details.inviterEmail,
-                organization: details.organizationName,
-                role: t(`roles.${details.role === 'owner' ? 'admin' : details.role}`),
-              })}
-            </Txt>
-            <Txt as="p" variant="caption" tone="muted">
-              {t('invite.signedInAs', { email })}
-            </Txt>
-            <div className="flex gap-2">
-              <Button
-                variant="primary"
-                disabled={accept.isPending || decline.isPending}
-                onClick={() => accept.mutate()}
-              >
-                {accept.isPending ? t('invite.accepting') : t('invite.accept')}
-              </Button>
-              <Button disabled={accept.isPending || decline.isPending} onClick={() => decline.mutate()}>
-                {t('invite.decline')}
-              </Button>
-            </div>
-            {accept.isError || decline.isError ? (
-              <InvitationProblem error={accept.error ?? decline.error} email={email} />
-            ) : null}
-          </>
-        ) : null}
-      </div>
-    </PageLayout>
+      ) : details ? (
+        <>
+          <Txt as="p" variant="body" className="break-words">
+            {t('invite.description', {
+              inviter: details.inviterEmail,
+              organization: details.organizationName,
+              role: t(`roles.${details.role === 'owner' ? 'admin' : details.role}`),
+            })}
+          </Txt>
+          <OrganizationLinkSignedInAs>{t('invite.signedInAs', { email })}</OrganizationLinkSignedInAs>
+          <OrganizationLinkActions>
+            <Button variant="primary" disabled={busy} onClick={() => accept.mutate()}>
+              {accept.isPending ? t('invite.accepting') : t('invite.accept')}
+            </Button>
+            <Button disabled={busy} onClick={() => decline.mutate()}>
+              {t('invite.decline')}
+            </Button>
+          </OrganizationLinkActions>
+          {accept.isError || decline.isError ? (
+            <InvitationProblem error={accept.error ?? decline.error} email={email} />
+          ) : null}
+        </>
+      ) : null}
+    </OrganizationLinkPage>
   );
 }

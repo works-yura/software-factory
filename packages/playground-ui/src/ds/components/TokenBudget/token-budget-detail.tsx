@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { formatCompactTokens } from './format-tokens';
+import { tokenBudgetReading } from './token-budget';
 import { toneClass } from './tones';
 import type { TokenBudgetTone } from './tones';
 import { Txt } from '@/ds/components/Txt';
@@ -20,6 +21,8 @@ export interface TokenBudgetDetailProps {
   tone?: TokenBudgetTone;
   /** Sits before the label in the budget's own color, tying the row to its ring. */
   icon?: ReactNode;
+  /** Writes a token count in the reader's own locale; see `TokenBudget`'s `format`. */
+  format?: (tokens: number) => string;
 }
 
 /** A budget in full: how far it has filled, and what reaching the threshold sets off. */
@@ -31,7 +34,10 @@ export function TokenBudgetDetail({
   description,
   tone = 'messages',
   icon,
+  format,
 }: TokenBudgetDetailProps) {
+  const reading = tokenBudgetReading(tokens, threshold, format);
+  const freedReading = format ? format(projected) : `${formatCompactTokens(projected)}k`;
   const used = threshold > 0 ? Math.min(100, (tokens / threshold) * 100) : 0;
   const freed = Math.min(used, threshold > 0 ? (projected / threshold) * 100 : 0);
 
@@ -49,9 +55,9 @@ export function TokenBudgetDetail({
           </Txt>
         </span>
         <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
-          {formatCompactTokens(tokens)}
-          <span className="text-placeholder">/{formatCompactTokens(threshold)}k</span>
-          {projected > 0 && <span className="text-placeholder"> −{formatCompactTokens(projected)}k</span>}
+          {reading.value}
+          <span className="text-placeholder">{reading.limit}</span>
+          {projected > 0 && <span className="text-placeholder"> −{freedReading}</span>}
         </Txt>
       </div>
       <div className="flex h-1.5 overflow-hidden rounded-full bg-current/15">

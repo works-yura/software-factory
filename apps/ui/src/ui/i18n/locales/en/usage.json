@@ -65,7 +65,9 @@
     "turns_other": "{{count}} turns",
     "context": "Context window",
     "contextValue": "{{tokens}} of {{window}}",
-    "contextUnknown": "{{tokens}} in context"
+    "contextUnknown": "{{tokens}} in context",
+    "tooltip": "Tokens used this session: {{tokens}}",
+    "tooltipContext": "Tokens used this session: {{tokens}}. Context window: {{used}} of {{window}}"
   },
   "card": {
     "title": "Usage",

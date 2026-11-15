@@ -38,7 +38,10 @@ export function StatusLine() {
   return (
     <div
       aria-label={t('status.line')}
-      className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+      // Shares the composer's footer row with the send buttons: it takes the room left and wraps
+      // inside it, so the buttons never drop to a row of their own. `@container/status` lets each
+      // stat drop its secondary reading when the row is narrow (tooltips and popovers still say it).
+      className="@container/status text-caption text-muted-foreground flex h-fit min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModelPicker />
       <ModelCredential />

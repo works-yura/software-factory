@@ -203,7 +203,7 @@
       "background": "Consolidating observations in the background",
       "blocking": "Consolidating observations"
     },
-    "reading": "{{tokens}} of {{threshold}}k",
+    "reading": "{{tokens}} of {{threshold}}",
     "budgets": "Memory budgets: {{budgets}}",
     "messagesDescription": "Read into memory once full",
     "messagesLabel": "Messages",

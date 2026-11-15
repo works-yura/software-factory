@@ -2,6 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -16,6 +18,12 @@ import { BoardSelect } from './RoutingSelects';
 
 /** The phase choice that leaves the route's board at its first phase. */
 const FIRST_PHASE = '__first_phase__';
+
+/** A phase as the picker names it: its name, its title, or its key when it has neither. */
+function phaseLabel(phases: ReadonlyArray<{ id: string; name?: string; title?: string }>, phaseKey: string): string {
+  const phase = phases.find(candidate => candidate.id === phaseKey);
+  return phase?.name ?? phase?.title ?? phaseKey;
+}
 
 /**
  * The editor of one route «За розкладом»: its name, its own trigger, what each fire does and the
@@ -75,7 +83,8 @@ export function ScheduleRouteEditor({
   return (
     <form
       aria-label={label}
-      className="flex flex-col gap-3 rounded-md border border-border1 px-3 py-3"
+      // The same raised card the arrival routes above it are drawn on (`RuleCard`), not a bordered box of its own.
+      className={cn(raisedSurfaceStyle, 'flex min-w-0 flex-col gap-3 rounded-xl px-4 py-3')}
       onSubmit={event => {
         event.preventDefault();
         if (ready) onSave(draft());
@@ -118,27 +127,24 @@ export function ScheduleRouteEditor({
           disabled={busy || !board}
           onValueChange={next => setPhaseKey(next === FIRST_PHASE ? null : next)}
         >
-          <SelectTrigger size="sm" aria-label={t('intakeRoutes.phase')} className="w-auto">
-            <Txt as="span" variant="caption">
-              {phaseKey
-                ? (phases.find(phase => phase.id === phaseKey)?.name ??
-                  phases.find(phase => phase.id === phaseKey)?.title ??
-                  phaseKey)
-                : t('intakeRoutes.firstPhase')}
+          <SelectTrigger size="sm" aria-label={t('intakeRoutes.phase')} className="w-auto max-w-full">
+            <Txt as="span" variant="caption" className="truncate">
+              {phaseKey ? phaseLabel(phases, phaseKey) : t('intakeRoutes.firstPhase')}
             </Txt>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={FIRST_PHASE}>{t('intakeRoutes.firstPhase')}</SelectItem>
             {phases.map(phase => (
               <SelectItem key={phase.id} value={phase.id}>
-                {phase.name ?? phase.title}
+                {phaseLabel(phases, phase.id)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      {/* Wraps on a phone: «Зберегти й запустити» alone is wider than half of one. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
           {t('intakeRoutes.cancel')}
         </Button>

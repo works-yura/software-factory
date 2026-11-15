@@ -61,7 +61,7 @@ function KindSection({
   const label = kinds.find(kind => kind.kind === draft.kind)?.label ?? draft.kind;
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Txt as="span" variant="caption" tone="muted">
           {title}
         </Txt>
@@ -70,7 +70,7 @@ function KindSection({
           disabled={disabled || editable.length < 2}
           onValueChange={next => onChange({ kind: next, config: formFor(next)!.defaultConfig(context) })}
         >
-          <SelectTrigger size="sm" aria-label={selectLabel} className="w-auto">
+          <SelectTrigger size="sm" aria-label={selectLabel} className="w-auto max-w-full">
             <Txt as="span" variant="caption">
               {label}
             </Txt>
@@ -157,12 +157,12 @@ export function TriggerFields({
         disabled={disabled}
         context={context}
       />
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Txt as="span" variant="caption" tone="muted">
           {t('intakeTriggers.ifOpen')}
         </Txt>
         <Select value={value.policy.kind} disabled={disabled} onValueChange={kind => onChange({ ...value, policy: { kind } })}>
-          <SelectTrigger size="sm" aria-label={t('intakeTriggers.policy')} className="w-auto">
+          <SelectTrigger size="sm" aria-label={t('intakeTriggers.policy')} className="w-auto max-w-full">
             <Txt as="span" variant="caption">
               {kinds.policies.find(kind => kind.kind === value.policy.kind)?.label ?? value.policy.kind}
             </Txt>

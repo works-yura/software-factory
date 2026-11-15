@@ -6,7 +6,6 @@ import {
 } from '@mastra/playground-ui/components/ai/annotations';
 import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer as ComposerRoot,
   ComposerActions,
@@ -39,6 +38,7 @@ import {
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
+import { useCoarsePointer } from '../../../../hooks/useCoarsePointer';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useComposerConnectionNotice } from '../hooks/useComposerConnectionNotice';
 import { useComposerAttachmentUpload, withAttachmentLines } from '../hooks/useComposerAttachmentUpload';
@@ -56,6 +56,7 @@ import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerFileAttachments } from './ComposerFileAttachments';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
+import { ComposerSendButtons, TOUCH_TARGET } from './ComposerSendButtons';
 import { ComposerFactoryRefs } from './FactoryRefChips';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
@@ -64,6 +65,7 @@ type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { t } = useTranslation('chat');
+  const coarsePointer = useCoarsePointer();
   const { sessionId, sessionEnabled, baseUrl, factorySessionState, claudeCode, harness } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
@@ -397,12 +399,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             className="hidden"
             aria-label={acceptFiles ? t('composer.attachFiles') : t('composer.attachImages')}
           />
-          <ComposerActions>
+          {/* One row: the status line takes the room left and wraps inside it; the buttons hold the
+              bottom-right corner and never drop to a row of their own. */}
+          <ComposerActions className="flex-nowrap">
             <StatusLine />
-            <ButtonsGroup size="sm" className="ml-auto" aria-label={t('composer.actions')}>
+            <ComposerSendButtons label={t('composer.actions')} touch={coarsePointer}>
               <Button
                 type="button"
-                size="icon-sm"
+                size={coarsePointer ? 'icon-lg' : 'icon-sm'}
+                className={coarsePointer ? TOUCH_TARGET : undefined}
                 disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label={acceptFiles ? t('composer.attachFiles') : t('composer.attachImage')}
@@ -414,9 +419,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 showAbort={liveRun && !hasSubmittableDraft}
                 sendDisabled={sendDisabled || !hasSubmittableDraft}
                 sendTitle={sendTitle}
+                touch={coarsePointer}
                 onAbort={() => void abortMutation.mutateAsync()}
               />
-            </ButtonsGroup>
+            </ComposerSendButtons>
           </ComposerActions>
         </ComposerBox>
       </ComposerRing>

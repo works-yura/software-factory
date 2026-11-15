@@ -3,13 +3,15 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useTranslation } from 'react-i18next';
 
 import { useDependabotStatusQuery } from '../../../../hooks/useDependabotStatus';
 import type { DependabotRepositoryStatus } from '../../../../hooks/useDependabotStatus';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
-import { ScopeBadge } from './SettingsScope';
+import { errorText } from '../../../../lib/errorText';
+import { SettingsSubsection } from './SettingsSubsection';
 
 /** The `source.kind` a route names to take Dependabot alerts (ADR-0042). */
 const DEPENDABOT_SOURCE_KIND = 'dependabot_alert';
@@ -25,7 +27,8 @@ export function DependabotIntakeBlock({ factoryProjectId }: { factoryProjectId: 
   const save = useSaveIntakeConfigMutation();
   const routes = useIntakeRoutesQuery(factoryProjectId).data ?? [];
   const enabled = config.data?.dependabot.enabled ?? false;
-  const status = useDependabotStatusQuery(enabled).data ?? [];
+  const statusQuery = useDependabotStatusQuery(enabled);
+  const status = statusQuery.data ?? [];
   const routed = routes.some(
     route =>
       route.enabled &&
@@ -46,31 +49,34 @@ export function DependabotIntakeBlock({ factoryProjectId }: { factoryProjectId: 
     );
   };
 
+  // The switch is the organization's intake config, unlike the routes below it (this Factory's).
   return (
-    <section aria-labelledby="dependabot-intake-title" className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          {/* The switch is the organization's intake config, unlike the routes below (this Factory's). */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Txt as="h3" id="dependabot-intake-title" variant="card-title">
-              {t('intake.dependabot.title')}
-            </Txt>
-            <ScopeBadge scope="org" />
-          </div>
-          <Txt as="p" variant="caption" tone="muted">
-            {t('intake.dependabot.description')}
-          </Txt>
-        </div>
-        <Switch
-          aria-label={t('intake.dependabot.toggle')}
-          checked={enabled}
-          disabled={!config.data || save.isPending}
-          onCheckedChange={toggle}
-        />
-      </div>
+    <SettingsSubsection title={t('intake.dependabot.title')} scope="org">
+      <SettingsContainer>
+        <SettingsRow label={t('intake.dependabot.toggle')} description={t('intake.dependabot.description')}>
+          <Switch
+            aria-label={t('intake.dependabot.toggle')}
+            checked={enabled}
+            disabled={!config.data || save.isPending}
+            onCheckedChange={toggle}
+          />
+        </SettingsRow>
+      </SettingsContainer>
+      {config.isError && (
+        <Notice variant="destructive" role="alert">
+          {t('intake.dependabot.loadFailed', { message: errorText(config.error) })}
+        </Notice>
+      )}
       {enabled && !routed && <Notice variant="warning">{t('intake.dependabot.noRoute')}</Notice>}
-      {enabled && <DependabotStatusLines status={status} />}
-    </section>
+      {enabled &&
+        (statusQuery.isError ? (
+          <Notice variant="destructive" role="alert">
+            {t('intake.dependabot.statusFailed', { message: errorText(statusQuery.error) })}
+          </Notice>
+        ) : (
+          <DependabotStatusLines status={status} />
+        ))}
+    </SettingsSubsection>
   );
 }
 

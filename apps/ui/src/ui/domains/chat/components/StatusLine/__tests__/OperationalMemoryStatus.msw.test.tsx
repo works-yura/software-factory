@@ -111,7 +111,7 @@ describe('observational memory status', () => {
 
       expect(
         screen.getByRole('button', {
-          name: 'Memory budgets: Message window until next observation, 14.9 of 30k. Consolidating observations in the background, 12 of 40k',
+          name: 'Memory budgets: Message window until next observation, 14.9K of 30K. Consolidating observations in the background, 12K of 40K',
         }),
       ).toBeVisible();
     });
@@ -124,7 +124,7 @@ describe('observational memory status', () => {
       expect(screen.getByText('consolidating memory')).toBeVisible();
       expect(screen.getByRole('meter', { name: 'Consolidating observations' })).toHaveAttribute(
         'aria-valuetext',
-        '12/40k',
+        '12K/40K',
       );
     });
   });
@@ -144,7 +144,7 @@ describe('observational memory status', () => {
 
       expect(screen.getByRole('meter', { name: 'Message window until next observation' })).toHaveAttribute(
         'aria-valuetext',
-        '14.9/30k',
+        '14.9K/30K',
       );
       expect(container.querySelector('[data-working]')).toBeNull();
     });
@@ -154,7 +154,7 @@ describe('observational memory status', () => {
 
       expect(
         screen.getByRole('button', {
-          name: 'Memory budgets: Message window until next observation, 14.9 of 30k. Observations accumulated until next reflection, 12 of 40k',
+          name: 'Memory budgets: Message window until next observation, 14.9K of 30K. Observations accumulated until next reflection, 12K of 40K',
         }),
       ).toBeVisible();
     });
@@ -166,7 +166,7 @@ describe('observational memory status', () => {
 
       await waitFor(() => expect(screen.getByText('Read into memory once full')).toBeVisible());
       expect(screen.getByText('Consolidated into a reflection once full')).toBeVisible();
-      expect(screen.getAllByText('/40k')).toHaveLength(2);
+      expect(screen.getAllByText('/40K')).toHaveLength(2);
     });
   });
 });

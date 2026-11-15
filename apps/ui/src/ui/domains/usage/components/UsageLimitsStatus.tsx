@@ -100,13 +100,14 @@ export function UsageLimitsStatus() {
 
   return (
     <Popover>
-      <PopoverTrigger variant="ghost" size="sm" aria-label={label}>
+      <PopoverTrigger variant="ghost" size="sm" aria-label={label} tooltip={label}>
         <UsageLimitRing label={name} percent={percent} valueText={t('windowUsed', { window: name, percent })}>
           <span>{t('percentUsed', { percent })}</span>
-          {left ? <span className="text-muted-foreground">{formatDuration(left)}</span> : null}
+          {/* A narrow status line keeps the share; when it resets is in the tooltip and the popover. */}
+          {left ? <span className="text-muted-foreground @max-md/status:hidden">{formatDuration(left)}</span> : null}
         </UsageLimitRing>
       </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-3">
+      <PopoverContent align="start" side="top" className="flex w-96 flex-col gap-3">
         <LimitsDetail stored={account} now={now} />
       </PopoverContent>
     </Popover>

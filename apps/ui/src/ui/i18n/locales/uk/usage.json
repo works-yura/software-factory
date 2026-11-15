@@ -67,7 +67,9 @@
     "turns_other": "{{count}} ходу",
     "context": "Контекстне вікно",
     "contextValue": "{{tokens}} з {{window}}",
-    "contextUnknown": "{{tokens}} у контексті"
+    "contextUnknown": "{{tokens}} у контексті",
+    "tooltip": "Використано токенів у сесії: {{tokens}}",
+    "tooltipContext": "Використано токенів у сесії: {{tokens}}. Контекстне вікно: {{used}} з {{window}}"
   },
   "card": {
     "title": "Використання",

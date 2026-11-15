@@ -18,6 +18,15 @@ describe('TokenBudget', () => {
     expect(screen.getByText('/30k')).not.toBeNull();
   });
 
+  it("writes both counts with the host's formatter, without the trailing k", () => {
+    const format = (value: number) => `${value / 1000} thousand`;
+    render(<TokenBudget label="Context" threshold={1_000_000} tokens={37_200} format={format} />);
+
+    expect(screen.getByRole('meter', { name: 'Context' }).getAttribute('aria-valuetext')).toBe('37.2 thousand/1000 thousand');
+    expect(screen.getByText('37.2 thousand')).not.toBeNull();
+    expect(screen.getByText('/1000 thousand')).not.toBeNull();
+  });
+
   it('fills the ring to the share of the threshold that is used', () => {
     const { container } = render(<TokenBudget label="Message window" threshold={30_000} tokens={14_900} />);
 
@@ -92,6 +101,15 @@ describe('TokenBudget', () => {
 });
 
 describe('TokenBudgetDetail', () => {
+  it("writes the reading and the freed share with the host's formatter", () => {
+    const format = (value: number) => `${value} tokens`;
+    render(<TokenBudgetDetail label="Messages" threshold={8000} tokens={5200} projected={1000} format={format} />);
+
+    expect(screen.getByText('5200 tokens')).not.toBeNull();
+    expect(screen.getByText('/8000 tokens')).not.toBeNull();
+    expect(screen.getByText(/−1000 tokens/)).not.toBeNull();
+  });
+
   it('states the reading and what reaching the threshold sets off', () => {
     const { container } = render(
       <TokenBudgetDetail
