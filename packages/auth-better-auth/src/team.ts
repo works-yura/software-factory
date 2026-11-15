@@ -68,6 +68,46 @@ export class OrganizationEventRelay {
     for (const listener of this.#membershipListeners) listener(organizationId, userId);
   }
 
+  #removalListeners = new Set<(organizationId: string, userId: string) => Promise<void>>();
+  #deletionListeners = new Set<(userId: string) => Promise<void>>();
+
+  /**
+   * A person left an organization or was removed from it: what they kept there that is theirs
+   * alone (their assistant, ADR-0051) is erased by the listener.
+   */
+  onMemberRemoved(listener: (organizationId: string, userId: string) => Promise<void>): void {
+    this.#removalListeners.add(listener);
+  }
+
+  /** A person's account was deleted (better-auth's `user.delete` hook): the listener erases what was theirs. */
+  onUserDeleted(listener: (userId: string) => Promise<void>): void {
+    this.#deletionListeners.add(listener);
+  }
+
+  /**
+   * Runs every removal listener. The removal already happened, so a listener that fails is logged
+   * loudly (naming the person and organization) and does not undo it; the next listener still runs.
+   */
+  async memberRemoved(organizationId: string, userId: string): Promise<void> {
+    for (const listener of this.#removalListeners) {
+      try {
+        await listener(organizationId, userId);
+      } catch (error) {
+        console.error(`[BetterAuth] Cleaning up after removing ${userId} from ${organizationId} failed; it must be retried by hand.`, error);
+      }
+    }
+  }
+
+  async userDeleted(userId: string): Promise<void> {
+    for (const listener of this.#deletionListeners) {
+      try {
+        await listener(userId);
+      } catch (error) {
+        console.error(`[BetterAuth] Cleaning up after deleting the account ${userId} failed; it must be retried by hand.`, error);
+      }
+    }
+  }
+
   /**
    * Records the event. The change it describes already happened, so a missing
    * handler or a failed write is logged loudly but does not undo or fail it.
@@ -151,6 +191,7 @@ export function organizationEventsHook(relay: OrganizationEventRelay) {
         const member = record(result.member) as MemberLike | undefined;
         if (!member?.organizationId || !member.userId) return;
         relay.membershipChanged(member.organizationId, member.userId);
+        await relay.memberRemoved(member.organizationId, member.userId);
         await relay.emit({
           action: 'factory.organization.member_removed',
           organizationId: member.organizationId,
@@ -164,6 +205,7 @@ export function organizationEventsHook(relay: OrganizationEventRelay) {
         const member = result as MemberLike;
         if (!member.organizationId || !member.userId) return;
         relay.membershipChanged(member.organizationId, member.userId);
+        await relay.memberRemoved(member.organizationId, member.userId);
         await relay.emit({
           action: 'factory.organization.member_left',
           organizationId: member.organizationId,
