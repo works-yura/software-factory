@@ -76,6 +76,7 @@ import {
 import type { AssistantFile, AssistantMessage, AssistantRequest, FactoryAccessState, RequestStatus, TurnFailure } from './api';
 import { PendingFiles, pastedFiles } from './NewRequestForm';
 import { RequestTime } from './time';
+import { eventLabel, PendingActionCard, TurnDetailsView } from './TurnTransparency';
 
 export const STATUS_BADGE: Record<RequestStatus, BadgeVariant> = {
   new: 'info',
@@ -483,6 +484,19 @@ function EventLine({ message, onOpenRequest, onAnalyse, analysing }: { message: 
   if (message.text.startsWith('continues:')) {
     return <ContinuesLine previousId={message.text.slice('continues:'.length).trim()} onOpenRequest={onOpenRequest} />;
   }
+  const known = eventLabel(message.text, t as never);
+  if (known) {
+    return (
+      <>
+        <TranscriptDivider label={known.label} />
+        {known.body ? (
+          <Txt as="p" variant="caption" tone="muted" className="line-clamp-3 text-center whitespace-pre-line">
+            {known.body}
+          </Txt>
+        ) : null}
+      </>
+    );
+  }
   if (message.text.startsWith('not_analysed:')) {
     return (
       <TranscriptDivider label={t('thread.notAnalysed')}>
@@ -562,7 +576,13 @@ function ThreadEntry({ message, files, ...actions }: { message: AssistantMessage
       from={message.author === 'person' ? 'user' : 'assistant'}
       aria-label={label}
       attachments={own.length ? <Attachments files={own} /> : undefined}
-      footer={message.author === 'factory' ? <MessageMetadata>{label}</MessageMetadata> : undefined}
+      footer={
+        message.author === 'factory' ? (
+          <MessageMetadata>{label}</MessageMetadata>
+        ) : message.author === 'agent' && message.details ? (
+          <TurnDetailsView details={message.details} />
+        ) : undefined
+      }
     >
       {message.text ? <MarkdownRenderer>{message.text}</MarkdownRenderer> : null}
     </Message>
@@ -936,6 +956,7 @@ export function RequestThread({
                     {...(canAnalyse && index > lastAgent ? { onAnalyse: () => actions.retry.mutate() } : {})}
                   />
                 ))}
+                {request.pendingAction ? <PendingActionCard request={request} action={request.pendingAction} /> : null}
                 {request.analysing ? (
                   <Message from="assistant" pending>
                     <Txt as="p" variant="body-sm" tone="muted" role="status">

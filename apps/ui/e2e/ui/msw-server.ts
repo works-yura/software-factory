@@ -52,6 +52,8 @@ export const server = setupServer(
   http.get('*/web/assistant/settings', () => HttpResponse.json({ settings: { modelId: null, retentionDays: 30 } })),
   http.get('*/web/assistant/models', () => HttpResponse.json({ models: [] })),
   http.get('*/web/assistant/factories', () => HttpResponse.json({ connected: false, pending: false, factories: [] })),
+  http.get('*/web/assistant/model-status', () => HttpResponse.json({ providers: [] })),
+  http.get('*/web/assistant/skills', () => HttpResponse.json({ skills: [] })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),

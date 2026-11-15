@@ -16,6 +16,7 @@ import {
   Palette,
   Plug,
   SlidersHorizontal,
+  Sparkles,
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -62,6 +63,14 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: CircleUserRound,
         searchText: 'my account profile identity email authentication session log out sign out user',
+      },
+      {
+        id: 'assistant',
+        get label() {
+          return SETTINGS_SECTION_LABELS.assistant;
+        },
+        icon: Sparkles,
+        searchText: 'assistant помічник model instructions behavior skills sources clickup digest rules factory access retention clear what the agent sees tools prompt',
       },
       {
         id: 'preferences',

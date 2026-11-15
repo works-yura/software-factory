@@ -23,7 +23,8 @@
     "behavior": "Behavior",
     "memory": "Memory",
     "debug": "Debug",
-    "team": "Team"
+    "team": "Team",
+    "assistant": "Assistant"
   },
   "groups": {
     "account": "Account",
@@ -521,7 +522,9 @@
     },
     "assistant": {
       "title": "Assistant",
-      "description": "Your own requests desk in this organization: what colleagues and clients send you, sorted by an assistant that reports only to you. Factories and admins do not see it."
+      "description": "Your own requests desk in this organization: what colleagues and clients send you, sorted by an assistant that reports only to you. Factories and admins do not see it.",
+      "moved": "Model, instructions, skills, sources and everything else of your assistant are on its own page.",
+      "open": "Open assistant settings"
     },
     "assistantSources": {
       "title": "Sources",
@@ -2070,5 +2073,40 @@
       "count_one": "{{count}} join link",
       "count_other": "{{count}} join links"
     }
+  },
+  "assistantPage": {
+    "model": {
+      "title": "Model",
+      "description": "Which of the organization's models the assistant runs on, whether it works, and why that one."
+    },
+    "behavior": {
+      "title": "Behaviour",
+      "description": "The assistant's base instructions as one document you edit."
+    },
+    "skills": {
+      "title": "Skills",
+      "description": "Factory's skills and your own; changes stay in your assistant only."
+    },
+    "sources": {
+      "title": "Sources",
+      "description": "Where requests come from, with your own connections. Nobody else in the organization sees them."
+    },
+    "proactivity": {
+      "title": "Proactivity",
+      "description": "What the assistant does by itself: each chat's rule and the digest."
+    },
+    "access": {
+      "title": "Factory access",
+      "description": "Asking Factories and handing requests over, as you."
+    },
+    "preview": {
+      "title": "What the agent sees",
+      "description": "Read-only: the whole system prompt and every tool, as the next turn gets them."
+    },
+    "storage": {
+      "title": "Storage",
+      "description": "How long closed requests are kept; erasing the assistant."
+    },
+    "needsOrganization": "The assistant lives in an organization: join or create one first."
   }
 }

@@ -19,7 +19,8 @@
     "newCount_other": "{{count}} new",
     "unread": "unread",
     "inboxZero": "All caught up",
-    "emptyFilter": "Nothing here"
+    "emptyFilter": "Nothing here",
+    "settings": "Assistant settings"
   },
   "filter": {
     "label": "Show",
@@ -90,7 +91,7 @@
     "noAnswerYet": "Factory has not answered yet.",
     "factory": "Factory",
     "cancel": "Cancel",
-    "connectFirst": "Allow the assistant to reach Factory first: Account › Assistant.",
+    "connectFirst": "Allow the assistant to reach Factory first: Settings › Assistant.",
     "noFactories": "There is no Factory you can reach.",
     "reopen": "Reopen",
     "closeHint": "Close the request",
@@ -134,8 +135,8 @@
     "title": "Assistant",
     "description": "Your own assistant in this organization. Factories and the organization's admins do not see it.",
     "model": "Model",
-    "modelDescription": "One of the organization's models.",
-    "modelDefault": "The organization's default",
+    "modelDescription": "One of the organization's models. Leave it on the default to follow the organization.",
+    "modelDefault": "The organization's default model",
     "noModels": "The organization has no model connected yet.",
     "retention": "Keep closed requests",
     "retentionDescription": "Closed requests, their threads and files are erased after this many days.",
@@ -159,7 +160,37 @@
     "clearConfirmTitle": "Clear the assistant?",
     "clearConfirmDescription": "Everything it kept in this organization is erased. This cannot be undone.",
     "cleared": "The assistant was cleared.",
-    "saveRetention": "Save how long to keep"
+    "saveRetention": "Save how long to keep",
+    "free": "free",
+    "modelDefaultIs": "Default: {{model}}",
+    "searchModels": "Search models…",
+    "noModelFound": "No model matches",
+    "useDefault": "Use the default",
+    "runsOn": "Runs on",
+    "runsOnDescription": "The model the assistant's next turn actually uses, and why.",
+    "runsChosen": "{{model}} — you chose it",
+    "runsDefault": "{{model}} — the organization's default",
+    "runsNothing": "Nothing: the organization has no model the assistant can run",
+    "onlyFree": "The only models that work in this organization now are free ones (OpenCode). Their provider may use what it is sent to improve its models: keep that in mind for clients' data.",
+    "providers": "Providers",
+    "providersDescription": "How each provider fared last for you: a turn or a model check that worked, or why it failed.",
+    "providersUnknown": "No turns or checks yet.",
+    "providerState": {
+      "ok": "works",
+      "rate_limit": "limit / no credits",
+      "auth": "key refused",
+      "model_not_found": "no such model",
+      "overloaded": "overloaded",
+      "unknown": "failed",
+      "no_model": "no model"
+    },
+    "check": "Check the model",
+    "checkDescription": "A tiny call to the model the assistant runs on now, to see that it answers.",
+    "checking": "Checking…",
+    "checkOk": "{{model}} answered in {{ms}} ms: «{{reply}}»",
+    "reachable": "Factories",
+    "reachableDescription": "The Factories the assistant can reach as you.",
+    "unavailable": "Not available now"
   },
   "time": {
     "now": "now",
@@ -259,23 +290,134 @@
     },
     "rate_limit": {
       "title": "{{model}}: limit reached or no credits",
-      "fix": "Choose another model in Account › Assistant, or top up this provider, then retry."
+      "fix": "Choose another model in Settings › Assistant, or top up this provider, then retry."
     },
     "auth": {
       "title": "{{model}}: the API key was refused",
-      "fix": "The key is invalid or has no access. An admin replaces it in Settings › Models, or choose another model in Account › Assistant."
+      "fix": "The key is invalid or has no access. An admin replaces it in Settings › Models, or choose another model in Settings › Assistant."
     },
     "model_not_found": {
       "title": "{{model}}: the provider has no such model",
-      "fix": "Choose another model in Account › Assistant."
+      "fix": "Choose another model in Settings › Assistant."
     },
     "overloaded": {
       "title": "{{model}}: the provider is overloaded or down",
-      "fix": "Retry in a minute, or choose another model in Account › Assistant."
+      "fix": "Retry in a minute, or choose another model in Settings › Assistant."
     },
     "unknown": {
       "title": "{{model}}: the assistant could not answer",
-      "fix": "Retry; if it fails again, choose another model in Account › Assistant."
+      "fix": "Retry; if it fails again, choose another model in Settings › Assistant."
     }
+  },
+  "document": {
+    "text": "Text",
+    "edit": "Edit",
+    "preview": "Preview",
+    "diff": "Changes",
+    "noDiff": "Same as the default."
+  },
+  "behavior": {
+    "customized": "Your version",
+    "default": "Default",
+    "changed": "Changed",
+    "version": "version {{version}}",
+    "versionHint": "Each reply's details name the version it ran on.",
+    "hint": "The assistant's base instructions, as one Markdown document. Your version replaces the default; «Changes» shows what differs. Whatever it says, the assistant reports to you only and only proposes Factory actions.",
+    "editor": "Base instructions",
+    "save": "Save",
+    "discard": "Discard changes",
+    "reset": "Restore default"
+  },
+  "skills": {
+    "new": "New skill",
+    "newTitle": "New skill",
+    "newDescription": "A skill of your own: only your assistant has it.",
+    "editTitle": "Skill {{name}}",
+    "editDescription": "Saving keeps your text for your assistant only: the original and every Factory's edits stay as they are.",
+    "overriddenNote": "You changed this skill for your assistant. «Restore original» drops your text.",
+    "revert": "Restore original",
+    "delete": "Delete",
+    "create": "Create",
+    "save": "Save",
+    "mine": "mine",
+    "factory": "Factory",
+    "changed": "changed",
+    "open": "Open",
+    "toggle": "Give {{name}} to the assistant",
+    "empty": "No skills yet",
+    "count_one": "{{count}} of {{max}} on",
+    "count_other": "{{count}} of {{max}} on"
+  },
+  "preview": {
+    "prompt": "System prompt",
+    "promptHint": "Exactly what the next turn runs on: version {{version}}, model {{model}}. It is your base document, the skills index and a guard no edit removes.",
+    "tools": "Tools",
+    "toolsCount_one": "{{count}} tool",
+    "toolsCount_other": "{{count}} tools",
+    "kind": {
+      "read": "reads",
+      "write_own": "writes your notes",
+      "proposal": "proposal only"
+    }
+  },
+  "rules": {
+    "title": "Chat rules",
+    "analyse": "Analyse",
+    "digest_only": "Digest only",
+    "analyse_and_ask": "Analyse and ask {{factory}}",
+    "for": "What to do with new requests from {{channel}}",
+    "noChannels": "No chats turned on: turn some on in Sources.",
+    "noSource": "Connect a source first (Sources).",
+    "count_one": "{{count}} chat on",
+    "count_other": "{{count}} chats on",
+    "hint": "«Analyse and ask» starts a side session in that Factory by itself (it costs), at most 10 a day; past that it becomes a proposal you confirm."
+  },
+  "digest": {
+    "frequency": "Digest",
+    "frequencyDescription": "A request summing up what is open in your inbox.",
+    "off": "Off",
+    "hourly": "Hourly",
+    "daily": "Daily",
+    "hour": "At",
+    "hourDescription": "The hour, in your time zone.",
+    "timeZone": "Time zone",
+    "save": "Save the schedule",
+    "saveDescription": "The next digest is scheduled from it.",
+    "next": "Next digest:"
+  },
+  "details": {
+    "title": "Turn details",
+    "calls_one": "{{count}} tool call",
+    "calls_other": "{{count}} tool calls",
+    "call": "Tool call {{name}}",
+    "model": "model {{model}}",
+    "version": "instructions {{version}}",
+    "skills": "skills: {{skills}}",
+    "noSkills": "no skills",
+    "noCalls": "No tool calls.",
+    "ms": "{{ms}} ms"
+  },
+  "pending": {
+    "label": "Proposed action",
+    "ask": "Proposed: ask {{factory}}",
+    "handOver": "Proposed: hand over to {{factory}}",
+    "confirmAsk": "Ask",
+    "confirmHandOver": "Hand over",
+    "byAgent": "the assistant proposes",
+    "byRule": "the chat's rule (today's limit is spent)",
+    "question": "Question",
+    "title": "Card"
+  },
+  "events": {
+    "proposedAsk": "Proposed asking {{factory}}",
+    "proposedHandOver": "Proposed handing over to {{factory}}",
+    "confirmed": "You confirmed it",
+    "cancelled": "You cancelled it",
+    "ruleAsk": "The chat's rule asks the Factory",
+    "autoAskFailed": "The chat's rule could not ask the Factory",
+    "answerTimeout": "No answer from the Factory in 15 minutes: check later with «Check answer»",
+    "digestOnly": "Not analysed: the chat goes into the digest",
+    "digest_one": "Digest of {{count}} open request",
+    "digest_other": "Digest of {{count}} open requests"
   }
 }

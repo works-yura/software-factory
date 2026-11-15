@@ -29,6 +29,38 @@ export interface TurnFailure {
   detail: string;
 }
 
+/** A Factory action the agent (or a channel rule) proposed: waits for the person's Confirm / Cancel. */
+export interface PendingAction {
+  id: string;
+  kind: 'ask' | 'hand_over';
+  factoryId: string;
+  factoryName: string;
+  question?: string;
+  title?: string;
+  note?: string;
+  reason?: string;
+  proposedBy: 'agent' | 'rule';
+  proposedAt: string;
+}
+
+/** One tool call of an agent turn: short summaries of what went in and came out. */
+export interface ToolCallRecord {
+  name: string;
+  args: string;
+  result?: string;
+  error?: string;
+  durationMs: number;
+}
+
+/** What drove one agent reply: the model, the system prompt's version, the skills, the tool calls. */
+export interface TurnDetails {
+  modelId: string | null;
+  instructionsVersion: string;
+  skills: string[];
+  toolCalls: ToolCallRecord[];
+  durationMs: number;
+}
+
 export interface AssistantRequest {
   id: string;
   topic: string;
@@ -42,6 +74,8 @@ export interface AssistantRequest {
   analysing: boolean;
   lastError: TurnFailure | null;
   unread: boolean;
+  /** Absent from servers before phase 3. */
+  pendingAction?: PendingAction | null;
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
@@ -54,6 +88,8 @@ export interface AssistantMessage {
   fromName?: string | null;
   text: string;
   fileIds: string[];
+  /** On an agent reply: what drove it (absent on older replies). */
+  details?: TurnDetails | null;
   createdAt: string;
 }
 
@@ -81,15 +117,48 @@ export interface AssistantNote {
   updatedAt: string;
 }
 
+export type DigestFrequency = 'off' | 'hourly' | 'daily';
+
+export interface DigestSettings {
+  frequency: DigestFrequency;
+  hour: number;
+  timeZone: string;
+}
+
 export interface AssistantSettings {
   modelId: string | null;
   retentionDays: number;
+  /** Skill names the agent may load (absent from servers before phase 3). */
+  skills?: string[];
+  digest?: DigestSettings;
 }
 
+/**
+ * A model of the organization's. The server may add how Factory presents it (a label, a group such
+ * as a sign-in account, a free badge, whether it can run now); the picker reads what is there.
+ */
 export interface AssistantModel {
   id: string;
   provider: string;
   modelName: string;
+  label?: string;
+  group?: string;
+  free?: boolean;
+  available?: boolean;
+  unavailableReason?: string;
+}
+
+/** The model a person who chose none runs on, and why (when the server says). */
+export interface AssistantDefaultModel {
+  modelId: string | null;
+  reason?: string;
+}
+
+export interface AssistantModelCatalog {
+  models: AssistantModel[];
+  default: AssistantDefaultModel | null;
+  /** The response as the server sent it, for a host picker that reads more of it (provider instances). */
+  raw: Record<string, unknown>;
 }
 
 export interface FactoryAccessState {
@@ -182,6 +251,11 @@ export const assistantKeys = {
   settings: () => ['assistant', 'settings'] as const,
   models: () => ['assistant', 'models'] as const,
   factories: () => ['assistant', 'factories'] as const,
+  behavior: () => ['assistant', 'behavior'] as const,
+  skills: () => ['assistant', 'skills'] as const,
+  skill: (name: string) => ['assistant', 'skill', name] as const,
+  preview: () => ['assistant', 'agent-preview'] as const,
+  modelStatus: () => ['assistant', 'model-status'] as const,
 };
 
 export function useAssistantRequests(options: { enabled?: boolean } = {}) {
@@ -338,12 +412,46 @@ export function useAssistantSettings() {
   });
 }
 
-export function useAssistantModels() {
+/** Confirm or Cancel a proposed Factory action in a thread. */
+export function usePendingAction(requestId: string) {
+  const api = useAssistantApi();
+  const invalidate = useInvalidateRequests();
+  const path = (actionId: string, verb: 'confirm' | 'cancel') =>
+    `/requests/${encodeURIComponent(requestId)}/actions/${encodeURIComponent(actionId)}/${verb}`;
+  const done = { onSettled: () => invalidate(requestId) };
+  return {
+    confirm: useMutation({ mutationFn: (actionId: string) => call(api, path(actionId, 'confirm'), json('POST', {})), ...done }),
+    cancel: useMutation({ mutationFn: (actionId: string) => call(api, path(actionId, 'cancel'), json('POST', {})), ...done }),
+  };
+}
+
+/** `GET /models` as the picker reads it: the list, and the default with its reason when the server gives one. */
+export function readModelCatalog(body: Record<string, unknown>): AssistantModelCatalog {
+  const models = Array.isArray(body.models) ? (body.models as AssistantModel[]) : [];
+  const raw = (body.default ?? body.defaultModel) as Record<string, unknown> | string | null | undefined;
+  const defaultModel =
+    typeof raw === 'string'
+      ? { modelId: raw }
+      : raw && typeof raw === 'object'
+        ? {
+            modelId: typeof raw.modelId === 'string' ? raw.modelId : typeof raw.id === 'string' ? raw.id : null,
+            ...(typeof raw.reason === 'string' ? { reason: raw.reason } : {}),
+          }
+        : null;
+  return { models, default: defaultModel, raw: body };
+}
+
+export function useAssistantModelCatalog() {
   const api = useAssistantApi();
   return useQuery({
     queryKey: assistantKeys.models(),
-    queryFn: () => call<{ models: AssistantModel[] }>(api, '/models').then(body => body.models),
+    queryFn: () => call<Record<string, unknown>>(api, '/models').then(readModelCatalog),
   });
+}
+
+export function useAssistantModels() {
+  const catalog = useAssistantModelCatalog();
+  return { ...catalog, data: catalog.data?.models } as Omit<typeof catalog, 'data'> & { data: AssistantModel[] | undefined };
 }
 
 export function useSettingsActions() {
@@ -353,7 +461,12 @@ export function useSettingsActions() {
     save: useMutation({
       mutationFn: (patch: Partial<AssistantSettings>) =>
         call<{ settings: AssistantSettings }>(api, '/settings', json('PUT', patch)).then(body => body.settings),
-      onSuccess: settings => queryClient.setQueryData(assistantKeys.settings(), settings),
+      onSuccess: settings => {
+        queryClient.setQueryData(assistantKeys.settings(), settings);
+        void queryClient.invalidateQueries({ queryKey: [...assistantKeys.settings(), 'schedule'] });
+        void queryClient.invalidateQueries({ queryKey: assistantKeys.skills() });
+        void queryClient.invalidateQueries({ queryKey: assistantKeys.preview() });
+      },
     }),
     clear: useMutation({
       mutationFn: () => call<{ cleared: { requests: number; files: number } }>(api, '/clear', json('POST', {})),

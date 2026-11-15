@@ -18,7 +18,9 @@ import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playgr
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 import { translator } from '../../../i18n/t';
-import { AssistantAccountSettings, AssistantAccountSources } from '../../assistant/AssistantOverlay';
+import { Link, useParams } from 'react-router';
+
+import { settingsSectionPath } from '../settingsSections';
 
 const tk = translator('settings');
 
@@ -51,6 +53,24 @@ function AccountGithubRow() {
   const github = useGithubStatusQuery().data;
   if (!github?.connected || github.appConfigured === false) return null;
   return <UserGithubConnectionRow />;
+}
+
+/** «Помічник» has its own page now (Settings › Помічник); Account links to it. */
+function AssistantLinkRow() {
+  const { t } = useTranslation('settings');
+  const { factoryId } = useParams<{ factoryId: string }>();
+  if (!factoryId) return null;
+  return (
+    <SettingsSubsection scope="personal" title={t('account.assistant.title')} description={t('account.assistant.description')}>
+      <SettingsContainer>
+        <SettingsRow label={t('account.assistant.title')} description={t('account.assistant.moved')}>
+          <Button size="sm" render={<Link to={settingsSectionPath(factoryId, 'assistant')} />}>
+            {t('account.assistant.open')}
+          </Button>
+        </SettingsRow>
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
 }
 
 export function AccountSettingsSection() {
@@ -143,29 +163,7 @@ export function AccountSettingsSection() {
         </SettingsContainer>
       </SettingsSubsection>
       <AccountGithubRow />
-      {user?.organizationId ? (
-        <SettingsSubsection
-          id="assistant"
-          // The assistant's panel links here (`#assistant`) to pick another model after a failed turn.
-          ref={element => {
-            if (element && window.location.hash === '#assistant') element.scrollIntoView?.({ block: 'start' });
-          }}
-          scope="personal"
-          title={t('account.assistant.title')}
-          description={t('account.assistant.description')}
-        >
-          <AssistantAccountSettings />
-        </SettingsSubsection>
-      ) : null}
-      {user?.organizationId ? (
-        <SettingsSubsection
-          scope="personal"
-          title={t('account.assistantSources.title')}
-          description={t('account.assistantSources.description')}
-        >
-          <AssistantAccountSources />
-        </SettingsSubsection>
-      ) : null}
+      {user?.organizationId ? <AssistantLinkRow /> : null}
       {editable ? <SessionsList /> : null}
       <SettingsSubsection scope="personal" title={t('account.session.title')}>
         <SettingsContainer>
