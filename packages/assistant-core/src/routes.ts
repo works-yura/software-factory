@@ -35,6 +35,7 @@ export function requestWire(request: AssistantRequest) {
     fromName: request.fromName,
     source: request.source,
     sourceUrl: request.sourceUrl,
+    previousRequestId: request.previousRequestId,
     status: request.status,
     factory: request.factory,
     analysing: request.analysing,
@@ -50,6 +51,7 @@ function messageWire(message: AssistantMessage) {
   return {
     id: message.id,
     author: message.author,
+    fromName: message.fromName,
     text: message.text,
     fileIds: message.fileIds,
     createdAt: message.createdAt.toISOString(),
@@ -87,7 +89,37 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
-async function jsonBody(c: Context): Promise<Record<string, unknown>> {
+/** The caller as an assistant owner: `(tenant.orgId, tenant.userId)`, never from the request. */
+export async function assistantOwnerOf(auth: RouteAuth, c: Context): Promise<AssistantOwner> {
+  await auth.ensureUser(c);
+  const tenant = auth.tenant(c);
+  if (!tenant) throw new AssistantError('unauthorized', 'Sign in to use the assistant.', 403);
+  if (!tenant.orgId) throw new AssistantError('organization_required', 'The assistant lives in an organization.', 403);
+  return { orgId: tenant.orgId, userId: tenant.userId };
+}
+
+/**
+ * A route handler run as the caller; an `AssistantError` becomes its JSON answer. Source packages
+ * (`assistant-source-*`) mount their routes with it too.
+ */
+export function assistantHandler(auth: RouteAuth, handler: (c: Context, owner: AssistantOwner) => Promise<Response>) {
+  return async (raw: unknown) => {
+    const c = loose(raw);
+    try {
+      const owner = await assistantOwnerOf(auth, c);
+      return await handler(c, owner);
+    } catch (error) {
+      if (error instanceof AssistantError) {
+        const status = error.code === 'unauthorized' ? 401 : error.status;
+        return c.json({ error: error.code, message: error.message }, status);
+      }
+      throw error;
+    }
+  };
+}
+
+/** The request's JSON object body; anything else is a 400. */
+export async function jsonBody(c: Context): Promise<Record<string, unknown>> {
   try {
     const body: unknown = await c.req.json();
     if (body && typeof body === 'object' && !Array.isArray(body)) return body as Record<string, unknown>;
@@ -148,29 +180,12 @@ export class AssistantRoutes {
   }
 
   async #owner(c: Context): Promise<AssistantOwner> {
-    const { auth } = this.#deps;
-    await auth.ensureUser(c);
-    const tenant = auth.tenant(c);
-    if (!tenant) throw new AssistantError('unauthorized', 'Sign in to use the assistant.', 403);
-    if (!tenant.orgId) throw new AssistantError('organization_required', 'The assistant lives in an organization.', 403);
-    return { orgId: tenant.orgId, userId: tenant.userId };
+    return assistantOwnerOf(this.#deps.auth, c);
   }
 
   /** Runs a handler as the caller; an `AssistantError` becomes its JSON answer. */
   #handle(handler: (c: Context, owner: AssistantOwner) => Promise<Response>) {
-    return async (raw: unknown) => {
-      const c = loose(raw);
-      try {
-        const owner = await this.#owner(c);
-        return await handler(c, owner);
-      } catch (error) {
-        if (error instanceof AssistantError) {
-          const status = error.code === 'unauthorized' ? 401 : error.status;
-          return c.json({ error: error.code, message: error.message }, status);
-        }
-        throw error;
-      }
-    };
+    return assistantHandler(this.#deps.auth, handler);
   }
 
   routes(): ApiRoute[] {

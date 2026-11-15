@@ -50,9 +50,14 @@ export class FakeBrain implements AssistantBrain {
   readonly turns: BrainTurn[] = [];
   answer: (turn: BrainTurn) => string | Promise<string> = turn => `seen: ${turn.input.text}`;
 
+  /** The topic a source request's first turn names; none by default. */
+  topic: ((turn: BrainTurn) => string | undefined) | undefined;
+
   async respond(turn: BrainTurn) {
     this.turns.push(turn);
-    return { text: await this.answer(turn) };
+    const text = await this.answer(turn);
+    const topic = turn.first ? this.topic?.(turn) : undefined;
+    return topic ? { text, topic } : { text };
   }
 }
 

@@ -17,10 +17,14 @@ import type {
   AssistantBrain,
   AssistantMemory,
   AssistantModels,
+  AssistantSource,
   BrainFile,
+  BrainTurn,
   FactoryClient,
   FactoryGrant,
+  IngestOutcome,
   RequestView,
+  SourceMessage,
 } from './ports.ts';
 import type { AssistantStorage } from './storage.ts';
 import type {
@@ -32,8 +36,6 @@ import type {
   AssistantSettings,
 } from './types.ts';
 import { assertOwner, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from './types.ts';
-
-
 
 const notFound = () => new AssistantError('not_found', 'Request not found.', 404);
 
@@ -51,6 +53,8 @@ export interface AssistantServiceDeps {
   models: AssistantModels;
   factory: FactoryClient;
   grant: FactoryGrant;
+  /** The person's own source connections (ClickUp Chat …): disconnected first when the assistant is erased. */
+  sources?: AssistantSource[];
   audit: AssistantAudit;
   /** Whether bytes are still named by anything outside the assistant (Factory attachments, avatars). */
   blobReferencedElsewhere: (sha256: string) => Promise<boolean>;
@@ -99,6 +103,8 @@ export class AssistantService {
   readonly #deps: AssistantServiceDeps;
   readonly #now: () => Date;
   readonly #schedule: (task: () => Promise<void>) => void;
+  /** Turns of one request run one after another; the count says when the last one is done. */
+  readonly #turns = new Map<string, { tail: Promise<void>; pending: number }>();
 
   constructor(deps: AssistantServiceDeps) {
     this.#deps = deps;
@@ -192,6 +198,101 @@ export class AssistantService {
     const closed = await this.#deps.storage.updateRequest(owner, id, { status: 'closed', closedAt: now, unread: false }, now);
     if (!closed) throw notFound();
     return closed;
+  }
+
+  // Sources
+
+  /**
+   * Takes in one message a source read (ADR-0051 phase 2). The request binding key is the source
+   * thread: a message in a thread with an open request joins it; in a thread whose request was
+   * closed it opens a new request that continues the previous one; otherwise it starts a new one.
+   * The message's own source id makes this idempotent: a message taken in once is a no-op after.
+   * The person's own messages only join an open request (as context, without an agent turn).
+   */
+  async ingestSourceMessage(
+    owner: AssistantOwner,
+    message: SourceMessage,
+  ): Promise<{ outcome: IngestOutcome; request: AssistantRequest | null }> {
+    await this.#ready();
+    const { storage } = this.#deps;
+    if (!message.sourceKey || !message.messageKey) throw new Error('A source message needs its thread key and its own key.');
+    if (await storage.hasSourceMessage(owner, message.messageKey)) return { outcome: 'duplicate', request: null };
+
+    const latest = await storage.latestRequestForSource(owner, message.sourceKey);
+    const open = latest && latest.status !== 'closed' ? latest : null;
+    if (message.fromMe && !open) return { outcome: 'skipped', request: null };
+
+    // Claim the message before anything is written: a concurrent read of the same message stops here.
+    if (!(await storage.recordSourceMessage(owner, { messageKey: message.messageKey, requestId: '', now: this.#now() }))) {
+      return { outcome: 'duplicate', request: null };
+    }
+    try {
+      const text = (message.text ?? '').trim().slice(0, MAX_TEXT);
+      const files = this.#deps.blobs
+        ? (message.files ?? [])
+            .filter(file => file.bytes.byteLength <= this.maxFileBytes)
+            .slice(0, ASSISTANT_MAX_FILES_PER_MESSAGE)
+        : [];
+      const fromName = message.fromName?.trim().slice(0, 200) || null;
+      const sourceUrl = message.sourceUrl && /^https?:\/\//i.test(message.sourceUrl) ? message.sourceUrl : null;
+      let request: AssistantRequest;
+      let outcome: IngestOutcome;
+      if (open) {
+        request = open;
+        outcome = 'appended';
+      } else {
+        request = await storage.createRequest(owner, {
+          topic: deriveTopic(text, files.map(file => ({ name: cleanFileName(file.name) }))) || message.where || message.platform,
+          fromName,
+          source: message.platform,
+          sourceUrl,
+          sourceKey: message.sourceKey,
+          previousRequestId: latest?.id ?? null,
+          now: this.#now(),
+        });
+        outcome = latest ? 'reopened' : 'created';
+        if (latest) {
+          await storage.addMessage(owner, { requestId: request.id, author: 'event', text: `continues:${latest.id}`, now: this.#now() });
+        }
+      }
+      await storage.bindSourceMessage(owner, message.messageKey, request.id);
+      const stored = await this.#storeFiles(owner, request.id, files);
+      await storage.addMessage(owner, {
+        requestId: request.id,
+        author: 'source',
+        fromName,
+        text,
+        fileIds: stored.map(file => file.id),
+        now: this.#now(),
+      });
+      if (message.fromMe) {
+        return { outcome, request: (await storage.updateRequest(owner, request.id, {}, this.#now())) ?? request };
+      }
+      if (!message.analyse) {
+        await storage.addMessage(owner, { requestId: request.id, author: 'event', text: 'not_analysed:limit', now: this.#now() });
+        const waiting = await storage.updateRequest(owner, request.id, { status: 'waiting_me', unread: true }, this.#now());
+        return { outcome, request: waiting ?? request };
+      }
+      const started = await this.#startTurn(owner, request, {
+        author: 'source',
+        text,
+        files: stored,
+        fromName,
+        first: outcome !== 'appended',
+        ...(message.where ? { where: message.where } : {}),
+      });
+      return { outcome, request: started };
+    } catch (error) {
+      await storage.forgetSourceMessage(owner, message.messageKey).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /** Whether a source thread has an open request (a follow-up there joins it whatever the channel's mode). */
+  async hasOpenSourceRequest(owner: AssistantOwner, sourceKey: string): Promise<boolean> {
+    await this.#ready();
+    const latest = await this.#deps.storage.latestRequestForSource(owner, sourceKey);
+    return latest !== null && latest.status !== 'closed';
   }
 
   // Factory
@@ -388,6 +489,7 @@ export class AssistantService {
     const files = await storage.listFiles(owner);
 
     await this.#deps.grant.revoke(owner);
+    for (const source of this.#deps.sources ?? []) await source.disconnect(owner);
     await this.#deps.memory.forget(owner);
     await storage.deleteOwnerRows(owner);
     for (const file of files) await storage.deleteFile(owner, file.id);
@@ -407,9 +509,12 @@ export class AssistantService {
   /** A deleted account: its assistant in every organization. */
   async clearUser(userId: string, input: { reason: AssistantClearReason; actorId: string }): Promise<number> {
     await this.#ready();
-    const orgs = await this.#deps.storage.organizationsOf(userId);
+    const orgs = new Set(await this.#deps.storage.organizationsOf(userId));
+    for (const source of this.#deps.sources ?? []) {
+      for (const orgId of await source.organizationsOf(userId)) orgs.add(orgId);
+    }
     for (const orgId of orgs) await this.clear({ orgId, userId }, input);
-    return orgs.length;
+    return orgs.size;
   }
 
   /** The daily sweep: closed requests past their owner's retention, with their threads, files and memory. */
@@ -502,38 +607,76 @@ export class AssistantService {
   async #startTurn(
     owner: AssistantOwner,
     request: AssistantRequest,
-    input: { author: 'person' | 'factory'; text: string; files: Array<AssistantFile & { bytes: Uint8Array }> },
+    input: {
+      author: 'person' | 'factory' | 'source';
+      text: string;
+      files: Array<AssistantFile & { bytes: Uint8Array }>;
+      fromName?: string | null;
+      first?: boolean;
+      where?: string;
+    },
   ): Promise<AssistantRequest> {
     const started = await this.#deps.storage.updateRequest(owner, request.id, { analysing: true, lastError: null }, this.#now());
     if (!started) throw notFound();
     const files: BrainFile[] = input.files.map(file => ({ name: file.name, mime: file.mime, bytes: file.bytes }));
-    this.#schedule(() => this.#runTurn(owner, started, { author: input.author, text: input.text, files }));
+    const turn: BrainTurn['input'] = {
+      author: input.author,
+      text: input.where && input.author === 'source' ? `(${input.where})\n${input.text}` : input.text,
+      files,
+      ...(input.fromName !== undefined ? { fromName: input.fromName } : {}),
+    };
+    // One turn of a request at a time: a follow-up that arrives while the agent answers waits for it.
+    const key = `${owner.orgId}\u0000${owner.userId}\u0000${request.id}`;
+    const chain = this.#turns.get(key) ?? { tail: Promise.resolve(), pending: 0 };
+    chain.pending += 1;
+    this.#turns.set(key, chain);
+    const finish = () => {
+      chain.pending -= 1;
+      if (chain.pending === 0 && this.#turns.get(key) === chain) this.#turns.delete(key);
+      return chain.pending === 0;
+    };
+    this.#schedule(() => {
+      const run = chain.tail.then(() => this.#runTurn(owner, started, turn, Boolean(input.first), finish));
+      chain.tail = run;
+      return run;
+    });
     return started;
   }
 
-  async #runTurn(owner: AssistantOwner, request: AssistantRequest, input: { author: 'person' | 'factory'; text: string; files: BrainFile[] }) {
+  async #runTurn(owner: AssistantOwner, request: AssistantRequest, input: BrainTurn['input'], first: boolean, finish: () => boolean) {
     try {
       const settings = await this.#deps.storage.getSettings(owner);
-      const { text } = await this.#deps.brain.respond({ owner, request, input, modelId: settings.modelId });
-      await this.#deps.storage.addMessage(owner, { requestId: request.id, author: 'agent', text, now: this.#now() });
+      const before = (await this.#deps.storage.getRequest(owner, request.id)) ?? request;
+      const answer = await this.#deps.brain.respond({ owner, request: before, input, modelId: settings.modelId, first });
+      await this.#deps.storage.addMessage(owner, { requestId: request.id, author: 'agent', text: answer.text, now: this.#now() });
+      const last = finish();
       const current = await this.#deps.storage.getRequest(owner, request.id);
       if (!current) return;
+      // A request a source made gets its topic from the agent's summary on the first turn.
+      const topic = first && current.source !== 'manual' ? answer.topic?.trim().slice(0, MAX_TOPIC) : undefined;
       await this.#deps.storage.updateRequest(
         owner,
         request.id,
         {
-          analysing: false,
+          ...(last ? { analysing: false } : {}),
           unread: true,
+          ...(topic ? { topic } : {}),
           // The agent reported: the person decides next. A closed request stays closed.
           ...(current.status === 'closed' ? {} : { status: 'waiting_me' as const }),
         },
         this.#now(),
       );
     } catch (error) {
+      const last = finish();
       // Loud: the thread shows why, the log names the request (never its content).
       console.error(`[assistant] The agent's turn on request ${request.id} failed:`, errorText(error));
       await this.#deps.storage
-        .updateRequest(owner, request.id, { analysing: false, lastError: errorText(error), unread: true }, this.#now())
+        .updateRequest(
+          owner,
+          request.id,
+          { ...(last ? { analysing: false } : {}), lastError: errorText(error), unread: true },
+          this.#now(),
+        )
         .catch(stored => console.error(`[assistant] Could not record the failure on request ${request.id}:`, stored));
     }
   }

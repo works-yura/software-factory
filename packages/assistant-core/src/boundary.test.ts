@@ -26,7 +26,7 @@ const FORBIDDEN = [
   /^@factory\/mcp(\/|$)/,
 ];
 /** What a runtime dependency may be, among Factory's own packages. Tests may also use the auth provider. */
-const ALLOWED_RUNTIME = new Set(['@factory/http', '@factory/access', '@factory/auth', '@factory/notifications', '@mastra/playground-ui']);
+const ALLOWED_RUNTIME = new Set(['@factory/assistant-core', '@factory/http', '@factory/access', '@factory/auth', '@factory/notifications', '@mastra/playground-ui']);
 const ALLOWED_DEV = new Set([...ALLOWED_RUNTIME, '@factory/auth-better-auth']);
 
 function sources(dir: string): string[] {
@@ -42,7 +42,7 @@ function imports(file: string): string[] {
   return [...text.matchAll(/(?:from\s+|import\s*\(\s*|import\s+)['"]([^'"]+)['"]/g)].map(match => match[1]!);
 }
 
-describe.each(['assistant-core', 'assistant-ui'])('%s', name => {
+describe.each(['assistant-core', 'assistant-ui', 'assistant-source-clickup'])('%s', name => {
   const root = join(packagesDir, name);
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     dependencies?: Record<string, string>;

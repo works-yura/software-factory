@@ -27,6 +27,8 @@ export const ASSISTANT_NOTES = 'assistant_notes';
 export const ASSISTANT_SETTINGS = 'assistant_settings';
 export const ASSISTANT_FILES = 'assistant_files';
 export const ASSISTANT_FACTORY_GRANTS = 'assistant_factory_grants';
+/** Every source message the assistant took in, by its source id: what makes reading idempotent. */
+export const ASSISTANT_SOURCE_MESSAGES = 'assistant_source_messages';
 
 const owner = { owner_org_id: { type: 'text' }, owner_user_id: { type: 'text' } } as const;
 
@@ -40,6 +42,9 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
       from_name: { type: 'text', nullable: true },
       source: { type: 'text' },
       source_url: { type: 'text', nullable: true },
+      // The source thread a request is bound to (`platform:workspace:channel:thread`), phase 2.
+      source_key: { type: 'text', nullable: true },
+      previous_request_id: { type: 'text', nullable: true },
       status: { type: 'text' },
       factory: { type: 'json', nullable: true },
       analysing: { type: 'boolean' },
@@ -52,6 +57,7 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
     indexes: [
       { name: 'assistant_requests_owner_idx', columns: ['owner_org_id', 'owner_user_id', 'updated_at'] },
       { name: 'assistant_requests_status_idx', columns: ['status'] },
+      { name: 'assistant_requests_source_key_idx', columns: ['owner_org_id', 'owner_user_id', 'source_key'] },
     ],
   },
   {
@@ -63,6 +69,7 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
       // The entry's place in its thread: timestamps tie within a millisecond.
       seq: { type: 'integer' },
       author: { type: 'text' },
+      from_name: { type: 'text', nullable: true },
       text: { type: 'text' },
       file_ids: { type: 'json' },
       created_at: { type: 'timestamp' },
@@ -126,10 +133,26 @@ export const ASSISTANT_SCHEMAS: CollectionSchema[] = [
     },
     uniqueIndexes: [{ name: 'assistant_factory_grants_owner_key', columns: ['owner_org_id', 'owner_user_id'] }],
   },
+  {
+    name: ASSISTANT_SOURCE_MESSAGES,
+    columns: {
+      id: { type: 'uuid-pk' },
+      ...owner,
+      // `platform:workspace:message`: the message's own id at its source.
+      message_key: { type: 'text' },
+      request_id: { type: 'text' },
+      created_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      { name: 'assistant_source_messages_key', columns: ['owner_org_id', 'owner_user_id', 'message_key'] },
+    ],
+    indexes: [{ name: 'assistant_source_messages_request_idx', columns: ['owner_org_id', 'owner_user_id', 'request_id'] }],
+  },
 ];
 
 /** Every table an owner has rows in, in the order cleanup erases them (files last: their bytes follow). */
 export const OWNER_TABLES = [
+  ASSISTANT_SOURCE_MESSAGES,
   ASSISTANT_MESSAGES,
   ASSISTANT_REQUESTS,
   ASSISTANT_NOTES,
@@ -150,6 +173,8 @@ interface RequestRow extends Record<string, unknown> {
   from_name: string | null;
   source: string;
   source_url: string | null;
+  source_key: string | null;
+  previous_request_id: string | null;
   status: string;
   factory: FactoryLink | null;
   analysing: boolean;
@@ -165,6 +190,7 @@ interface MessageRow extends Record<string, unknown> {
   request_id: string;
   seq: number;
   author: string;
+  from_name: string | null;
   text: string;
   file_ids: string[];
   created_at: Date;
@@ -221,6 +247,8 @@ function toRequest(row: RequestRow): AssistantRequest {
     fromName: row.from_name,
     source: row.source as RequestSource,
     sourceUrl: row.source_url,
+    sourceKey: row.source_key ?? null,
+    previousRequestId: row.previous_request_id ?? null,
     status: row.status as RequestStatus,
     factory: row.factory ?? null,
     analysing: bool(row.analysing),
@@ -237,6 +265,7 @@ function toMessage(row: MessageRow): AssistantMessage {
     id: row.id,
     requestId: row.request_id,
     author: row.author as MessageAuthor,
+    fromName: row.from_name ?? null,
     text: row.text,
     fileIds: Array.isArray(row.file_ids) ? row.file_ids : [],
     createdAt: row.created_at,
@@ -295,7 +324,15 @@ export class AssistantStorage extends FactoryStorageDomain {
 
   async createRequest(
     o: AssistantOwner,
-    input: { topic: string; fromName: string | null; source: RequestSource; sourceUrl: string | null; now?: Date },
+    input: {
+      topic: string;
+      fromName: string | null;
+      source: RequestSource;
+      sourceUrl: string | null;
+      sourceKey?: string | null;
+      previousRequestId?: string | null;
+      now?: Date;
+    },
   ): Promise<AssistantRequest> {
     const now = input.now ?? new Date();
     const row = await this.ops.insertOne<RequestRow>(ASSISTANT_REQUESTS, {
@@ -304,6 +341,8 @@ export class AssistantStorage extends FactoryStorageDomain {
       from_name: input.fromName,
       source: input.source,
       source_url: input.sourceUrl,
+      source_key: input.sourceKey ?? null,
+      previous_request_id: input.previousRequestId ?? null,
       status: 'new',
       factory: null,
       analysing: false,
@@ -345,6 +384,16 @@ export class AssistantStorage extends FactoryStorageDomain {
     return row ? toRequest(row) : null;
   }
 
+  /** The latest request bound to a source thread, open or closed; `null` when none is. */
+  async latestRequestForSource(o: AssistantOwner, sourceKey: string): Promise<AssistantRequest | null> {
+    const [row] = await this.ops.findMany<RequestRow>(
+      ASSISTANT_REQUESTS,
+      { ...ownerWhere(o), source_key: sourceKey },
+      { orderBy: [['created_at', 'desc'], ['id', 'desc']], limit: 1 },
+    );
+    return row ? toRequest(row) : null;
+  }
+
   /** Every closed request, of every owner, for the retention sweep. */
   async listClosedRequests(): Promise<AssistantRequest[]> {
     const rows = await this.ops.findMany<RequestRow>(ASSISTANT_REQUESTS, { status: 'closed' });
@@ -354,6 +403,7 @@ export class AssistantStorage extends FactoryStorageDomain {
   /** Removes one request and its thread; its files are left to the caller (their bytes need a refcount). */
   async deleteRequest(o: AssistantOwner, id: string): Promise<void> {
     const where = ownerWhere(o);
+    await this.ops.deleteMany(ASSISTANT_SOURCE_MESSAGES, { ...where, request_id: id });
     await this.ops.deleteMany(ASSISTANT_MESSAGES, { ...where, request_id: id });
     await this.ops.deleteMany(ASSISTANT_NOTES, { ...where, request_id: id });
     await this.ops.deleteMany(ASSISTANT_REQUESTS, { ...where, id });
@@ -363,7 +413,14 @@ export class AssistantStorage extends FactoryStorageDomain {
 
   async addMessage(
     o: AssistantOwner,
-    input: { requestId: string; author: MessageAuthor; text: string; fileIds?: string[]; now?: Date },
+    input: {
+      requestId: string;
+      author: MessageAuthor;
+      text: string;
+      fromName?: string | null;
+      fileIds?: string[];
+      now?: Date;
+    },
   ): Promise<AssistantMessage> {
     const [last] = await this.ops.findMany<MessageRow>(
       ASSISTANT_MESSAGES,
@@ -375,6 +432,7 @@ export class AssistantStorage extends FactoryStorageDomain {
       request_id: input.requestId,
       seq: (last ? Number(last.seq) : 0) + 1,
       author: input.author,
+      from_name: input.fromName ?? null,
       text: input.text,
       file_ids: input.fileIds ?? [],
       created_at: input.now ?? new Date(),
@@ -389,6 +447,42 @@ export class AssistantStorage extends FactoryStorageDomain {
       { orderBy: [['seq', 'asc']] },
     );
     return rows.map(toMessage);
+  }
+
+  // Source messages (idempotency)
+
+  /** Whether a source message was already taken in (by its `platform:workspace:message` key). */
+  async hasSourceMessage(o: AssistantOwner, messageKey: string): Promise<boolean> {
+    return (await this.ops.findOne(ASSISTANT_SOURCE_MESSAGES, { ...ownerWhere(o), message_key: messageKey })) !== null;
+  }
+
+  /**
+   * Records a source message as taken in. `false` when it already was (a concurrent read won):
+   * the unique key is the last word on idempotency.
+   */
+  async recordSourceMessage(o: AssistantOwner, input: { messageKey: string; requestId: string; now?: Date }): Promise<boolean> {
+    try {
+      await this.ops.insertOne(ASSISTANT_SOURCE_MESSAGES, {
+        ...ownerWhere(o),
+        message_key: input.messageKey,
+        request_id: input.requestId,
+        created_at: input.now ?? new Date(),
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof UniqueViolationError) return false;
+      throw error;
+    }
+  }
+
+  /** Points a recorded source message at the request it went into. */
+  async bindSourceMessage(o: AssistantOwner, messageKey: string, requestId: string): Promise<void> {
+    await this.ops.updateAtomic(ASSISTANT_SOURCE_MESSAGES, { ...ownerWhere(o), message_key: messageKey }, () => ({ request_id: requestId }));
+  }
+
+  /** Forgets a recorded source message whose taking-in failed, so the next read tries again. */
+  async forgetSourceMessage(o: AssistantOwner, messageKey: string): Promise<void> {
+    await this.ops.deleteMany(ASSISTANT_SOURCE_MESSAGES, { ...ownerWhere(o), message_key: messageKey });
   }
 
   // Notes
