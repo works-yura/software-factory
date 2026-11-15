@@ -1,6 +1,6 @@
 # 0048. Хости пристроїв і пісочниці за можливостями; окрема пісочниця перевірки
 
-Дата: 2026-11-15 · Статус: запропоновано (лише дизайн) · Продовжує [ADR-0026](0026-env-files-and-sandbox-stages.md) (стадії й команди налаштування), [ADR-0039](0039-local-environment-template-mirrors-and-session-work.md) (дзеркала, чекаут), [ADR-0041](0041-agents-run-as-a-separate-macos-user.md) (агент — окремий користувач), [ADR-0044](0044-harness-modules.md) (модулі), [ADR-0045](0045-repository-cache-and-session-work-are-replaceable-ports.md) (порти шаблону)
+Дата: 2026-11-15 · Статус: запропоновано (лише дизайн) · Продовжує [ADR-0026](0026-env-files-and-sandbox-stages.md) (стадії й команди налаштування), [ADR-0039](0039-local-environment-template-mirrors-and-session-work.md) (дзеркала, чекаут), [ADR-0041](0041-agents-run-as-a-separate-macos-user.md) (агент — окремий користувач), [ADR-0044](0044-harness-modules.md) (модулі), [ADR-0049](0049-repository-cache-and-session-work-are-replaceable-ports.md) (порти шаблону)
 
 ## Контекст
 

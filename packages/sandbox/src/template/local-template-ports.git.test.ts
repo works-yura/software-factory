@@ -1,5 +1,5 @@
 /**
- * The template's cache and session work stores are ports (ADR-0045): another
+ * The template's cache and session work stores are ports (ADR-0049): another
  * cache and store work without a single local mirror, and what needs a
  * capability the configured cache lacks fails at construction.
  */

@@ -84,7 +84,7 @@ export interface RepositoryCache {
  * Capability: the cache keeps every repository as a bare git repository on the
  * server's own disk (the local mirror store). What needs one asks for it with
  * {@link localRepositoriesOf} and fails at construction when the configured
- * cache has none (ADR-0045), never falling back to the network:
+ * cache has none (ADR-0049), never falling back to the network:
  * - environment builds clone the template copy from it (`git clone --local`);
  * - the template's housekeeping reads and drops the session work refs kept in
  *   it (`refs/factory/trash`, `wip/superseded`, `wip/conflict`) and the view of

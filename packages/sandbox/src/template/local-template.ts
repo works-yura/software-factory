@@ -6,7 +6,7 @@
  * ({@link SessionWork}). `LocalFactorySandbox` owns one and hands its ports to
  * materialization through {@link FactorySandboxCheckoutServices}.
  *
- * The cache and the session work stores are ports (ADR-0045): the options can
+ * The cache and the session work stores are ports (ADR-0049): the options can
  * replace them; by default they are the local mirrors. What needs the cache to
  * keep local repositories (builds, kept-ref housekeeping) asks for the
  * {@link LocalRepositories} capability and fails loudly without it.
