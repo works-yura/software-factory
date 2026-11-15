@@ -237,6 +237,24 @@ describe('session work safety, with real git', () => {
     expect(fx.git(dir, 'diff', '--cached', '--name-only')).toBe('.env');
   });
 
+  it('saves when an env file in the manifest sits in an ignored folder (git refuses to name an ignored path)', async () => {
+    const { folder, dir } = await freshCheckout();
+    fx.git(dir, 'checkout', '--quiet', '-b', 'factory/item-ignored');
+    // As setup writes it in a repository that ignores the folder: `.secrets/` in .gitignore.
+    await writeFile(path.join(dir, '.gitignore'), '.secrets/\n');
+    await mkdir(path.join(dir, '.secrets'), { recursive: true });
+    await writeFile(path.join(dir, '.secrets', 'factory-sa.json'), '{"private_key":"x"}\n');
+    await writeFile(path.join(dir, '.git', ENV_FILES_MANIFEST), '.secrets/factory-sa.json\n');
+    await writeFile(path.join(dir, 'kept.txt'), 'kept\n');
+
+    const saved = await template.saveFolder(folder);
+    expect(saved.failures).toEqual([]);
+    const mirror = template.repositoryCache.mirrorPath(fx.origin);
+    const files = fx.git(mirror, 'ls-tree', '-r', '--name-only', 'refs/factory/wip/tree/factory/item-ignored').split('\n');
+    expect(files).toContain('kept.txt');
+    expect(files).not.toContain('.secrets/factory-sa.json');
+  });
+
   it('records the owner on a mirror a save has to create, so publishing later can find credentials', async () => {
     const elsewhere = path.join(fx.root, 'second.git');
     fx.git(fx.root, 'clone', '--quiet', '--bare', fx.origin, elsewhere);
