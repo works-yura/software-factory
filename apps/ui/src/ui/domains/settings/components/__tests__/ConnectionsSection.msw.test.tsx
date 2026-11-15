@@ -404,6 +404,72 @@ describe('Підключення', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  /** Opens «Connect Robo Agent» and starts its sign-in, whose status the test's handlers answer. */
+  async function startRoboSignIn(status: (request: Request) => unknown) {
+    useIntegrationHandlers({ connectors: [acmeConnector, roboAgentConnector] });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/connections`, () =>
+        HttpResponse.json({ type: 'authorize', authId: 'flow-1', waiting: { title: 'Finish signing in to Robo', message: 'Open the sign-in page and sign in.', timeoutMs: 60_000 } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/connections/authorizations/flow-1`, ({ request }) => HttpResponse.json(status(request) as never)),
+    );
+    renderConnections();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Add connection' })).getByRole('option', { name: 'Connect Robo Agent' }));
+    const connect = await screen.findByRole('dialog', { name: 'Connect Robo Agent' });
+    await userEvent.click(within(connect).getByRole('button', { name: 'Continue' }));
+    return connect;
+  }
+
+  it('signs in from another machine: opens the page the server’s CLI printed in a new tab, then sends the code that page shows', async () => {
+    const url = 'https://claude.com/cai/oauth/authorize?code=true&state=s1';
+    let submitted: unknown;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/connections/authorizations/flow-1/code`, async ({ request }) => {
+        expect(new URL(request.url).searchParams.get('connector')).toBe('robo');
+        submitted = await request.json();
+        return HttpResponse.json({ status: 'pending' });
+      }),
+    );
+    const connect = await startRoboSignIn(() =>
+      submitted ? { status: 'completed' } : { status: 'pending', prompt: { url, acceptsCode: true } },
+    );
+    expect(await within(connect).findByText('Finish signing in to Robo')).toBeInTheDocument();
+
+    const open = await within(connect).findByRole('link', { name: 'Open sign-in page' }, { timeout: 5_000 });
+    expect(open).toHaveAttribute('href', url);
+    expect(open).toHaveAttribute('target', '_blank');
+    expect(open.getAttribute('rel')).toContain('noopener');
+
+    const field = within(connect).getByRole('textbox', { name: 'Code from the sign-in page' });
+    const submit = within(connect).getByRole('button', { name: 'Submit' });
+    expect(submit).toBeDisabled();
+    await userEvent.type(field, '  code-1#state-1 ');
+    await userEvent.click(submit);
+    await waitFor(() => expect(submitted).toEqual({ code: 'code-1#state-1' }));
+    expect(await within(connect).findByText('Robo Agent is connected', {}, { timeout: 5_000 })).toBeInTheDocument();
+  });
+
+  it('shows a device sign-in’s code to enter on the page, and going back cancels the sign-in', async () => {
+    let cancelled = 0;
+    server.use(
+      http.delete(`${TEST_BASE_URL}/web/connections/authorizations/flow-1`, () => {
+        cancelled += 1;
+        return HttpResponse.json({ status: 'failed' });
+      }),
+    );
+    const connect = await startRoboSignIn(() => ({
+      status: 'pending',
+      prompt: { url: 'https://auth.openai.com/codex/device', userCode: 'ABCD-EFGH1', acceptsCode: false },
+    }));
+    expect(await within(connect).findByRole('link', { name: 'Open sign-in page' }, { timeout: 5_000 })).toHaveAttribute('href', 'https://auth.openai.com/codex/device');
+    expect(within(connect).getByText('ABCD-EFGH1')).toBeInTheDocument();
+    expect(within(connect).queryByRole('textbox', { name: 'Code from the sign-in page' })).not.toBeInTheDocument();
+
+    await userEvent.click(within(connect).getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(cancelled).toBe(1));
+  });
+
   it('says the page needs an update when the server speaks another connections contract major', async () => {
     useHandlers();
     server.use(

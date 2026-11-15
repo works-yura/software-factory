@@ -1779,7 +1779,15 @@
       "errorTitle": "Couldn't connect",
       "pickFile": "Pick a file",
       "submit": "Connect",
-      "connecting": "Connecting…"
+      "connecting": "Connecting…",
+      "preparingSignIn": "Getting the sign-in page…",
+      "openSignInPage": "Open sign-in page",
+      "userCodeLabel": "Enter this code on that page",
+      "pasteCodeLabel": "Code from the sign-in page",
+      "pasteCodeHint": "After you sign in, the page shows a code. Paste it here.",
+      "submitCode": "Submit",
+      "codeSent": "Code sent. Finishing the sign-in…",
+      "codeFailed": "Couldn't send the code"
     },
     "addDialog": {
       "title": "Add connection",
