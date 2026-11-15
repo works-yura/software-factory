@@ -20,6 +20,8 @@ import type {
   RequestStatus,
 } from './types.ts';
 import { assertOwner, DEFAULT_RETENTION_DAYS } from './types.ts';
+import type { TurnFailure } from './turn-failure.ts';
+import { parseTurnFailure, serializeTurnFailure } from './turn-failure.ts';
 
 export const ASSISTANT_REQUESTS = 'assistant_requests';
 export const ASSISTANT_MESSAGES = 'assistant_messages';
@@ -252,7 +254,7 @@ function toRequest(row: RequestRow): AssistantRequest {
     status: row.status as RequestStatus,
     factory: row.factory ?? null,
     analysing: bool(row.analysing),
-    lastError: row.last_error,
+    lastError: parseTurnFailure(row.last_error),
     unread: bool(row.unread),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -302,7 +304,7 @@ export interface RequestPatch {
   status?: RequestStatus;
   factory?: FactoryLink | null;
   analysing?: boolean;
-  lastError?: string | null;
+  lastError?: TurnFailure | null;
   unread?: boolean;
   closedAt?: Date | null;
 }
@@ -377,7 +379,7 @@ export class AssistantStorage extends FactoryStorageDomain {
     if (patch.status !== undefined) set.status = patch.status;
     if (patch.factory !== undefined) set.factory = patch.factory;
     if (patch.analysing !== undefined) set.analysing = patch.analysing;
-    if (patch.lastError !== undefined) set.last_error = patch.lastError;
+    if (patch.lastError !== undefined) set.last_error = patch.lastError ? serializeTurnFailure(patch.lastError) : null;
     if (patch.unread !== undefined) set.unread = patch.unread;
     if (patch.closedAt !== undefined) set.closed_at = patch.closedAt;
     const row = await this.ops.updateAtomic<RequestRow>(ASSISTANT_REQUESTS, { ...ownerWhere(o), id }, () => set);

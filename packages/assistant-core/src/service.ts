@@ -36,6 +36,7 @@ import type {
   AssistantSettings,
   RequestStatus,
 } from './types.ts';
+import { classifyTurnFailure } from './turn-failure.ts';
 import { assertOwner, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from './types.ts';
 
 const notFound = () => new AssistantError('not_found', 'Request not found.', 404);
@@ -224,6 +225,44 @@ export class AssistantService {
     const updated = await this.#deps.storage.updateRequest(owner, id, patch, this.#now());
     if (!updated) throw notFound();
     return updated;
+  }
+
+  /**
+   * Runs the agent again on what it has not answered yet: the entries after its last reply (a turn
+   * that failed, or source messages left unread by the hourly limit). Same model choice as any
+   * turn — never another provider behind the person's back.
+   */
+  async retry(owner: AssistantOwner, id: string): Promise<AssistantRequest> {
+    await this.#ready();
+    const request = await this.#require(owner, id);
+    if (request.status === 'closed') throw new AssistantError('request_closed', 'This request is closed.', 409);
+    if (request.analysing) throw new AssistantError('agent_busy', 'The assistant is still answering.', 409);
+    const messages = await this.#deps.storage.listMessages(owner, id);
+    let lastAgent = -1;
+    messages.forEach((message, index) => {
+      if (message.author === 'agent') lastAgent = index;
+    });
+    const unanswered = messages
+      .slice(lastAgent + 1)
+      .filter(
+        (message): message is typeof message & { author: 'person' | 'factory' | 'source' } =>
+          message.author === 'person' || message.author === 'factory' || message.author === 'source',
+      );
+    const latest = unanswered.at(-1);
+    if (!latest) throw new AssistantError('nothing_to_retry', 'The assistant has already answered everything here.', 409);
+    const fileIds = new Set(unanswered.flatMap(message => message.fileIds));
+    const files = (await this.#deps.storage.listFiles(owner, id)).filter(file => fileIds.has(file.id));
+    const withBytes = await Promise.all(files.map(async file => ({ ...file, bytes: await this.#bytes(file) })));
+    return this.#startTurn(owner, request, {
+      author: latest.author,
+      text: unanswered
+        .map(message => message.text)
+        .filter(Boolean)
+        .join('\n\n'),
+      files: withBytes,
+      fromName: latest.fromName,
+      first: lastAgent < 0 && request.source !== 'manual',
+    });
   }
 
   // Sources
@@ -702,7 +741,7 @@ export class AssistantService {
         .updateRequest(
           owner,
           request.id,
-          { ...(last ? { analysing: false } : {}), lastError: errorText(error), unread: true },
+          { ...(last ? { analysing: false } : {}), lastError: classifyTurnFailure(error), unread: true },
           this.#now(),
         )
         .catch(stored => console.error(`[assistant] Could not record the failure on request ${request.id}:`, stored));

@@ -144,7 +144,16 @@ export function AccountSettingsSection() {
       </SettingsSubsection>
       <AccountGithubRow />
       {user?.organizationId ? (
-        <SettingsSubsection scope="personal" title={t('account.assistant.title')} description={t('account.assistant.description')}>
+        <SettingsSubsection
+          id="assistant"
+          // The assistant's panel links here (`#assistant`) to pick another model after a failed turn.
+          ref={element => {
+            if (element && window.location.hash === '#assistant') element.scrollIntoView?.({ block: 'start' });
+          }}
+          scope="personal"
+          title={t('account.assistant.title')}
+          description={t('account.assistant.description')}
+        >
           <AssistantAccountSettings />
         </SettingsSubsection>
       ) : null}
