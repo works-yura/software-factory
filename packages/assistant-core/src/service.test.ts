@@ -137,6 +137,20 @@ describe('a request the person brings', () => {
     await expect(service.postMessage(ADA, created.id, { text: 'more' })).rejects.toMatchObject({ code: 'request_closed' });
   });
 
+  it('takes the person’s own topic and status, closing and reopening', async () => {
+    const created = await service.createRequest(ADA, { text: 'first' });
+    await settle();
+    const renamed = await service.updateRequest(ADA, created.id, { topic: '  Checkout   for Olena ' });
+    expect(renamed.topic).toBe('Checkout for Olena');
+    await expect(service.updateRequest(ADA, created.id, { topic: ' ' })).rejects.toMatchObject({ code: 'invalid_topic', status: 400 });
+
+    const closed = await service.updateRequest(ADA, created.id, { status: 'closed' });
+    expect(closed).toMatchObject({ status: 'closed', closedAt: now, unread: false });
+    const reopened = await service.updateRequest(ADA, created.id, { status: 'waiting_me' });
+    expect(reopened).toMatchObject({ status: 'waiting_me', closedAt: null });
+    await expect(service.updateRequest(BOB, created.id, { status: 'closed' })).rejects.toMatchObject({ status: 404 });
+  });
+
   it('takes its topic from the first line, or the first file', () => {
     expect(deriveTopic('\n  Line one \nLine two', [])).toBe('Line one');
     expect(deriveTopic('', [{ name: 'shot.png' }])).toBe('shot.png');
@@ -210,7 +224,18 @@ describe('Factory', () => {
     const handed = await service.handOver(ADA, created.id, { factoryId: 'f-1' });
     expect(handed).toMatchObject({ status: 'waiting_factory', factory: { workItemId: 'card-1', factoryName: 'Shop' } });
     expect(factory.handed[0]).toMatchObject({ title: 'Fix the banner', files: ['a.png'] });
+    expect(factory.handed[0]!.description).toContain('Fix the banner');
     await expect(service.handOver(ADA, created.id, { factoryId: 'f-1' })).rejects.toMatchObject({ code: 'already_handed_over' });
+  });
+
+  it('puts the person’s hand-over note first in the card and in the thread', async () => {
+    factory.connect(ADA);
+    const created = await service.createRequest(ADA, { text: 'Fix the banner' });
+    await settle();
+    await service.handOver(ADA, created.id, { factoryId: 'f-1', note: 'Only on mobile' });
+    expect(factory.handed[0]!.description.startsWith('Only on mobile\n\nFix the banner')).toBe(true);
+    const view = await service.openRequest(ADA, created.id);
+    expect(view.messages.find(m => m.author === 'event')!.text).toBe('handed:Shop\nOnly on mobile');
   });
 
   it('turns a Factory failure into its answer to the person', async () => {

@@ -16,7 +16,10 @@
     "selectRequest": "Open a request, or bring a new one.",
     "loading": "Loading…",
     "newCount_one": "{{count}} new",
-    "newCount_other": "{{count}} new"
+    "newCount_other": "{{count}} new",
+    "unread": "unread",
+    "inboxZero": "All caught up",
+    "emptyFilter": "Nothing here"
   },
   "filter": {
     "label": "Show",
@@ -28,7 +31,8 @@
     "waiting_factory": "Waiting for Factory",
     "waiting_me": "Waiting for me",
     "answered": "Answered",
-    "closed": "Closed"
+    "closed": "Closed",
+    "label": "Status"
   },
   "newRequest": {
     "title": "New request",
@@ -64,7 +68,11 @@
     "reply": "Write to the assistant…",
     "send": "Send",
     "attach": "Attach files",
-    "closedNotice": "This request is closed."
+    "closedNotice": "This request is closed.",
+    "created": "Created",
+    "rename": "Rename",
+    "topic": "Topic",
+    "properties": "Request properties"
   },
   "actions": {
     "label": "Request actions",
@@ -74,15 +82,16 @@
     "checkAnswer": "Check for the answer",
     "noAnswerYet": "Factory has not answered yet.",
     "factory": "Factory",
-    "question": "Question",
-    "questionPlaceholder": "Leave empty to send the request as it is",
-    "title": "Card title",
-    "confirmAsk": "Ask",
-    "confirmHandOver": "Hand over",
     "cancel": "Cancel",
     "connectFirst": "Allow the assistant to reach Factory first: Account › Assistant.",
     "noFactories": "There is no Factory you can reach.",
-    "hint": "{{factory}}?"
+    "reopen": "Reopen",
+    "closeHint": "Close the request",
+    "more": "More actions",
+    "openOriginal": "Open the original",
+    "openInFactory": "Open in {{factory}}",
+    "notConnected": "Factory not allowed",
+    "searchFactory": "Find a Factory…"
   },
   "notes": {
     "empty": "No notes yet.",
@@ -120,5 +129,37 @@
     "clearConfirmDescription": "Everything it kept in this organization is erased. This cannot be undone.",
     "cleared": "The assistant was cleared.",
     "saveRetention": "Save how long to keep"
+  },
+  "time": {
+    "now": "now",
+    "minutes_one": "{{count}}m",
+    "minutes_other": "{{count}}m",
+    "hours_one": "{{count}}h",
+    "hours_other": "{{count}}h",
+    "days_one": "{{count}}d",
+    "days_other": "{{count}}d"
+  },
+  "keys": {
+    "move": "move",
+    "reply": "reply",
+    "close": "close",
+    "new": "new"
+  },
+  "source": {
+    "manual": "Brought by you"
+  },
+  "composer": {
+    "mode": "Send to",
+    "modes": {
+      "assistant": "Assistant",
+      "ask": "Ask Factory",
+      "handOver": "Hand to Factory"
+    },
+    "askPlaceholder": "Question for {{factory}} — leave empty to send the request as it is",
+    "handOverPlaceholder": "A note for the card in {{factory}} (optional)",
+    "factoryHint": "Goes out as you, with your role.",
+    "sendAsk": "Ask {{factory}}",
+    "sendHandOver": "Hand to {{factory}}",
+    "actions": "Send"
   }
 }

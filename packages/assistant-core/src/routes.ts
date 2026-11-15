@@ -18,6 +18,7 @@ import { ASSISTANT_MAX_FILES_PER_MESSAGE, isInlineMime } from './files.ts';
 import type { AssistantModels } from './ports.ts';
 import type { AssistantService } from './service.ts';
 import type { AssistantFile, AssistantMessage, AssistantNote, AssistantOwner, AssistantRequest } from './types.ts';
+import { isRequestStatus, REQUEST_STATUSES } from './types.ts';
 
 export const ASSISTANT_ROUTE_PREFIX = '/web/assistant';
 
@@ -213,6 +214,22 @@ export class AssistantRoutes {
           return c.json({ request: requestWire(request) }, 201);
         }),
       }),
+      registerApiRoute(`${p}/requests/:id`, {
+        method: 'PATCH',
+        handler: handle(async (c, owner) => {
+          const body = await jsonBody(c);
+          const topic = optionalString(body, 'topic');
+          const status = body.status;
+          if (status !== undefined && !isRequestStatus(status)) {
+            throw new AssistantError('invalid_body', `status must be one of ${REQUEST_STATUSES.join(', ')}.`, 400);
+          }
+          const request = await service.updateRequest(owner, c.req.param('id') ?? '', {
+            ...(topic !== undefined ? { topic } : {}),
+            ...(status !== undefined ? { status } : {}),
+          });
+          return c.json({ request: requestWire(request) });
+        }),
+      }),
       registerApiRoute(`${p}/requests/:id/close`, {
         method: 'POST',
         handler: handle(async (c, owner) => c.json({ request: requestWire(await service.close(owner, c.req.param('id') ?? '')) })),
@@ -245,9 +262,11 @@ export class AssistantRoutes {
           const factoryId = optionalString(body, 'factoryId');
           if (!factoryId) throw new AssistantError('invalid_body', 'Name the Factory to hand the request to.', 400);
           const title = optionalString(body, 'title');
+          const note = optionalString(body, 'note');
           const request = await service.handOver(owner, c.req.param('id') ?? '', {
             factoryId,
             ...(title !== undefined ? { title } : {}),
+            ...(note !== undefined ? { note } : {}),
           });
           return c.json({ request: requestWire(request) });
         }),
@@ -386,6 +405,7 @@ export class AssistantRoutes {
 /** Every write is the person's own (ADR-0045 `self.write`); the callback writes the grant, so it declares too. */
 export const ASSISTANT_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'POST /web/assistant/requests': 'self.write',
+  'PATCH /web/assistant/requests/:id': 'self.write',
   'POST /web/assistant/requests/:id/messages': 'self.write',
   'POST /web/assistant/requests/:id/close': 'self.write',
   'POST /web/assistant/requests/:id/ask': 'self.write',

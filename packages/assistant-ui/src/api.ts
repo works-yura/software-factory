@@ -207,6 +207,34 @@ export function usePostMessage(id: string) {
   });
 }
 
+export interface RequestPatch {
+  topic?: string;
+  status?: RequestStatus;
+}
+
+/**
+ * The person's own edits to any request (topic, status) — the thread header and the list's
+ * keyboard (E closes) both use it. The list shows the new status at once, before the server answers.
+ */
+export function useUpdateRequest() {
+  const api = useAssistantApi();
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidateRequests();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: RequestPatch }) =>
+      call<{ request: AssistantRequest }>(api, `/requests/${encodeURIComponent(id)}`, json('PATCH', patch)).then(body => body.request),
+    onMutate: ({ id, patch }) => {
+      queryClient.setQueryData<AssistantRequest[]>(assistantKeys.requests(), current =>
+        current?.map(request => (request.id === id ? { ...request, ...patch } : request)),
+      );
+      queryClient.setQueryData<RequestView>(assistantKeys.request(id), current =>
+        current ? { ...current, request: { ...current.request, ...patch } } : current,
+      );
+    },
+    onSettled: (_data, _error, { id }) => invalidate(id),
+  });
+}
+
 export function useRequestAction(id: string) {
   const api = useAssistantApi();
   const invalidate = useInvalidateRequests();
@@ -219,7 +247,7 @@ export function useRequestAction(id: string) {
       ...done,
     }),
     handOver: useMutation({
-      mutationFn: (input: { factoryId: string; title?: string }) => call(api, `${path}/hand-over`, json('POST', input)),
+      mutationFn: (input: { factoryId: string; title?: string; note?: string }) => call(api, `${path}/hand-over`, json('POST', input)),
       ...done,
     }),
     checkAnswer: useMutation({
