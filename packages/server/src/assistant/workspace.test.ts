@@ -113,7 +113,11 @@ describe.runIf(Boolean(agentConfig && existsSync(agentConfig.profilePath)))('as 
       await workspaces.forTurn(owner, { requestId: 'r1', files: [], hooks: {} });
       const output = await workspaces.runApproved(owner, 'r1', {
         toolName: 'execute_command',
-        args: { command: 'id -un > requests/r1/who.txt; ls ~/ >/dev/null 2>&1 && echo home; ls /Users/$USER >/dev/null 2>&1 || echo closed', description: 'who' },
+        // The server user's home (not the agent's own: inside the run $USER is the agent) is closed to it.
+        args: {
+          command: `id -un > requests/r1/who.txt; ls ~/ >/dev/null 2>&1 && echo home; ls /Users/${process.env.USER} >/dev/null 2>&1 || echo closed`,
+          description: 'who',
+        },
       });
       expect(JSON.stringify(output)).toContain('closed');
       const who = await workspaces.read(owner, 'r1', 'who.txt');
