@@ -62,6 +62,61 @@ export interface WorkspaceEntry {
   modifiedAt: Date | null;
 }
 
+/*
+ * The Files view's wire shapes. They are those of a session's Files (`WorkspaceTreeListing`,
+ * `WorkspaceFile` in `@factory/api/fs`), copied rather than imported because ADR-0051's boundary
+ * keeps `@factory/api` out of the assistant; the app draws both with the same components, so a
+ * change there must come here too (the app's adapter test reads both through one type).
+ */
+
+/** One directory of the request's folder, as a session's Files tree lists one. */
+export interface WorkspaceTreeView {
+  /** `assistant/<requestId>`: what the app keys its queries by. */
+  workspacePath: string;
+  path: string;
+  available: boolean;
+  entries: Array<{ name: string; path: string; type: 'file' | 'directory'; size?: number }>;
+}
+
+/** One file, as a session's file view shows it. */
+export interface WorkspaceFileView {
+  workspacePath: string;
+  path: string;
+  name: string;
+  size: number;
+  updatedAt: string;
+  contentType: 'text' | 'media' | 'unsupported';
+  content?: string;
+  mimeType?: string;
+  truncated?: boolean;
+}
+
+/** What the app keys a request's Files by; never a path on disk. */
+export function workspaceViewPath(requestId: string): string {
+  return `assistant/${requestId}`;
+}
+
+const MAX_TEXT_BYTES = 512 * 1024;
+const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
+const MEDIA_TYPES: Readonly<Record<string, string>> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  svg: 'image/svg+xml',
+  pdf: 'application/pdf',
+};
+
+function mediaTypeOf(path: string): string | undefined {
+  const dot = path.lastIndexOf('.');
+  if (dot === -1 || dot < path.lastIndexOf('/')) return undefined;
+  return MEDIA_TYPES[path.slice(dot + 1).toLowerCase()];
+}
+
 function bytesOf(content: string | Buffer | Uint8Array): Uint8Array {
   return typeof content === 'string' ? new TextEncoder().encode(content) : new Uint8Array(content);
 }
@@ -253,6 +308,58 @@ export class AssistantWorkspaces {
     const bytes = bytesOf(await filesystem.readFile(path));
     const name = path.split('/').pop()!;
     return { name, mime: sniffMime(bytes, getMimeType(name) ?? null), bytes };
+  }
+
+  /**
+   * One directory of the request's folder (`''` its top), in the wire shape of a session's Files tree
+   * (`/web/workspace/tree`), so the app draws it with the sessions' own file browser.
+   */
+  async tree(owner: AssistantOwner, requestId: string, relativePath: string): Promise<WorkspaceTreeView> {
+    const workspace = await this.#host.open(owner);
+    const filesystem = this.#filesystem(workspace);
+    const root = requestFolder(requestId);
+    const path = relativePath.trim() ? pathInRequest(requestId, relativePath).slice(root.length + 1) : '';
+    const dir = path ? `${root}/${path}` : root;
+    const listing = { workspacePath: workspaceViewPath(requestId), path };
+    if (!(await filesystem.exists(dir))) return { ...listing, available: true, entries: [] };
+    const entries = (await filesystem.readdir(dir))
+      .filter(entry => !entry.isSymlink)
+      .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1))
+      .slice(0, MAX_LISTED)
+      .map(entry => ({
+        name: entry.name,
+        path: path ? `${path}/${entry.name}` : entry.name,
+        type: entry.type,
+        ...(entry.type === 'file' && entry.size !== undefined ? { size: entry.size } : {}),
+      }));
+    return { ...listing, available: true, entries };
+  }
+
+  /**
+   * One file of the request's folder in the wire shape of a session's file view (`/web/workspace/file`):
+   * images and PDFs as media, text (its first 512 KiB), anything else unsupported.
+   */
+  async fileView(owner: AssistantOwner, requestId: string, relativePath: string): Promise<WorkspaceFileView> {
+    const workspace = await this.#host.open(owner);
+    const filesystem = this.#filesystem(workspace);
+    const full = pathInRequest(requestId, relativePath);
+    const path = full.slice(requestFolder(requestId).length + 1);
+    const stat = await filesystem.stat(full).catch(() => null);
+    if (!stat || stat.type !== 'file') throw new AssistantError('not_found', 'File not found.', 404);
+    const base = { workspacePath: workspaceViewPath(requestId), path, name: path.split('/').pop()!, size: stat.size, updatedAt: stat.modifiedAt.toISOString() };
+    const mimeType = mediaTypeOf(path);
+    if (mimeType) {
+      if (stat.size > MAX_MEDIA_BYTES) return { ...base, contentType: 'unsupported' };
+      return { ...base, contentType: 'media', mimeType, content: Buffer.from(bytesOf(await filesystem.readFile(full))).toString('base64') };
+    }
+    const bytes = bytesOf(await filesystem.readFile(full));
+    const truncated = bytes.byteLength > MAX_TEXT_BYTES;
+    try {
+      const content = new TextDecoder('utf-8', { fatal: true }).decode(truncated ? bytes.subarray(0, MAX_TEXT_BYTES) : bytes);
+      return { ...base, contentType: 'text', content, truncated };
+    } catch {
+      return { ...base, contentType: 'unsupported' };
+    }
   }
 
   /** Writes a file into the request's folder (a download, a source's attachment); a taken name gets a suffix. */

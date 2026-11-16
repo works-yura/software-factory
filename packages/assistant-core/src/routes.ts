@@ -374,6 +374,22 @@ export class AssistantRoutes {
           });
         }),
       }),
+      // The same shapes a session's Files read (`/web/workspace/tree|file`): the app draws them with the sessions' viewer.
+      registerApiRoute(`${p}/requests/:id/workspace/tree`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => {
+          if (!service.hasWorkspace) throw new AssistantError('workspace_unavailable', 'This server gives the assistant no workspace.', 503);
+          return c.json(await service.workspaceTree(owner, c.req.param('id') ?? '', c.req.query('path') ?? ''));
+        }),
+      }),
+      registerApiRoute(`${p}/requests/:id/workspace/view`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => {
+          const path = c.req.query('path');
+          if (!path) throw new AssistantError('invalid_path', 'Name the file.', 400);
+          return c.json(await service.workspaceFileView(owner, c.req.param('id') ?? '', path));
+        }),
+      }),
       registerApiRoute(`${p}/requests/:id/workspace/file`, {
         method: 'GET',
         handler: handle(async (c, owner) => {

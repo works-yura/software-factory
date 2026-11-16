@@ -59,7 +59,7 @@ import type {
 } from './types.ts';
 import { classifyTurnFailure } from './turn-failure.ts';
 import { AssistantWorkspaces, DOWNLOADS_DIR, recordWorkspaceCalls, requestFolder, workspaceGate } from './workspace.ts';
-import type { WorkspaceEntry } from './workspace.ts';
+import type { WorkspaceEntry, WorkspaceFileView, WorkspaceTreeView } from './workspace.ts';
 import type { TurnFailure } from './turn-failure.ts';
 import {
   assertOwner,
@@ -1225,6 +1225,20 @@ export class AssistantService {
     await this.#ready();
     await this.#require(owner, id);
     return this.#requireWorkspaces().list(owner, id);
+  }
+
+  /** One directory of the request's folder, as a session's Files tree lists one. */
+  async workspaceTree(owner: AssistantOwner, id: string, path: string): Promise<WorkspaceTreeView> {
+    await this.#ready();
+    await this.#require(owner, id);
+    return this.#requireWorkspaces().tree(owner, id, path);
+  }
+
+  /** One file of the request's folder, as a session's file view shows it. */
+  async workspaceFileView(owner: AssistantOwner, id: string, path: string): Promise<WorkspaceFileView> {
+    await this.#ready();
+    await this.#require(owner, id);
+    return this.#requireWorkspaces().fileView(owner, id, path);
   }
 
   /** One file of the request's folder. */

@@ -288,6 +288,33 @@ describe("the thread's files and hand-over", () => {
     expect(pathInRequest(created.id, './downloads/a.png')).toBe(`requests/${created.id}/downloads/a.png`);
   });
 
+  it("answers in the session Files' shapes: tree by folder, images as media, text, others unsupported", async () => {
+    const created = await service.createRequest(ADA, { text: 'x', files: [{ name: 'a.png', declaredMime: null, bytes: PNG }] });
+    await settle();
+    const folder = join(host.folder(ADA), 'requests', created.id);
+    await writeFile(join(folder, 'notes.md'), '# Notes');
+    await writeFile(join(folder, 'blob.bin'), new Uint8Array([0xff, 0xfe, 0x00, 0x81]));
+    await service.downloadToWorkspace(ADA, created.id, { url: 'https://files.example-source.test/d/shot.png' });
+    const top = await service.workspaceTree(ADA, created.id, '');
+    expect(top).toMatchObject({ workspacePath: `assistant/${created.id}`, path: '', available: true });
+    expect(top.entries.map(entry => [entry.path, entry.type])).toEqual([
+      ['downloads', 'directory'],
+      ['a.png', 'file'],
+      ['blob.bin', 'file'],
+      ['notes.md', 'file'],
+    ]);
+    expect((await service.workspaceTree(ADA, created.id, 'downloads')).entries.map(entry => entry.path)).toEqual(['downloads/shot.png']);
+    expect(await service.workspaceFileView(ADA, created.id, 'notes.md')).toMatchObject({ contentType: 'text', content: '# Notes', truncated: false });
+    expect(await service.workspaceFileView(ADA, created.id, 'a.png')).toMatchObject({
+      contentType: 'media',
+      mimeType: 'image/png',
+      content: Buffer.from(PNG).toString('base64'),
+    });
+    expect(await service.workspaceFileView(ADA, created.id, 'blob.bin')).toMatchObject({ contentType: 'unsupported' });
+    await expect(service.workspaceTree(ADA, created.id, '../..')).rejects.toMatchObject({ code: 'invalid_path' });
+    await expect(service.workspaceTree(BOB, created.id, '')).rejects.toMatchObject({ code: 'not_found' });
+  });
+
   it('hands the picked workspace files over with the request’s own', async () => {
     factory.connect(ADA);
     brain.answer = async turn => {
