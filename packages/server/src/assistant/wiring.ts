@@ -21,6 +21,7 @@ import type {
   AssistantModels,
   AssistantSkills,
   AssistantStorage,
+  AssistantWorkspaceHost,
   DigestJob,
   RetentionJob,
 } from '@factory/assistant-core';
@@ -106,6 +107,11 @@ export interface FactoryAssistantOptions {
   authProvider: unknown;
   /** How harness models run here (tests); by default Claude Code, Codex and OpenCode on the sign-in and account pools. */
   harnessRunners?: Readonly<Record<string, AssistantHarnessRunner>>;
+  /**
+   * The owner's workspace in the server's local sandbox (`./workspace.ts`); without one (sessions
+   * run in remote sandboxes) the assistant has no files or commands and says so.
+   */
+  workspace?: AssistantWorkspaceHost;
 }
 
 /**
@@ -277,6 +283,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     ...(clickup ? { sources: [clickup] } : {}),
     skills,
     ...(options.blobs ? { blobs: options.blobs } : {}),
+    ...(options.workspace ? { workspace: options.workspace } : {}),
     brain: createMastraAssistantBrain({ memory: createAssistantMemory(options.mastraStorage), models: resolver }),
     memory: createAssistantMemoryEraser(options.mastraStorage),
     models,

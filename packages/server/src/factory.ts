@@ -138,6 +138,7 @@ import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/
 import { AssistantStorage } from '@factory/assistant-core';
 import { ClickUpSourceStorage } from '@factory/assistant-source-clickup';
 import { createFactoryAssistant, createOrgClickUpReader } from './assistant/wiring.ts';
+import { createAssistantWorkspaceHost } from './assistant/workspace.ts';
 import type { FactoryAssistant } from './assistant/wiring.ts';
 import type { FactoryMcpConfig } from '@factory/mcp';
 import { resolveDeploymentModelProviders } from '@factory/api';
@@ -1097,6 +1098,12 @@ export class MastraFactory {
     // «Помічник» (ADR-0051): a person's requests desk in their organization. It needs sign-in (an owner
     // is a person in an organization) and reaches Factory only through the MCP endpoint as that person.
     this.#assistant?.stop();
+    // The assistant's workspace lives in the local sandbox, beside the sessions' folders; a server
+    // whose sessions run elsewhere has no folder to keep per person between turns.
+    const assistantSandbox = sandboxConfig instanceof LocalFactorySandbox ? sandboxConfig : undefined;
+    if (auth && !assistantSandbox) {
+      console.warn('[assistant] No local sandbox on this server: the assistant gets no workspace (files and commands).');
+    }
     this.#assistant = auth
       ? createFactoryAssistant({
           storage: assistantStorage,
@@ -1117,6 +1124,7 @@ export class MastraFactory {
           publicOrigin,
           authProvider: auth,
           codeSkills: this.#skills,
+          ...(assistantSandbox ? { workspace: createAssistantWorkspaceHost({ sandbox: assistantSandbox }) } : {}),
         })
       : undefined;
     const workItemsInitError = storage.domainInitError('work-items');
