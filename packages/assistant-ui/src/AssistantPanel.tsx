@@ -10,7 +10,7 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { ThreadList, ThreadListItem, ThreadListItems } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { ArrowLeft, Inbox, MessageSquareDashed, Plus, Settings, X } from 'lucide-react';
+import { ArrowLeft, Inbox, Maximize2, MessageSquareDashed, Minimize2, Plus, Settings, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -93,8 +93,13 @@ export function AssistantPanel({
   compact = false,
   hint,
   onClose,
+  expanded = false,
+  onToggleExpanded,
 }: {
   compact?: boolean;
+  /** Whether the panel fills the screen; with `onToggleExpanded` the header offers the switch. */
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
   /** The Factory the page belongs to, the default target when asking or handing over. */
   hint?: { id: string; name: string };
   onClose: () => void;
@@ -295,6 +300,19 @@ export function AssistantPanel({
             {settingsHref ? (
               <Button size="icon-sm" variant="ghost" aria-label={t('panel.settings')} tooltip={t('panel.settings')} render={<a href={settingsHref} />}>
                 <Settings />
+              </Button>
+            ) : null}
+            {onToggleExpanded ? (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label={t(expanded ? 'panel.collapse' : 'panel.expand')}
+                aria-pressed={expanded}
+                tooltip={t(expanded ? 'panel.collapse' : 'panel.expand')}
+                onClick={onToggleExpanded}
+                data-testid="assistant-expand"
+              >
+                {expanded ? <Minimize2 /> : <Maximize2 />}
               </Button>
             ) : null}
             <Button size="icon-sm" variant="ghost" aria-label={t('launcher.close')} onClick={onClose}>

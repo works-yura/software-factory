@@ -20,7 +20,9 @@
     "unread": "unread",
     "inboxZero": "All caught up",
     "emptyFilter": "Nothing here",
-    "settings": "Assistant settings"
+    "settings": "Assistant settings",
+    "expand": "Full screen",
+    "collapse": "Back to a window"
   },
   "filter": {
     "label": "Show",
