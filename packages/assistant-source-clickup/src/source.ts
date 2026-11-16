@@ -14,6 +14,7 @@ import type {
   SecretCipher,
   SourceChannelInfo,
   SourceChannelMessages,
+  SourceDownload,
   SourceMessage,
 } from '@factory/assistant-core';
 
@@ -25,7 +26,8 @@ import type {
   ClickUpChatClientOptions,
   ClickUpWorkspaceInfo,
 } from './client.ts';
-import { channelUrl, ClickUpBudgetSpent, ClickUpChatClient, ClickUpChatError, fileLinks, isPersonalToken } from './client.ts';
+import { channelUrl, ClickUpBudgetSpent, ClickUpChatClient, ClickUpChatError, isClickUpFileUrl, isPersonalToken } from './client.ts';
+import type { MessageAttachment } from './client.ts';
 import type { OrgClickUpReader } from './org-connection.ts';
 import { orgConnectionFor } from './org-connection.ts';
 import type { ChannelKind, ChannelMember, ClickUpSourceStorage, DetailsWhat, SourceChannel, SourceConnection } from './storage.ts';
@@ -549,21 +551,43 @@ export class ClickUpChatSource implements AssistantSource {
       const page = input.threadId
         ? await client.replies(channel.workspaceId, channel.channelId, input.threadId, { limit })
         : await client.messages(channel.workspaceId, channel.channelId, { limit });
+      const names = await this.#authorNames(client, channel, members, page.items.map(message => message.userId));
       return {
         channel: this.#info(channel),
         messages: page.items
           .sort((a, b) => a.date - b.date)
           .map(message => ({
             id: message.id,
-            from: members.get(message.userId) ?? (message.userId || null),
+            from: names.get(message.userId) ?? null,
             text: message.content,
             at: new Date(message.date).toISOString(),
             replies: message.repliesCount,
             threadId: message.parentMessageId,
+            ...(message.attachments.length ? { attachments: message.attachments.map(file => ({ name: file.name, url: file.url })) } : {}),
           })),
       };
     } catch (error) {
       if (error instanceof AssistantError) throw error;
+      throw new AssistantError('clickup_failed', `ClickUp answered: ${errorText(error)}`, 502);
+    }
+  }
+
+  /**
+   * A file on ClickUp's hosts for the agent's download tool, fetched with the person's connection
+   * (their token, or the organization's while provably theirs); `null` for any other host.
+   */
+  async download(owner: AssistantOwner, url: string, maxBytes: number): Promise<SourceDownload | null> {
+    if (!isClickUpFileUrl(url)) return null;
+    await this.#ready();
+    const connection = await this.#deps.storage.getConnection(owner);
+    if (!connection || connection.status !== 'active') throw new AssistantError('not_connected', 'ClickUp is not connected (or no longer accepts the token).', 409);
+    const access = await this.#token(owner, connection);
+    if (!access) throw new AssistantError('not_connected', ORG_CONNECTION_GONE, 409);
+    const client = this.#client(owner, 'read', access.token, 1);
+    try {
+      return await client.download(url, maxBytes);
+    } catch (error) {
+      if (error instanceof ClickUpChatError && error.status === 413) throw new AssistantError('file_too_large', 'The file is larger than the limit.', 413);
       throw new AssistantError('clickup_failed', `ClickUp answered: ${errorText(error)}`, 502);
     }
   }
@@ -919,6 +943,7 @@ export class ClickUpChatSource implements AssistantSource {
     }
     incoming.sort((a, b) => a.message.date - b.message.date);
 
+    const names = await this.#authorNames(client, channel, members, incoming.map(({ message }) => message.userId));
     let ingested = 0;
     for (const { message, rootId } of incoming) {
       if (!(await storage.getConnection(owner))) return ingested;
@@ -936,9 +961,9 @@ export class ClickUpChatSource implements AssistantSource {
         sourceKey,
         messageKey: `clickup:${workspaceId}:${message.id}`,
         text: message.content,
-        fromName: members.get(message.userId) ?? (message.userId || null),
+        fromName: names.get(message.userId) ?? null,
         sourceUrl: channelUrl(workspaceId, channelId),
-        files: await this.#files(client, message.content),
+        files: await this.#files(client, message.attachments),
         fromMe,
         // A digest-only channel never spends a turn; the others count against the hourly limit.
         analyse: fromMe || channel.rule.kind === 'digest_only' ? false : this.#turns.allow(owner, this.limits.turnsPerHour, this.#now().getTime()),
@@ -976,14 +1001,35 @@ export class ClickUpChatSource implements AssistantSource {
     return tagged.includes(me);
   }
 
-  /** Files the message links to on ClickUp's hosts; a file that cannot be fetched is skipped. */
-  async #files(client: ClickUpChatClient, content: string): Promise<SourceMessage['files']> {
+  /**
+   * Who wrote what: workspace members first (v2 `/team`), then the channel's own people (stored
+   * from its listing, else read once now, within the budget) — guests and people of a shared DM
+   * are not workspace members. Someone still unknown has no name (never a raw id).
+   */
+  async #authorNames(client: ClickUpChatClient, channel: SourceChannel, members: Map<string, string>, userIds: string[]): Promise<Map<string, string>> {
+    const names = new Map(members);
+    for (const person of channel.members ?? []) if (person.name && !names.has(person.id)) names.set(person.id, person.name);
+    const unknown = [...new Set(userIds)].filter(id => id && !names.has(id));
+    if (unknown.length === 0 || client.remaining <= 1) return names;
+    try {
+      for (const person of await client.channelMembers(channel.workspaceId, channel.channelId, 1)) {
+        const name = person.name || person.email;
+        if (name && !names.has(person.id)) names.set(person.id, name);
+      }
+    } catch (error) {
+      if (!(error instanceof ClickUpBudgetSpent)) console.warn('[assistant] ClickUp channel members could not be read for author names:', errorText(error));
+    }
+    return names;
+  }
+
+  /** The files a message carries, fetched now; a file that cannot be fetched is skipped (and logged). */
+  async #files(client: ClickUpChatClient, attachments: MessageAttachment[]): Promise<SourceMessage['files']> {
     const files: SourceMessage['files'] = [];
-    for (const link of fileLinks(content).slice(0, 5)) {
+    for (const link of attachments.slice(0, 5)) {
       if (client.remaining <= 1) break;
       try {
         const { bytes, mime } = await client.download(link.url, this.#deps.maxFileBytes ?? ASSISTANT_FILE_MAX_BYTES);
-        files.push({ name: link.name, declaredMime: mime, bytes });
+        files.push({ name: link.name, declaredMime: mime ?? link.mime, bytes });
       } catch (error) {
         if (error instanceof ClickUpBudgetSpent) break;
         console.warn('[assistant] A ClickUp file could not be downloaded:', errorText(error));

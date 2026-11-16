@@ -112,6 +112,15 @@ export interface ChatMessage {
   /** The root message, for a reply; `null` for a top-level message. */
   parentMessageId: string | null;
   repliesCount: number;
+  /** Files the message carries: ClickUp file links in its Markdown and any attachment field the API returns. */
+  attachments: MessageAttachment[];
+}
+
+/** A file a message carries, on ClickUp's hosts (fetched with the person's token only). */
+export interface MessageAttachment {
+  name: string;
+  url: string;
+  mime: string | null;
 }
 
 export interface Page<T> {
@@ -339,7 +348,46 @@ function toMessage(raw: unknown, channelId: string): ChatMessage | null {
     channelId: str(row.parent_channel) || channelId,
     parentMessageId: str(row.parent_message) || null,
     repliesCount: Number(row.replies_count) || 0,
+    attachments: messageAttachments(row),
   };
+}
+
+/** The keys an attachment list may come under. The chat spec names none; v2 tasks use `attachments`. */
+const ATTACHMENT_KEYS = ['attachments', 'files', 'attachment'] as const;
+
+/**
+ * What a message carries: links to ClickUp's file hosts in its Markdown, and the entries of any
+ * attachment field (`attachments`, `files`) shaped like v2's task attachments (`url` or `url_w_host`
+ * or `download_url`; `title` / `name` / `file_name`; `mimetype`). Only ClickUp file URLs are kept,
+ * each once; the token never leaves ClickUp's hosts.
+ */
+export function messageAttachments(row: Record<string, unknown>): MessageAttachment[] {
+  const out: MessageAttachment[] = [];
+  const seen = new Set<string>();
+  const add = (url: string, name: string, mime: string | null) => {
+    if (!url || seen.has(url) || !isClickUpFileUrl(url)) return;
+    seen.add(url);
+    out.push({ name: name || nameOfUrl(url), url, mime });
+  };
+  for (const key of ATTACHMENT_KEYS) {
+    const value = row[key];
+    for (const raw of Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : []) {
+      const item = record(raw);
+      const url = str(item.url_w_host) || str(item.download_url) || str(item.url);
+      const name = str(item.title) || str(item.name) || str(item.file_name) || str(item.filename);
+      add(url, name, str(item.mimetype) || str(item.mime_type) || str(item.content_type) || null);
+    }
+  }
+  for (const link of fileLinks(str(row.content))) add(link.url, link.name, null);
+  return out;
+}
+
+function nameOfUrl(url: string): string {
+  try {
+    return decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '') || 'file';
+  } catch {
+    return 'file';
+  }
 }
 
 export class ClickUpChatClient {
@@ -395,7 +443,9 @@ export class ClickUpChatClient {
         const user = record(record(member).user);
         const userId = str(user.id);
         if (!userId) continue;
-        members.set(userId, str(user.username) || str(user.email) || userId);
+        // A member without a username or e-mail stays unnamed: a raw id is never shown as a name.
+        const name = str(user.username) || str(user.email);
+        if (name) members.set(userId, name);
         const picture = str(user.profilePicture);
         if (/^https:\/\//.test(picture)) avatars.set(userId, picture);
       }

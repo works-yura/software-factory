@@ -20,6 +20,8 @@ export interface FakeMessage {
   date: number;
   parent?: string;
   tagged?: string[];
+  /** More fields as the live API may return them (attachment lists, …), sent as they are. */
+  extra?: Record<string, unknown>;
 }
 
 export interface FakeChannel {
@@ -195,6 +197,7 @@ export class FakeClickUp {
         resolved: false,
         replies_count: this.messages.filter(reply => reply.parent === message.id).length,
         links: { reactions: '', replies: '', tagged_users: '' },
+        ...(message.extra ?? {}),
       })),
     });
   }

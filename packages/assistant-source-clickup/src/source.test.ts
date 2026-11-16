@@ -4,7 +4,7 @@ import { FakeBrain, FakeFactory, FakeMemory, fakeModels, MemoryBlobStore, testCi
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ClickUpChatClient, fileLinks, isClickUpFileUrl, shapeOf, toMember, urlTemplate } from './client.ts';
+import { ClickUpChatClient, fileLinks, isClickUpFileUrl, messageAttachments, shapeOf, toMember, urlTemplate } from './client.ts';
 import { FakeClickUp } from './fake-clickup.ts';
 import { startClickUpPolling } from './scheduler.ts';
 import type { ClickUpPollLimits } from './source.ts';
@@ -326,6 +326,81 @@ describe('reading channels by mode', () => {
     expect(clickup.calls.some(call => call.includes('evil.example'))).toBe(false);
     expect(brain.turns[0]?.input.files).toHaveLength(1);
   });
+
+  it('takes files from an attachment field too (v2 task-attachment shape), each once, ClickUp hosts only', async () => {
+    const shot = 'https://t9001.p.clickup-attachments.com/t9001/abc/screen.png';
+    const doc = 'https://t9001.p.clickup-attachments.com/t9001/def/spec.pdf';
+    clickup.files.set(shot, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]));
+    clickup.files.set(doc, new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 1]));
+    await connectAndWatch('ch-general');
+    clickup.post({
+      id: 'm1',
+      channel: 'ch-general',
+      user: '7',
+      content: `look ![screen.png](${shot})`,
+      date: T0 + 5000,
+      extra: {
+        attachments: [
+          { id: 'a1', title: 'screen.png', url_w_host: shot, mimetype: 'image/png', extension: 'png' },
+          { id: 'a2', title: 'Spec', url: doc, mimetype: 'application/pdf' },
+          { id: 'a3', title: 'elsewhere', url: 'https://evil.example/x.png' },
+        ],
+      },
+    });
+    now += 60_000;
+    await poll();
+    const [request] = await core.listRequests(ADA);
+    expect((await core.listFiles(ADA, request!.id)).map(file => [file.name, file.mime])).toEqual([
+      ['screen.png', 'image/png'],
+      ['Spec', 'application/pdf'],
+    ]);
+    expect(clickup.calls.some(call => call.includes('evil.example'))).toBe(false);
+  });
+});
+
+describe('author names and attachments when the agent reads', () => {
+  it('names a guest from the channel’s people, never shows a raw id, and lists the message’s files', async () => {
+    await source.connect(ADA, clickup.token);
+    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch' });
+    clickup.workspaces[0]!.members.push({ user: { id: 99, username: '', email: '' } });
+    const support = clickup.channels.find(channel => channel.id === 'ch-support')!;
+    support.members = ['7', '99', '8'];
+    const url = 'https://t9001.p.clickup-attachments.com/t9001/abc/log.txt';
+    clickup.post({ id: 'm1', channel: 'ch-support', user: '8', content: `log: [log.txt](${url})`, date: T0 + 5000 });
+    clickup.post({ id: 'm2', channel: 'ch-support', user: '99', content: 'who am I', date: T0 + 6000 });
+    const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
+    expect(read.messages).toMatchObject([
+      { id: 'm1', from: 'Taras', attachments: [{ name: 'log.txt', url }] },
+      { id: 'm2', from: null },
+    ]);
+    expect(JSON.stringify(read)).not.toContain('"from":"99"');
+  });
+
+  it('downloads a ClickUp file for the agent with the person’s token, and leaves other hosts to the core', async () => {
+    const url = 'https://t9001.p.clickup-attachments.com/t9001/abc/shot.png';
+    clickup.files.set(url, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]));
+    await expect(source.download(ADA, url, 1000)).rejects.toMatchObject({ code: 'not_connected' });
+    await source.connect(ADA, clickup.token);
+    expect(await source.download(ADA, 'https://example.org/a.png', 1000)).toBeNull();
+    const file = await source.download(ADA, url, 1000);
+    expect(file?.bytes.byteLength).toBe(9);
+    await expect(source.download(ADA, url, 4)).rejects.toMatchObject({ code: 'file_too_large' });
+  });
+});
+
+describe('message attachments', () => {
+  it('reads attachment fields and Markdown links, ClickUp hosts only, once each', () => {
+    const a = 'https://x.clickup-attachments.com/f/a.png';
+    expect(
+      messageAttachments({
+        content: `![a](${a}) [b](https://x.clickup-attachments.com/f/b.zip)`,
+        files: [{ name: 'a.png', download_url: a, mime_type: 'image/png' }, { url: 'https://other.example/c.png' }],
+      }),
+    ).toEqual([
+      { name: 'a.png', url: a, mime: 'image/png' },
+      { name: 'b', url: 'https://x.clickup-attachments.com/f/b.zip', mime: null },
+    ]);
+  });
 });
 
 describe('limits and failures', () => {
@@ -469,7 +544,7 @@ describe('the client', () => {
     clickup.post({ id: 'x2', channel: 'ch-general', user: '7', content: 'reply', date: T0 + 1, parent: 'x1' });
     const page = await client.messages(WS, 'ch-general');
     expect(page.items).toEqual([
-      { id: 'x1', content: 'hi', date: T0, userId: '7', channelId: 'ch-general', parentMessageId: null, repliesCount: 1 },
+      { id: 'x1', content: 'hi', date: T0, userId: '7', channelId: 'ch-general', parentMessageId: null, repliesCount: 1, attachments: [] },
     ]);
     expect((await client.replies(WS, 'ch-general', 'x1')).items[0]).toMatchObject({ id: 'x2', parentMessageId: 'x1' });
   });
