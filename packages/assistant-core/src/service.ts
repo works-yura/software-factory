@@ -141,6 +141,10 @@ export interface AssistantLimits {
   digestRequests: number;
   /** Model checks («Check the model») per person per hour. */
   modelChecksPerHour: number;
+  /** After a restart: only requests touched this recently are picked up again. */
+  resumeWithinMs: number;
+  /** After a restart: agent turns run again per person; past it, the request waits for «Analyse». */
+  resumeTurnsPerOwner: number;
 }
 
 export const DEFAULT_ASSISTANT_LIMITS: AssistantLimits = {
@@ -150,7 +154,32 @@ export const DEFAULT_ASSISTANT_LIMITS: AssistantLimits = {
   answerPollTimeoutMs: 15 * 60_000,
   digestRequests: 40,
   modelChecksPerHour: 20,
+  resumeWithinMs: 24 * 60 * 60_000,
+  resumeTurnsPerOwner: 5,
 };
+
+/** What a server start did with one request a restart cut short (`resumeAfterRestart`). */
+export type ResumeOutcome =
+  /** An agent turn runs again, with the restart note. */
+  | 'turn'
+  /** The wait for a Factory's answer goes on, for what is left of it since the question. */
+  | 'polling'
+  /** The agent had already answered (or failed); only the «answering» mark was left over. */
+  | 'settled'
+  /** No model the person can run: the usual turn failure is shown. */
+  | 'no_model'
+  /** Past the per-person limit, or a resume already cut short once: waits for the person («Analyse»). */
+  | 'left'
+  /** The wait for a Factory's answer ran out: «Check answer», as after any timeout. */
+  | 'timeout'
+  /** This server start already picked it up. */
+  | 'already';
+
+/** The thread entries a turn answers: what people and sources wrote, a Factory's answer, an approved run's result, a digest. */
+function isTurnInput(message: { author: string; text: string }): boolean {
+  if (message.author === 'person' || message.author === 'source' || message.author === 'factory') return true;
+  return message.author === 'event' && /^(ran|downloaded|digest):/.test(message.text);
+}
 
 /** A sliding window of events per owner, in memory: a restart forgives, never overspends much. */
 class OwnerWindow {
@@ -1361,6 +1390,172 @@ export class AssistantService {
     return { requests, files };
   }
 
+  // After a restart
+
+  /**
+   * Picks up what a server restart cut short (once per server start, `bootId` naming it). Turns run
+   * in memory and the wait for a Factory's answer is a timer, so both die with the process; the
+   * rest is stored, and what to pick up is read from it:
+   * - a turn that was running (`analysing`) whose thread has entries after the agent's last reply
+   *   runs again — a normal turn with the restart note; the agent checks with its tools where it
+   *   stopped. A request whose resume was itself cut short is left for the person («Analyse»);
+   * - a request waiting for a Factory's answer (asked, no answer, no timeout yet) is polled again
+   *   for what is left of the original wait; once that ran out, the agent checks once with its tool.
+   * Bounded: requests touched within `resumeWithinMs`, at most `resumeTurnsPerOwner` turns a person,
+   * newest first; a person with no model they can run gets the usual failure. Every pick-up leaves
+   * `resumed:<bootId>` in the thread, so one server start never runs a request twice.
+   */
+  async resumeAfterRestart(bootId: string): Promise<Array<{ owner: AssistantOwner; requestId: string; outcome: ResumeOutcome }>> {
+    await this.#ready();
+    if (!bootId) throw new Error('A resume needs the id of the server start it belongs to.');
+    const since = new Date(this.#now().getTime() - this.limits.resumeWithinMs);
+    const turns = new Map<string, number>();
+    const models = new Map<string, Promise<TurnFailure | null>>();
+    const outcomes: Array<{ owner: AssistantOwner; requestId: string; outcome: ResumeOutcome }> = [];
+    for (const request of await this.#deps.storage.listResumeCandidates(since)) {
+      const owner = request.owner;
+      const key = this.#ownerKey(owner);
+      const budget = {
+        model: () => {
+          if (!models.has(key)) models.set(key, this.#modelProblem(owner));
+          return models.get(key)!;
+        },
+        take: () => {
+          const used = turns.get(key) ?? 0;
+          if (used >= this.limits.resumeTurnsPerOwner) return false;
+          turns.set(key, used + 1);
+          return true;
+        },
+      };
+      try {
+        const outcome = await this.#resumeOne(owner, request, bootId, budget);
+        if (outcome) outcomes.push({ owner, requestId: request.id, outcome });
+      } catch (error) {
+        console.error(`[assistant] Request ${request.id} could not be picked up after the restart:`, errorText(error));
+      }
+    }
+    return outcomes;
+  }
+
+  async #resumeOne(
+    owner: AssistantOwner,
+    request: AssistantRequest,
+    bootId: string,
+    budget: { model: () => Promise<TurnFailure | null>; take: () => boolean },
+  ): Promise<ResumeOutcome | null> {
+    const { storage } = this.#deps;
+    const messages = await storage.listMessages(owner, request.id);
+    const marker = `resumed:${bootId}`;
+    if (messages.some(message => message.author === 'event' && message.text === marker)) return 'already';
+    const event = (text: string) => storage.addMessage(owner, { requestId: request.id, author: 'event', text, now: this.#now() });
+    const lastAgent = messages.findLastIndex(message => message.author === 'agent');
+    const lastInput = messages.findLastIndex((message, index) => index > lastAgent && isTurnInput(message));
+    const eventAfter = (index: number, test: (text: string) => boolean) =>
+      messages.slice(index + 1).some(message => message.author === 'event' && test(message.text));
+
+    // Whether a turn may run now: a model the person can run, and their share of resumes.
+    const runnable = async (): Promise<'no_model' | 'left' | null> => {
+      const problem = await budget.model();
+      if (problem) {
+        await storage.updateRequest(owner, request.id, { analysing: false, lastError: problem, unread: true }, this.#now());
+        return 'no_model';
+      }
+      return budget.take() ? null : 'left';
+    };
+
+    if (request.analysing && (lastInput < 0 || request.lastError)) {
+      // A resumed check of a Factory's answer that was cut short too: the wait is decided below.
+      const lostResume = !request.lastError && eventAfter(lastAgent, text => text.startsWith('resumed:'));
+      if (!lostResume) {
+        // The agent had answered (or failed) when the server stopped; only the mark was left.
+        const reported = !request.lastError && request.status !== 'closed';
+        await storage.updateRequest(owner, request.id, { analysing: false, ...(reported ? { status: 'waiting_me' as const, unread: true } : {}) }, this.#now());
+        return 'settled';
+      }
+      await storage.updateRequest(owner, request.id, { analysing: false }, this.#now());
+    } else if (request.analysing) {
+      const leave = async (): Promise<'left'> => {
+        if (!eventAfter(lastInput, text => text.startsWith('not_analysed:'))) await event('not_analysed:restart');
+        await storage.updateRequest(owner, request.id, { analysing: false, unread: true }, this.#now());
+        return 'left';
+      };
+      // Picked up once already and cut short again: never a loop of restarts; the person decides.
+      if (eventAfter(lastInput, text => text.startsWith('resumed:'))) return leave();
+      const blocked = await runnable();
+      if (blocked === 'left') return leave();
+      if (blocked) return blocked;
+      const entries = messages.slice(lastAgent + 1).filter(isTurnInput);
+      const fileIds = new Set(entries.flatMap(message => message.fileIds));
+      const files = (await storage.listFiles(owner, request.id)).filter(file => fileIds.has(file.id));
+      const withBytes = await Promise.all(files.map(async file => ({ ...file, bytes: await this.#bytes(file) })));
+      await event(marker);
+      await this.#startTurn(owner, request, {
+        author: 'resumed',
+        text: ['The entries since your last reply (what you were answering):', ...entries.map(entryLine)].join('\n\n'),
+        files: withBytes,
+      });
+      return 'turn';
+    }
+
+    const sessionId = request.factory?.sessionId;
+    if (request.status !== 'waiting_factory' || !request.factory || !sessionId || this.limits.answerPollTimeoutMs <= 0) return null;
+    const asked = messages.findLastIndex(message => message.author === 'event' && message.text.startsWith('asked:'));
+    if (asked < 0) return null;
+    if (messages.slice(asked + 1).some(message => message.author === 'factory') || eventAfter(asked, text => text === 'answer_timeout')) {
+      return null;
+    }
+    const question = messages[asked]!;
+    const left = this.limits.answerPollTimeoutMs - (this.#now().getTime() - new Date(question.createdAt).getTime());
+    if (left > 0) {
+      await event(marker);
+      this.#watchAnswer(owner, request.id, sessionId, left);
+      return 'polling';
+    }
+    // The wait ran out while the server was down: the agent checks once; past that, «Check answer».
+    if (eventAfter(asked, text => text.startsWith('resumed:'))) {
+      await event('answer_timeout');
+      return 'timeout';
+    }
+    const blocked = await runnable();
+    if (blocked) {
+      await event('answer_timeout');
+      return blocked === 'left' ? 'timeout' : blocked;
+    }
+    await event(marker);
+    await this.#startTurn(owner, request, {
+      author: 'resumed',
+      text: [
+        `You were waiting for the answer of Factory ${request.factory.factoryName} (factoryId ${request.factory.factoryId}, sessionId ${sessionId}) to the question asked at ${new Date(question.createdAt).toISOString()}:`,
+        question.text.split('\n').slice(1).join('\n'),
+        'The wait for it ran out while the server was down. Check it once with factory_session_status: give the person the conclusion if it answered, or say it has not answered yet (they can check again later).',
+      ].join('\n\n'),
+      files: [],
+    });
+    return 'turn';
+  }
+
+  /** Why the person's turns cannot run now (no model to run them on), or null; a catalog that cannot be read lets the turn say why. */
+  async #modelProblem(owner: AssistantOwner): Promise<TurnFailure | null> {
+    const settings = await this.#deps.storage.getSettings(owner);
+    let catalog: Awaited<ReturnType<AssistantModels['catalog']>>;
+    try {
+      catalog = await this.#deps.models.catalog(owner);
+    } catch {
+      return null;
+    }
+    if (!settings.modelId) return catalog.default ? null : { kind: 'no_model', modelId: null, status: null, detail: catalog.defaultReason };
+    const model = catalog.groups.flatMap(group => group.models).find(candidate => candidate.id === settings.modelId);
+    if (model?.selectable) return null;
+    return {
+      kind: model ? 'no_model' : 'model_not_found',
+      modelId: settings.modelId,
+      status: null,
+      detail: model
+        ? `The assistant cannot run ${model.label}: ${model.availability.reason ?? model.availability.state}.`
+        : `The organization has no model ${settings.modelId}.`,
+    };
+  }
+
   // Internals
 
   async #ready(): Promise<void> {
@@ -1658,9 +1853,9 @@ export class AssistantService {
    * passed (an event says so; "Check answer" still works). Stops once the request no longer waits
    * on that session.
    */
-  #watchAnswer(owner: AssistantOwner, id: string, sessionId: string): void {
-    if (this.limits.answerPollTimeoutMs <= 0) return;
-    const attempts = Math.max(1, Math.ceil(this.limits.answerPollTimeoutMs / this.limits.answerPollIntervalMs));
+  #watchAnswer(owner: AssistantOwner, id: string, sessionId: string, timeoutMs = this.limits.answerPollTimeoutMs): void {
+    if (this.limits.answerPollTimeoutMs <= 0 || timeoutMs <= 0) return;
+    const attempts = Math.max(1, Math.ceil(timeoutMs / this.limits.answerPollIntervalMs));
     this.#schedule(async () => {
       try {
         for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -1815,6 +2010,13 @@ export class AssistantService {
     const path = await this.#requireWorkspaces().write(owner, id, { dir: DOWNLOADS_DIR, name, bytes: fetched.bytes });
     return { path: `${requestFolder(id)}/${path}`, mime, size: fetched.bytes.byteLength };
   }
+}
+
+/** One thread entry as a resumed turn quotes it. */
+function entryLine(message: { author: string; fromName: string | null; text: string }): string {
+  if (message.author === 'event') return `[result] ${message.text}`;
+  const who = message.author === 'source' ? (message.fromName ?? 'someone in the chat') : message.author;
+  return `[${who}] ${message.text}`;
 }
 
 /** A proposal in one line, for the digest. */

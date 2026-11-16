@@ -324,6 +324,8 @@ describe('the thread: what drove a reply, proposed actions, events', () => {
       },
       { id: 'm3', author: 'event', text: 'proposed:ask:Shop\nWhy does checkout fail?', fileIds: [], createdAt: NOW },
       { id: 'm4', author: 'event', text: 'answer_timeout', fileIds: [], createdAt: NOW },
+      { id: 'm5', author: 'event', text: 'resumed:boot-1', fileIds: [], createdAt: NOW },
+      { id: 'm6', author: 'event', text: 'not_analysed:restart', fileIds: [], createdAt: NOW },
     ],
     files: [],
   });
@@ -360,6 +362,8 @@ describe('the thread: what drove a reply, proposed actions, events', () => {
 
     expect(screen.getByText('Proposed asking Shop')).toBeInTheDocument();
     expect(screen.getByText(/No answer from the Factory in 15 minutes/)).toBeInTheDocument();
+    expect(screen.getByText('The server restarted — the assistant carried on')).toBeInTheDocument();
+    expect(screen.getByText('The server restarted — the assistant did not carry on: analyse again')).toBeInTheDocument();
     const card = screen.getByTestId('assistant-pending-action');
     expect(within(card).getByText('Proposed: ask Shop')).toBeInTheDocument();
     expect(within(card).getByText('Shop owns checkout.')).toBeInTheDocument();

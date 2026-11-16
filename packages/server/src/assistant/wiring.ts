@@ -14,6 +14,7 @@ import {
   FactoryAccess,
   McpFactoryClient,
   startAssistantDigests,
+  startAssistantResume,
   startAssistantRetention,
 } from '@factory/assistant-core';
 import type {
@@ -23,6 +24,7 @@ import type {
   AssistantStorage,
   AssistantWorkspaceHost,
   DigestJob,
+  ResumeJob,
   RetentionJob,
 } from '@factory/assistant-core';
 import { buildClickUpSourceRoutes, ClickUpChatSource, startClickUpPolling } from '@factory/assistant-source-clickup';
@@ -85,6 +87,11 @@ export interface FactoryAssistantOptions {
   pollClickUp?: boolean;
   /** The digest timer (phase 3); tests turn it off and tick by hand. */
   runDigests?: boolean;
+  /**
+   * Picking up after a restart: once the routes (and so the model catalog) are wired, the turns and
+   * Factory waits the last process left unfinished resume. Tests turn it off and run it by hand.
+   */
+  resumeAfterRestart?: boolean;
   /**
    * The app's own skills (`MastraFactory({ skills })`): with the bundled skills and the app's
    * `factory-skills/` folder they make the catalogue a person picks the assistant's skills from.
@@ -320,6 +327,8 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
   const retention: RetentionJob = startAssistantRetention(service);
   const polling: ClickUpPolling | undefined = clickup && options.pollClickUp !== false ? startClickUpPolling(clickup) : undefined;
   const digests: DigestJob | undefined = options.runDigests !== false ? startAssistantDigests(service) : undefined;
+  // Started with the routes: a turn needs the model catalog, which comes with them.
+  let resume: ResumeJob | undefined;
 
   return {
     service,
@@ -328,6 +337,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
     routes({ auth, controller, harnessModels: registry }) {
       catalog = controller;
       harnessModels = registry;
+      if (options.resumeAfterRestart !== false) resume ??= startAssistantResume(service);
       return [
         ...buildAssistantRoutes({ auth, service, access, models }),
         ...(clickup ? buildClickUpSourceRoutes({ auth, source: clickup }) : []),
@@ -337,6 +347,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
       retention.stop();
       polling?.stop();
       digests?.stop();
+      resume?.stop();
     },
   };
 }

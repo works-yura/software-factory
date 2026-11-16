@@ -80,6 +80,7 @@
     "continuesUnknown": "Continues an earlier request",
     "openPrevious": "Open",
     "notAnalysed": "Not analysed: hourly analysis limit reached",
+    "notResumed": "The server restarted — the assistant did not carry on: analyse again",
     "analyse": "Analyse",
     "someone": "Someone",
     "sourceFrom": "Message from {{name}}",
@@ -445,7 +446,8 @@
     "proposedRun": "Proposed to run {{tool}}",
     "proposedDownload": "Proposed a download",
     "ran": "Ran {{tool}}",
-    "downloaded": "Downloaded {{path}}"
+    "downloaded": "Downloaded {{path}}",
+    "resumed": "The server restarted — the assistant carried on"
   },
   "handOverFiles": {
     "label": "Workspace files for the card",

@@ -524,6 +524,23 @@ export class AssistantStorage extends FactoryStorageDomain {
     return rows.map(toRequest);
   }
 
+  /**
+   * Every owner's requests a restart may have cut short, touched since `since`: a turn marked as
+   * running (`analysing`), or waiting for a Factory's answer. Read once per server start.
+   */
+  async listResumeCandidates(since: Date): Promise<AssistantRequest[]> {
+    const rows: RequestRow[] = [];
+    // By status (indexed); the boolean column is compared in code, as every driver stores it its own way.
+    for (const status of ['new', 'waiting_factory', 'waiting_me', 'answered'] as const) {
+      rows.push(...(await this.ops.findMany<RequestRow>(ASSISTANT_REQUESTS, { status })));
+    }
+    return rows
+      .map(toRequest)
+      .filter(request => request.analysing || request.status === 'waiting_factory')
+      .filter(request => new Date(request.updatedAt).getTime() >= since.getTime())
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+
   /** Removes one request and its thread; its files are left to the caller (their bytes need a refcount). */
   async deleteRequest(o: AssistantOwner, id: string): Promise<void> {
     const where = ownerWhere(o);

@@ -6,6 +6,7 @@ export * from './factory-client.ts';
 export * from './files.ts';
 export * from './instructions.ts';
 export * from './ports.ts';
+export * from './resume.ts';
 export * from './retention.ts';
 export * from './routes.ts';
 export * from './service.ts';

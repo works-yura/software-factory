@@ -43,6 +43,7 @@ async function setup() {
     clickupStorage,
     pollClickUp: false,
     runDigests: false,
+    resumeAfterRestart: false,
     mastraStorage: seed.storage.getMastraStorage(),
     secretEncryption: createPlaintextFactorySecretEncryption(),
     blobReferencedElsewhere: async () => false,

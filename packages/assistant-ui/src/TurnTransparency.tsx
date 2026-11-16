@@ -175,6 +175,8 @@ export function eventLabel(text: string, t: (key: string, options?: Record<strin
   if (head === 'rule:analyse_and_ask') return { label: t('events.ruleAsk') };
   if (head === 'auto_ask_failed') return { label: t('events.autoAskFailed'), ...(body ? { body } : {}) };
   if (head === 'answer_timeout') return { label: t('events.answerTimeout') };
+  // `resumed:<server start>`: the server restarted mid-work and the assistant picked the request up again.
+  if (head.startsWith('resumed:')) return { label: t('events.resumed') };
   if (head === 'not_analysed:digest') return { label: t('events.digestOnly') };
   if (head.startsWith('digest:')) return { label: t('events.digest', { count: Number(head.slice('digest:'.length)) || 0 }) };
   return null;

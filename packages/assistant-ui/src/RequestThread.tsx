@@ -473,7 +473,8 @@ function ContinuesLine({ previousId, onOpenRequest }: { previousId: string; onOp
 
 /**
  * An `event` entry: `asked:<Factory>\n<question>`, `handed:<Factory>[\n<note>][\nfiles_failed\n…]`,
- * `continues:<request id>`, or `not_analysed:limit` (a source message kept but not read by the agent).
+ * `continues:<request id>`, or `not_analysed:limit` (a source message kept but not read by the agent;
+ * `not_analysed:restart`: a turn a server restart cut short and not picked up again).
  */
 function EventLine({ message, onOpenRequest, onAnalyse, analysing }: { message: AssistantMessage } & ThreadEntryActions) {
   const { t } = useTranslation('assistant');
@@ -495,7 +496,7 @@ function EventLine({ message, onOpenRequest, onAnalyse, analysing }: { message: 
   }
   if (message.text.startsWith('not_analysed:')) {
     return (
-      <TranscriptDivider label={t('thread.notAnalysed')}>
+      <TranscriptDivider label={message.text === 'not_analysed:restart' ? t('thread.notResumed') : t('thread.notAnalysed')}>
         {onAnalyse ? (
           <Button variant="ghost" size="sm" icon={<Sparkles />} disabled={analysing} onClick={onAnalyse}>
             {t('thread.analyse')}

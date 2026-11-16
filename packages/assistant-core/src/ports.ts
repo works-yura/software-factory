@@ -39,10 +39,11 @@ export interface BrainFile {
 }
 
 /**
- * Who the entry a turn answers comes from: the person, a Factory, a source, the digest, or
- * `approved` — the result of a call the person approved (a command, a download).
+ * Who the entry a turn answers comes from: the person, a Factory, a source, the digest,
+ * `approved` — the result of a call the person approved (a command, a download) — or `resumed`:
+ * the server restarted while the agent worked on the request, and it carries on.
  */
-export type BrainAuthor = 'person' | 'factory' | 'source' | 'digest' | 'approved';
+export type BrainAuthor = 'person' | 'factory' | 'source' | 'digest' | 'approved' | 'resumed';
 
 /** What one turn of the agent sees: the request and the new entry it answers. */
 export interface BrainTurn {

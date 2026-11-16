@@ -61,11 +61,22 @@ export function splitTopic(answer: string): { text: string; topic?: string } {
   return { text: text || answer.trim(), topic: match[1].replace(/\*+$/, '').trim().slice(0, 120) };
 }
 
+/**
+ * The head of a turn after a server restart (`resumed`): what the agent does then, carried in the
+ * turn itself so it holds whatever the person's own instructions say.
+ */
+export const RESUME_NOTE = [
+  'Сервер перезапускався під час твоєї роботи над цим зверненням. Перевір, на чому зупинився, і продовж.',
+  '(The server restarted while you worked on this request. Check the thread first: confirmed actions and events in it already happened — do not redo or re-propose them. If a Factory was asked, check its answer with factory_session_status. Then finish the step and report briefly.)',
+].join('\n');
+
 /** The user message of a turn: who wrote it, the request's topic line on the first turn, the files. */
 export function turnMessage(turn: BrainTurn) {
   const { request, input } = turn;
   const header =
-    input.author === 'approved'
+    input.author === 'resumed'
+      ? RESUME_NOTE
+      : input.author === 'approved'
       ? 'The person approved what you proposed; it ran. Its result is below. Carry on from it and report to the person.'
       : input.author === 'digest'
       ? "Write the person's digest: what is open in their inbox, below. Group it — what needs them first, what waits on a Factory, what came from digest-only chats — one line each, with the sender. No preamble."
