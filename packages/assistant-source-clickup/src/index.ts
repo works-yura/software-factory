@@ -4,3 +4,4 @@ export * from './routes.ts';
 export * from './scheduler.ts';
 export * from './source.ts';
 export * from './storage.ts';
+export * from './tag.ts';

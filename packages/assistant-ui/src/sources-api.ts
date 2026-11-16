@@ -1,39 +1,21 @@
 /**
- * The person's own sources (ADR-0051 phase 2) at `/web/assistant/sources`: ClickUp Chat connected
- * with a personal API token, a mode per channel, the last sync. The token is sent once and never
- * comes back.
+ * The person's own sources (ADR-0051 phase 2; the tag per the amendment of 2026-11-16) at
+ * `/web/assistant/sources`: ClickUp Chat connected with a personal API token, the person's tag
+ * (what in a chat makes a request), the last sync. The token is sent once and never comes back.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { assistantKeys, call, json, useAssistantApi } from './api';
 
-export type ChannelMode = 'ignore' | 'addressed' | 'watch';
-export const CHANNEL_MODES: readonly ChannelMode[] = ['ignore', 'addressed', 'watch'];
+/** Who may tag: only the person (the default), or anyone in the chat. */
+export type TagWho = 'me' | 'anyone';
 
-/** Another person in a DM, with their ClickUp picture when there is one. */
-export interface ChannelMember {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-}
-
-export interface SourceChannel {
-  workspaceId: string;
-  channelId: string;
-  /** A channel's name; a DM's or group DM's other people, joined. */
-  name: string;
-  kind: 'channel' | 'dm' | 'group_dm';
-  /** In the person's ClickUp sidebar (a channel they follow, a DM they did not hide). Absent from older servers: shown. */
-  inSidebar?: boolean;
-  visibility?: 'PUBLIC' | 'PRIVATE' | null;
-  /** A location channel's Space/Folder/List and its path, outermost first (empty until looked up). */
-  location?: { kind: 'space' | 'folder' | 'list'; path: string[] } | null;
-  members?: ChannelMember[];
-  mode: ChannelMode;
-  /** `analyse`, `analyse_and_ask:<factoryId>` or `digest_only`. */
-  rule?: string;
-  lastSyncAt: string | null;
-  lastError: string | null;
+/** The person's tag: their pattern (`null`: the default one), who may tag, and how many earlier messages come along. */
+export interface TagSettings {
+  pattern: string | null;
+  defaultPattern: string;
+  who: TagWho;
+  contextMessages: number;
 }
 
 export interface ClickUpConnection {
@@ -47,7 +29,39 @@ export interface ClickUpConnection {
   lastSyncAt: string | null;
   lastError: string | null;
   nextPollAt: string | null;
-  channels: SourceChannel[];
+  tag: TagSettings;
+  /** The chats looked at for the tag: every one the token sees. */
+  chats: { total: number; inSidebar: number };
+}
+
+/** The pattern's flags on the server too: case-insensitive, Unicode. */
+export const TAG_FLAGS = 'iu';
+
+/**
+ * Why a pattern cannot be a tag (the server checks the same and has the last word), or `null`:
+ * it must compile and must not match an empty or ordinary message.
+ */
+export function tagPatternError(pattern: string): 'empty' | 'invalid' | 'matchesEverything' | null {
+  if (!pattern.trim()) return 'empty';
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern, TAG_FLAGS);
+  } catch {
+    return 'invalid';
+  }
+  return ['', ' ', 'да', 'ok'].some(line => regex.test(line)) ? 'matchesEverything' : null;
+}
+
+/** What the tag does to a test message: whether it is found, and the instruction left once it is stripped. */
+export function tryTag(pattern: string, text: string): { matches: boolean; instruction: string } | null {
+  if (tagPatternError(pattern)) return null;
+  const matches = new RegExp(pattern, TAG_FLAGS).test(text);
+  const instruction = text
+    .replace(new RegExp(pattern, `${TAG_FLAGS}g`), ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/^[ \t,:;—-]+/gm, '')
+    .trim();
+  return { matches, instruction };
 }
 
 export const sourcesKey = () => [...assistantKeys.all, 'sources'] as const;
@@ -66,16 +80,6 @@ export function useSourceActions() {
   const queryClient = useQueryClient();
   const store = (clickup: ClickUpConnection) => queryClient.setQueryData(sourcesKey(), clickup);
   return {
-    /** What the assistant does with a new request from a channel: `analyse`, `digest_only`, `analyse_and_ask:<factoryId>`. */
-    setRule: useMutation({
-      mutationFn: (input: { workspaceId: string; channelId: string; rule: string }) =>
-        call<{ clickup: ClickUpConnection }>(
-          api,
-          `/sources/clickup/channels/${encodeURIComponent(input.workspaceId)}/${encodeURIComponent(input.channelId)}`,
-          json('PUT', { rule: input.rule }),
-        ).then(body => body.clickup),
-      onSuccess: store,
-    }),
     connect: useMutation({
       mutationFn: (token: string) =>
         call<{ clickup: ClickUpConnection }>(api, '/sources/clickup', json('POST', { token })).then(body => body.clickup),
@@ -103,19 +107,10 @@ export function useSourceActions() {
         void queryClient.invalidateQueries({ queryKey: assistantKeys.requests() });
       },
     }),
-    /** Every DM and group DM to one mode at once. */
-    setDmModes: useMutation({
-      mutationFn: (mode: ChannelMode) =>
-        call<{ changed: number; clickup: ClickUpConnection }>(api, '/sources/clickup/dms', json('PUT', { mode })).then(body => body.clickup),
-      onSuccess: store,
-    }),
-    setMode: useMutation({
-      mutationFn: (input: { workspaceId: string; channelId: string; mode: ChannelMode }) =>
-        call<{ clickup: ClickUpConnection }>(
-          api,
-          `/sources/clickup/channels/${encodeURIComponent(input.workspaceId)}/${encodeURIComponent(input.channelId)}`,
-          json('PUT', { mode: input.mode }),
-        ).then(body => body.clickup),
+    /** The person's tag: `{ pattern?: string | null, who?, contextMessages? }`. */
+    setTag: useMutation({
+      mutationFn: (input: { pattern?: string | null; who?: TagWho; contextMessages?: number }) =>
+        call<{ clickup: ClickUpConnection }>(api, '/sources/clickup/tag', json('PUT', input)).then(body => body.clickup),
       onSuccess: store,
     }),
   };

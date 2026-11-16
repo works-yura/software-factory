@@ -35,6 +35,7 @@ import type {
   SkillSummary,
   SourceChannelInfo,
   SourceChannelMessages,
+  SourceContextMessage,
   SourceMessage,
 } from './ports.ts';
 import { FACTORY_READ_TOOLS } from './ports.ts';
@@ -48,7 +49,6 @@ import type {
   AssistantOwner,
   AssistantRequest,
   AssistantSettings,
-  ChannelRule,
   DigestSettings,
   FactoryActionKind,
   OwnSkill,
@@ -127,12 +127,10 @@ const MAX_TOPIC = 120;
 const MAX_NOTE = 10_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The cost guards of phase 3: how much the agent's tools, rules and digests may do. */
+/** The cost guards of phase 3: how much the agent's tools and digests may do. */
 export interface AssistantLimits {
   /** Model steps (tool calls and answers) in one agent turn. */
   stepsPerTurn: number;
-  /** Factory questions channel rules may ask on their own per person per day; past it, they are proposed. */
-  autoAsksPerDay: number;
   /** How often a Factory's side session is checked for its answer after asking. */
   answerPollIntervalMs: number;
   /** How long it is checked; after that the person checks by hand ("Check answer"). 0 turns the checks off. */
@@ -149,7 +147,6 @@ export interface AssistantLimits {
 
 export const DEFAULT_ASSISTANT_LIMITS: AssistantLimits = {
   stepsPerTurn: 8,
-  autoAsksPerDay: 10,
   answerPollIntervalMs: 20_000,
   answerPollTimeoutMs: 15 * 60_000,
   digestRequests: 40,
@@ -230,6 +227,25 @@ export interface AssistantServiceDeps {
 }
 
 /** The topic line's title: the first line of the text, or the first file's name. */
+/** One quoted message of a tag's context: at most this many characters each. */
+const CONTEXT_MESSAGE_CHARS = 2000;
+
+/**
+ * What a tag stores in the request's thread and gives the agent: the conversation it points at,
+ * quoted with authors and times (oldest first), then the tagger's instruction.
+ */
+export function formatTaggedMessage(context: SourceContextMessage[], instruction: string): string {
+  const quoted = context
+    .filter(item => item.text.trim())
+    .map(item => {
+      const when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(item.at) ? ` · ${item.at.slice(0, 16).replace('T', ' ')} UTC` : '';
+      const body = item.text.trim().slice(0, CONTEXT_MESSAGE_CHARS);
+      return [`**${item.fromName?.trim() || 'Someone'}**${when}`, ...body.split('\n')].map(line => `> ${line}`.trimEnd()).join('\n');
+    })
+    .join('\n>\n');
+  return [quoted, instruction].filter(Boolean).join('\n\n');
+}
+
 export function deriveTopic(text: string, files: Array<{ name: string }>): string {
   const line = text
     .split('\n')
@@ -265,7 +281,6 @@ export class AssistantService {
   readonly #schedule: (task: () => Promise<void>) => void;
   /** Turns of one request run one after another; the count says when the last one is done. */
   readonly #turns = new Map<string, { tail: Promise<void>; pending: number }>();
-  readonly #autoAsks = new OwnerWindow();
   readonly #modelChecks = new OwnerWindow();
   /** The latest outcome per provider per owner (turns and model checks), in memory. */
   readonly #providerStates = new Map<string, Map<string, ProviderState>>();
@@ -441,11 +456,12 @@ export class AssistantService {
   // Sources
 
   /**
-   * Takes in one message a source read (ADR-0051 phase 2). The request binding key is the source
-   * thread: a message in a thread with an open request joins it; in a thread whose request was
-   * closed it opens a new request that continues the previous one; otherwise it starts a new one.
-   * The message's own source id makes this idempotent: a message taken in once is a no-op after.
-   * The person's own messages only join an open request (as context, without an agent turn).
+   * Takes in a tag a source found (ADR-0051 amendment 2026-11-16: the person's tag in their chat is
+   * the only way a source makes a request). The request binding key is the source thread: a tag in a
+   * thread with an open request joins it; in a thread whose request was closed it opens a new
+   * request that continues the previous one; otherwise it starts a new one. The tagged message's own
+   * source id makes this idempotent. What is stored is the conversation the tag points at (quoted,
+   * with its authors) and the tagger's instruction; nothing else of the chat is kept.
    */
   async ingestSourceMessage(
     owner: AssistantOwner,
@@ -458,14 +474,14 @@ export class AssistantService {
 
     const latest = await storage.latestRequestForSource(owner, message.sourceKey);
     const open = latest && latest.status !== 'closed' ? latest : null;
-    if (message.fromMe && !open) return { outcome: 'skipped', request: null };
 
     // Claim the message before anything is written: a concurrent read of the same message stops here.
     if (!(await storage.recordSourceMessage(owner, { messageKey: message.messageKey, requestId: '', now: this.#now() }))) {
       return { outcome: 'duplicate', request: null };
     }
     try {
-      const text = (message.text ?? '').trim().slice(0, MAX_TEXT);
+      const instruction = (message.text ?? '').trim();
+      const text = formatTaggedMessage(message.context ?? [], instruction).slice(0, MAX_TEXT);
       const files = this.#deps.blobs
         ? (message.files ?? [])
             .filter(file => file.bytes.byteLength <= this.maxFileBytes)
@@ -479,8 +495,9 @@ export class AssistantService {
         request = open;
         outcome = 'appended';
       } else {
+        const about = instruction || [...(message.context ?? [])].reverse().find(item => item.text.trim())?.text || '';
         request = await storage.createRequest(owner, {
-          topic: deriveTopic(text, files.map(file => ({ name: cleanFileName(file.name) }))) || message.where || message.platform,
+          topic: deriveTopic(about, files.map(file => ({ name: cleanFileName(file.name) }))) || message.where || message.platform,
           fromName,
           source: message.platform,
           sourceUrl,
@@ -503,15 +520,6 @@ export class AssistantService {
         fileIds: stored.map(file => file.id),
         now: this.#now(),
       });
-      if (message.fromMe) {
-        return { outcome, request: (await storage.updateRequest(owner, request.id, {}, this.#now())) ?? request };
-      }
-      if (message.rule?.kind === 'digest_only') {
-        // The channel goes into the digest: kept, never a turn of its own.
-        await storage.addMessage(owner, { requestId: request.id, author: 'event', text: 'not_analysed:digest', now: this.#now() });
-        const waiting = await storage.updateRequest(owner, request.id, { status: 'waiting_me', unread: true }, this.#now());
-        return { outcome, request: waiting ?? request };
-      }
       if (!message.analyse) {
         await storage.addMessage(owner, { requestId: request.id, author: 'event', text: 'not_analysed:limit', now: this.#now() });
         const waiting = await storage.updateRequest(owner, request.id, { status: 'waiting_me', unread: true }, this.#now());
@@ -524,21 +532,12 @@ export class AssistantService {
         fromName,
         first: outcome !== 'appended',
         ...(message.where ? { where: message.where } : {}),
-        // A new request of a channel whose rule asks a Factory: asked once the agent has reported.
-        ...(message.rule?.kind === 'analyse_and_ask' && outcome !== 'appended' ? { autoAsk: message.rule.factoryId } : {}),
       });
       return { outcome, request: started };
     } catch (error) {
       await storage.forgetSourceMessage(owner, message.messageKey).catch(() => undefined);
       throw error;
     }
-  }
-
-  /** Whether a source thread has an open request (a follow-up there joins it whatever the channel's mode). */
-  async hasOpenSourceRequest(owner: AssistantOwner, sourceKey: string): Promise<boolean> {
-    await this.#ready();
-    const latest = await this.#deps.storage.latestRequestForSource(owner, sourceKey);
-    return latest !== null && latest.status !== 'closed';
   }
 
   // Factory
@@ -690,11 +689,6 @@ export class AssistantService {
     return { answered: answer.text !== null, answer: answer.text };
   }
 
-  /** Whether a channel rule can run: a rule that asks a Factory needs one the person can reach. */
-  async checkChannelRule(owner: AssistantOwner, rule: ChannelRule): Promise<void> {
-    if (rule.kind === 'analyse_and_ask') await this.#factoryRef(owner, rule.factoryId);
-  }
-
   // Proposed actions (phase 3): asking a Factory and handing over change something outside, so the
   // agent only proposes them; the person's Confirm runs them.
 
@@ -816,20 +810,20 @@ export class AssistantService {
     return this.#deps.storage.createNote(owner, { text, requestId, author: 'agent', now: this.#now() });
   }
 
-  /** The chats the person turned on, in every source that can list them. */
-  async listEnabledChannels(owner: AssistantOwner): Promise<SourceChannelInfo[]> {
+  /** The chats where the person tagged the assistant, in every source that can list them. */
+  async listTaggedChannels(owner: AssistantOwner): Promise<SourceChannelInfo[]> {
     const channels: SourceChannelInfo[] = [];
     for (const source of this.#deps.sources ?? []) {
-      if (source.enabledChannels) channels.push(...(await source.enabledChannels(owner)));
+      if (source.taggedChannels) channels.push(...(await source.taggedChannels(owner)));
     }
     return channels;
   }
 
-  /** Recent messages of one chat the person turned on, read now by its source. */
+  /** Recent messages of one chat where the person tagged the assistant, read now by its source. */
   async readSourceChannel(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages> {
     const platform = input.ref.split(':')[0];
     const source = (this.#deps.sources ?? []).find(candidate => candidate.platform === platform);
-    if (!source?.readChannel) throw new AssistantError('not_found', 'No such chat among the ones you turned on.', 404);
+    if (!source?.readChannel) throw new AssistantError('not_found', 'No such chat among the ones you tagged the assistant in.', 404);
     return source.readChannel(owner, input);
   }
 
@@ -1086,8 +1080,8 @@ export class AssistantService {
 
   /**
    * One digest now: a request (source `digest`) listing what is open — topic, sender, status, the
-   * latest words, which requests a digest-only channel brought — for the agent to sum up. Nothing
-   * open, no request. The next one is scheduled either way.
+   * latest words — for the agent to sum up. It reads only the person's own requests, never a chat.
+   * Nothing open, no request. The next one is scheduled either way.
    */
   async writeDigest(owner: AssistantOwner): Promise<AssistantRequest | null> {
     await this.#ready();
@@ -1103,12 +1097,10 @@ export class AssistantService {
     for (const request of open) {
       const messages = await storage.listMessages(owner, request.id);
       const latest = [...messages].reverse().find(message => (message.author === 'source' || message.author === 'person') && message.text);
-      const digestOnly = messages.some(message => message.author === 'event' && message.text === 'not_analysed:digest');
       lines.push(
         [
           `- [${request.status}] ${request.topic}`,
           request.fromName ? ` — from ${request.fromName}` : '',
-          digestOnly ? ' (digest-only channel, not analysed yet)' : '',
           request.pendingAction ? ` (waits for the person to confirm: ${pendingLabel(request.pendingAction)})` : '',
           latest ? `\n  "${latest.text.replace(/\s+/g, ' ').slice(0, 300)}"` : '',
         ].join(''),
@@ -1338,7 +1330,6 @@ export class AssistantService {
     await this.#deps.grant.revoke(owner);
     for (const source of this.#deps.sources ?? []) await source.disconnect(owner);
     await this.#deps.memory.forget(owner);
-    this.#autoAsks.forget(owner);
     this.#modelChecks.forget(owner);
     this.#providerStates.delete(this.#ownerKey(owner));
     await storage.deleteOwnerRows(owner);
@@ -1631,8 +1622,6 @@ export class AssistantService {
       fromName?: string | null;
       first?: boolean;
       where?: string;
-      /** A channel rule asks this Factory once the agent has reported. */
-      autoAsk?: string;
     },
   ): Promise<AssistantRequest> {
     const started = await this.#deps.storage.updateRequest(owner, request.id, { analysing: true, lastError: null }, this.#now());
@@ -1655,7 +1644,7 @@ export class AssistantService {
       return chain.pending === 0;
     };
     this.#schedule(() => {
-      const run = chain.tail.then(() => this.#runTurn(owner, started, turn, Boolean(input.first), finish, input.autoAsk));
+      const run = chain.tail.then(() => this.#runTurn(owner, started, turn, Boolean(input.first), finish));
       chain.tail = run;
       return run;
     });
@@ -1668,9 +1657,7 @@ export class AssistantService {
     input: BrainTurn['input'],
     first: boolean,
     finish: () => boolean,
-    autoAsk?: string,
   ) {
-    let reported: string | undefined;
     try {
       const settings = await this.#deps.storage.getSettings(owner);
       const before = (await this.#deps.storage.getRequest(owner, request.id)) ?? request;
@@ -1708,7 +1695,6 @@ export class AssistantService {
       };
       this.#noteProvider(owner, details.modelId, null);
       await this.#deps.storage.addMessage(owner, { requestId: request.id, author: 'agent', text: answer.text, details, now: this.#now() });
-      reported = answer.text;
       const last = finish();
       const current = await this.#deps.storage.getRequest(owner, request.id);
       if (!current) return;
@@ -1739,7 +1725,6 @@ export class AssistantService {
         )
         .catch(stored => console.error(`[assistant] Could not record the failure on request ${request.id}:`, stored));
     }
-    if (autoAsk) await this.#autoAsk(owner, request.id, autoAsk, reported);
   }
 
   /** The person's picked skills that the catalogue still has (a removed skill is dropped quietly from the turn). */
@@ -1806,45 +1791,6 @@ export class AssistantService {
       at: this.#now(),
     });
     this.#providerStates.set(key, states);
-  }
-
-  /**
-   * A channel rule's own question to a Factory (`analyse_and_ask`), after the agent's report. It
-   * starts a side session, which costs, so it runs only for channels the person opted in, within
-   * the daily limit; past the limit it becomes a proposal the person confirms, never a silent run.
-   * A Factory that cannot be reached leaves an `auto_ask_failed` line in the thread.
-   */
-  async #autoAsk(owner: AssistantOwner, id: string, factoryId: string, report: string | undefined): Promise<void> {
-    try {
-      const request = await this.#deps.storage.getRequest(owner, id);
-      if (!request || request.status === 'closed' || request.factory?.sessionId) return;
-      const summary = await this.#summary(owner, request);
-      const question = [
-        summary,
-        ...(report ? [`The assistant's first reading:\n${report}`] : []),
-        'What is the answer, or the next step?',
-      ]
-        .join('\n\n')
-        .slice(0, 8000);
-      const allowed = this.#autoAsks.allow(owner, this.limits.autoAsksPerDay, DAY_MS, this.#now().getTime());
-      if (!allowed) {
-        await this.proposeAction(owner, id, {
-          kind: 'ask',
-          factoryId,
-          question,
-          reason: `The channel's rule asks this Factory, but today's limit of ${this.limits.autoAsksPerDay} automatic questions is spent.`,
-          proposedBy: 'rule',
-        });
-        return;
-      }
-      await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text: 'rule:analyse_and_ask', now: this.#now() });
-      await this.askFactory(owner, id, { factoryId, question });
-    } catch (error) {
-      console.error(`[assistant] The channel rule could not ask a Factory on request ${id}:`, errorText(error));
-      await this.#deps.storage
-        .addMessage(owner, { requestId: id, author: 'event', text: `auto_ask_failed\n${errorText(error)}`, now: this.#now() })
-        .catch(() => undefined);
-    }
   }
 
   /**

@@ -172,6 +172,8 @@ export function eventLabel(text: string, t: (key: string, options?: Record<strin
   }
   if (head.startsWith('confirmed:')) return { label: t('events.confirmed') };
   if (head.startsWith('cancelled:')) return { label: t('events.cancelled') };
+  // `rule:analyse_and_ask`, `auto_ask_failed`, `not_analysed:digest`: written only by the channel
+  // rules retired with the tag (ADR-0051 amendment 2026-11-16); kept so older threads still read.
   if (head === 'rule:analyse_and_ask') return { label: t('events.ruleAsk') };
   if (head === 'auto_ask_failed') return { label: t('events.autoAskFailed'), ...(body ? { body } : {}) };
   if (head === 'answer_timeout') return { label: t('events.answerTimeout') };

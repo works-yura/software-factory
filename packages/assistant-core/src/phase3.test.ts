@@ -1,8 +1,8 @@
 /**
  * Phase 3 of «Помічник»: the agent's tools are its owner's only; asking a Factory and handing over
  * are only proposed by the agent and run on the person's Confirm (never silently); the person's
- * instructions and skills reach the agent; channel rules (analyse / analyse_and_ask / digest_only)
- * with the auto-ask limit; digests on the person's schedule; the routes the settings page uses.
+ * instructions and skills reach the agent; digests on the person's schedule; the routes the settings
+ * page uses. (Channel rules were retired with the tag trigger, ADR-0051 amendment 2026-11-16.)
  */
 import { can } from '@factory/access';
 import { enforceRouteAccess } from '@factory/http';
@@ -20,7 +20,7 @@ import { buildAssistantRoutes } from './routes.ts';
 import { AssistantService } from './service.ts';
 import { AssistantStorage } from './storage.ts';
 import { FakeBrain, FakeFactory, FakeMemory, fakeModels, MemoryBlobStore, testCipher } from './testing.ts';
-import type { AssistantOwner, ChannelRule } from './types.ts';
+import type { AssistantOwner } from './types.ts';
 
 const ADA: AssistantOwner = { orgId: 'org-a', userId: 'ada' };
 const ADA_ELSEWHERE: AssistantOwner = { orgId: 'org-b', userId: 'ada' };
@@ -55,11 +55,11 @@ class FakeSource implements AssistantSource {
   async organizationsOf() {
     return [];
   }
-  async enabledChannels(owner: AssistantOwner) {
+  async taggedChannels(owner: AssistantOwner) {
     return this.channels.get(`${owner.orgId}:${owner.userId}`) ?? [];
   }
   async readChannel(owner: AssistantOwner, input: { ref: string }) {
-    const channel = (await this.enabledChannels(owner)).find(candidate => candidate.ref === input.ref);
+    const channel = (await this.taggedChannels(owner)).find(candidate => candidate.ref === input.ref);
     if (!channel) throw new (await import('./errors.ts')).AssistantError('not_found', 'No such chat.', 404);
     this.reads.push(`${owner.userId}:${input.ref}`);
     return { channel, messages: [{ id: 'm1', from: 'Olena', text: 'is checkout fixed?', at: now.toISOString(), replies: 0, threadId: null }] };
@@ -148,8 +148,8 @@ describe('the agent’s tools are its owner’s only', () => {
     expect(await service.listNotes(BOB)).toMatchObject([{ text: 'Bob wants a call on Friday', author: 'agent', requestId: created.id }]);
   });
 
-  it('lists and reads only the chats its owner turned on', async () => {
-    source.channels.set('org-a:ada', [{ ref: 'clickup:9001:ch-support', name: 'support', kind: 'channel', mode: 'watch', rule: { kind: 'analyse' } }]);
+  it('lists and reads only the chats its owner tagged it in', async () => {
+    source.channels.set('org-a:ada', [{ ref: 'clickup:9001:ch-support', name: 'support', kind: 'channel' }]);
     await requestOf(BOB, 'what is new in support?');
     const turn = brain.turns[0]!;
     expect(await run(turn, 'source_list_channels')).toEqual({ channels: [] });
@@ -299,7 +299,7 @@ describe('instructions and skills', () => {
   });
 });
 
-function sourceMessage(n: number, rule?: ChannelRule): SourceMessage {
+function sourceMessage(n: number): SourceMessage {
   return {
     platform: 'clickup',
     sourceKey: `clickup:9001:ch-support:root-${n}`,
@@ -307,56 +307,13 @@ function sourceMessage(n: number, rule?: ChannelRule): SourceMessage {
     text: `Checkout broke again #${n}`,
     fromName: 'Olena',
     sourceUrl: 'https://app.clickup.com/9001/chat/r/ch-support',
+    context: [],
+    contextKind: 'chat',
     files: [],
-    fromMe: false,
     analyse: true,
     where: '#support',
-    ...(rule ? { rule } : {}),
   };
 }
-
-describe('channel rules', () => {
-  it('digest_only keeps the message for the digest without a turn', async () => {
-    const { request } = await service.ingestSourceMessage(ADA, sourceMessage(1, { kind: 'digest_only' }));
-    await settle();
-    expect(brain.turns).toEqual([]);
-    expect(request).toMatchObject({ status: 'waiting_me', unread: true });
-    expect((await storage.listMessages(ADA, request!.id)).map(message => message.text)).toContain('not_analysed:digest');
-  });
-
-  it('analyse_and_ask asks the channel’s Factory after the report, within the daily limit; past it, proposes', async () => {
-    factory.connect(ADA);
-    service = build({ limits: { autoAsksPerDay: 1, answerPollTimeoutMs: 0 } });
-    const rule: ChannelRule = { kind: 'analyse_and_ask', factoryId: 'f-1' };
-    const first = await service.ingestSourceMessage(ADA, sourceMessage(1, rule));
-    await settle();
-    expect(factory.asked).toHaveLength(1);
-    expect(factory.asked[0]!.question).toContain('Olena: Checkout broke again #1');
-    expect(factory.asked[0]!.question).toContain('first reading');
-    const asked = (await storage.getRequest(ADA, first.request!.id))!;
-    expect(asked.status).toBe('waiting_factory');
-    expect((await storage.listMessages(ADA, asked.id)).map(message => message.text.split('\n')[0])).toContain('rule:analyse_and_ask');
-
-    const second = await service.ingestSourceMessage(ADA, sourceMessage(2, rule));
-    await settle();
-    expect(factory.asked).toHaveLength(1);
-    expect((await storage.getRequest(ADA, second.request!.id))!.pendingAction).toMatchObject({ kind: 'ask', proposedBy: 'rule' });
-  });
-
-  it('analyse_and_ask without a reachable Factory says so in the thread and asks nothing', async () => {
-    const { request } = await service.ingestSourceMessage(ADA, sourceMessage(1, { kind: 'analyse_and_ask', factoryId: 'f-1' }));
-    await settle();
-    expect(factory.asked).toEqual([]);
-    expect((await storage.listMessages(ADA, request!.id)).some(message => message.text.startsWith('auto_ask_failed'))).toBe(true);
-  });
-
-  it('a rule asking a Factory is checked when it is set', async () => {
-    await expect(service.checkChannelRule(ADA, { kind: 'analyse_and_ask', factoryId: 'f-1' })).rejects.toMatchObject({ code: 'factory_not_connected' });
-    factory.connect(ADA);
-    await expect(service.checkChannelRule(ADA, { kind: 'analyse_and_ask', factoryId: 'nope' })).rejects.toMatchObject({ code: 'factory_not_found' });
-    await expect(service.checkChannelRule(ADA, { kind: 'analyse_and_ask', factoryId: 'f-1' })).resolves.toBeUndefined();
-  });
-});
 
 describe('digests', () => {
   it('computes the next digest: the next full hour, or the hour in the person’s zone', () => {
@@ -373,7 +330,7 @@ describe('digests', () => {
     await expect(service.patchSettings(ADA, { digest: { frequency: 'daily', timeZone: 'Mars/Base' } })).rejects.toMatchObject({ code: 'invalid_digest' });
     await expect(service.patchSettings(ADA, { digest: { frequency: 'weekly' as never } })).rejects.toMatchObject({ code: 'invalid_digest' });
 
-    await service.ingestSourceMessage(ADA, sourceMessage(1, { kind: 'digest_only' }));
+    await service.ingestSourceMessage(ADA, sourceMessage(1));
     await requestOf(BOB, 'Bob’s request stays out of Ada’s digest');
     await service.patchSettings(ADA, { digest: { frequency: 'hourly' } });
     expect((await service.digestSchedule(ADA)).nextAt!.toISOString()).toBe('2026-11-15T11:00:00.000Z');
@@ -388,7 +345,6 @@ describe('digests', () => {
     const turn = brain.turns.slice(turnsBefore).find(candidate => candidate.input.author === 'digest')!;
     expect(turn.owner).toEqual(ADA);
     expect(turn.input.text).toContain('Checkout broke again #1');
-    expect(turn.input.text).toContain('digest-only');
     expect(turn.input.text).not.toContain('Bob');
     expect((await service.digestSchedule(ADA)).nextAt!.toISOString()).toBe('2026-11-15T12:00:00.000Z');
     // Not due again until then; Bob has none.

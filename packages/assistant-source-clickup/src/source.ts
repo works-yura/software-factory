@@ -1,19 +1,20 @@
 /**
- * ClickUp Chat as a personal source of «Помічник» (ADR-0051 phase 2): the person connects their
- * own personal API token; the assistant lists the channels and DMs it sees, reads the ones the
- * person turned on (a mode per channel), and turns threads into requests through the core's
- * `ingestSourceMessage` (binding key `clickup:<workspace>:<channel>:<root message>`, idempotent by
- * message id). It never writes to ClickUp.
+ * ClickUp Chat as a personal source of «Помічник» (ADR-0051 phase 2, trigger per the amendment of
+ * 2026-11-16): the person connects their own personal API token; the assistant looks at every chat
+ * the token sees, cheaply, for new messages since its cursor, and only a message that carries the
+ * person's tag (`#помічник …`, a regular expression — never a model) becomes a request, through the
+ * core's `ingestSourceMessage` (binding key `clickup:<workspace>:<channel>:<root message>`,
+ * idempotent by message id), with the conversation it points at as context. Messages without the
+ * tag are not kept. It never writes to ClickUp.
  */
-import { AssistantError, ASSISTANT_FILE_MAX_BYTES, formatChannelRule } from '@factory/assistant-core';
+import { AssistantError, ASSISTANT_FILE_MAX_BYTES } from '@factory/assistant-core';
 import type {
   AssistantOwner,
   AssistantSource,
-  ChannelMode,
-  ChannelRule,
   SecretCipher,
   SourceChannelInfo,
   SourceChannelMessages,
+  SourceContextMessage,
   SourceDownload,
   SourceMessage,
 } from '@factory/assistant-core';
@@ -32,6 +33,8 @@ import type { OrgClickUpReader } from './org-connection.ts';
 import { orgConnectionFor } from './org-connection.ts';
 import type { ChannelKind, ChannelMember, ClickUpSourceStorage, DetailsWhat, SourceChannel, SourceConnection } from './storage.ts';
 import { PLATFORM } from './storage.ts';
+import type { TagSettings, TagWho } from './tag.ts';
+import { assertTagPattern, DEFAULT_TAG_PATTERN, MAX_CONTEXT_MESSAGES, tagMatcher } from './tag.ts';
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -44,11 +47,19 @@ export interface ClickUpPollLimits {
   maxBackoffMs: number;
   /** ClickUp calls one poll may make (ClickUp allows 100 a minute per token on most plans). */
   callsPerPoll: number;
-  /** Channels read in one poll; the rest are read next time, least recently read first. */
+  /**
+   * Chats looked at in one poll (one call each when nothing is tagged); the rest next time, least
+   * recently read first. Every chat the token sees is looked at: there is no per-chat choice.
+   */
   channelsPerPoll: number;
+  /**
+   * A chat outside the person's ClickUp sidebar (a channel they do not follow, a hidden DM) waits
+   * this much longer than a sidebar chat for its next look: where the person writes comes first.
+   */
+  offSidebarDelayMs: number;
   /** Pages of top-level messages read back per channel in one poll. */
   pagesPerChannel: number;
-  /** Agent turns per person per hour; past it, messages are kept but not analysed. */
+  /** Agent turns per person per hour; past it, tags are kept as requests but not analysed. */
   turnsPerHour: number;
   /** The channel list is read again this often. */
   channelsRefreshMs: number;
@@ -57,9 +68,10 @@ export interface ClickUpPollLimits {
   /** ClickUp calls one on-demand read by the agent's tool may make. */
   callsPerRead: number;
   /**
-   * Channels described per poll: a DM's people (`…/members`), a channel's followers (is the person
-   * one: their sidebar) and a location channel's path. Rows never described, or whose lookup failed
-   * a while ago, go first.
+   * Channels described per poll: a DM's people (`…/members`, for author names), a channel's
+   * followers (is the person one: their sidebar, read first) and a location channel's path (to say
+   * where a request came from). Rows never described, or whose lookup failed a while ago, go first.
+   * Looked up with what is left of the poll's calls after the chats were read.
    */
   detailsPerListing: number;
   /** A failed lookup is tried again after this long (a good one after a day). */
@@ -69,8 +81,10 @@ export interface ClickUpPollLimits {
 export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
   intervalMs: 2 * MINUTE,
   maxBackoffMs: 30 * MINUTE,
-  callsPerPoll: 40,
-  channelsPerPoll: 10,
+  // 60 calls per 2 minutes: 30 a minute, well within ClickUp's 100 a minute per token.
+  callsPerPoll: 60,
+  channelsPerPoll: 30,
+  offSidebarDelayMs: 10 * MINUTE,
   pagesPerChannel: 3,
   turnsPerHour: 20,
   channelsRefreshMs: 60 * MINUTE,
@@ -80,10 +94,9 @@ export const DEFAULT_POLL_LIMITS: ClickUpPollLimits = {
   detailsRetryMs: 10 * MINUTE,
 };
 
-/** What the source needs from the core: taking messages in, and which threads have open requests. */
+/** What the source needs from the core: taking a tag in. */
 export interface SourceIngest {
   ingestSourceMessage(owner: AssistantOwner, message: SourceMessage): Promise<{ outcome: string }>;
-  hasOpenSourceRequest(owner: AssistantOwner, sourceKey: string): Promise<boolean>;
 }
 
 export interface ClickUpSourceDeps {
@@ -94,22 +107,12 @@ export interface ClickUpSourceDeps {
   client?: (options: ClickUpChatClientOptions) => ClickUpChatClient;
   limits?: Partial<ClickUpPollLimits>;
   /**
-   * Whether a channel rule can run (a rule that asks a Factory needs one the person reaches): the
-   * core's `checkChannelRule`. Throws an `AssistantError` saying why not.
-   */
-  checkRule?: (owner: AssistantOwner, rule: ChannelRule) => Promise<void>;
-  /**
    * The organization's ClickUp connection (Settings › Підключення), offered to the one person whose
    * own account its token is; absent, everyone connects a personal token.
    */
   orgClickUp?: OrgClickUpReader;
   maxFileBytes?: number;
   now?: () => Date;
-}
-
-/** The default mode of a channel the person has not set: DMs are read when addressed, channels not at all. */
-export function defaultMode(kind: ChannelKind): ChannelMode {
-  return kind === 'channel' ? 'ignore' : 'addressed';
 }
 
 /**
@@ -131,6 +134,31 @@ export function channelDisplayName(channel: Pick<SourceChannel, 'kind' | 'name' 
  */
 export function inSidebarOf(channel: Pick<SourceChannel, 'kind' | 'following' | 'follower' | 'hidden'>): boolean {
   return channel.kind === 'channel' ? channel.following || channel.follower === true : !channel.hidden;
+}
+
+/** Files taken in with one tag (its own and its context's). */
+const MAX_TAG_FILES = 8;
+
+/**
+ * A tag's context: the messages before it (oldest first) after the previous tag among them, at
+ * most `limit` (the newest).
+ */
+export function sinceLastTag<T>(before: T[], isTag: (message: T) => boolean, limit: number): T[] {
+  let start = 0;
+  for (let index = before.length - 1; index >= 0; index -= 1) {
+    if (isTag(before[index]!)) {
+      start = index + 1;
+      break;
+    }
+  }
+  const after = before.slice(start);
+  return limit > 0 ? after.slice(-limit) : [];
+}
+
+/** One context message as the core takes it: a file-only message names its files. */
+function contextItem(message: ChatMessage, names: Map<string, string>): SourceContextMessage {
+  const text = message.content.trim() || message.attachments.map(file => `[${file.name}]`).join(' ');
+  return { fromName: names.get(message.userId) ?? null, text, at: new Date(message.date).toISOString() };
 }
 
 function ownerKey(owner: AssistantOwner): string {
@@ -176,7 +204,7 @@ export interface ClickUpDiagnostics {
 }
 
 export interface PollResult {
-  /** Messages taken in (new requests and follow-ups). */
+  /** Tags taken in (new requests and later tags joining one). */
   ingested: number;
   /** Channels read. */
   channels: number;
@@ -199,26 +227,10 @@ export interface ConnectionView {
   lastSyncAt: string | null;
   lastError: string | null;
   nextPollAt: string | null;
-  channels: Array<{
-    workspaceId: string;
-    channelId: string;
-    name: string;
-    kind: ChannelKind;
-    /** In the person's ClickUp sidebar: a channel they follow, a DM they did not hide. The rest is behind «show all». */
-    inSidebar: boolean;
-    visibility: 'PUBLIC' | 'PRIVATE' | null;
-    /** A location channel's Space/Folder/List and its path (outermost first; empty until looked up). */
-    location: { kind: ChannelLocationKind; path: string[] } | null;
-    /** A DM's or group DM's other people (empty until looked up). */
-    members: ChannelMember[];
-    /** Why the last lookup of its people / path / followers failed (`code`: HTTP status, network cause, `empty`). */
-    detailsError: { what: DetailsWhat; code: string } | null;
-    mode: ChannelMode;
-    /** `analyse`, `analyse_and_ask:<factoryId>` or `digest_only`. */
-    rule: string;
-    lastSyncAt: string | null;
-    lastError: string | null;
-  }>;
+  /** The person's tag: their pattern (`null`: the default), the default, who may tag, context size. */
+  tag: { pattern: string | null; defaultPattern: string; who: TagWho; contextMessages: number };
+  /** The chats looked at for the tag: all the token sees; those in the person's ClickUp sidebar come first. */
+  chats: { total: number; inSidebar: number };
 }
 
 /** What the stored secret holds: the person's own token, or a pointer to the organization's connection. */
@@ -339,8 +351,8 @@ export class ClickUpChatSource implements AssistantSource {
 
   /**
    * Connects the person's own personal API token: checks it with ClickUp (whose it is, which
-   * workspaces), stores it encrypted, and lists the channels. Nothing is read until a channel is on;
-   * DMs are on «only when addressed» by default, channels off.
+   * workspaces), stores it encrypted, and lists the chats. Each chat's first read only sets its
+   * cursor: nothing written before is looked at.
    */
   async connect(owner: AssistantOwner, rawToken: string): Promise<ConnectionView> {
     await this.#ready();
@@ -417,7 +429,7 @@ export class ClickUpChatSource implements AssistantSource {
     return 'token' in value ? 'personal' : 'org';
   }
 
-  /** Forgets the connection, channel modes and cursors (the token first). Requests stay the person's. */
+  /** Forgets the connection (the token first), its tag settings and cursors. Requests stay the person's. */
   async disconnect(owner: AssistantOwner): Promise<void> {
     await this.#ready();
     await this.#deps.storage.deleteOwner(owner);
@@ -444,21 +456,12 @@ export class ClickUpChatSource implements AssistantSource {
         lastSyncAt: null,
         lastError: null,
         nextPollAt: null,
-        channels: [],
+        tag: { pattern: null, defaultPattern: DEFAULT_TAG_PATTERN, who: 'me', contextMessages: 10 },
+        chats: { total: 0, inSidebar: 0 },
       };
     }
     const via = await this.#via(connection);
-    // DMs first (they are what reaches the person), then channels, each by the name the list shows.
-    const order: Record<ChannelKind, number> = { dm: 0, group_dm: 1, channel: 2 };
-    const channels = (await this.#deps.storage.listChannels(owner))
-      .filter(channel => !channel.gone)
-      .map(channel => ({ channel, displayName: channelDisplayName(channel) }))
-      .sort(
-        (a, b) =>
-          order[a.channel.kind] - order[b.channel.kind] ||
-          a.displayName.localeCompare(b.displayName) ||
-          (a.channel.location?.path ?? []).join('/').localeCompare((b.channel.location?.path ?? []).join('/')),
-      );
+    const chats = (await this.#deps.storage.listChannels(owner)).filter(channel => !channel.gone);
     return {
       connected: true,
       via,
@@ -468,77 +471,64 @@ export class ClickUpChatSource implements AssistantSource {
       lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
       lastError: connection.lastError,
       nextPollAt: connection.nextPollAt?.toISOString() ?? null,
-      channels: channels.map(({ channel, displayName }) => ({
-        workspaceId: channel.workspaceId,
-        channelId: channel.channelId,
-        name: displayName,
-        kind: channel.kind,
-        // In the person's ClickUp sidebar: a channel they follow, a DM they did not hide.
-        inSidebar: inSidebarOf(channel),
-        visibility: channel.visibility,
-        location: channel.location ? { kind: channel.location.kind, path: channel.location.path ?? [] } : null,
-        members: channel.members ?? [],
-        detailsError: channel.detailsError,
-        mode: channel.mode,
-        rule: formatChannelRule(channel.rule),
-        lastSyncAt: channel.lastSyncAt?.toISOString() ?? null,
-        lastError: channel.lastError,
-      })),
+      tag: { ...connection.tag, defaultPattern: DEFAULT_TAG_PATTERN },
+      chats: { total: chats.length, inSidebar: chats.filter(channel => inSidebarOf(channel)).length },
     };
   }
 
-  async setMode(owner: AssistantOwner, input: { workspaceId: string; channelId: string; mode: ChannelMode }) {
-    return this.setChannel(owner, input);
-  }
-
   /**
-   * Sets a channel's mode and/or its rule for new requests. A rule that asks a Factory on its own
-   * is checked first (the Factory must be one the person reaches) and is only ever set here, by the
-   * person: it is never a default.
+   * Sets the person's tag: their own pattern (checked: it must compile and need a tag; `null` goes
+   * back to the default), who may tag (`me` — only the person, the default — or `anyone` in the
+   * chat), and how many messages before a tag in a flat chat are its context.
    */
-  async setChannel(owner: AssistantOwner, input: { workspaceId: string; channelId: string; mode?: ChannelMode; rule?: ChannelRule }) {
+  async setTag(owner: AssistantOwner, input: Partial<TagSettings>): Promise<ConnectionView> {
     await this.#ready();
-    if (!(await this.#deps.storage.getConnection(owner))) {
-      throw new AssistantError('not_connected', 'Connect ClickUp first.', 409);
+    if (!(await this.#deps.storage.getConnection(owner))) throw new AssistantError('not_connected', 'Connect ClickUp first.', 409);
+    const patch: Partial<TagSettings> = {};
+    if (input.pattern !== undefined) {
+      const pattern = input.pattern === null ? null : String(input.pattern).trim();
+      if (pattern !== null) assertTagPattern(pattern);
+      patch.pattern = pattern === DEFAULT_TAG_PATTERN ? null : pattern;
     }
-    if (input.rule?.kind === 'analyse_and_ask') {
-      if (!this.#deps.checkRule) throw new AssistantError('rule_unavailable', 'Asking a Factory from a channel rule is not available here.', 409);
-      await this.#deps.checkRule(owner, input.rule);
+    if (input.who !== undefined) {
+      if (input.who !== 'me' && input.who !== 'anyone') throw new AssistantError('invalid_tag_who', 'who is me or anyone.', 400);
+      patch.who = input.who;
     }
-    const channel = await this.#deps.storage.setChannel(
-      owner,
-      input.workspaceId,
-      input.channelId,
-      { ...(input.mode !== undefined ? { mode: input.mode } : {}), ...(input.rule !== undefined ? { rule: input.rule } : {}) },
-      this.#now(),
-    );
-    if (!channel) throw new AssistantError('not_found', 'Channel not found.', 404);
-    return channel;
+    if (input.contextMessages !== undefined) {
+      const count = Number(input.contextMessages);
+      if (!Number.isInteger(count) || count < 0 || count > MAX_CONTEXT_MESSAGES) {
+        throw new AssistantError('invalid_tag_context', `contextMessages is a whole number from 0 to ${MAX_CONTEXT_MESSAGES}.`, 400);
+      }
+      patch.contextMessages = count;
+    }
+    await this.#deps.storage.setTag(owner, patch, this.#now());
+    return this.view(owner);
   }
 
   // On demand, for the agent's tools
 
-  /** The chats the person turned on (any mode but `ignore`), for the agent. */
-  async enabledChannels(owner: AssistantOwner): Promise<SourceChannelInfo[]> {
+  /** The chats where the person tagged the assistant, for the agent. */
+  async taggedChannels(owner: AssistantOwner): Promise<SourceChannelInfo[]> {
     await this.#ready();
     if (!(await this.#deps.storage.getConnection(owner))) return [];
     return (await this.#deps.storage.listChannels(owner))
-      .filter(channel => channel.mode !== 'ignore' && !channel.gone)
+      .filter(channel => channel.taggedAt !== null && !channel.gone)
       .map(channel => this.#info(channel));
   }
 
   /**
-   * The latest messages of a chat the person turned on — or of one thread in it — read now with the
-   * person's connection (own token, or the organization's while provably theirs), within `callsPerRead` ClickUp calls. A chat that is off, gone or unknown
-   * is refused: the agent reads only what the person chose to let the assistant read.
+   * The latest messages of a chat where the person tagged the assistant — or of one thread in it —
+   * read now with the person's connection (own token, or the organization's while provably theirs),
+   * within `callsPerRead` ClickUp calls. Any other chat (never tagged, gone, unknown) is refused:
+   * the agent reads only where the person called it.
    */
   async readChannel(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages> {
     await this.#ready();
     const match = /^clickup:([^:]+):([^:]+)$/.exec(input.ref);
-    const refused = () => new AssistantError('not_found', 'No such chat among the ones you turned on.', 404);
+    const refused = () => new AssistantError('not_found', 'No such chat among the ones you tagged the assistant in.', 404);
     if (!match) throw refused();
     const channel = await this.#deps.storage.getChannel(owner, match[1]!, match[2]!);
-    if (!channel || channel.mode === 'ignore' || channel.gone) throw refused();
+    if (!channel || channel.taggedAt === null || channel.gone) throw refused();
     const connection = await this.#deps.storage.getConnection(owner);
     if (!connection || connection.status !== 'active') throw new AssistantError('not_connected', 'ClickUp is not connected (or no longer accepts the token).', 409);
     // The person's own token, or the organization's while it is still provably theirs — as polling.
@@ -597,8 +587,6 @@ export class ClickUpChatSource implements AssistantSource {
       ref: `clickup:${channel.workspaceId}:${channel.channelId}`,
       name: channelDisplayName(channel),
       kind: channel.kind,
-      mode: channel.mode,
-      rule: channel.rule,
     };
   }
 
@@ -650,16 +638,14 @@ export class ClickUpChatSource implements AssistantSource {
       const workspaces = await client.workspaces();
       // Rows listed before the sidebar facts were kept (`following` never stored) are listed again now.
       const unlisted = (await storage.listChannels(owner)).some(channel => !channel.gone && !channel.factsKnown);
-      if (unlisted || started.getTime() - listedAt >= this.limits.channelsRefreshMs) {
-        await this.#listChannels(owner, client, workspaces);
-      } else {
-        // What a listing could not describe (budget, a failure) is looked up on the next polls.
-        await this.#lookUpDetails(owner, client, workspaces);
-      }
+      const listing = unlisted || started.getTime() - listedAt >= this.limits.channelsRefreshMs;
+      if (listing) await this.#listChannels(owner, client, workspaces);
       const members = namesOf(workspaces);
+      // Every chat, least recently read first; one outside the sidebar waits `offSidebarDelayMs` longer.
+      const due = (channel: SourceChannel) => (channel.lastSyncAt?.getTime() ?? 0) + (inSidebarOf(channel) ? 0 : this.limits.offSidebarDelayMs);
       const channels = (await storage.listChannels(owner))
-        .filter(channel => channel.mode !== 'ignore' && !channel.gone)
-        .sort((a, b) => (a.lastSyncAt?.getTime() ?? 0) - (b.lastSyncAt?.getTime() ?? 0))
+        .filter(channel => !channel.gone)
+        .sort((a, b) => due(a) - due(b))
         .slice(0, this.limits.channelsPerPoll);
       for (const channel of channels) {
         if (client.remaining <= 0) break;
@@ -679,6 +665,14 @@ export class ClickUpChatSource implements AssistantSource {
             { lastSyncAt: this.#now(), lastError: errorText(error) },
             this.#now(),
           );
+        }
+      }
+      // What a listing could not describe (budget, a failure) is looked up with the calls left.
+      if (!listing && (await storage.getConnection(owner))) {
+        try {
+          await this.#lookUpDetails(owner, client, workspaces);
+        } catch (error) {
+          if (!(error instanceof ClickUpBudgetSpent)) throw error;
         }
       }
       await storage.pruneThreads(owner, started.getTime() - this.limits.followThreadsMs);
@@ -748,7 +742,6 @@ export class ClickUpChatSource implements AssistantSource {
             channelId: channel.id,
             name: channel.name || (kind === 'channel' ? channel.id : ''),
             kind,
-            defaultMode: defaultMode(kind),
             following: following.has(channel.id),
             hidden: channel.hidden,
             visibility: channel.visibility,
@@ -846,23 +839,12 @@ export class ClickUpChatSource implements AssistantSource {
     }
   }
 
-  /** Bulk: one mode for every DM and group DM (e.g. all of them «only when addressed»). */
-  async setDmModes(owner: AssistantOwner, mode: ChannelMode): Promise<number> {
-    await this.#ready();
-    if (!(await this.#deps.storage.getConnection(owner))) throw new AssistantError('not_connected', 'Connect ClickUp first.', 409);
-    let changed = 0;
-    for (const channel of await this.#deps.storage.listChannels(owner)) {
-      if (channel.gone || channel.kind === 'channel' || channel.mode === mode) continue;
-      await this.#deps.storage.setChannel(owner, channel.workspaceId, channel.channelId, { mode }, this.#now());
-      changed += 1;
-    }
-    return changed;
-  }
-
   /**
-   * Reads one channel since its cursor: new top-level messages (newest first, back to the cursor),
-   * and new replies of the threads on those pages whose reply count grew. A channel read for the
-   * first time after being turned on only sets its cursor: history is never read.
+   * Looks at one chat since its cursor: new top-level messages (newest first, back to the cursor),
+   * and new replies of the threads on those pages whose reply count grew. Only a message that
+   * carries the person's tag (by someone allowed to tag) is taken in, with the conversation it points
+   * at; the rest is not kept. A chat read for the first time only sets its cursor: history is never
+   * looked at.
    */
   async #readChannel(
     owner: AssistantOwner,
@@ -888,7 +870,7 @@ export class ClickUpChatSource implements AssistantSource {
     }
 
     if (channel.cursorAt === null) {
-      // First read: remember where the channel stands; nothing before now becomes a request.
+      // First read: remember where the chat stands; nothing before now is looked at.
       const newest = roots.length ? roots.reduce((max, message) => Math.max(max, message.date), 0) : this.#now().getTime();
       for (const root of roots) {
         await storage.putThread(owner, {
@@ -898,7 +880,6 @@ export class ClickUpChatSource implements AssistantSource {
           rootAt: root.date,
           repliesCount: root.repliesCount,
           replyCursorAt: this.#now().getTime(),
-          involvesMe: root.userId === connection.accountId,
         });
       }
       await storage.patchChannel(owner, workspaceId, channelId, { cursorAt: newest });
@@ -911,13 +892,15 @@ export class ClickUpChatSource implements AssistantSource {
       });
     }
 
-    // What to take in, oldest first: new roots, and new replies of threads whose count grew.
-    const incoming: Array<{ message: ChatMessage; rootId: string }> = [];
+    // What is new, oldest first: new roots, and new replies of threads whose count grew. Every reply
+    // read is kept for this read only, as the context of a tag in its thread.
+    const incoming: ChatMessage[] = [];
+    const threads = new Map<string, ChatMessage[]>();
     let newest = channel.cursorAt;
     for (const root of roots) {
       const isNew = root.date > channel.cursorAt;
       if (isNew) {
-        incoming.push({ message: root, rootId: root.id });
+        incoming.push(root);
         newest = Math.max(newest, root.date);
       }
       const known = await storage.getThread(owner, workspaceId, root.id);
@@ -929,45 +912,61 @@ export class ClickUpChatSource implements AssistantSource {
         // A thread first seen on an old root: its replies so far are history, only new ones count.
         repliesCount: isNew ? 0 : root.repliesCount,
         replyCursorAt: isNew ? 0 : this.#now().getTime(),
-        involvesMe: root.userId === connection.accountId,
       };
       if (root.repliesCount > thread.repliesCount) {
-        const replies = await this.#newReplies(client, workspaceId, channelId, root.id, thread.replyCursorAt);
-        for (const reply of replies) incoming.push({ message: reply, rootId: root.id });
-        thread.replyCursorAt = replies.reduce((max, reply) => Math.max(max, reply.date), thread.replyCursorAt);
+        const read = await this.#replies(client, workspaceId, channelId, root.id, thread.replyCursorAt);
+        threads.set(root.id, read.all);
+        incoming.push(...read.fresh);
+        thread.replyCursorAt = read.fresh.reduce((max, reply) => Math.max(max, reply.date), thread.replyCursorAt);
       }
       thread.repliesCount = Math.max(thread.repliesCount, root.repliesCount);
       if (!known || known.repliesCount !== thread.repliesCount || known.replyCursorAt !== thread.replyCursorAt) {
         await storage.putThread(owner, thread);
       }
     }
-    incoming.sort((a, b) => a.message.date - b.message.date);
+    incoming.sort((a, b) => a.date - b.date);
 
-    const names = await this.#authorNames(client, channel, members, incoming.map(({ message }) => message.userId));
+    const tag = tagMatcher(connection.tag.pattern);
+    const isTag = (message: ChatMessage) =>
+      (connection.tag.who === 'anyone' || message.userId === connection.accountId) && tag.test(message.content);
     let ingested = 0;
-    for (const { message, rootId } of incoming) {
+    let older = cursor;
+    for (const message of incoming.filter(isTag)) {
       if (!(await storage.getConnection(owner))) return ingested;
-      const fromMe = message.userId === connection.accountId;
-      const thread = await storage.getThread(owner, workspaceId, rootId);
-      if (fromMe && thread && !thread.involvesMe) await storage.putThread(owner, { ...thread, involvesMe: true });
-      const sourceKey = `clickup:${workspaceId}:${channelId}:${rootId}`;
-      const take =
-        fromMe ||
-        (message.parentMessageId !== null && (await this.#deps.ingest.hasOpenSourceRequest(owner, sourceKey))) ||
-        (await this.#wanted(client, channel, message, thread?.involvesMe ?? false, connection.accountId));
-      if (!take) continue;
+      const rootId = message.parentMessageId ?? message.id;
+      let context: ChatMessage[];
+      if (message.parentMessageId) {
+        const root = roots.find(candidate => candidate.id === message.parentMessageId);
+        const replies = (threads.get(message.parentMessageId) ?? []).filter(reply => reply.date < message.date);
+        context = sinceLastTag([...(root ? [root] : []), ...replies.sort((a, b) => a.date - b.date)], isTag, MAX_CONTEXT_MESSAGES);
+      } else {
+        // A flat chat: the messages before it, up to the person's count, or since the previous tag.
+        const wanted = connection.tag.contextMessages;
+        const before = () => roots.filter(candidate => candidate.date < message.date);
+        if (wanted > 0 && before().length < wanted && older && client.remaining > 1) {
+          try {
+            const page = await client.messages(workspaceId, channelId, { cursor: older, limit: 50 });
+            roots.push(...page.items);
+            older = page.nextCursor;
+          } catch (error) {
+            if (!(error instanceof ClickUpBudgetSpent)) throw error;
+          }
+        }
+        context = sinceLastTag(before().sort((a, b) => a.date - b.date), isTag, wanted);
+      }
+      const names = await this.#authorNames(client, channel, members, [message.userId, ...context.map(item => item.userId)]);
+      const files = await this.#files(client, [message, ...[...context].reverse()].flatMap(item => item.attachments));
       const outcome = await this.#deps.ingest.ingestSourceMessage(owner, {
         platform: 'clickup',
-        sourceKey,
+        sourceKey: `clickup:${workspaceId}:${channelId}:${rootId}`,
         messageKey: `clickup:${workspaceId}:${message.id}`,
-        text: message.content,
+        text: tag.strip(message.content),
         fromName: names.get(message.userId) ?? null,
         sourceUrl: channelUrl(workspaceId, channelId),
-        files: await this.#files(client, message.attachments),
-        fromMe,
-        // A digest-only channel never spends a turn; the others count against the hourly limit.
-        analyse: fromMe || channel.rule.kind === 'digest_only' ? false : this.#turns.allow(owner, this.limits.turnsPerHour, this.#now().getTime()),
-        rule: channel.rule,
+        context: context.map(item => contextItem(item, names)),
+        contextKind: message.parentMessageId ? 'thread' : 'chat',
+        files,
+        analyse: this.#turns.allow(owner, this.limits.turnsPerHour, this.#now().getTime()),
         where:
           channel.kind === 'channel'
             ? `#${[...(channel.location?.path?.slice(0, -1) ?? []), channel.name].join(' › ')}`
@@ -975,30 +974,11 @@ export class ClickUpChatSource implements AssistantSource {
               ? `DM ${channelDisplayName(channel)}`
               : `group DM ${channelDisplayName(channel)}`,
       });
-      if (outcome.outcome !== 'duplicate' && outcome.outcome !== 'skipped') ingested += 1;
+      if (outcome.outcome !== 'duplicate') ingested += 1;
+      await storage.patchChannel(owner, workspaceId, channelId, { taggedAt: this.#now() }, this.#now());
     }
     if (newest > channel.cursorAt) await storage.patchChannel(owner, workspaceId, channelId, { cursorAt: newest });
     return ingested;
-  }
-
-  /**
-   * Whether a message someone else wrote is for the assistant in this channel's mode: `watch` takes
-   * everything; `addressed` takes a DM, a reply in a thread the person is in, or a mention of them.
-   * (A reply in a thread that already has an open request is taken by the caller either way.)
-   */
-  async #wanted(
-    client: ClickUpChatClient,
-    channel: SourceChannel,
-    message: ChatMessage,
-    threadInvolvesMe: boolean,
-    me: string,
-  ): Promise<boolean> {
-    if (channel.mode === 'watch') return true;
-    if (channel.mode !== 'addressed') return false;
-    if (channel.kind !== 'channel') return true;
-    if (message.parentMessageId && threadInvolvesMe) return true;
-    const tagged = await client.taggedUsers(channel.workspaceId, message.id);
-    return tagged.includes(me);
   }
 
   /**
@@ -1022,10 +1002,14 @@ export class ClickUpChatSource implements AssistantSource {
     return names;
   }
 
-  /** The files a message carries, fetched now; a file that cannot be fetched is skipped (and logged). */
+  /**
+   * The files a tag's messages carry (the tagged one first, then its context newest first), each
+   * once, at most `MAX_TAG_FILES`, fetched now; a file that cannot be fetched is skipped (and logged).
+   */
   async #files(client: ClickUpChatClient, attachments: MessageAttachment[]): Promise<SourceMessage['files']> {
     const files: SourceMessage['files'] = [];
-    for (const link of attachments.slice(0, 5)) {
+    const unique = attachments.filter((link, index) => attachments.findIndex(other => other.url === link.url) === index);
+    for (const link of unique.slice(0, MAX_TAG_FILES)) {
       if (client.remaining <= 1) break;
       try {
         const { bytes, mime } = await client.download(link.url, this.#deps.maxFileBytes ?? ASSISTANT_FILE_MAX_BYTES);
@@ -1038,17 +1022,19 @@ export class ClickUpChatSource implements AssistantSource {
     return files;
   }
 
-  /** New replies of a thread (newer than `after`), oldest first. */
-  async #newReplies(client: ClickUpChatClient, workspaceId: string, channelId: string, rootId: string, after: number) {
-    const out: ChatMessage[] = [];
+  /**
+   * The replies of a thread read now (newest first, up to 3 pages, stopping once older than `after`):
+   * `fresh` — newer than `after`, oldest first; `all` — every reply read, for a tag's context.
+   */
+  async #replies(client: ClickUpChatClient, workspaceId: string, channelId: string, rootId: string, after: number) {
+    const all: ChatMessage[] = [];
     let cursor: string | null = null;
     for (let page = 0; page < 3; page += 1) {
       const result = await client.replies(workspaceId, channelId, rootId, { cursor, limit: 50 });
-      const fresh = result.items.filter(reply => reply.date > after);
-      out.push(...fresh);
+      all.push(...result.items);
       cursor = result.nextCursor;
-      if (!cursor || fresh.length < result.items.length) break;
+      if (!cursor || result.items.some(reply => reply.date <= after)) break;
     }
-    return out.sort((a, b) => a.date - b.date);
+    return { all, fresh: all.filter(reply => reply.date > after).sort((a, b) => a.date - b.date) };
   }
 }

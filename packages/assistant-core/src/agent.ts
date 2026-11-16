@@ -79,14 +79,14 @@ export function turnMessage(turn: BrainTurn) {
       : input.author === 'approved'
       ? 'The person approved what you proposed; it ran. Its result is below. Carry on from it and report to the person.'
       : input.author === 'digest'
-      ? "Write the person's digest: what is open in their inbox, below. Group it — what needs them first, what waits on a Factory, what came from digest-only chats — one line each, with the sender. No preamble."
+      ? "Write the person's digest: what is open in their inbox, below. Group it — what needs them first, what waits on a Factory — one line each, with the sender. No preamble."
       : input.author === 'factory'
       ? `Factory ${request.factory?.factoryName ?? ''} answered the question about "${request.topic}":`
       : input.author === 'source'
         ? [
             turn.first
-              ? `New message in the person's ${request.source} chat, from ${input.fromName ?? 'someone'}.`
-              : `A new message in the same ${request.source} thread, from ${input.fromName ?? 'someone'}.`,
+              ? `${input.fromName ?? 'Someone'} tagged you in the person's ${request.source} chat. Quoted below: the messages the tag points at (oldest first, with their authors); after them, what the tagger asked you to do — if nothing, read the messages and report what needs the person.`
+              : `${input.fromName ?? 'Someone'} tagged you again in the same ${request.source} thread: the messages since the last tag, quoted, then what they ask now.`,
             ...(request.sourceUrl ? [`Original: ${request.sourceUrl}`] : []),
             ...(turn.first
               ? [`Start your answer with one line "${TOPIC_PREFIX} <what it is about, at most 80 characters>", then your report.`]

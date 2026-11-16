@@ -279,9 +279,7 @@ export function createFactoryAssistant(options: FactoryAssistantOptions): Factor
         ...(options.orgClickUp ? { orgClickUp: options.orgClickUp } : {}),
         ingest: {
           ingestSourceMessage: (owner, message) => ingest!.ingestSourceMessage(owner, message),
-          hasOpenSourceRequest: (owner, key) => ingest!.hasOpenSourceRequest(owner, key),
         },
-        checkRule: (owner, rule) => ingest!.checkChannelRule(owner, rule),
       })
     : undefined;
 

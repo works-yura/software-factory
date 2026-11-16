@@ -240,7 +240,7 @@
   },
   "sources": {
     "clickup": "ClickUp Chat",
-    "tokenHelp": "Paste your own personal API token: in ClickUp, avatar › Settings › Apps › API Token (starts with pk_). The assistant only reads the chats you turn on below and never writes to ClickUp. The token is stored encrypted and only you can use it.",
+    "tokenHelp": "Paste your own personal API token: in ClickUp, avatar › Settings › Apps › API Token (starts with pk_). The assistant only looks for your tag in your chats and never writes to ClickUp. The token is stored encrypted and only you can use it.",
     "connectForm": "Connect ClickUp",
     "token": "Personal API token",
     "connect": "Connect",
@@ -250,52 +250,47 @@
     "syncNow": "Read now",
     "disconnect": "Disconnect",
     "disconnectTitle": "Disconnect ClickUp?",
-    "disconnectDescription": "The token, your channel modes and read positions are erased. Requests already made from ClickUp stay until you close and clear them.",
+    "disconnectDescription": "The token, your tag settings and read positions are erased. Requests already made from ClickUp stay until you close and clear them.",
     "rejected": "ClickUp no longer accepts this token, so reading stopped. Paste a new token to connect again.",
     "syncFailed": "The last read failed: {{error}}. It is retried automatically.",
-    "modesHelp": "For each chat, choose what becomes a request. Only new messages are read from when you turn a chat on. Off: not read. When addressed: DMs, mentions of you, replies in threads you are in. Everything: every new thread.",
-    "channels": "ClickUp chats",
-    "noChannels": "No chats yet",
-    "noChannelsHint": "ClickUp listed no channels or DMs for this token. Press «Read now» after joining one.",
-    "modeFor": "What to read in {{channel}}",
-    "mode": {
-      "ignore": "Off",
-      "addressed": "When addressed",
-      "watch": "Everything"
-    },
-    "kind": {
-      "channel": "Channel",
-      "dm": "Direct message",
-      "group_dm": "Group message",
-      "list_channel": "List channel",
-      "folder_channel": "Folder channel",
-      "space_channel": "Space channel"
-    },
     "loading": "Loading sources…",
     "orgTitle": "Your organization's ClickUp connection",
     "orgHelp": "The organization's ClickUp connection uses your own ClickUp account ({{workspaces}}), so the assistant can read your chats with it — no second token. Only you see this option.",
     "useOrg": "Use the organization's connection (ClickUp: {{name}})",
     "viaOrg": "Through the organization's ClickUp connection",
     "orgGone": "The organization's ClickUp connection was removed or no longer uses your account, so reading stopped. Connect your own personal token.",
-    "private": "private",
-    "detailsFailed": {
-      "members": "Could not get the people (code {{code}})",
-      "path": "Could not get the location (code {{code}})",
-      "followers": "Could not check whether it is in your sidebar (code {{code}})"
-    },
-    "dms": "Direct messages",
-    "rooms": "Channels",
-    "count_one": "{{count}} chat",
-    "count_other": "{{count}} chats",
-    "showAll": "Show all ({{count}})",
-    "showSidebar": "Show only my sidebar",
-    "search": "Search chats",
-    "searchPlaceholder": "Name, person or location",
-    "nothingFound": "Nothing found",
-    "nothingFoundHint": "No chat, person or location matches «{{query}}».",
-    "allDms": "All DMs",
-    "allDmsPlaceholder": "All DMs…",
-    "allDmsTo": "All DMs: {{mode}}"
+    "chats_one": "Looking for the tag in {{count}} chat",
+    "chats_other": "Looking for the tag in {{count}} chats",
+    "tag": {
+      "title": "Tag",
+      "help": "Write the tag in any ClickUp chat — «#помічник оціни це» — and that message, with the thread or the messages before it, becomes a request; the text after the tag is your instruction. Nothing else in your chats ever becomes a request.",
+      "form": "Tag pattern",
+      "pattern": "Tag pattern (regular expression, case-insensitive)",
+      "save": "Save the tag pattern",
+      "useDefault": "Default tag",
+      "problem": {
+        "empty": "Write a pattern.",
+        "invalid": "This is not a valid regular expression.",
+        "matchesEverything": "This pattern matches ordinary messages: every message would become a request."
+      },
+      "test": "Try it",
+      "testHelp": "Type a message to see whether it carries the tag and what instruction is left.",
+      "testInput": "Test message",
+      "sample": "#помічник оціни це",
+      "testMatch": "Tag found. Instruction: «{{instruction}}»",
+      "noInstruction": "none — the assistant looks at the conversation",
+      "testNoMatch": "No tag: this message would not make a request.",
+      "testInvalid": "Fix the pattern to try it.",
+      "who": "Who can tag",
+      "whoHelp": "Only you, or anyone in a chat you are in (their tag makes a request for you).",
+      "whoOption": {
+        "me": "Only me",
+        "anyone": "Anyone in the chat"
+      },
+      "context": "Earlier messages",
+      "contextHelp": "In a chat without a thread: how many messages before the tag come along (fewer when an earlier tag is closer). In a thread: its first message and the replies.",
+      "saveContext": "Save the number of earlier messages"
+    }
   },
   "failure": {
     "defaultModel": "The organization's default model",
@@ -380,18 +375,6 @@
       "asks": "asks you first"
     }
   },
-  "rules": {
-    "title": "Chat rules",
-    "analyse": "Analyse",
-    "digest_only": "Digest only",
-    "analyse_and_ask": "Analyse and ask {{factory}}",
-    "for": "What to do with new requests from {{channel}}",
-    "noChannels": "No chats turned on: turn some on in Sources.",
-    "noSource": "Connect a source first (Sources).",
-    "count_one": "{{count}} chat on",
-    "count_other": "{{count}} chats on",
-    "hint": "«Analyse and ask» starts a side session in that Factory by itself (it costs), at most 10 a day; past that it becomes a proposal you confirm."
-  },
   "digest": {
     "frequency": "Digest",
     "frequencyDescription": "A request summing up what is open in your inbox.",
@@ -424,7 +407,7 @@
     "confirmAsk": "Ask",
     "confirmHandOver": "Hand over",
     "byAgent": "the assistant proposes",
-    "byRule": "the chat's rule (today's limit is spent)",
+    "byRule": "a chat rule (before tags)",
     "question": "Question",
     "title": "Card",
     "workspaceTool": "Run in the workspace: {{tool}}",
@@ -440,7 +423,7 @@
     "ruleAsk": "The chat's rule asks the Factory",
     "autoAskFailed": "The chat's rule could not ask the Factory",
     "answerTimeout": "No answer from the Factory in 15 minutes: check later with «Check answer»",
-    "digestOnly": "Not analysed: the chat goes into the digest",
+    "digestOnly": "Not analysed: the chat went into the digest (an old chat rule)",
     "digest_one": "Digest of {{count}} open request",
     "digest_other": "Digest of {{count}} open requests",
     "proposedRun": "Proposed to run {{tool}}",

@@ -1,9 +1,11 @@
 /**
- * `/web/assistant/sources/*` (ADR-0051 phase 2): the person's own ClickUp connection in their
- * current organization — connect with a personal API token, a mode per channel, sync now,
- * disconnect. The owner is always the caller; the token never leaves the server.
+ * `/web/assistant/sources/*` (ADR-0051 phase 2; the tag per the amendment of 2026-11-16): the
+ * person's own ClickUp connection in their current organization — connect with a personal API
+ * token, their tag (pattern, who may tag, context size), sync now, disconnect. There is no
+ * per-channel setting: every chat is looked at for the tag only. The owner is always the caller;
+ * the token never leaves the server.
  */
-import { AssistantError, assistantHandler, isChannelMode, jsonBody, parseChannelRule } from '@factory/assistant-core';
+import { AssistantError, assistantHandler, jsonBody } from '@factory/assistant-core';
 import type { RouteAccess, RouteAuth } from '@factory/http';
 import { declareAccess } from '@factory/http';
 import type { ApiRoute } from '@mastra/core/server';
@@ -55,37 +57,23 @@ export function buildClickUpSourceRoutes(deps: { auth: RouteAuth; source: ClickU
         return c.json({ result: { ingested: result.ingested, channels: result.channels, error: result.error ?? null }, clickup: await source.view(owner) });
       }),
     }),
-    // Bulk: every DM and group DM to one mode (e.g. «only when addressed»).
-    registerApiRoute(`${p}/clickup/dms`, {
+    // The person's tag: `{ pattern?: string | null (null: the default), who?: 'me' | 'anyone', contextMessages?: number }`.
+    registerApiRoute(`${p}/clickup/tag`, {
       method: 'PUT',
       handler: handle(async (c, owner) => {
         const body = await jsonBody(c);
-        if (!isChannelMode(body.mode)) throw new AssistantError('invalid_mode', 'mode is ignore, addressed or watch.', 400);
-        const changed = await source.setDmModes(owner, body.mode);
-        return c.json({ changed, clickup: await source.view(owner) });
-      }),
-    }),
-    registerApiRoute(`${p}/clickup/channels/:workspaceId/:channelId`, {
-      method: 'PUT',
-      handler: handle(async (c, owner) => {
-        const body = await jsonBody(c);
-        if (body.mode === undefined && body.rule === undefined) {
-          throw new AssistantError('invalid_body', 'Send mode and/or rule.', 400);
+        if (body.pattern === undefined && body.who === undefined && body.contextMessages === undefined) {
+          throw new AssistantError('invalid_body', 'Send pattern, who and/or contextMessages.', 400);
         }
-        if (body.mode !== undefined && !isChannelMode(body.mode)) {
-          throw new AssistantError('invalid_mode', 'mode is ignore, addressed or watch.', 400);
+        if (body.pattern !== undefined && body.pattern !== null && typeof body.pattern !== 'string') {
+          throw new AssistantError('invalid_body', 'pattern is text, or null for the default.', 400);
         }
-        const rule = body.rule === undefined ? undefined : parseChannelRule(body.rule);
-        if (rule === null) {
-          throw new AssistantError('invalid_rule', 'rule is analyse, analyse_and_ask:<factoryId> or digest_only.', 400);
-        }
-        await source.setChannel(owner, {
-          workspaceId: c.req.param('workspaceId') ?? '',
-          channelId: c.req.param('channelId') ?? '',
-          ...(body.mode !== undefined ? { mode: body.mode } : {}),
-          ...(rule ? { rule } : {}),
+        const clickup = await source.setTag(owner, {
+          ...(body.pattern !== undefined ? { pattern: body.pattern as string | null } : {}),
+          ...(body.who !== undefined ? { who: body.who as 'me' | 'anyone' } : {}),
+          ...(body.contextMessages !== undefined ? { contextMessages: body.contextMessages as number } : {}),
         });
-        return c.json({ clickup: await source.view(owner) });
+        return c.json({ clickup });
       }),
     }),
   ];
@@ -98,6 +86,5 @@ export const CLICKUP_SOURCE_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> 
   'POST /web/assistant/sources/clickup/org': 'self.write',
   'DELETE /web/assistant/sources/clickup': 'self.write',
   'POST /web/assistant/sources/clickup/sync': 'self.write',
-  'PUT /web/assistant/sources/clickup/channels/:workspaceId/:channelId': 'self.write',
-  'PUT /web/assistant/sources/clickup/dms': 'self.write',
+  'PUT /web/assistant/sources/clickup/tag': 'self.write',
 };

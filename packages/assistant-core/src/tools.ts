@@ -1,11 +1,11 @@
 /**
  * The agent's tools (ADR-0051 phase 3), Mastra tools built for one turn and bound to its owner and
- * request: the owner never comes from the model, so another person's requests, notes, channels or
+ * request: the owner never comes from the model, so another person's requests, notes, chats or
  * Factory grant are out of reach whatever the model asks for.
  *
  * - The person's own data: search and read requests, list notes, write a note (the only write).
- * - Sources: the channels the person turned on, and recent messages of one, read now with the
- *   person's own connection.
+ * - Sources: the chats where the person tagged the assistant, and recent messages of one, read
+ *   now with the person's own connection (no other chat is reachable).
  * - Factory, through its MCP as the person: Factories, cards (find, inspect, what needs a person),
  *   a side session's status. Asking a Factory and handing a request over change something outside,
  *   so the tools only *propose* them: the thread shows Confirm / Cancel, and only the person's
@@ -30,7 +30,7 @@ export type AssistantToolHost = Pick<
   | 'readThread'
   | 'listNotes'
   | 'createAgentNote'
-  | 'listEnabledChannels'
+  | 'listTaggedChannels'
   | 'readSourceChannel'
   | 'factoriesFor'
   | 'factoryRead'
@@ -193,15 +193,15 @@ export function createAssistantTools(host: AssistantToolHost, context: Assistant
     source_list_channels: createTool({
       id: 'source_list_channels',
       description:
-        "The chats the person turned on in their own sources (ClickUp channels and DMs), with each one's mode. Only these can be read.",
+        'The chats (ClickUp channels and DMs) where the person tagged you. Only these can be read.',
       inputSchema: z.object({}),
-      execute: async () => guarded(async () => ({ channels: await host.listEnabledChannels(owner) })),
+      execute: async () => guarded(async () => ({ channels: await host.listTaggedChannels(owner) })),
     }),
 
     source_read_channel: createTool({
       id: 'source_read_channel',
       description:
-        "Read the latest messages of one chat the person turned on (or of one thread in it), now, with the person's own connection. Use for context; never answer there.",
+        "Read the latest messages of one chat where the person tagged you (or of one thread in it), now, with the person's own connection. Use for context; never answer there.",
       inputSchema: z.object({
         channel: z.string().trim().min(1).max(300).describe('The channel ref from source_list_channels.'),
         threadId: z.string().trim().min(1).max(128).optional().describe('A thread root message id: read its replies instead.'),

@@ -167,7 +167,10 @@ interface PendingActionBase {
   id: string;
   /** Why the agent proposes it, in a sentence the person reads. */
   reason?: string;
-  /** The agent proposed it, or a channel rule whose auto-ask limit was spent. */
+  /**
+   * The agent proposed it. `rule` only on requests from before the channel rules were retired
+   * (ADR-0051 amendment 2026-11-16): kept so such a pending action still reads and confirms.
+   */
   proposedBy: 'agent' | 'rule';
   proposedAt: Date;
 }
@@ -280,38 +283,3 @@ export interface AssistantFile {
 
 /** Why an assistant was erased, for the audit entry (never its content). */
 export type AssistantClearReason = 'member_removed' | 'account_deleted' | 'cleared_by_person';
-
-/**
- * How the assistant reads one channel of a source (ADR-0051): `ignore` (the default for a channel),
- * `addressed` — only what is addressed to the person: a direct message, a mention, a reply in a
- * thread they are in (the default for DMs) — or `watch`, where every new thread becomes a request.
- */
-export const CHANNEL_MODES = ['ignore', 'addressed', 'watch'] as const;
-export type ChannelMode = (typeof CHANNEL_MODES)[number];
-
-export function isChannelMode(value: unknown): value is ChannelMode {
-  return typeof value === 'string' && (CHANNEL_MODES as readonly string[]).includes(value);
-}
-
-/**
- * What the assistant does with a new request from a channel (phase 3): `analyse` (the default) —
- * the agent's report; `analyse_and_ask` — the report, then the channel's Factory is asked on its
- * own (a side session, which costs: only when the person turned it on for the channel, never by
- * default, and within a daily limit); `digest_only` — no turn per message, the request goes into
- * the next digest.
- */
-export type ChannelRule = { kind: 'analyse' } | { kind: 'analyse_and_ask'; factoryId: string } | { kind: 'digest_only' };
-
-export const DEFAULT_CHANNEL_RULE: ChannelRule = { kind: 'analyse' };
-
-/** `analyse`, `analyse_and_ask:<factoryId>`, `digest_only` → the rule; anything else → `null`. */
-export function parseChannelRule(value: unknown): ChannelRule | null {
-  if (value === 'analyse' || value === 'digest_only') return { kind: value };
-  if (typeof value !== 'string') return null;
-  const match = /^analyse_and_ask:([A-Za-z0-9._-]{1,128})$/.exec(value);
-  return match ? { kind: 'analyse_and_ask', factoryId: match[1]! } : null;
-}
-
-export function formatChannelRule(rule: ChannelRule): string {
-  return rule.kind === 'analyse_and_ask' ? `analyse_and_ask:${rule.factoryId}` : rule.kind;
-}

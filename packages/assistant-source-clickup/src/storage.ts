@@ -3,16 +3,25 @@
  * delete scoped by both halves:
  *
  * - `assistant_source_connections` — the person's connection: the encrypted token, whose it is,
- *   the sync state (last sync, last error, failures, when to poll next);
- * - `assistant_source_channels` — each channel/DM the token sees, with the person's mode, the rule
- *   for a new request (phase 3) and the read cursor (the newest top-level message taken);
- * - `assistant_source_threads` — threads seen in a channel: replies count, the newest reply taken,
- *   whether the person is in it (for «only when addressed»).
+ *   the sync state (last sync, last error, failures, when to poll next) and their tag settings
+ *   (pattern, who may tag, how many messages before a tag are its context);
+ * - `assistant_source_channels` — each channel/DM the token sees, its read cursor (the newest
+ *   top-level message looked at) and when the person last tagged there;
+ * - `assistant_source_threads` — threads seen in a channel: replies count, the newest reply looked at.
+ *
+ * Only cursors and ids are kept: a message that carries no tag is looked at and dropped.
+ *
+ * Retired (ADR-0051 amendment 2026-11-16, the tag replaced the channel modes and rules): the
+ * columns `assistant_source_channels.mode` / `.rule` and `assistant_source_threads.involves_me` are
+ * no longer read. Schemas only ever add columns, so they stay: `mode` holds `retired`, `rule` null,
+ * `involves_me` false. `init` migrates rows from before once (see `retireChannelModes`).
  */
-import { assertOwner, DEFAULT_CHANNEL_RULE, formatChannelRule, parseChannelRule } from '@factory/assistant-core';
-import type { AssistantOwner, ChannelMode, ChannelRule } from '@factory/assistant-core';
+import { assertOwner } from '@factory/assistant-core';
+import type { AssistantOwner } from '@factory/assistant-core';
 
 import type { ChannelLocationKind } from './client.ts';
+import type { TagSettings, TagWho } from './tag.ts';
+import { DEFAULT_TAG_SETTINGS, MAX_CONTEXT_MESSAGES } from './tag.ts';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere } from '@mastra/core/storage';
 
@@ -42,6 +51,11 @@ export const SOURCE_SCHEMAS: CollectionSchema[] = [
       failures: { type: 'integer' },
       next_poll_at: { type: 'timestamp', nullable: true },
       channels_listed_at: { type: 'timestamp', nullable: true },
+      // The person's tag: their pattern (null: the default), who may tag (`me` / `anyone`; null: me),
+      // and how many messages before a tag in a flat chat are its context (null: the default).
+      tag_pattern: { type: 'text', nullable: true },
+      tag_who: { type: 'text', nullable: true },
+      tag_context: { type: 'integer', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -59,8 +73,9 @@ export const SOURCE_SCHEMAS: CollectionSchema[] = [
       name: { type: 'text' },
       // `channel`, `dm`, `group_dm`
       kind: { type: 'text' },
+      // Retired with the tag (see the file comment): `retired` on every row.
       mode: { type: 'text' },
-      // What a new request from it gets (phase 3): `analyse` (null), `analyse_and_ask:<factoryId>`, `digest_only`.
+      // Retired with the tag: always null.
       rule: { type: 'text', nullable: true },
       // What ClickUp says about it: in the person's sidebar (they follow it), a DM they hid,
       // PUBLIC/PRIVATE, and the Space/Folder/List a location channel belongs to.
@@ -77,8 +92,10 @@ export const SOURCE_SCHEMAS: CollectionSchema[] = [
       details_at: { type: 'timestamp', nullable: true },
       // Why the last lookup failed (`members:404`, `path:ECONNRESET` …); `null` when it worked.
       details_error: { type: 'text', nullable: true },
-      // Epoch ms of the newest top-level message taken; `null` until the first read after enabling.
+      // Epoch ms of the newest top-level message looked at; `null` until the first read (which only sets it).
       cursor_at: { type: 'bigint', nullable: true },
+      // When the person last tagged the assistant here: the agent may read only such chats on demand.
+      tagged_at: { type: 'timestamp', nullable: true },
       last_sync_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
       gone: { type: 'boolean' },
@@ -103,8 +120,9 @@ export const SOURCE_SCHEMAS: CollectionSchema[] = [
       message_id: { type: 'text' },
       root_at: { type: 'bigint' },
       replies_count: { type: 'integer' },
-      // Epoch ms of the newest reply taken (0 = none yet).
+      // Epoch ms of the newest reply looked at (0 = none yet).
       reply_cursor_at: { type: 'bigint' },
+      // Retired with the tag: always false.
       involves_me: { type: 'boolean' },
       updated_at: { type: 'timestamp' },
     },
@@ -150,6 +168,7 @@ export interface SourceConnection {
   failures: number;
   nextPollAt: Date | null;
   channelsListedAt: Date | null;
+  tag: TagSettings;
 }
 
 export interface SourceChannel {
@@ -157,8 +176,6 @@ export interface SourceChannel {
   channelId: string;
   name: string;
   kind: ChannelKind;
-  mode: ChannelMode;
-  rule: ChannelRule;
   following: boolean;
   hidden: boolean;
   visibility: 'PUBLIC' | 'PRIVATE' | null;
@@ -173,6 +190,8 @@ export interface SourceChannel {
   /** Why the last lookup failed: `{ what: 'members' | 'path' | 'followers', code }`; `null` when it worked. */
   detailsError: { what: DetailsWhat; code: string } | null;
   cursorAt: number | null;
+  /** When the person last tagged the assistant here; `null`: never. */
+  taggedAt: Date | null;
   lastSyncAt: Date | null;
   lastError: string | null;
   gone: boolean;
@@ -185,7 +204,6 @@ export interface SourceThread {
   rootAt: number;
   repliesCount: number;
   replyCursorAt: number;
-  involvesMe: boolean;
 }
 
 interface ConnectionRow extends Record<string, unknown> {
@@ -200,6 +218,9 @@ interface ConnectionRow extends Record<string, unknown> {
   failures: number;
   next_poll_at: Date | null;
   channels_listed_at: Date | null;
+  tag_pattern?: string | null;
+  tag_who?: string | null;
+  tag_context?: number | string | null;
 }
 
 interface ChannelRow extends Record<string, unknown> {
@@ -207,8 +228,6 @@ interface ChannelRow extends Record<string, unknown> {
   channel_id: string;
   name: string;
   kind: string;
-  mode: string;
-  rule: string | null;
   following: unknown;
   hidden: unknown;
   visibility: string | null;
@@ -220,6 +239,7 @@ interface ChannelRow extends Record<string, unknown> {
   details_at: Date | null;
   details_error?: string | null;
   cursor_at: number | string | null;
+  tagged_at?: Date | null;
   last_sync_at: Date | null;
   last_error: string | null;
   gone: unknown;
@@ -232,7 +252,6 @@ interface ThreadRow extends Record<string, unknown> {
   root_at: number | string;
   replies_count: number;
   reply_cursor_at: number | string;
-  involves_me: unknown;
 }
 
 function where(o: AssistantOwner): CollectionWhere {
@@ -256,7 +275,18 @@ function toConnection(row: ConnectionRow): SourceConnection {
     failures: Number(row.failures) || 0,
     nextPollAt: row.next_poll_at,
     channelsListedAt: row.channels_listed_at,
+    tag: {
+      pattern: typeof row.tag_pattern === 'string' && row.tag_pattern ? row.tag_pattern : null,
+      who: row.tag_who === 'anyone' ? 'anyone' : 'me',
+      contextMessages: contextCount(row.tag_context),
+    },
   };
+}
+
+function contextCount(value: unknown): number {
+  const count = Number(value);
+  if (value === null || value === undefined || !Number.isInteger(count)) return DEFAULT_TAG_SETTINGS.contextMessages;
+  return Math.min(Math.max(count, 0), MAX_CONTEXT_MESSAGES);
 }
 
 function parseDetailsError(value: unknown): SourceChannel['detailsError'] {
@@ -271,8 +301,6 @@ function toChannel(row: ChannelRow): SourceChannel {
     channelId: row.channel_id,
     name: row.name,
     kind: row.kind === 'dm' || row.kind === 'group_dm' ? row.kind : 'channel',
-    mode: row.mode === 'watch' || row.mode === 'addressed' ? row.mode : 'ignore',
-    rule: parseChannelRule(row.rule) ?? DEFAULT_CHANNEL_RULE,
     following: bool(row.following),
     hidden: bool(row.hidden),
     visibility: row.visibility === 'PUBLIC' || row.visibility === 'PRIVATE' ? row.visibility : null,
@@ -286,6 +314,7 @@ function toChannel(row: ChannelRow): SourceChannel {
     detailsAt: row.details_at ?? null,
     detailsError: parseDetailsError(row.details_error),
     cursorAt: row.cursor_at === null || row.cursor_at === undefined ? null : Number(row.cursor_at),
+    taggedAt: row.tagged_at ?? null,
     lastSyncAt: row.last_sync_at,
     lastError: row.last_error,
     gone: bool(row.gone),
@@ -300,7 +329,6 @@ function toThread(row: ThreadRow): SourceThread {
     rootAt: Number(row.root_at),
     repliesCount: Number(row.replies_count) || 0,
     replyCursorAt: Number(row.reply_cursor_at) || 0,
-    involvesMe: bool(row.involves_me),
   };
 }
 
@@ -313,6 +341,9 @@ export interface ConnectionPatch {
   channelsListedAt?: Date | null;
 }
 
+/** The value the retired `mode` column holds (it is NOT NULL in tables from before). */
+export const RETIRED_MODE = 'retired';
+
 export class ClickUpSourceStorage extends FactoryStorageDomain {
   constructor() {
     super('assistant_source_clickup');
@@ -320,6 +351,25 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     await this.ensureCollections(SOURCE_SCHEMAS);
+    await this.retireChannelModes();
+  }
+
+  /**
+   * The one-time migration to the tag (ADR-0051 amendment 2026-11-16): rows that still carry a
+   * channel mode (`ignore` / `addressed` / `watch`) lose it and their rule, and their cursors move
+   * to the switch: nothing written before it (in a chat that was off, possibly long ago) is ever
+   * looked at for a tag, and a tag written after it is found on the chat's next read. Rows already
+   * migrated are not touched again. Returns how many rows it migrated.
+   */
+  async retireChannelModes(now = new Date()): Promise<number> {
+    const migrated = await this.ops.updateMany(
+      SOURCE_CHANNELS,
+      { mode: { in: ['ignore', 'addressed', 'watch'] } },
+      { mode: RETIRED_MODE, rule: null, cursor_at: now.getTime(), last_error: null, updated_at: now },
+    );
+    // Threads followed before the switch: their replies so far were written before it, too.
+    if (migrated > 0) await this.ops.updateMany(SOURCE_THREADS, {}, { reply_cursor_at: now.getTime(), updated_at: now });
+    return migrated;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -376,6 +426,15 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
     await this.ops.updateAtomic<ConnectionRow>(SOURCE_CONNECTIONS, where(o), () => set as Partial<ConnectionRow>);
   }
 
+  /** Sets the person's tag: pattern (`null`: the default), who may tag, context messages. */
+  async setTag(o: AssistantOwner, tag: Partial<TagSettings>, now = new Date()): Promise<void> {
+    const set: Record<string, unknown> = { updated_at: now };
+    if (tag.pattern !== undefined) set.tag_pattern = tag.pattern;
+    if (tag.who !== undefined) set.tag_who = tag.who satisfies TagWho;
+    if (tag.contextMessages !== undefined) set.tag_context = tag.contextMessages;
+    await this.ops.updateAtomic<ConnectionRow>(SOURCE_CONNECTIONS, where(o), () => set as Partial<ConnectionRow>);
+  }
+
   /** Active connections due a poll, the most overdue first. */
   async dueConnections(now: Date, limit: number): Promise<SourceConnection[]> {
     const rows = await this.ops.findMany<ConnectionRow>(
@@ -407,13 +466,13 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Brings the channel list up to what ClickUp lists: new channels get their default mode, known
-   * ones keep the person's mode and get the current name, ones no longer listed are marked gone
-   * (their mode is kept should they come back).
+   * Brings the channel list up to what ClickUp lists: new channels are added (their first read
+   * only sets the cursor), known ones get the current name, ones no longer listed are marked gone
+   * (their cursor is kept should they come back).
    */
   async syncChannels(
     o: AssistantOwner,
-    listed: Array<{ workspaceId: string; channelId: string; name: string; kind: ChannelKind; defaultMode: ChannelMode } & ChannelFacts>,
+    listed: Array<{ workspaceId: string; channelId: string; name: string; kind: ChannelKind } & ChannelFacts>,
     now = new Date(),
   ): Promise<void> {
     const w = where(o);
@@ -458,7 +517,7 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
           ...target,
           name: channel.name,
           kind: channel.kind,
-          mode: channel.defaultMode,
+          mode: RETIRED_MODE,
           rule: null,
           ...facts,
           location_path: null,
@@ -467,6 +526,7 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
           details_at: null,
           details_error: null,
           cursor_at: null,
+          tagged_at: null,
           last_sync_at: null,
           last_error: null,
           gone: false,
@@ -487,30 +547,6 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
     }
   }
 
-  /**
-   * Sets a channel's mode and/or rule. Turning reading on (from `ignore`) restarts its cursor, so
-   * only what is written from now on is read — never the channel's history.
-   */
-  async setChannel(
-    o: AssistantOwner,
-    workspaceId: string,
-    channelId: string,
-    patch: { mode?: ChannelMode; rule?: ChannelRule },
-    now = new Date(),
-  ) {
-    const target = { ...where(o), workspace_id: workspaceId, channel_id: channelId };
-    const current = await this.ops.findOne<ChannelRow>(SOURCE_CHANNELS, target);
-    if (!current) return null;
-    const restart = patch.mode !== undefined && patch.mode !== 'ignore' && toChannel(current).mode === 'ignore';
-    const row = await this.ops.updateAtomic<ChannelRow>(SOURCE_CHANNELS, target, () => ({
-      ...(patch.mode !== undefined ? { mode: patch.mode } : {}),
-      ...(patch.rule !== undefined ? { rule: patch.rule.kind === 'analyse' ? null : formatChannelRule(patch.rule) } : {}),
-      ...(restart ? { cursor_at: null, last_error: null } : {}),
-      updated_at: now,
-    }));
-    return row ? toChannel(row) : null;
-  }
-
   /** What was looked up about a channel: a location's path, a DM's other people. */
   async setDetails(
     o: AssistantOwner,
@@ -529,19 +565,16 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
     }));
   }
 
-  async setMode(o: AssistantOwner, workspaceId: string, channelId: string, mode: ChannelMode, now = new Date()) {
-    return this.setChannel(o, workspaceId, channelId, { mode }, now);
-  }
-
   async patchChannel(
     o: AssistantOwner,
     workspaceId: string,
     channelId: string,
-    patch: { cursorAt?: number; lastSyncAt?: Date; lastError?: string | null },
+    patch: { cursorAt?: number; taggedAt?: Date; lastSyncAt?: Date; lastError?: string | null },
     now = new Date(),
   ): Promise<void> {
     const set: Record<string, unknown> = { updated_at: now };
     if (patch.cursorAt !== undefined) set.cursor_at = patch.cursorAt;
+    if (patch.taggedAt !== undefined) set.tagged_at = patch.taggedAt;
     if (patch.lastSyncAt !== undefined) set.last_sync_at = patch.lastSyncAt;
     if (patch.lastError !== undefined) set.last_error = patch.lastError;
     await this.ops.updateAtomic<ChannelRow>(
@@ -565,12 +598,11 @@ export class ClickUpSourceStorage extends FactoryStorageDomain {
       root_at: thread.rootAt,
       replies_count: thread.repliesCount,
       reply_cursor_at: thread.replyCursorAt,
-      involves_me: thread.involvesMe,
       updated_at: now,
     };
     if (await this.ops.updateAtomic<ThreadRow>(SOURCE_THREADS, target, () => set)) return;
     try {
-      await this.ops.insertOne<ThreadRow>(SOURCE_THREADS, { ...target, ...set } as Partial<ThreadRow>);
+      await this.ops.insertOne<ThreadRow>(SOURCE_THREADS, { ...target, ...set, involves_me: false } as Partial<ThreadRow>);
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
       await this.ops.updateAtomic<ThreadRow>(SOURCE_THREADS, target, () => set);

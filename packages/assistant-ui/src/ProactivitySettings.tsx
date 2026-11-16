@@ -3,17 +3,15 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsEmptyRow, SettingsItem, SettingsListHeader, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useQuery } from '@tanstack/react-query';
 
-import { assistantKeys, call, useAssistantApi, useAssistantFactories, useAssistantSettings, useSettingsActions } from './api';
+import { assistantKeys, call, useAssistantApi, useAssistantSettings, useSettingsActions } from './api';
 import type { DigestFrequency, DigestSettings } from './api';
 import { RequestTime } from './time';
-import { useAssistantSources, useSourceActions } from './sources-api';
-import type { SourceChannel } from './sources-api';
 
 const FREQUENCIES: readonly DigestFrequency[] = ['off', 'hourly', 'daily'];
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
@@ -24,68 +22,6 @@ function browserTimeZone(): string {
   } catch {
     return 'UTC';
   }
-}
-
-function ChannelRuleSelect({ channel, factories }: { channel: SourceChannel; factories: Array<{ id: string; name: string }> }) {
-  const { t } = useTranslation('assistant');
-  const actions = useSourceActions();
-  const rule = channel.rule ?? 'analyse';
-  // A rule naming a Factory the person no longer reaches still shows what it is.
-  const askedId = rule.startsWith('analyse_and_ask:') ? rule.slice('analyse_and_ask:'.length) : null;
-  const options = [
-    { value: 'analyse', label: t('rules.analyse') },
-    { value: 'digest_only', label: t('rules.digest_only') },
-    ...factories.map(factory => ({ value: `analyse_and_ask:${factory.id}`, label: t('rules.analyse_and_ask', { factory: factory.name }) })),
-    ...(askedId && !factories.some(factory => factory.id === askedId) ? [{ value: rule, label: t('rules.analyse_and_ask', { factory: askedId }) }] : []),
-  ];
-  return (
-    <Select
-      value={rule}
-      disabled={actions.setRule.isPending}
-      onValueChange={value => actions.setRule.mutate({ workspaceId: channel.workspaceId, channelId: channel.channelId, rule: value as string })}
-    >
-      <SelectTrigger size="sm" aria-label={t('rules.for', { channel: channel.name })}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map(option => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-/** The rules of the chats the person turned on: what the assistant does with a new request from each. */
-function ChannelRules() {
-  const { t } = useTranslation('assistant');
-  const sources = useAssistantSources();
-  const factories = useAssistantFactories();
-  const actions = useSourceActions();
-  const channels = sources.data?.channels.filter(channel => channel.mode !== 'ignore') ?? [];
-  const reachable = factories.data?.connected ? factories.data.factories : [];
-  return (
-    <SettingsContainer aria-label={t('rules.title')}>
-      {channels.length === 0 ? (
-        <SettingsEmptyRow>{sources.data?.connected ? t('rules.noChannels') : t('rules.noSource')}</SettingsEmptyRow>
-      ) : (
-        <>
-          <SettingsListHeader>{t('rules.count', { count: channels.length })}</SettingsListHeader>
-          {channels.map(channel => (
-            <SettingsItem key={`${channel.workspaceId}:${channel.channelId}`} title={channel.name} description={t(`sources.mode.${channel.mode}`)}>
-              <ChannelRuleSelect channel={channel} factories={reachable} />
-            </SettingsItem>
-          ))}
-        </>
-      )}
-      {actions.setRule.isError ? <Notice variant="destructive">{actions.setRule.error.message}</Notice> : null}
-      <Txt as="p" variant="caption" tone="muted" className="p-3">
-        {t('rules.hint')}
-      </Txt>
-    </SettingsContainer>
-  );
 }
 
 /** The digest: off, hourly, or daily at an hour of the person's time zone. */
@@ -171,13 +107,14 @@ function useDigestSchedule() {
 }
 
 /**
- * Settings › «Помічник» › Проактивність: what the assistant does by itself — the rule of each chat
- * the person turned on (analyse, ask a Factory on its own, digest only) and the digest schedule.
+ * Settings › «Помічник» › Проактивність: what the assistant does by itself — only the digest of the
+ * person's open requests on their schedule. It never reads a chat for it: requests come only from
+ * the person (the panel's «+», or their tag in a chat). Per-chat rules were retired with the tag
+ * (ADR-0051 amendment 2026-11-16).
  */
 export function AssistantProactivitySettings() {
   return (
     <>
-      <ChannelRules />
       <DigestRows />
       <DigestSchedule />
     </>

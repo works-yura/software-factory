@@ -238,28 +238,9 @@ describe('Settings › Assistant › Model', () => {
 });
 
 describe('Settings › Assistant › Proactivity', () => {
-  it('sets a chat’s rule (a reachable Factory included) and saves the digest schedule', async () => {
-    let rule: unknown;
+  it('has no per-chat rules any more, only the digest of open requests, and saves its schedule', async () => {
     let digest: unknown;
-    const clickup = (channelRule = 'analyse') => ({
-      connected: true,
-      account: { id: 'u1', name: 'Ada' },
-      status: 'active',
-      lastSyncAt: null,
-      lastError: null,
-      nextPollAt: null,
-      channels: [
-        { workspaceId: 'w1', channelId: 'c1', name: 'support', kind: 'channel', mode: 'watch', rule: channelRule, lastSyncAt: null, lastError: null },
-        { workspaceId: 'w1', channelId: 'c2', name: 'random', kind: 'channel', mode: 'ignore', lastSyncAt: null, lastError: null },
-      ],
-    });
     server.use(
-      http.get(`${A}/sources`, () => HttpResponse.json({ clickup: clickup() })),
-      http.get(`${A}/factories`, () => HttpResponse.json({ connected: true, pending: false, factories: [{ id: 'f-1', name: 'Shop' }] })),
-      http.put(`${A}/sources/clickup/channels/w1/c1`, async ({ request }) => {
-        rule = await request.json();
-        return HttpResponse.json({ clickup: clickup('analyse_and_ask:f-1') });
-      }),
       http.get(`${A}/settings`, () =>
         HttpResponse.json({ settings: { modelId: null, retentionDays: 30, skills: [], digest: { frequency: 'off', hour: 9, timeZone: 'Europe/Kyiv' } }, digestSchedule: { lastAt: null, nextAt: null } }),
       ),
@@ -271,13 +252,8 @@ describe('Settings › Assistant › Proactivity', () => {
     const user = userEvent.setup();
     renderIn(<AssistantProactivitySettings />);
 
-    // Only the chats turned on have a rule.
-    const select = await screen.findByRole('combobox', { name: 'What to do with new requests from support' });
-    expect(screen.queryByRole('combobox', { name: 'What to do with new requests from random' })).not.toBeInTheDocument();
-    await user.click(select);
-    await user.click(await screen.findByRole('option', { name: 'Analyse and ask Shop' }));
-    await waitFor(() => expect(rule).toEqual({ rule: 'analyse_and_ask:f-1' }));
-
+    await screen.findByRole('combobox', { name: 'Digest' });
+    expect(screen.queryByText(/Chat rules|What to do with new requests|Analyse and ask/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('combobox', { name: 'Digest' }));
     await user.click(await screen.findByRole('option', { name: 'Daily' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -387,7 +363,8 @@ describe('the thread: what drove a reply, proposed actions, events', () => {
     renderIn(<AssistantPanel onClose={vi.fn()} />);
     await user.click(await screen.findByText('Checkout fails'));
     const card = await screen.findByTestId('assistant-pending-action');
-    expect(within(card).getByText(/the chat's rule/)).toBeInTheDocument();
+    // A pending action an old chat rule left still reads (rules are gone, their proposals may remain).
+    expect(within(card).getByText(/a chat rule \(before tags\)/)).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(cancelled).toBe(true));
   });

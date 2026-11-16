@@ -10,8 +10,6 @@ import type {
   AssistantMessage,
   AssistantOwner,
   AssistantRequest,
-  ChannelMode,
-  ChannelRule,
   FactoryLink,
 } from './types.ts';
 
@@ -320,14 +318,15 @@ export interface AssistantSkills {
   read(owner: AssistantOwner, name: string): Promise<(SkillSummary & { instructions: string }) | null>;
 }
 
-/** A channel the person turned on in a source, as the agent's tools list it. */
+/**
+ * A chat of a source where the person tagged the assistant (ADR-0051 amendment 2026-11-16), as the
+ * agent's tools list it: only such chats can be read on demand.
+ */
 export interface SourceChannelInfo {
   /** `platform:workspace:channel`: what the agent passes back to read it. */
   ref: string;
   name: string;
   kind: string;
-  mode: ChannelMode;
-  rule: ChannelRule;
 }
 
 /** Recent messages of a channel (or of one thread in it), read on demand with the person's connection. */
@@ -353,15 +352,15 @@ export interface SourceChannelMessages {
  */
 export interface AssistantSource {
   readonly platform: string;
-  /** Forgets the person's connection (the encrypted token), channel modes and cursors. */
+  /** Forgets the person's connection (the encrypted token), its tag settings and cursors. */
   disconnect(owner: AssistantOwner): Promise<void>;
   /** Organizations a person has a connection of this source in (for erasing a deleted account). */
   organizationsOf(userId: string): Promise<string[]>;
-  /** The channels the person turned on (mode other than `ignore`), for the agent's tools. */
-  enabledChannels?(owner: AssistantOwner): Promise<SourceChannelInfo[]>;
+  /** The chats where the person tagged the assistant, for the agent's tools. */
+  taggedChannels?(owner: AssistantOwner): Promise<SourceChannelInfo[]>;
   /**
-   * Recent messages of one channel the person turned on (or one thread in it), read now with the
-   * person's own connection; a channel that is off or unknown is refused.
+   * Recent messages of one chat where the person tagged the assistant (or one thread in it), read
+   * now with the person's own connection; any other chat is refused.
    */
   readChannel?(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages>;
   /**
@@ -372,31 +371,52 @@ export interface AssistantSource {
   download?(owner: AssistantOwner, url: string, maxBytes: number): Promise<SourceDownload | null>;
 }
 
-/** One message a source read, as the core takes it in. */
+/** One message of the conversation a tag points at. */
+export interface SourceContextMessage {
+  /** Who wrote it, as the source names them; `null` when the source does not know. */
+  fromName: string | null;
+  text: string;
+  /** ISO time it was written. */
+  at: string;
+}
+
+/**
+ * A tag a source found (ADR-0051 amendment 2026-11-16): a message in the person's chat that carries
+ * their tag (`#помічник` …), detected by a pattern, never by a model. It is the only way a source
+ * makes a request; ordinary chat traffic never does.
+ */
 export interface SourceMessage {
   platform: 'clickup';
-  /** The thread it belongs to: `platform:workspace:channel:thread` (thread = the root message id). */
+  /**
+   * The thread it belongs to: `platform:workspace:channel:thread` (thread = the root message id). A
+   * later tag in the same thread joins the open request from it.
+   */
   sourceKey: string;
-  /** The message's own id at the source: `platform:workspace:message`. Taking it in twice is a no-op. */
+  /** The tagged message's own id at the source: `platform:workspace:message`. Taking it in twice is a no-op. */
   messageKey: string;
+  /** What the tagger wrote besides the tag (the tag stripped): their instruction; may be empty. */
   text: string;
-  /** Who wrote it, as the source names them. */
+  /** Who tagged, as the source names them. */
   fromName: string | null;
-  /** A link to the message at the source. */
+  /** A link to the chat at the source. */
   sourceUrl: string | null;
-  /** Its attachments, already downloaded. */
+  /**
+   * What the tag points at, oldest first: in a thread, its root and replies (since the previous tag
+   * there); in a flat chat, the messages before it (up to the person's count, or since the
+   * previous tag).
+   */
+  context: SourceContextMessage[];
+  /** `thread` or `chat`: where the context comes from. */
+  contextKind: 'thread' | 'chat';
+  /** Attachments of the tagged message and its context, already downloaded. */
   files: Array<{ name: string; declaredMime: string | null; bytes: Uint8Array }>;
-  /** The person wrote it themself: it joins an open request as context, but never starts one or a turn. */
-  fromMe: boolean;
-  /** False when the person's limit on agent turns is spent: the message is kept, the agent skips it. */
+  /** False when the person's limit on agent turns is spent: the request is kept, the agent skips it. */
   analyse: boolean;
   /** Where the source thread lives, for the agent (`#general`, `DM`). */
   where?: string;
-  /** The channel's rule for a new request (phase 3); `analyse` when absent. */
-  rule?: ChannelRule;
 }
 
-export type IngestOutcome = 'duplicate' | 'skipped' | 'created' | 'appended' | 'reopened';
+export type IngestOutcome = 'duplicate' | 'created' | 'appended' | 'reopened';
 
 /** What a request and its thread look like to the panel. */
 export interface RequestView {

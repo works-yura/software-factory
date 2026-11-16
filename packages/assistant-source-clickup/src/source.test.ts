@@ -9,14 +9,18 @@ import { FakeClickUp } from './fake-clickup.ts';
 import { startClickUpPolling } from './scheduler.ts';
 import type { ClickUpPollLimits } from './source.ts';
 import type { OrgClickUpConnection, OrgClickUpReader } from './org-connection.ts';
-import { ClickUpChatSource, ORG_CONNECTION_GONE } from './source.ts';
-import { ClickUpSourceStorage, SOURCE_CONNECTIONS } from './storage.ts';
+import { channelDisplayName, ClickUpChatSource, inSidebarOf, ORG_CONNECTION_GONE, sinceLastTag } from './source.ts';
+import type { ChannelKind, SourceChannel } from './storage.ts';
+import { ClickUpSourceStorage, RETIRED_MODE, SOURCE_CHANNELS, SOURCE_CONNECTIONS, SOURCE_THREADS } from './storage.ts';
+import { DEFAULT_TAG_PATTERN, tagMatcher, tagPatternProblem } from './tag.ts';
 
 const ADA: AssistantOwner = { orgId: 'org-a', userId: 'ada' };
 const ADA_ELSEWHERE: AssistantOwner = { orgId: 'org-b', userId: 'ada' };
 const BOB: AssistantOwner = { orgId: 'org-a', userId: 'bob' };
 const WS = '9001';
 const T0 = Date.parse('2026-11-15T10:00:00Z');
+/** The person's ClickUp user (FakeClickUp.me): the default «who may tag». */
+const ME = '42';
 
 let clickup: FakeClickUp;
 let core: AssistantStorage;
@@ -37,10 +41,9 @@ function build(limits: Partial<ClickUpPollLimits> = {}, orgClickUp?: OrgClickUpR
     ...(orgClickUp ? { orgClickUp } : {}),
     storage,
     cipher: testCipher,
-    ingest: { ingestSourceMessage: (o, m) => service.ingestSourceMessage(o, m), hasOpenSourceRequest: (o, k) => service.hasOpenSourceRequest(o, k) },
+    ingest: { ingestSourceMessage: (o, m) => service.ingestSourceMessage(o, m) },
     client: options => new ClickUpChatClient({ ...options, fetch: clickup.fetch, sleep: async ms => void sleeps.push(ms) }),
     limits,
-    checkRule: (owner, rule) => service.checkChannelRule(owner, rule),
     now: () => new Date(now),
   });
   factory = new FakeFactory();
@@ -89,11 +92,54 @@ beforeEach(async () => {
   build();
 });
 
-async function connectAndWatch(channel: string, mode: 'watch' | 'addressed' = 'watch', owner = ADA) {
+/** Connects and lets the first read of every chat set its cursor: from here on, only new messages are looked at. */
+async function connectAndArm(owner = ADA) {
   await source.connect(owner, clickup.token);
-  await source.setMode(owner, { workspaceId: WS, channelId: channel, mode });
   now += 1000;
-  await poll(owner); // the first read only sets the cursor
+  await poll(owner);
+}
+
+/** Posts a message `seconds` after T0 (after the cursor once armed). */
+function say(id: string, channel: string, user: string, content: string, seconds: number, extra: { parent?: string } = {}) {
+  clickup.post({ id, channel, user, content, date: T0 + seconds * 1000, ...extra });
+}
+
+async function next(owner = ADA) {
+  now += 60_000;
+  return poll(owner);
+}
+
+/** The source messages of a request's thread: who and what. */
+async function sourceLines(requestId: string, owner = ADA): Promise<Array<[string | null, string]>> {
+  return (await core.listMessages(owner, requestId))
+    .filter(message => message.author === 'source')
+    .map(message => [message.fromName, message.text] as [string | null, string]);
+}
+
+/** The first source message of a request: who and what. */
+async function firstLine(requestId: string, owner = ADA): Promise<[string | null, string]> {
+  const [line] = await sourceLines(requestId, owner);
+  if (!line) throw new Error('The request has no source message.');
+  return line;
+}
+
+/** The stored chats as the settings once listed them: DMs first, then channels, by the name shown. */
+async function chatList(owner = ADA) {
+  const order: Record<ChannelKind, number> = { dm: 0, group_dm: 1, channel: 2 };
+  return (await storage.listChannels(owner))
+    .filter(channel => !channel.gone)
+    .map(channel => ({
+      channelId: channel.channelId,
+      name: channelDisplayName(channel),
+      kind: channel.kind,
+      location: channel.location ? `${channel.location.kind}:${(channel.location.path ?? []).join(' › ')}` : null,
+      inSidebar: inSidebarOf(channel),
+      members: channel.members ?? [],
+      detailsError: channel.detailsError,
+    }))
+    .sort(
+      (a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name) || (a.location ?? '').localeCompare(b.location ?? ''),
+    );
 }
 
 describe('connecting a personal token', () => {
@@ -103,30 +149,25 @@ describe('connecting a personal token', () => {
     expect((await source.view(ADA)).connected).toBe(false);
   });
 
-  it('stores the token encrypted, never shows it, and lists channels: DMs addressed, channels ignored', async () => {
+  it('stores the token encrypted, never shows it, lists every chat, and starts with the default tag', async () => {
     const view = await source.connect(ADA, clickup.token);
     expect(view.account).toEqual({ id: '42', name: 'ada' });
     expect(JSON.stringify(view)).not.toContain(clickup.token);
     const stored = await storage.getConnection(ADA);
     expect(stored?.secret.startsWith('enc:')).toBe(true);
     expect(stored?.secret).not.toContain(clickup.token);
-    expect(view.channels.map(channel => [channel.name, channel.kind, channel.mode])).toEqual([
-      ['Olena', 'dm', 'addressed'],
-      ['general', 'channel', 'ignore'],
-      ['support', 'channel', 'ignore'],
-    ]);
+    expect(view.tag).toEqual({ pattern: null, defaultPattern: DEFAULT_TAG_PATTERN, who: 'me', contextMessages: 10 });
+    expect(view.chats).toEqual({ total: 3, inSidebar: 3 });
+    // No per-chat setting comes back: there is none.
+    expect(JSON.stringify(view)).not.toMatch(/"mode"|"rule"|"channels"/);
   });
 
-  it('keeps the person’s modes when the channel list is read again, and marks channels gone', async () => {
+  it('marks chats gone when the list is read again', async () => {
     await source.connect(ADA, clickup.token);
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-general', mode: 'watch' });
     clickup.channels = clickup.channels.filter(channel => channel.id !== 'ch-support');
     await source.syncNow(ADA);
-    const view = await source.view(ADA);
-    expect(view.channels.map(channel => [channel.name, channel.mode])).toEqual([
-      ['Olena', 'addressed'],
-      ['general', 'watch'],
-    ]);
+    expect((await chatList()).map(chat => chat.name)).toEqual(['Olena', 'general']);
+    expect((await source.view(ADA)).chats.total).toBe(2);
   });
 });
 
@@ -169,10 +210,9 @@ describe('the organization’s ClickUp connection', () => {
     expect(view).toMatchObject({ connected: true, via: 'org', orgOffer: null, account: { id: '42', name: 'ada' } });
     const stored = await storage.getConnection(ADA);
     expect(stored?.secret).not.toContain(clickup.token);
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-general', mode: 'watch' });
     now += 1000;
     await poll();
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'Checkout fails', date: now + 5000 });
+    clickup.post({ id: 'm1', channel: 'ch-general', user: ME, content: '#помічник Checkout fails', date: now + 5000 });
     now += 60_000;
     await poll();
     expect(await core.listRequests(ADA)).toHaveLength(1);
@@ -194,14 +234,17 @@ describe('the organization’s ClickUp connection', () => {
     expect(await source.view(ADA)).toMatchObject({ status: 'rejected', lastError: ORG_CONNECTION_GONE });
   });
 
-  it('the agent’s on-demand read and channel rules work on the organization’s connection too', async () => {
+  it('the tag and the agent’s on-demand read work on the organization’s connection too', async () => {
     await source.connectOrg(ADA);
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch' });
-    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'digest_only' } });
-    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'is checkout fixed?', date: T0 + 5000 });
+    now += 1000;
+    await poll();
+    await source.setTag(ADA, { who: 'anyone' });
+    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'is checkout fixed? #помічник', date: T0 + 5000 });
+    now += 60_000;
+    await poll();
+    expect((await core.listRequests(ADA)).map(request => request.fromName)).toEqual(['Olena']);
     const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
     expect(read.messages).toMatchObject([{ id: 'm1', from: 'Olena' }]);
-    expect(read.channel.rule).toEqual({ kind: 'digest_only' });
     org = null;
     await expect(source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` })).rejects.toMatchObject({ code: 'not_connected' });
   });
@@ -212,166 +255,395 @@ describe('the organization’s ClickUp connection', () => {
   });
 });
 
-describe('reading channels by mode', () => {
-  it('never reads an ignored channel, and turning one on does not read its history', async () => {
-    clickup.post({ id: 'old', channel: 'ch-general', user: '7', content: 'old news', date: T0 - 60_000 });
-    await source.connect(ADA, clickup.token);
-    clickup.calls.length = 0;
-    await poll();
-    expect(clickup.calls.some(call => call.includes('ch-general'))).toBe(false);
-
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-general', mode: 'watch' });
-    await poll();
-    expect(await core.listRequests(ADA)).toEqual([]);
+describe('the tag pattern', () => {
+  it('the default finds #помічник, @помічник and #assistant in any case, as a whole word, and strips it', () => {
+    const tag = tagMatcher(null);
+    for (const text of ['#помічник оціни це', 'оціни це @Помічник', '#ПОМІЧНИК', '#assistant look', 'ok @ASSISTANT, check', 'line one\n#помічник']) {
+      expect(tag.test(text)).toBe(true);
+    }
+    for (const text of ['помічник оціни', '#помічникові', '#assistants', 'да', 'ВЖЕ', '7 ЗАПИСАВ', 'email me@assistant.example', '']) {
+      expect(tag.test(text)).toBe(false);
+    }
+    expect(tag.strip('#помічник оціни це')).toBe('оціни це');
+    expect(tag.strip('оціни це, @помічник')).toBe('оціни це,');
+    expect(tag.strip('#assistant')).toBe('');
   });
 
-  it('watch: a new thread is a request (topic from the agent, from, link), replies join it, idempotently', async () => {
-    await connectAndWatch('ch-general');
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'Checkout fails for client X', date: T0 + 5000 });
-    now += 60_000;
-    await poll();
-
-    let [request] = await core.listRequests(ADA);
-    expect(request).toMatchObject({
-      source: 'clickup',
-      fromName: 'Olena',
-      topic: 'Topic of Olena',
-      sourceKey: `clickup:${WS}:ch-general:m1`,
-      sourceUrl: `https://app.clickup.com/${WS}/chat/r/ch-general`,
-      status: 'waiting_me',
-      unread: true,
-    });
-    expect(brain.turns[0]).toMatchObject({ first: true, input: { author: 'source', fromName: 'Olena' } });
-
-    clickup.post({ id: 'r1', channel: 'ch-general', user: '8', content: 'Same for me', date: T0 + 70_000, parent: 'm1' });
-    now += 60_000;
-    await poll();
-    await poll(); // nothing new: no duplicates
-    const requests = await core.listRequests(ADA);
-    expect(requests).toHaveLength(1);
-    const messages = await core.listMessages(ADA, requests[0]!.id);
-    expect(messages.filter(message => message.author === 'source').map(message => [message.fromName, message.text])).toEqual([
-      ['Olena', 'Checkout fails for client X'],
-      ['Taras', 'Same for me'],
-    ]);
-    expect(brain.turns).toHaveLength(2);
-    expect(brain.turns[1]?.first).toBe(false);
-    [request] = requests;
-    expect(request?.topic).toBe('Topic of Olena');
+  it('a custom pattern must compile, stay short, need a tag, and not nest repetition', () => {
+    expect(tagPatternProblem('!!ai\\b')).toBeNull();
+    expect(tagPatternProblem('')).toMatch(/empty/);
+    expect(tagPatternProblem('(')).toMatch(/not a valid/);
+    expect(tagPatternProblem('a?')).toMatch(/empty message/);
+    expect(tagPatternProblem('.*')).toMatch(/empty message/);
+    expect(tagPatternProblem('да')).toMatch(/ordinary message/);
+    expect(tagPatternProblem('(a+)+!')).toMatch(/nested repetition/);
+    expect(tagPatternProblem('x'.repeat(201))).toMatch(/longer/);
+    expect(tagPatternProblem(DEFAULT_TAG_PATTERN)).toBeNull();
+    const custom = tagMatcher('!!ai\\b');
+    expect(custom.test('!!AI please look')).toBe(true);
+    expect(custom.test('#помічник')).toBe(false);
+    expect(custom.strip('!!ai please look')).toBe('please look');
   });
 
-  it('a message in a closed request’s thread opens a new request continuing it', async () => {
-    await connectAndWatch('ch-general');
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'Question one', date: T0 + 5000 });
-    now += 60_000;
-    await poll();
-    const [first] = await core.listRequests(ADA);
-    await service.close(ADA, first!.id);
-
-    clickup.post({ id: 'r1', channel: 'ch-general', user: '7', content: 'One more thing', date: T0 + 70_000, parent: 'm1' });
-    now += 60_000;
-    await poll();
-    const requests = await core.listRequests(ADA);
-    expect(requests).toHaveLength(2);
-    const next = requests.find(request => request.id !== first!.id)!;
-    expect(next).toMatchObject({ previousRequestId: first!.id, sourceKey: first!.sourceKey, status: 'waiting_me' });
-    const thread = await core.listMessages(ADA, next.id);
-    expect(thread[0]).toMatchObject({ author: 'event', text: `continues:${first!.id}` });
-  });
-
-  it('only when addressed: a mention, a reply in the person’s thread, a DM — not other chatter', async () => {
-    await connectAndWatch('ch-support', 'addressed');
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'dm-olena', mode: 'addressed' });
-    now += 1000;
-    await poll(); // the DM's first read
-    clickup.post({ id: 'a1', channel: 'ch-support', user: '7', content: 'lunch?', date: T0 + 10_000 });
-    clickup.post({ id: 'a2', channel: 'ch-support', user: '7', content: '@ada can you check the invoice', date: T0 + 11_000, tagged: ['42'] });
-    clickup.post({ id: 'a3', channel: 'ch-support', user: '42', content: 'I started a thread', date: T0 + 12_000 });
-    clickup.post({ id: 'a4', channel: 'ch-support', user: '8', content: 'reply to Ada', date: T0 + 13_000, parent: 'a3' });
-    clickup.post({ id: 'd1', channel: 'dm-olena', user: '7', content: 'hi Ada, a quick one', date: T0 + 14_000 });
-    now += 60_000;
-    await poll();
-
-    const texts = (await core.listRequests(ADA)).map(request => request.sourceKey);
-    expect(texts.sort()).toEqual([`clickup:${WS}:ch-support:a2`, `clickup:${WS}:ch-support:a3`, `clickup:${WS}:dm-olena:d1`].sort());
-    // The person's own root opened no request by itself; the reply to it did, with the person's line as context.
-    const own = (await core.listRequests(ADA)).find(request => request.sourceKey?.endsWith(':a3'))!;
-    const thread = await core.listMessages(ADA, own.id);
-    expect(thread.filter(message => message.author === 'source').map(message => message.text)).toEqual(['reply to Ada']);
-  });
-
-  it('the person’s own reply joins the open request as context, without an agent turn', async () => {
-    await connectAndWatch('ch-general');
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'Help please', date: T0 + 5000 });
-    now += 60_000;
-    await poll();
-    clickup.post({ id: 'r1', channel: 'ch-general', user: '42', content: 'Looking', date: T0 + 70_000, parent: 'm1' });
-    now += 60_000;
-    await poll();
-    const [request] = await core.listRequests(ADA);
-    expect((await core.listMessages(ADA, request!.id)).filter(m => m.author === 'source').map(m => m.fromName)).toEqual(['Olena', 'ada']);
-    expect(brain.turns).toHaveLength(1);
-  });
-
-  it('downloads files a message links on ClickUp’s file hosts into the request', async () => {
-    const url = 'https://t9001.p.clickup-attachments.com/t9001/abc/shot.png';
-    clickup.files.set(url, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]));
-    await connectAndWatch('ch-general');
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: `See ![shot.png](${url}) and [site](https://evil.example/x.png)`, date: T0 + 5000 });
-    now += 60_000;
-    await poll();
-    const [request] = await core.listRequests(ADA);
-    const files = await core.listFiles(ADA, request!.id);
-    expect(files.map(file => [file.name, file.mime])).toEqual([['shot.png', 'image/png']]);
-    expect(clickup.calls.some(call => call.includes('evil.example'))).toBe(false);
-    expect(brain.turns[0]?.input.files).toHaveLength(1);
-  });
-
-  it('takes files from an attachment field too (v2 task-attachment shape), each once, ClickUp hosts only', async () => {
-    const shot = 'https://t9001.p.clickup-attachments.com/t9001/abc/screen.png';
-    const doc = 'https://t9001.p.clickup-attachments.com/t9001/def/spec.pdf';
-    clickup.files.set(shot, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]));
-    clickup.files.set(doc, new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 1]));
-    await connectAndWatch('ch-general');
-    clickup.post({
-      id: 'm1',
-      channel: 'ch-general',
-      user: '7',
-      content: `look ![screen.png](${shot})`,
-      date: T0 + 5000,
-      extra: {
-        attachments: [
-          { id: 'a1', title: 'screen.png', url_w_host: shot, mimetype: 'image/png', extension: 'png' },
-          { id: 'a2', title: 'Spec', url: doc, mimetype: 'application/pdf' },
-          { id: 'a3', title: 'elsewhere', url: 'https://evil.example/x.png' },
-        ],
-      },
-    });
-    now += 60_000;
-    await poll();
-    const [request] = await core.listRequests(ADA);
-    expect((await core.listFiles(ADA, request!.id)).map(file => [file.name, file.mime])).toEqual([
-      ['screen.png', 'image/png'],
-      ['Spec', 'application/pdf'],
-    ]);
-    expect(clickup.calls.some(call => call.includes('evil.example'))).toBe(false);
+  it('the context is what came after the previous tag, at most the count', () => {
+    const tagged = (text: string) => text.startsWith('#');
+    expect(sinceLastTag(['a', 'b', 'c'], tagged, 10)).toEqual(['a', 'b', 'c']);
+    expect(sinceLastTag(['a', 'b', 'c'], tagged, 2)).toEqual(['b', 'c']);
+    expect(sinceLastTag(['a', '#x', 'b', 'c'], tagged, 10)).toEqual(['b', 'c']);
+    expect(sinceLastTag(['a', 'b', '#x'], tagged, 10)).toEqual([]);
+    expect(sinceLastTag(['a', 'b'], tagged, 0)).toEqual([]);
   });
 });
 
+describe('requests only from the tag', () => {
+  it('ordinary chat traffic — in a DM, a channel, a thread, from anyone — makes no request and is not kept', async () => {
+    await connectAndArm();
+    // The production case: a DM with a colleague, ordinary replies.
+    say('d1', 'dm-olena', '7', 'ти бачила рахунок?', 5);
+    say('d2', 'dm-olena', ME, 'да', 6);
+    say('d3', 'dm-olena', '7', 'ВЖЕ', 7);
+    say('d4', 'dm-olena', ME, '7 ЗАПИСАВ', 8);
+    say('g1', 'ch-general', '7', '@ada can you check the invoice', 9);
+    say('g2', 'ch-general', '8', 'reply in a thread', 10, { parent: 'g1' });
+    await next();
+    await next();
+    expect(await core.listRequests(ADA)).toEqual([]);
+    expect(brain.turns).toEqual([]);
+    // Only cursors and ids are kept: no message text anywhere in the source's tables.
+    const ops = (storage as unknown as { ops: { findMany: (table: string, where: object) => Promise<unknown[]> } }).ops;
+    const stored = JSON.stringify([
+      await ops.findMany(SOURCE_CHANNELS, {}),
+      await ops.findMany(SOURCE_THREADS, {}),
+      await ops.findMany(SOURCE_CONNECTIONS, {}),
+    ]);
+    for (const text of ['рахунок', 'ВЖЕ', 'ЗАПИСАВ', 'invoice', 'reply in a thread']) expect(stored).not.toContain(text);
+  });
+
+  it('my tag in a DM makes one request: the preceding messages with their authors, and my instruction', async () => {
+    await connectAndArm();
+    say('d1', 'dm-olena', '7', 'Checkout fails for client X', 5);
+    say('d2', 'dm-olena', ME, 'since when?', 6);
+    say('d3', 'dm-olena', '7', 'since Monday', 7);
+    say('d4', 'dm-olena', ME, '#помічник оціни це', 8);
+    await next();
+    const [request] = await core.listRequests(ADA);
+    expect(request).toMatchObject({
+      source: 'clickup',
+      fromName: 'ada',
+      sourceKey: `clickup:${WS}:dm-olena:d4`,
+      sourceUrl: `https://app.clickup.com/${WS}/chat/r/dm-olena`,
+      status: 'waiting_me',
+    });
+    const [from, text] = await firstLine(request!.id);
+    expect(from).toBe('ada');
+    expect(text).toBe(
+      [
+        '> **Olena** · 2026-11-15 10:00 UTC',
+        '> Checkout fails for client X',
+        '>',
+        '> **ada** · 2026-11-15 10:00 UTC',
+        '> since when?',
+        '>',
+        '> **Olena** · 2026-11-15 10:00 UTC',
+        '> since Monday',
+        '',
+        'оціни це',
+      ].join('\n'),
+    );
+    expect(brain.turns).toHaveLength(1);
+    expect(brain.turns[0]).toMatchObject({ first: true, input: { author: 'source', fromName: 'ada' } });
+    expect(brain.turns[0]!.input.text).toContain('(DM Olena)');
+    // Taken once: the next polls find nothing new.
+    await next();
+    expect(await core.listRequests(ADA)).toHaveLength(1);
+    expect(brain.turns).toHaveLength(1);
+  });
+
+  it('only me by default: a colleague’s tag is ignored until the person lets anyone in the chat tag', async () => {
+    await connectAndArm();
+    say('o1', 'dm-olena', '7', '#помічник глянь', 5);
+    await next();
+    expect(await core.listRequests(ADA)).toEqual([]);
+
+    expect((await source.setTag(ADA, { who: 'anyone' })).tag.who).toBe('anyone');
+    say('o2', 'dm-olena', '7', '#помічник а тепер?', 70);
+    await next();
+    const requests = await core.listRequests(ADA);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ fromName: 'Olena', sourceKey: `clickup:${WS}:dm-olena:o2` });
+    // The earlier tag (by someone allowed now) bounds the context: nothing before it comes along.
+    const [, text] = await firstLine(requests[0]!.id);
+    expect(text).toBe('а тепер?');
+  });
+
+  it('a custom pattern replaces the default; an invalid one is refused and changes nothing', async () => {
+    await connectAndArm();
+    await expect(source.setTag(ADA, { pattern: '.*' })).rejects.toMatchObject({ code: 'invalid_tag_pattern', status: 400 });
+    await expect(source.setTag(ADA, { contextMessages: 99 })).rejects.toMatchObject({ code: 'invalid_tag_context' });
+    await expect(source.setTag(ADA, { who: 'everyone' as never })).rejects.toMatchObject({ code: 'invalid_tag_who' });
+    expect((await source.view(ADA)).tag.pattern).toBeNull();
+    expect((await source.setTag(ADA, { pattern: '!!ai\\b' })).tag.pattern).toBe('!!ai\\b');
+    say('c1', 'ch-general', ME, '#помічник old tag', 5);
+    say('c2', 'ch-general', ME, '!!AI summarise', 6);
+    await next();
+    const requests = await core.listRequests(ADA);
+    expect(requests.map(request => request.sourceKey)).toEqual([`clickup:${WS}:ch-general:c2`]);
+    // Back to the default.
+    expect((await source.setTag(ADA, { pattern: null })).tag.pattern).toBeNull();
+    await expect(source.setTag(BOB, { who: 'anyone' })).rejects.toMatchObject({ code: 'not_connected' });
+  });
+
+  it('flat chat: the preceding messages up to the count, or since the previous tag', async () => {
+    await connectAndArm();
+    for (let i = 1; i <= 12; i += 1) say(`f${i}`, 'ch-support', '7', `line ${i}`, i);
+    say('t1', 'ch-support', ME, '#помічник first', 13);
+    await next();
+    let [request] = await core.listRequests(ADA);
+    let [, text] = await firstLine(request!.id);
+    expect(text).not.toContain('line 2\n');
+    expect(text.match(/> line \d+/g)).toEqual(['line 3', 'line 4', 'line 5', 'line 6', 'line 7', 'line 8', 'line 9', 'line 10', 'line 11', 'line 12'].map(line => `> ${line}`));
+    expect(text.endsWith('\n\nfirst')).toBe(true);
+
+    // A second tag in the same flat chat is a new request, with only what came after the first tag.
+    say('f13', 'ch-support', '8', 'line 13', 80);
+    say('t2', 'ch-support', ME, '#помічник second', 81);
+    await next();
+    const requests = await core.listRequests(ADA);
+    expect(requests).toHaveLength(2);
+    request = requests.find(candidate => candidate.sourceKey?.endsWith(':t2'));
+    [, text] = await firstLine(request!.id);
+    expect(text).toBe(['> **Taras** · 2026-11-15 10:01 UTC', '> line 13', '', 'second'].join('\n'));
+
+    // A smaller count.
+    await source.setTag(ADA, { contextMessages: 1 });
+    say('f14', 'ch-support', '7', 'line 14', 140);
+    say('f15', 'ch-support', '7', 'line 15', 141);
+    say('t3', 'ch-support', ME, '#помічник third', 142);
+    await next();
+    request = (await core.listRequests(ADA)).find(candidate => candidate.sourceKey?.endsWith(':t3'));
+    [, text] = await firstLine(request!.id);
+    expect(text).toContain('line 15');
+    expect(text).not.toContain('line 14');
+  });
+
+  it('thread: the parent and the replies before the tag; a later tag there joins the open request with what came since', async () => {
+    await connectAndArm();
+    say('r', 'ch-general', '7', 'Checkout broke', 5);
+    say('r1', 'ch-general', '8', 'for me too', 6, { parent: 'r' });
+    say('r2', 'ch-general', ME, '#помічник що там?', 7, { parent: 'r' });
+    say('x', 'ch-general', '8', 'unrelated chatter in the channel', 8);
+    await next();
+    const [request] = await core.listRequests(ADA);
+    expect(request).toMatchObject({ sourceKey: `clickup:${WS}:ch-general:r`, fromName: 'ada' });
+    let lines = await sourceLines(request!.id);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]![1]).toContain('> Checkout broke');
+    expect(lines[0]![1]).toContain('> for me too');
+    expect(lines[0]![1]).not.toContain('unrelated');
+    expect(lines[0]![1].endsWith('що там?')).toBe(true);
+
+    say('r3', 'ch-general', '7', 'fixed now?', 70, { parent: 'r' });
+    say('r4', 'ch-general', ME, '#помічник перевір ще раз', 71, { parent: 'r' });
+    await next();
+    const requests = await core.listRequests(ADA);
+    expect(requests).toHaveLength(1);
+    lines = await sourceLines(request!.id);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]![1]).toBe(['> **Olena** · 2026-11-15 10:01 UTC', '> fixed now?', '', 'перевір ще раз'].join('\n'));
+    expect(brain.turns.map(turn => turn.first)).toEqual([true, false]);
+  });
+
+  it('a tag on a message, then a tag in its thread: one request', async () => {
+    await connectAndArm();
+    say('m', 'ch-general', ME, '#помічник ось баг з оплатою', 5);
+    await next();
+    say('m1', 'ch-general', '7', 'logs attached', 70, { parent: 'm' });
+    say('m2', 'ch-general', ME, '#помічник ще логи', 71, { parent: 'm' });
+    await next();
+    const requests = await core.listRequests(ADA);
+    expect(requests).toHaveLength(1);
+    expect((await sourceLines(requests[0]!.id)).map(([, text]) => text)).toEqual([
+      'ось баг з оплатою',
+      ['> **Olena** · 2026-11-15 10:01 UTC', '> logs attached', '', 'ще логи'].join('\n'),
+    ]);
+  });
+
+  it('a tag in a closed request’s thread opens a new request continuing it', async () => {
+    await connectAndArm();
+    say('m', 'ch-general', ME, '#помічник question one', 5);
+    await next();
+    const [first] = await core.listRequests(ADA);
+    await service.close(ADA, first!.id);
+    say('m1', 'ch-general', ME, '#помічник one more thing', 70, { parent: 'm' });
+    await next();
+    const requests = await core.listRequests(ADA);
+    expect(requests).toHaveLength(2);
+    const reopened = requests.find(request => request.id !== first!.id)!;
+    expect(reopened).toMatchObject({ previousRequestId: first!.id, sourceKey: first!.sourceKey, status: 'waiting_me' });
+    expect((await core.listMessages(ADA, reopened.id))[0]).toMatchObject({ author: 'event', text: `continues:${first!.id}` });
+  });
+
+  it('downloads the files of the tagged message and its context, ClickUp hosts only, each once', async () => {
+    const shot = 'https://t9001.p.clickup-attachments.com/t9001/abc/shot.png';
+    const doc = 'https://t9001.p.clickup-attachments.com/t9001/def/spec.pdf';
+    clickup.files.set(shot, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]));
+    clickup.files.set(doc, new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 1]));
+    await connectAndArm();
+    say('a1', 'dm-olena', '7', `See ![shot.png](${shot}) and [site](https://evil.example/x.png)`, 5);
+    clickup.post({
+      id: 'a2',
+      channel: 'dm-olena',
+      user: '7',
+      content: '',
+      date: T0 + 6000,
+      extra: { attachments: [{ id: 'x', title: 'Spec', url: doc, mimetype: 'application/pdf' }, { id: 'y', title: 'again', url_w_host: shot }] },
+    });
+    say('a3', 'dm-olena', ME, '#помічник що тут?', 7);
+    await next();
+    const [request] = await core.listRequests(ADA);
+    // The tagged message first, then its context newest first: the second link to the shot is named "again".
+    expect((await core.listFiles(ADA, request!.id)).map(file => [file.name, file.mime]).sort()).toEqual([
+      ['Spec', 'application/pdf'],
+      ['again', 'image/png'],
+    ]);
+    expect(clickup.calls.some(call => call.includes('evil.example'))).toBe(false);
+    expect(brain.turns[0]?.input.files).toHaveLength(2);
+    // A file-only message is named in the quote.
+    const [, text] = await firstLine(request!.id);
+    expect(text).toContain('> [Spec] [again]');
+  });
+
+  it('a tag written before a chat’s first read is history: never taken', async () => {
+    say('old', 'dm-olena', ME, '#помічник old', -60);
+    await connectAndArm();
+    await next();
+    expect(await core.listRequests(ADA)).toEqual([]);
+  });
+});
+
+describe('the channel modes and rules are gone', () => {
+  /** A row as the per-channel settings left it (mode, rule, cursor long ago), written straight into the table. */
+  async function legacyRow(channelId: string, mode: string, rule: string | null, kind: ChannelKind = 'channel') {
+    const ops = (storage as unknown as { ops: { insertOne: (table: string, row: object) => Promise<unknown> } }).ops;
+    await ops.insertOne(SOURCE_CHANNELS, {
+      owner_org_id: ADA.orgId,
+      owner_user_id: ADA.userId,
+      platform: 'clickup',
+      workspace_id: WS,
+      channel_id: channelId,
+      name: channelId,
+      kind,
+      mode,
+      rule,
+      following: true,
+      hidden: false,
+      visibility: null,
+      location_kind: null,
+      location_id: null,
+      location_path: null,
+      members: null,
+      follower: null,
+      details_at: null,
+      details_error: null,
+      cursor_at: T0 - 86_400_000,
+      last_sync_at: null,
+      last_error: null,
+      gone: false,
+      created_at: new Date(T0),
+      updated_at: new Date(T0),
+    });
+  }
+
+  it('old settings («Усе», digest only, ask a Factory) are migrated away: untagged traffic makes nothing, the tag works', async () => {
+    await source.connect(ADA, clickup.token);
+    const ops = (storage as unknown as { ops: { deleteMany: (table: string, where: object) => Promise<number> } }).ops;
+    await ops.deleteMany(SOURCE_CHANNELS, {});
+    await legacyRow('dm-olena', 'watch', null, 'dm');
+    await legacyRow('ch-general', 'addressed', 'digest_only');
+    await legacyRow('ch-support', 'ignore', 'analyse_and_ask:f-1');
+    // Written while the chat was on «Усе», before the switch: never looked at for a tag.
+    say('before', 'dm-olena', ME, '#помічник from before the switch', -30);
+    now = T0;
+    expect(await storage.retireChannelModes(new Date(now))).toBe(3);
+    expect(await storage.retireChannelModes(new Date(now))).toBe(0);
+    const rows = await (storage as unknown as { ops: { findMany: (table: string, where: object) => Promise<Array<Record<string, unknown>>> } }).ops.findMany(SOURCE_CHANNELS, {});
+    expect(rows.map(row => [row.mode, row.rule, Number(row.cursor_at)])).toEqual(rows.map(() => [RETIRED_MODE, null, T0]));
+
+    say('d1', 'dm-olena', '7', 'да', 5);
+    say('g1', 'ch-general', '7', 'FYI: deploy at 5', 6);
+    say('s1', 'ch-support', '7', 'Checkout fails', 7);
+    await next();
+    expect(await core.listRequests(ADA)).toEqual([]);
+    expect(brain.turns).toEqual([]);
+    expect(factory.asked).toEqual([]);
+
+    say('s2', 'ch-support', ME, '#помічник оціни', 70);
+    await next();
+    const requests = await core.listRequests(ADA);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.status).toBe('waiting_me');
+    // No rule runs: no Factory is asked on its own, no digest-only bypass.
+    expect(factory.asked).toEqual([]);
+    expect(brain.turns).toHaveLength(1);
+  });
+
+  it('the per-channel routes are gone; the tag route is the person’s own', async () => {
+    await source.connect(ADA, clickup.token);
+    const app = await sourcesApp();
+    const headers = { 'x-user': 'ada', 'x-org': 'org-a', 'content-type': 'application/json' };
+    const put = (path: string, body: object, as = headers) =>
+      app.request(`http://localhost/web/assistant/sources/clickup${path}`, { method: 'PUT', headers: as, body: JSON.stringify(body) });
+    expect((await put(`/channels/${WS}/ch-general`, { mode: 'watch' })).status).toBe(404);
+    expect((await put('/dms', { mode: 'watch' })).status).toBe(404);
+    const ok = await put('/tag', { pattern: '!!ai\\b', who: 'anyone', contextMessages: 5 });
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { clickup: { tag: unknown } }).clickup.tag).toMatchObject({ pattern: '!!ai\\b', who: 'anyone', contextMessages: 5 });
+    const bad = await put('/tag', { pattern: '.*' });
+    expect(bad.status).toBe(400);
+    expect((await put('/tag', {})).status).toBe(400);
+    // Bob has no connection of his own; Ada's tag is not his to change.
+    expect((await put('/tag', { who: 'me' }, { ...headers, 'x-user': 'bob' })).status).toBe(409);
+    expect((await storage.getConnection(ADA))?.tag.who).toBe('anyone');
+  });
+});
+
+/** The source's routes on a Hono app, the caller from `x-user` / `x-org`. */
+async function sourcesApp() {
+  const { Hono } = await import('hono');
+  const { enforceRouteAccess } = await import('@factory/http');
+  const { buildClickUpSourceRoutes } = await import('./routes.ts');
+  const auth = {
+    enabled: () => true,
+    ensureUser: async () => undefined,
+    tenant: (c: { req: { header: (name: string) => string | undefined } }) => {
+      const userId = c.req.header('x-user');
+      return userId ? { userId, orgId: c.req.header('x-org') ?? 'org-a', role: 'member' } : undefined;
+    },
+    can: async () => true,
+  } as unknown as Parameters<typeof buildClickUpSourceRoutes>[0]['auth'];
+  const app = new Hono();
+  for (const route of enforceRouteAccess(buildClickUpSourceRoutes({ auth, source }), auth)) {
+    app.on([route.method], route.path, c => (route as unknown as { handler: (c: unknown) => Promise<Response> }).handler(c));
+  }
+  return app;
+}
+
 describe('author names and attachments when the agent reads', () => {
   it('names a guest from the channel’s people, never shows a raw id, and lists the message’s files', async () => {
-    await source.connect(ADA, clickup.token);
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch' });
+    await connectAndArm();
     clickup.workspaces[0]!.members.push({ user: { id: 99, username: '', email: '' } });
     const support = clickup.channels.find(channel => channel.id === 'ch-support')!;
     support.members = ['7', '99', '8'];
     const url = 'https://t9001.p.clickup-attachments.com/t9001/abc/log.txt';
-    clickup.post({ id: 'm1', channel: 'ch-support', user: '8', content: `log: [log.txt](${url})`, date: T0 + 5000 });
-    clickup.post({ id: 'm2', channel: 'ch-support', user: '99', content: 'who am I', date: T0 + 6000 });
+    say('m1', 'ch-support', '8', `log: [log.txt](${url})`, 5);
+    say('m2', 'ch-support', '99', 'who am I', 6);
+    say('m3', 'ch-support', ME, '#помічник', 7);
+    await next();
     const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
     expect(read.messages).toMatchObject([
       { id: 'm1', from: 'Taras', attachments: [{ name: 'log.txt', url }] },
       { id: 'm2', from: null },
+      { id: 'm3', from: 'ada' },
     ]);
     expect(JSON.stringify(read)).not.toContain('"from":"99"');
   });
@@ -385,6 +657,32 @@ describe('author names and attachments when the agent reads', () => {
     const file = await source.download(ADA, url, 1000);
     expect(file?.bytes.byteLength).toBe(9);
     await expect(source.download(ADA, url, 4)).rejects.toMatchObject({ code: 'file_too_large' });
+  });
+
+  it('the agent reads only chats where its owner tagged it, within the read budget', async () => {
+    await connectAndArm();
+    await source.connect(BOB, clickup.token);
+    say('m1', 'ch-support', '7', 'is checkout fixed?', 5);
+    say('m2', 'ch-support', ME, '#помічник', 6);
+    say('m3', 'ch-general', '7', 'lunch?', 7);
+    await next();
+
+    expect((await source.taggedChannels(ADA)).map(channel => channel.ref)).toEqual([`clickup:${WS}:ch-support`]);
+    clickup.calls.length = 0;
+    const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
+    expect(read.messages).toMatchObject([{ id: 'm1', from: 'Olena', text: 'is checkout fixed?' }, { id: 'm2' }]);
+    expect(clickup.calls.length).toBeLessThanOrEqual(source.limits.callsPerRead);
+
+    // Never tagged by Ada, and Bob tagged nothing (Ada's tag is not his): refused, nothing read.
+    clickup.calls.length = 0;
+    await expect(source.readChannel(ADA, { ref: `clickup:${WS}:ch-general` })).rejects.toMatchObject({ status: 404 });
+    await expect(source.readChannel(BOB, { ref: `clickup:${WS}:ch-support` })).rejects.toMatchObject({ status: 404 });
+    await expect(source.readChannel(ADA, { ref: 'clickup:other:thing:extra' })).rejects.toMatchObject({ status: 404 });
+    expect(clickup.calls).toEqual([]);
+
+    // Through the core, as the agent's tool does.
+    expect((await service.listTaggedChannels(BOB)).map(channel => channel.name)).toEqual([]);
+    expect((await service.listTaggedChannels(ADA)).map(channel => channel.name)).toEqual(['support']);
   });
 });
 
@@ -404,30 +702,54 @@ describe('message attachments', () => {
 });
 
 describe('limits and failures', () => {
-  it('past the hourly turn limit messages are kept but not analysed', async () => {
+  it('past the hourly turn limit tags are kept as requests but not analysed', async () => {
     build({ turnsPerHour: 1 });
-    await connectAndWatch('ch-general');
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'one', date: T0 + 5000 });
-    clickup.post({ id: 'm2', channel: 'ch-general', user: '7', content: 'two', date: T0 + 6000 });
-    now += 60_000;
-    await poll();
+    await connectAndArm();
+    say('m1', 'ch-general', ME, '#помічник one', 5);
+    say('m2', 'ch-general', ME, '#помічник two', 6);
+    await next();
     expect(brain.turns).toHaveLength(1);
     const second = (await core.listRequests(ADA)).find(request => request.sourceKey?.endsWith(':m2'))!;
     expect(second.status).toBe('waiting_me');
     expect((await core.listMessages(ADA, second.id)).map(message => message.text)).toContain('not_analysed:limit');
   });
 
-  it('a poll spends at most its call budget; the rest waits for the next poll', async () => {
+  it('a poll spends at most its call budget; a tag in a chat it did not reach is found on a later poll', async () => {
+    await connectAndArm();
     build({ callsPerPoll: 3 });
-    await source.connect(ADA, clickup.token);
-    for (const id of ['ch-general', 'ch-support']) await source.setMode(ADA, { workspaceId: WS, channelId: id, mode: 'watch' });
-    clickup.calls.length = 0;
-    await poll();
-    expect(clickup.calls.length).toBeLessThanOrEqual(3);
+    say('t1', 'ch-support', ME, '#помічник late', 5);
+    let found = 0;
+    for (let round = 0; round < 4 && found === 0; round += 1) {
+      clickup.calls.length = 0;
+      found += (await next()).ingested;
+      expect(clickup.calls.length).toBeLessThanOrEqual(3);
+    }
+    expect(found).toBe(1);
+    expect(await core.listRequests(ADA)).toHaveLength(1);
+  });
+
+  it('chats outside the sidebar are looked at less often than the sidebar', async () => {
+    clickup.channels.push({ id: 'ch-far', name: 'far away', type: 'CHANNEL', following: false });
+    await connectAndArm();
+    build({ channelsPerPoll: 1 });
+    const reads: string[] = [];
+    const round = async () => {
+      clickup.calls.length = 0;
+      now += 1000;
+      await poll();
+      reads.push(...clickup.calls.filter(call => call.includes('/messages?')).map(call => call.split('/channels/')[1]!.split('/')[0]!));
+    };
+    for (let i = 0; i < 6; i += 1) await round();
+    // Six polls, one chat each: the three sidebar chats twice, the one outside not yet (it waits 10 minutes).
+    expect(reads.filter(id => id === 'ch-far')).toEqual([]);
+    expect(new Set(reads)).toEqual(new Set(['dm-olena', 'ch-general', 'ch-support']));
+    now += source.limits.offSidebarDelayMs;
+    for (let i = 0; i < 4; i += 1) await round();
+    expect(reads.filter(id => id === 'ch-far')).toEqual(['ch-far']);
   });
 
   it('backs off after failures, waits for the rate-limit reset, and stops on a rejected token', async () => {
-    await connectAndWatch('ch-general');
+    await connectAndArm();
     clickup.failWith = { status: 500 };
     await poll();
     let connection = await storage.getConnection(ADA);
@@ -481,28 +803,25 @@ describe('limits and failures', () => {
 });
 
 describe('owners and cleanup', () => {
-  it('keeps each owner’s connection, channels and requests apart', async () => {
-    await connectAndWatch('ch-general', 'watch', ADA);
+  it('keeps each owner’s connection, tag and requests apart', async () => {
+    await connectAndArm(ADA);
     await source.connect(BOB, clickup.token);
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'for whoever watches', date: T0 + 5000 });
-    now += 60_000;
-    await poll(ADA);
+    await source.setTag(BOB, { pattern: '!!bob\\b' });
+    say('m1', 'ch-general', ME, '#помічник for Ada’s tag', 5);
+    await next(ADA);
     await poll(BOB);
     expect(await core.listRequests(ADA)).toHaveLength(1);
     expect(await core.listRequests(BOB)).toEqual([]);
+    expect((await source.view(ADA)).tag.pattern).toBeNull();
     expect((await source.view(ADA_ELSEWHERE)).connected).toBe(false);
-    expect((await source.view(BOB)).channels.find(channel => channel.channelId === 'ch-general')?.mode).toBe('ignore');
-    await expect(source.setMode(ADA_ELSEWHERE, { workspaceId: WS, channelId: 'ch-general', mode: 'watch' })).rejects.toMatchObject({
-      code: 'not_connected',
-    });
+    await expect(source.setTag(ADA_ELSEWHERE, { who: 'anyone' })).rejects.toMatchObject({ code: 'not_connected' });
   });
 
   it('erasing the assistant disconnects the source first and polling stops', async () => {
-    await connectAndWatch('ch-general');
+    await connectAndArm();
     await source.connect(BOB, clickup.token);
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'hello', date: T0 + 5000 });
-    now += 60_000;
-    await poll();
+    say('m1', 'ch-general', ME, '#помічник hello', 5);
+    await next();
     await service.clear(ADA, { reason: 'cleared_by_person', actorId: 'ada' });
     expect((await source.view(ADA)).connected).toBe(false);
     expect(await core.listRequests(ADA)).toEqual([]);
@@ -522,11 +841,10 @@ describe('owners and cleanup', () => {
     expect(SOURCE_CONNECTIONS).toBe('assistant_source_connections');
   });
 
-  it('disconnect forgets the token and modes but keeps the person’s requests', async () => {
-    await connectAndWatch('ch-general');
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'hello', date: T0 + 5000 });
-    now += 60_000;
-    await poll();
+  it('disconnect forgets the token, the tag and the cursors but keeps the person’s requests', async () => {
+    await connectAndArm();
+    say('m1', 'ch-general', ME, '#помічник hello', 5);
+    await next();
     await source.disconnect(ADA);
     expect(await storage.getConnection(ADA)).toBeNull();
     expect(await storage.listChannels(ADA)).toEqual([]);
@@ -569,77 +887,7 @@ describe('the client', () => {
   });
 });
 
-describe('phase 3: channel rules and reading on demand', () => {
-  it('a rule is set by the person, shown in the view; asking a Factory needs one they reach', async () => {
-    await source.connect(ADA, clickup.token);
-    expect((await source.view(ADA)).channels.every(channel => channel.rule === 'analyse')).toBe(true);
-    await expect(
-      source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } }),
-    ).rejects.toMatchObject({ code: 'factory_not_connected' });
-    factory.connect(ADA);
-    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } });
-    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-general', rule: { kind: 'digest_only' } });
-    const view = await source.view(ADA);
-    expect(view.channels.map(channel => [channel.name, channel.mode, channel.rule])).toEqual([
-      ['Olena', 'addressed', 'analyse'],
-      ['general', 'ignore', 'digest_only'],
-      ['support', 'watch', 'analyse_and_ask:f-1'],
-    ]);
-    // Bob's channels are untouched.
-    await source.connect(BOB, clickup.token);
-    expect((await source.view(BOB)).channels.every(channel => channel.rule === 'analyse')).toBe(true);
-  });
-
-  it('digest_only: a new message becomes a request without an agent turn or a spent turn', async () => {
-    await connectAndWatch('ch-general');
-    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-general', rule: { kind: 'digest_only' } });
-    clickup.post({ id: 'm1', channel: 'ch-general', user: '7', content: 'FYI: deploy at 5', date: T0 + 5000 });
-    now += 60_000;
-    await poll();
-    const [request] = await core.listRequests(ADA);
-    expect(request).toMatchObject({ status: 'waiting_me', fromName: 'Olena' });
-    expect(brain.turns).toEqual([]);
-    expect((await core.listMessages(ADA, request!.id)).map(message => message.text)).toContain('not_analysed:digest');
-  });
-
-  it('analyse_and_ask: the channel’s Factory is asked after the report', async () => {
-    factory.connect(ADA);
-    await connectAndWatch('ch-support');
-    await source.setChannel(ADA, { workspaceId: WS, channelId: 'ch-support', rule: { kind: 'analyse_and_ask', factoryId: 'f-1' } });
-    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'Checkout fails for client X', date: T0 + 5000 });
-    now += 60_000;
-    await poll();
-    expect(factory.asked).toHaveLength(1);
-    expect(factory.asked[0]!.question).toContain('Checkout fails for client X');
-    expect((await core.listRequests(ADA))[0]!.status).toBe('waiting_factory');
-  });
-
-  it('the agent reads only chats its owner turned on, within the read budget', async () => {
-    await source.connect(ADA, clickup.token);
-    await source.connect(BOB, clickup.token);
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-support', mode: 'watch' });
-    clickup.post({ id: 'm1', channel: 'ch-support', user: '7', content: 'is checkout fixed?', date: T0 + 5000 });
-    clickup.post({ id: 'm2', channel: 'ch-general', user: '7', content: 'lunch?', date: T0 + 6000 });
-
-    expect((await source.enabledChannels(ADA)).map(channel => channel.ref).sort()).toEqual([`clickup:${WS}:ch-support`, `clickup:${WS}:dm-olena`]);
-    clickup.calls.length = 0;
-    const read = await source.readChannel(ADA, { ref: `clickup:${WS}:ch-support` });
-    expect(read.messages).toMatchObject([{ id: 'm1', from: 'Olena', text: 'is checkout fixed?' }]);
-    expect(clickup.calls.length).toBeLessThanOrEqual(source.limits.callsPerRead);
-
-    // Off for Ada, and Bob never turned support on: refused, nothing read.
-    clickup.calls.length = 0;
-    await expect(source.readChannel(ADA, { ref: `clickup:${WS}:ch-general` })).rejects.toMatchObject({ status: 404 });
-    await expect(source.readChannel(BOB, { ref: `clickup:${WS}:ch-support` })).rejects.toMatchObject({ status: 404 });
-    await expect(source.readChannel(ADA, { ref: 'clickup:other:thing:extra' })).rejects.toMatchObject({ status: 404 });
-    expect(clickup.calls).toEqual([]);
-
-    // Through the core, as the agent's tool does.
-    expect((await service.listEnabledChannels(BOB)).map(channel => channel.name)).toEqual(['Olena']);
-  });
-});
-
-describe('the channel list as the person’s ClickUp sidebar shows it', () => {
+describe('the chat list: names, locations and the person’s ClickUp sidebar', () => {
   /**
    * Shaped like the person's workspace: plain channels they follow, «Bugs» and «Development» as
    * List/Folder channels in several places (same name, different location), DMs without names,
@@ -676,12 +924,9 @@ describe('the channel list as the person’s ClickUp sidebar shows it', () => {
   it('names each DM after its people, tells location channels apart by path, and marks the sidebar', async () => {
     sidebarFixture();
     const view = await source.connect(ADA, clickup.token);
-    const rows = view.channels.map(channel => ({
-      name: channel.name,
-      kind: channel.kind,
-      location: channel.location ? `${channel.location.kind}:${channel.location.path.join(' › ')}` : null,
-      inSidebar: channel.inSidebar,
-    }));
+    expect(view.chats).toEqual({ total: 11, inSidebar: 6 });
+    const chats = await chatList();
+    const rows = chats.map(({ name, kind, location, inSidebar }) => ({ name, kind, location, inSidebar }));
     expect(rows).toEqual([
       { name: 'Iryna', kind: 'dm', location: null, inSidebar: false },
       { name: 'Olena', kind: 'dm', location: null, inSidebar: true },
@@ -699,7 +944,7 @@ describe('the channel list as the person’s ClickUp sidebar shows it', () => {
     const labels = rows.map(row => `${row.kind}|${row.name}|${row.location}`);
     expect(new Set(labels).size).toBe(labels.length);
     // The person themself is not one of a DM's people; the avatar comes from the workspace member.
-    expect(view.channels.find(channel => channel.channelId === 'dm-olena')!.members).toEqual([
+    expect(chats.find(channel => channel.channelId === 'dm-olena')!.members).toEqual([
       { id: '7', name: 'Olena', avatarUrl: 'https://attachments.clickup.com/profilePictures/7_olena.jpg' },
     ]);
   });
@@ -710,8 +955,8 @@ describe('the channel list as the person’s ClickUp sidebar shows it', () => {
     await source.connect(ADA, clickup.token);
     expect(lookups()).toBe(3);
     // Sidebar rows first: a followed DM is named even with the small budget; the hidden one is not yet.
-    const first = await source.view(ADA);
-    expect(first.channels.filter(channel => channel.kind !== 'channel' && channel.members.length > 0).every(channel => channel.inSidebar)).toBe(true);
+    const first = await chatList();
+    expect(first.filter(channel => channel.kind !== 'channel' && channel.members.length > 0).every(channel => channel.inSidebar)).toBe(true);
     // The next poll (no new listing) goes on with the rest, 3 at a time.
     clickup.calls.length = 0;
     now += 1000;
@@ -731,29 +976,20 @@ describe('the channel list as the person’s ClickUp sidebar shows it', () => {
     expect(lookups()).toBe(11);
   });
 
-  it('sets every DM to one mode at once, channels untouched', async () => {
-    sidebarFixture();
-    await source.connect(ADA, clickup.token);
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-albi', mode: 'watch' });
-    expect(await source.setDmModes(ADA, 'watch')).toBe(4);
-    const modes = Object.fromEntries((await source.view(ADA)).channels.map(channel => [channel.channelId, channel.mode]));
-    expect(modes).toMatchObject({ 'dm-olena': 'watch', 'dm-taras': 'watch', 'dm-old': 'watch', 'gdm-1': 'watch', 'ch-albi': 'watch', 'ch-bugs-1': 'ignore' });
-    await expect(source.setDmModes(BOB, 'watch')).rejects.toMatchObject({ code: 'not_connected' });
-  });
-
   it('names where a request came from with its location, and a DM by its person', async () => {
     sidebarFixture();
     await source.connect(ADA, clickup.token);
-    await source.setMode(ADA, { workspaceId: WS, channelId: 'ch-bugs-2', mode: 'watch' });
+    // Every chat is looked at (11 chats, within one poll's reach), outside the sidebar too.
     now += 1000;
     await poll();
-    clickup.post({ id: 'b1', channel: 'ch-bugs-2', user: '7', content: 'crash on login', date: now + 5000 });
-    now += 60_000;
+    now += source.limits.offSidebarDelayMs;
     await poll();
-    expect(brain.turns.at(-1)!.input.text).toContain('(#Clients › KidNation › Bugs)');
-    expect((await source.enabledChannels(ADA)).map(channel => channel.name)).toEqual(
-      expect.arrayContaining(['Olena', 'Olena, Taras', 'Bugs']),
-    );
+    clickup.post({ id: 'b1', channel: 'ch-bugs-2', user: ME, content: 'crash on login #помічник', date: now + 5000 });
+    clickup.post({ id: 'd1', channel: 'dm-olena', user: ME, content: '#помічник', date: now + 6000 });
+    now += source.limits.offSidebarDelayMs + 60_000;
+    await poll();
+    expect(brain.turns.map(turn => turn.input.text.split('\n')[0]).sort()).toEqual(['(#Clients › KidNation › Bugs)', '(DM Olena)']);
+    expect((await source.taggedChannels(ADA)).map(channel => channel.name).sort()).toEqual(['Bugs', 'Olena']);
   });
 });
 
@@ -773,8 +1009,8 @@ describe('live ClickUp shapes, failures made visible, and diagnostics', () => {
   it('names a DM ClickUp calls "DM" after its people, when members come back with only id and email', async () => {
     liveFixture();
     clickup.memberShape = 'bare';
-    const view = await source.connect(ADA, clickup.token);
-    const dms = view.channels.filter(channel => channel.kind === 'dm');
+    await source.connect(ADA, clickup.token);
+    const dms = (await chatList()).filter(channel => channel.kind === 'dm');
     expect(dms.map(channel => [channel.name, channel.members.map(member => member.name), channel.detailsError])).toEqual([
       ['Olena', ['Olena'], null],
       ['Taras', ['Taras'], null],
@@ -784,18 +1020,18 @@ describe('live ClickUp shapes, failures made visible, and diagnostics', () => {
   it('takes members that come back as bare ids too', async () => {
     liveFixture();
     clickup.memberShape = 'ids';
-    const view = await source.connect(ADA, clickup.token);
-    expect(view.channels.filter(channel => channel.kind === 'dm').map(channel => channel.name)).toEqual(['Olena', 'Taras']);
+    await source.connect(ADA, clickup.token);
+    expect((await chatList()).filter(channel => channel.kind === 'dm').map(channel => channel.name)).toEqual(['Olena', 'Taras']);
   });
 
   it('is_follower is only a filter: the full list is asked without it, and …/followers finds the sidebar the filter missed', async () => {
     liveFixture();
-    const view = await source.connect(ADA, clickup.token);
+    await source.connect(ADA, clickup.token);
     const listing = clickup.calls.filter(call => call.includes('/chat/channels?'));
     expect(listing.some(call => call.includes('is_follower=true'))).toBe(true);
     expect(listing.some(call => !call.includes('is_follower'))).toBe(true);
     expect(listing.some(call => call.includes('is_follower=false'))).toBe(false);
-    const sidebar = Object.fromEntries(view.channels.map(channel => [channel.name, channel.inSidebar]));
+    const sidebar = Object.fromEntries((await chatList()).map(channel => [channel.name, channel.inSidebar]));
     expect(sidebar).toEqual({ Olena: true, Taras: true, 'Other team': false, SWITCH5: true, Syncta: true });
   });
 
@@ -814,38 +1050,39 @@ describe('live ClickUp shapes, failures made visible, and diagnostics', () => {
     now += 1000;
     await poll();
     expect(clickup.calls.some(call => call.includes('is_follower=true'))).toBe(true);
-    const view = await source.view(ADA);
-    expect(view.channels.find(channel => channel.channelId === 'ch-syncta')?.inSidebar).toBe(true);
-    expect(view.channels.find(channel => channel.channelId === 'dm-olena')?.name).toBe('Olena');
+    const chats = await chatList();
+    expect(chats.find(channel => channel.channelId === 'ch-syncta')?.inSidebar).toBe(true);
+    expect(chats.find(channel => channel.channelId === 'dm-olena')?.name).toBe('Olena');
   });
 
   it('a lookup ClickUp refuses shows its code on the row and is tried again after a while', async () => {
     liveFixture();
     clickup.failPaths = [{ path: /\/members$/, status: 403 }];
-    let view = await source.connect(ADA, clickup.token);
-    const olena = () => view.channels.find(channel => channel.channelId === 'dm-olena')!;
+    await source.connect(ADA, clickup.token);
+    let view = await chatList();
+    const olena = () => view.find(channel => channel.channelId === 'dm-olena')!;
     expect(olena().detailsError).toEqual({ what: 'members', code: '403' });
     expect(olena().members).toEqual([]);
     clickup.failPaths = [];
     now += 60_000;
     await poll();
-    view = await source.view(ADA);
+    view = await chatList();
     expect(olena().detailsError).toEqual({ what: 'members', code: '403' });
     now += source.limits.detailsRetryMs;
     await poll();
-    view = await source.view(ADA);
+    view = await chatList();
     expect(olena()).toMatchObject({ name: 'Olena', detailsError: null });
   });
 
   it('a members list that comes back empty is a visible failure, not a silent blank', async () => {
     liveFixture();
     clickup.channels.find(channel => channel.id === 'dm-taras')!.members = [];
-    const view = await source.connect(ADA, clickup.token);
-    expect(view.channels.find(channel => channel.channelId === 'dm-taras')!.detailsError).toEqual({ what: 'members', code: 'empty' });
+    await source.connect(ADA, clickup.token);
+    expect((await chatList()).find(channel => channel.channelId === 'dm-taras')!.detailsError).toEqual({ what: 'members', code: 'empty' });
   });
 
   it('«fetch failed» is tried again with backoff; past the tries the cause code is what the person sees', async () => {
-    await connectAndWatch('ch-general');
+    await connectAndArm();
     sleeps = [];
     clickup.networkFailures = 2;
     now += 10 * 60_000;
@@ -872,7 +1109,6 @@ describe('live ClickUp shapes, failures made visible, and diagnostics', () => {
     console.info = (...args: unknown[]) => void logged.push(args.map(String).join(' '));
     try {
       await source.connect(ADA, clickup.token);
-      await source.setMode(ADA, { workspaceId: WS, channelId: 'dm-olena', mode: 'watch' });
       now += 1000;
       await poll();
       clickup.post({ id: 'm1', channel: 'dm-olena', user: '7', content: 'secret client words', date: now + 5000 });
@@ -891,8 +1127,8 @@ describe('live ClickUp shapes, failures made visible, and diagnostics', () => {
       dmsWithoutPeople: 0,
       lookupFailures: {},
     });
-    const messages = diagnostics.lastRead!.calls.find(call => call.endpoint === 'v3.chat.messages');
-    expect(messages).toMatchObject({ status: 200, count: 1, itemKinds: ['object'] });
+    const messages = diagnostics.lastRead!.calls.filter(call => call.endpoint === 'v3.chat.messages');
+    expect(messages.find(call => call.count === 1)).toMatchObject({ status: 200, count: 1, itemKinds: ['object'] });
     const everything = JSON.stringify(diagnostics) + logged.join('\n');
     expect(logged.length).toBeGreaterThan(0);
     for (const secret of [clickup.token, 'Olena', 'olena@example.com', 'secret client words', 'SWITCH5', 'dm-olena', 'ch-syncta', WS]) {
@@ -906,22 +1142,7 @@ describe('live ClickUp shapes, failures made visible, and diagnostics', () => {
   it('GET …/clickup/diagnostics answers only the caller about their own connection', async () => {
     liveFixture();
     await source.connect(ADA, clickup.token);
-    const { Hono } = await import('hono');
-    const { enforceRouteAccess } = await import('@factory/http');
-    const { buildClickUpSourceRoutes } = await import('./routes.ts');
-    const auth = {
-      enabled: () => true,
-      ensureUser: async () => undefined,
-      tenant: (c: { req: { header: (name: string) => string | undefined } }) => {
-        const userId = c.req.header('x-user');
-        return userId ? { userId, orgId: c.req.header('x-org') ?? 'org-a', role: 'member' } : undefined;
-      },
-      can: async () => true,
-    } as unknown as Parameters<typeof buildClickUpSourceRoutes>[0]['auth'];
-    const app = new Hono();
-    for (const route of enforceRouteAccess(buildClickUpSourceRoutes({ auth, source }), auth)) {
-      app.on([route.method], route.path, c => (route as unknown as { handler: (c: unknown) => Promise<Response> }).handler(c));
-    }
+    const app = await sourcesApp();
     const get = (headers: Record<string, string>) => app.request('http://localhost/web/assistant/sources/clickup/diagnostics', { headers });
     const ada = await get({ 'x-user': 'ada', 'x-org': 'org-a' });
     expect(ada.status).toBe(200);

@@ -2093,7 +2093,7 @@
     },
     "proactivity": {
       "title": "Proactivity",
-      "description": "What the assistant does by itself: each chat's rule and the digest."
+      "description": "What the assistant does by itself: a digest of your open requests. It never reads your chats for it."
     },
     "access": {
       "title": "Factory access",

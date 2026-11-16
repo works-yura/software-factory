@@ -25,8 +25,9 @@ function message(overrides: Partial<SourceMessage> = {}): SourceMessage {
     text: 'Checkout fails',
     fromName: 'Olena',
     sourceUrl: 'https://app.clickup.com/9001/chat/r/ch',
+    context: [],
+    contextKind: 'chat',
     files: [],
-    fromMe: false,
     analyse: true,
     ...overrides,
   };
@@ -61,7 +62,7 @@ beforeEach(async () => {
   });
 });
 
-describe('taking in source messages', () => {
+describe('taking in tags', () => {
   it('is idempotent by the message’s own id, also when two reads race', async () => {
     const [a, b] = await Promise.all([service.ingestSourceMessage(ADA, message()), service.ingestSourceMessage(ADA, message())]);
     expect([a.outcome, b.outcome].sort()).toEqual(['created', 'duplicate']);
@@ -71,7 +72,7 @@ describe('taking in source messages', () => {
     expect(brain.turns).toHaveLength(1);
   });
 
-  it('binds by thread: follow-ups join the open request, and wait for the agent’s current turn', async () => {
+  it('binds by thread: a later tag joins the open request, and waits for the agent’s current turn', async () => {
     const created = await service.ingestSourceMessage(ADA, message());
     const followed = await service.ingestSourceMessage(ADA, message({ messageKey: 'clickup:9001:reply-1', text: 'Any news?' }));
     expect(followed).toMatchObject({ outcome: 'appended', request: { id: created.request!.id, analysing: true } });
@@ -91,12 +92,41 @@ describe('taking in source messages', () => {
     const next = await service.ingestSourceMessage(ADA, message({ messageKey: 'clickup:9001:reply-2', text: 'Again' }));
     expect(next.outcome).toBe('reopened');
     expect(next.request).toMatchObject({ previousRequestId: first.request!.id, sourceKey: 'clickup:9001:ch:root-1' });
-    expect(await service.hasOpenSourceRequest(ADA, 'clickup:9001:ch:root-1')).toBe(true);
   });
 
-  it('the person’s own message never starts a request', async () => {
-    expect((await service.ingestSourceMessage(ADA, message({ fromMe: true }))).outcome).toBe('skipped');
-    expect(await storage.listRequests(ADA)).toEqual([]);
+  it('stores the conversation the tag points at, quoted with its authors, then the instruction', async () => {
+    const created = await service.ingestSourceMessage(
+      ADA,
+      message({
+        text: 'оціни це',
+        fromName: 'Ada',
+        context: [
+          { fromName: 'Olena', text: 'Checkout fails for client X\nsince Monday', at: '2026-11-16T09:58:00.000Z' },
+          { fromName: null, text: 'Same here', at: '2026-11-16T09:59:00.000Z' },
+          { fromName: 'Taras', text: '   ', at: '2026-11-16T09:59:30.000Z' },
+        ],
+      }),
+    );
+    await runTurns();
+    const text = [
+      '> **Olena** · 2026-11-16 09:58 UTC',
+      '> Checkout fails for client X',
+      '> since Monday',
+      '>',
+      '> **Someone** · 2026-11-16 09:59 UTC',
+      '> Same here',
+      '',
+      'оціни це',
+    ].join('\n');
+    const thread = await storage.listMessages(ADA, created.request!.id);
+    expect(thread.filter(item => item.author === 'source')).toMatchObject([{ fromName: 'Ada', text }]);
+    expect(brain.turns[0]!.input.text).toBe(text);
+    // A tag with no instruction is the context alone; the topic comes from the newest context line.
+    const bare = await service.ingestSourceMessage(
+      BOB,
+      message({ text: '', context: [{ fromName: 'Olena', text: 'Invoice for March?', at: '2026-11-16T10:00:00.000Z' }] }),
+    );
+    expect(bare.request!.topic).toBe('Invoice for March?');
   });
 
   it('keeps owners apart: the same thread is a separate request per person and organization', async () => {
@@ -105,7 +135,6 @@ describe('taking in source messages', () => {
     }
     await runTurns();
     for (const owner of [ADA, BOB, ADA_ELSEWHERE]) expect(await storage.listRequests(owner)).toHaveLength(1);
-    expect(await service.hasOpenSourceRequest(BOB, 'clickup:9001:ch:other')).toBe(false);
   });
 
   it('retention erases a source request with its message keys', async () => {
