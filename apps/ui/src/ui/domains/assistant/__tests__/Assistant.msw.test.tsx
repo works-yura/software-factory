@@ -704,6 +704,30 @@ describe('the floating button', () => {
     await user.click(screen.getByTestId('assistant-launcher'));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Assistant' })).not.toBeInTheDocument());
   });
+
+  it('goes full screen and back to its window, and remembers the choice', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: 'ada', organizationId: 'org-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),
+    );
+    window.localStorage.removeItem('factory.assistant.expanded');
+    const user = userEvent.setup();
+    renderWithProviders(<AssistantOverlay factory={{ id: 'f-1', name: 'Shop' }} />);
+    await user.click(await screen.findByTestId('assistant-launcher'));
+    const panel = await screen.findByRole('dialog', { name: 'Assistant' });
+
+    await user.click(within(panel).getByRole('button', { name: 'Full screen' }));
+    const full = await screen.findByTestId('assistant-fullscreen');
+    expect(within(full).getByRole('button', { name: 'Back to a window' })).toHaveAttribute('aria-pressed', 'true');
+    expect(window.localStorage.getItem('factory.assistant.expanded')).toBe('1');
+
+    await user.click(within(full).getByRole('button', { name: 'Back to a window' }));
+    await waitFor(() => expect(screen.queryByTestId('assistant-fullscreen')).not.toBeInTheDocument());
+    expect(await screen.findByRole('dialog', { name: 'Assistant' })).toBeInTheDocument();
+    expect(window.localStorage.getItem('factory.assistant.expanded')).toBe('0');
+  });
 });
 
 describe('Settings › Assistant: model, storage, Factory access', () => {
