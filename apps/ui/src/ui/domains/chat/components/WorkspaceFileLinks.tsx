@@ -7,7 +7,7 @@ import type { MouseEvent, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
-import { workspaceFileDownloadUrl } from '../../workspace-viewer/components/WorkspaceFileViewer';
+import { useWorkspaceFilesEndpoints } from '../../workspace-viewer/context/WorkspaceFilesEndpoints';
 import { WorkspacePanelContext } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { linkedProductDocuments, workspaceFilePath } from '../../workspace-viewer/workspace-file-link';
 import type { ProductDocument } from '../../workspace-viewer/workspace-file-link';
@@ -75,9 +75,10 @@ function ChatLink({
 }) {
   const { t } = useTranslation('chat');
   const { baseUrl } = useApiConfig();
+  const endpoints = useWorkspaceFilesEndpoints();
   const download =
     target.kind === 'file' && workspacePath
-      ? workspaceFileDownloadUrl(baseUrl, { workspacePath, path: target.path })
+      ? endpoints.downloadUrl(baseUrl, { workspacePath, path: target.path })
       : undefined;
   const [open, setOpen] = useState(false);
   const shown = target.kind === 'web' ? target.url : target.path;

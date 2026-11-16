@@ -14,6 +14,8 @@ const KIND_VARIANT: Record<AssistantToolKind, 'neutral' | 'info' | 'warning'> = 
   read: 'neutral',
   write_own: 'info',
   proposal: 'warning',
+  workspace: 'info',
+  asks: 'warning',
 };
 
 /**

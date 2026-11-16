@@ -32,7 +32,7 @@ export interface AssistantSkillDetail extends AssistantSkillEntry {
   updatedAt: string | null;
 }
 
-export type AssistantToolKind = 'read' | 'write_own' | 'proposal';
+export type AssistantToolKind = 'read' | 'write_own' | 'proposal' | 'workspace' | 'asks';
 
 export interface AgentPreview {
   systemPrompt: string;

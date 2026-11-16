@@ -3,17 +3,25 @@ import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../api/config';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
+import { assistantWorkspaceSlot } from './AssistantRequestFiles';
 
 /** Settings › «Помічник»: the assistant's own page (personal), under a Factory's settings. */
 export function assistantSettingsHref(factoryId: string): string {
   return `/factories/${encodeURIComponent(factoryId)}/settings/assistant`;
 }
 
-/** The assistant's API at this app's server; with a Factory, the panel can link to its Account settings. */
+/**
+ * The assistant's API at this app's server; with a Factory, the panel can link to its Account settings.
+ * A request's workspace shows in the sessions' Files (`assistantWorkspaceSlot`).
+ */
 export function AssistantApi({ children, factoryId }: { children: ReactNode; factoryId?: string }) {
   const { baseUrl } = useApiConfig();
   return (
-    <AssistantApiProvider baseUrl={baseUrl} {...(factoryId ? { settingsHref: assistantSettingsHref(factoryId) } : {})}>
+    <AssistantApiProvider
+      baseUrl={baseUrl}
+      workspace={assistantWorkspaceSlot}
+      {...(factoryId ? { settingsHref: assistantSettingsHref(factoryId) } : {})}
+    >
       {children}
     </AssistantApiProvider>
   );

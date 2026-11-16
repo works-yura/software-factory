@@ -12,6 +12,27 @@ import { WorkspacePanelContext } from './WorkspacePanelContext';
 /** Owns the box the card measures itself against, and shares its state with the session header. */
 export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
   const { workspacePath, threadId } = useThreadWorkspacePath();
+  return (
+    <WorkspaceFilesPanelProvider workspace={{ workspacePath, threadId }}>
+      {children}
+    </WorkspaceFilesPanelProvider>
+  );
+}
+
+/**
+ * The Files panel's state and box for one workspace: the routed session's (`WorkspaceFilesProvider`),
+ * or another one (an assistant request's folder) with `content` for what its card shows.
+ */
+export function WorkspaceFilesPanelProvider({
+  children,
+  workspace,
+  content,
+}: {
+  children: ReactNode;
+  workspace: { workspacePath?: string; threadId?: string };
+  content?: ReactNode;
+}) {
+  const { workspacePath, threadId } = workspace;
   const chatRef = useRef<HTMLDivElement>(null);
   const { wider: canDock, revision: layoutRevision } = useWiderThan(chatRef, DOCK_MIN_REM);
   const [toggled, setToggled] = useState<{ layoutRevision: number; open: boolean }>();
@@ -46,7 +67,7 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
 
   return (
     <WorkspacePanelContext.Provider
-      value={{ open, setOpen, workspacePath, threadId, size, setSize, canDock, readsChanges, openFile, requestedFile }}
+      value={{ open, setOpen, workspacePath, threadId, size, setSize, canDock, readsChanges, openFile, requestedFile, content }}
     >
       <div
         ref={chatRef}

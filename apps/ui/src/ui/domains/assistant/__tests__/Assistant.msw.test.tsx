@@ -16,6 +16,7 @@ import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { i18n } from '../../../i18n';
 import { AssistantOverlay } from '../AssistantOverlay';
+import { assistantWorkspaceSlot } from '../AssistantRequestFiles';
 
 const NOW = '2026-11-15T10:00:00.000Z';
 
@@ -276,6 +277,125 @@ describe('the assistant panel', () => {
     await waitFor(() => expect(asked).toEqual({ factoryId: 'f-1', question: 'Why does checkout fail?' }));
     // Sent: the composer is back to writing to the assistant.
     expect(await screen.findByRole('textbox', { name: 'Write to the assistant…' })).toHaveValue('');
+  });
+
+  it("shows the request's workspace in the sessions' Files: its tree and a Markdown file rendered", async () => {
+    const asked: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view())),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1/workspace/tree`, ({ request: incoming }) => {
+        const path = new URL(incoming.url).searchParams.get('path') ?? '';
+        asked.push(`tree:${path}`);
+        return HttpResponse.json({
+          workspacePath: 'assistant/req-1',
+          path,
+          available: true,
+          entries:
+            path === 'downloads'
+              ? [{ name: 'shot.png', path: 'downloads/shot.png', type: 'file', size: 9 }]
+              : [
+                  { name: 'downloads', path: 'downloads', type: 'directory' },
+                  { name: 'report.md', path: 'report.md', type: 'file', size: 20 },
+                ],
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1/workspace/view`, ({ request: incoming }) => {
+        const path = new URL(incoming.url).searchParams.get('path') ?? '';
+        asked.push(`view:${path}`);
+        return HttpResponse.json({
+          workspacePath: 'assistant/req-1',
+          path,
+          name: 'report.md',
+          size: 20,
+          updatedAt: NOW,
+          contentType: 'text',
+          content: '# Report\n\nThe **checkout** log.',
+          truncated: false,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <AssistantApiProvider baseUrl={TEST_BASE_URL} workspace={assistantWorkspaceSlot}>
+        <AssistantPanel onClose={vi.fn()} hint={{ id: 'f-1', name: 'Shop' }} />
+      </AssistantApiProvider>,
+    );
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    const header = await screen.findByTestId('assistant-topic-line');
+    const toggle = within(header).getByRole('button', { name: 'Workspace files' });
+    if (toggle.getAttribute('aria-pressed') !== 'true') await user.click(toggle);
+    const files = await screen.findByTestId('assistant-workspace-files');
+    await user.click(await within(files).findByText('report.md'));
+    expect(await within(files).findByRole('heading', { name: 'Report' })).toBeInTheDocument();
+    expect(asked).toEqual(expect.arrayContaining(['tree:', 'view:report.md']));
+  });
+
+  it('shows a command the rules ask about with Run / Cancel, and confirms it', async () => {
+    let confirmed = false;
+    const action = {
+      id: 'act-1',
+      kind: 'workspace_tool',
+      toolName: 'execute_command',
+      args: { command: 'unzip logs.zip' },
+      summary: 'Unpack the logs\n$ unzip logs.zip',
+      proposedBy: 'agent',
+      proposedAt: NOW,
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request({ pendingAction: action })] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view({ pendingAction: confirmed ? null : action }))),
+      http.post(`${TEST_BASE_URL}/web/assistant/requests/req-1/actions/act-1/confirm`, () => {
+        confirmed = true;
+        return HttpResponse.json({ request: request() });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    const card = await screen.findByTestId('assistant-pending-action');
+    expect(within(card).getByText('Run in the workspace: execute_command')).toBeInTheDocument();
+    expect(within(card).getByText(/\$ unzip logs\.zip/)).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(confirmed).toBe(true));
+  });
+
+  it('hands the request over with the workspace files the person picks', async () => {
+    let handed: unknown;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view())),
+      http.get(`${TEST_BASE_URL}/web/assistant/factories`, () => HttpResponse.json({ connected: true, pending: false, factories: [{ id: 'f-1', name: 'Shop' }] })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1/workspace`, () =>
+        HttpResponse.json({
+          workspace: {
+            available: true,
+            files: [
+              { path: 'downloads', name: 'downloads', type: 'directory', size: 0, mime: null, modifiedAt: null },
+              { path: 'report.md', name: 'report.md', type: 'file', size: 9, mime: 'text/markdown', modifiedAt: NOW },
+            ],
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1/workspace/tree`, () =>
+        HttpResponse.json({ workspacePath: 'assistant/req-1', path: '', available: true, entries: [] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/assistant/requests/req-1/hand-over`, async ({ request: incoming }) => {
+        handed = await incoming.json();
+        return HttpResponse.json({ request: request({ status: 'waiting_factory' }) });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <AssistantApiProvider baseUrl={TEST_BASE_URL} workspace={assistantWorkspaceSlot}>
+        <AssistantPanel onClose={vi.fn()} hint={{ id: 'f-1', name: 'Shop' }} />
+      </AssistantApiProvider>,
+    );
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    await user.click(await screen.findByRole('radio', { name: /Hand to Factory/ }));
+    await user.click(await screen.findByRole('checkbox', { name: 'report.md' }));
+    await user.type(await screen.findByRole('textbox', { name: /card in Shop/ }), 'See the report{Enter}');
+    await waitFor(() => expect(handed).toEqual({ factoryId: 'f-1', note: 'See the report', workspaceFiles: ['report.md'] }));
   });
 
   it('hands the request to another Factory picked in the header, with a note', async () => {

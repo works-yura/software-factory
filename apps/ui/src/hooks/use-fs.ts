@@ -1,6 +1,7 @@
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
+import { useWorkspaceFilesEndpoints } from '../ui/domains/workspace-viewer/context/WorkspaceFilesEndpoints';
 import { queryKeys } from '../api/keys';
 import type {
   ArtifactListing,
@@ -32,10 +33,6 @@ function workspaceRenderedListingUrl(workspacePath: string | undefined, root: st
   return `/web/workspace/rendered/list?${new URLSearchParams({ workspacePath, root })}`;
 }
 
-function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined) {
-  if (!workspacePath || !path) return undefined;
-  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
-}
 
 export function isPlanReadablePath(path: string | undefined): path is string {
   return Boolean(path?.startsWith('.artifacts/'));
@@ -137,7 +134,8 @@ export function useWorkspaceTree(
 ) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
-  const url = workspacePath ? `/web/workspace/tree?${new URLSearchParams({ workspacePath, path })}` : undefined;
+  const endpoints = useWorkspaceFilesEndpoints();
+  const url = workspacePath ? endpoints.treeUrl(workspacePath, path) : undefined;
   const queryKey = queryKeys.workspaceTree(workspacePath, path);
   return useQuery<WorkspaceTreeListing>({
     queryKey,
@@ -164,7 +162,8 @@ export function useWorkspaceFile<TData = WorkspaceFile>(
   { enabled = true, select }: { enabled?: boolean; select?: (file: WorkspaceFile) => TData } = {},
 ) {
   const { client } = useApiConfig();
-  const url = workspaceFileUrl(workspacePath, filePath);
+  const endpoints = useWorkspaceFilesEndpoints();
+  const url = workspacePath && filePath ? endpoints.fileUrl(workspacePath, filePath) : undefined;
   return useQuery<WorkspaceFile, Error, TData>({
     queryKey: queryKeys.workspaceFile(workspacePath, filePath),
     enabled,

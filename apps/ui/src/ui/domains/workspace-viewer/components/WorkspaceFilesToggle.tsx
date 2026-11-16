@@ -10,7 +10,7 @@ import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 
 export function WorkspaceFilesToggle() {
   const { t } = useTranslation('workspaces');
-  const { open, setOpen, workspacePath, size, setSize, canDock } = useWorkspacePanel();
+  const { open, setOpen, workspacePath, size, setSize, canDock, content } = useWorkspacePanel();
 
   if (!workspacePath) return null;
 
@@ -51,7 +51,7 @@ export function WorkspaceFilesToggle() {
           popoverSizeClass[size],
         )}
       >
-        <WorkspaceFilesContent />
+        {content ?? <WorkspaceFilesContent />}
       </PopoverContent>
     </Popover>
   );

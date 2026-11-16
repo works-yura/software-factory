@@ -10,6 +10,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -69,9 +70,18 @@ import {
   useAssistantRequests,
   usePostMessage,
   useRequestAction,
+  useRequestWorkspace,
   useUpdateRequest,
 } from './api';
-import type { AssistantFile, AssistantMessage, AssistantRequest, FactoryAccessState, RequestStatus, TurnFailure } from './api';
+import type {
+  AssistantFile,
+  AssistantMessage,
+  AssistantRequest,
+  AssistantWorkspaceSlot,
+  FactoryAccessState,
+  RequestStatus,
+  TurnFailure,
+} from './api';
 import { AttachButton, DraftInput, PendingFiles, SendButton, ShortcutHint, useDraftFiles, useFilePicker } from './DraftComposer';
 import { RequestTime } from './time';
 import { eventLabel, PendingActionCard, TurnDetailsView } from './TurnTransparency';
@@ -313,6 +323,7 @@ function ThreadHeader({
   onAddNote?: (requestId: string) => void;
 }) {
   const { t } = useTranslation('assistant');
+  const { workspace } = useAssistantApi();
   const update = useUpdateRequest();
   const actions = useRequestAction(request.id);
   const topic = useRef<TopicHandle>(null);
@@ -400,6 +411,7 @@ function ThreadHeader({
       <div className="flex min-w-0 items-center gap-2">
         <Topic ref={topic} request={request} />
         <div className="flex shrink-0 items-center gap-1" role="toolbar" aria-label={t('actions.label')}>
+          {workspace ? <workspace.Toggle /> : null}
           {primary}
           {more}
         </div>
@@ -541,12 +553,23 @@ function SourceEntry({ message, files }: { message: AssistantMessage; files: Ass
         {files.length ? <Attachments files={files} /> : null}
         {message.text ? (
           <div className="border-border min-w-0 rounded-xl border px-4 py-2 [&>:last-child]:mb-0">
-            <MarkdownRenderer>{message.text}</MarkdownRenderer>
+            <ThreadMarkdown text={message.text} />
           </div>
         ) : null}
       </div>
     </Message>
   );
+}
+
+/** The app's file links when it gives the thread its Files (the sessions' own), else plain Markdown. */
+function ThreadMarkdown({ text }: { text: string }) {
+  const { workspace } = useAssistantApi();
+  return workspace ? <LinkedMarkdown text={text} useMarkdown={workspace.useMarkdown} /> : <MarkdownRenderer>{text}</MarkdownRenderer>;
+}
+
+function LinkedMarkdown({ text, useMarkdown }: { text: string; useMarkdown: AssistantWorkspaceSlot['useMarkdown'] }) {
+  const overrides = useMarkdown();
+  return <MarkdownRenderer {...overrides}>{text}</MarkdownRenderer>;
 }
 
 function ThreadEntry({ message, files, ...actions }: { message: AssistantMessage; files: AssistantFile[] } & ThreadEntryActions) {
@@ -568,7 +591,7 @@ function ThreadEntry({ message, files, ...actions }: { message: AssistantMessage
         ) : undefined
       }
     >
-      {message.text ? <MarkdownRenderer>{message.text}</MarkdownRenderer> : null}
+      {message.text ? <ThreadMarkdown text={message.text} /> : null}
     </Message>
   );
 }
@@ -676,6 +699,38 @@ function TurnFailureNotice({ failure, request }: { failure: TurnFailure; request
  * screenshots too), a question to the chosen Factory, or the request handed to it as a card with
  * what is typed as the note. Enter sends in every mode.
  */
+/** Workspace files the hand-over takes along to the card (as the card's attachments), picked by the person. */
+function HandOverFiles({ requestId, picked, onChange }: { requestId: string; picked: string[]; onChange: (paths: string[]) => void }) {
+  const { t } = useTranslation('assistant');
+  const workspace = useRequestWorkspace(requestId);
+  const files = (workspace.data?.files ?? []).filter(entry => entry.type === 'file');
+  return (
+    <div role="group" className="flex min-w-0 flex-col gap-1" aria-label={t('handOverFiles.label')}>
+      <Txt as="span" variant="caption" tone="muted">
+        {t('handOverFiles.label')}
+      </Txt>
+      {files.length === 0 ? (
+        <Txt as="span" variant="caption" tone="muted">
+          {t('handOverFiles.none')}
+        </Txt>
+      ) : (
+        <span className="flex max-h-24 flex-wrap gap-x-3 gap-y-1 overflow-auto">
+          {files.map(file => (
+            <label key={file.path} className="flex items-center gap-1.5 text-xs">
+              <Checkbox
+                checked={picked.includes(file.path)}
+                onCheckedChange={checked => onChange(checked ? [...picked, file.path] : picked.filter(path => path !== file.path))}
+                aria-label={file.path}
+              />
+              <span className="font-mono">{file.path}</span>
+            </label>
+          ))}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ReplyComposer({
   request,
   compact,
@@ -695,6 +750,8 @@ function ReplyComposer({
   const [text, setText] = useState('');
   const { files, add: addFiles, removeAt, clear } = useDraftFiles();
   const picker = useFilePicker(addFiles);
+  const [handOverFiles, setHandOverFiles] = useState<string[]>([]);
+  const { workspace: workspaceSlot } = useAssistantApi();
 
   if (request.status === 'closed') {
     return (
@@ -721,6 +778,7 @@ function ReplyComposer({
   const reset = () => {
     setText('');
     clear();
+    setHandOverFiles([]);
     setMode('assistant');
   };
   const submit = (event: FormEvent) => {
@@ -733,7 +791,11 @@ function ReplyComposer({
     const done = { onSuccess: reset, onError: () => restoreAnnotations(sent) };
     if (effective === 'assistant') post.mutate({ text: message, files }, done);
     else if (effective === 'ask') actions.ask.mutate({ factoryId: target!.id, ...(typed ? { question: typed } : {}) }, done);
-    else actions.handOver.mutate({ factoryId: target!.id, ...(typed ? { note: typed } : {}) }, done);
+    else
+      actions.handOver.mutate(
+        { factoryId: target!.id, ...(typed ? { note: typed } : {}), ...(handOverFiles.length ? { workspaceFiles: handOverFiles } : {}) },
+        done,
+      );
   };
   const drop = (event: DragEvent<HTMLFormElement>) => {
     const dropped = Array.from(event.dataTransfer?.files ?? []);
@@ -791,6 +853,11 @@ function ReplyComposer({
           ) : null}
         </ComposerHeaderRow>
         {notice ? <ComposerHeaderRow>{notice}</ComposerHeaderRow> : null}
+        {effective === 'handOver' && workspaceSlot ? (
+          <ComposerHeaderRow>
+            <HandOverFiles requestId={request.id} picked={handOverFiles} onChange={setHandOverFiles} />
+          </ComposerHeaderRow>
+        ) : null}
         {mutation.isError ? <ComposerHeaderRow tone="destructive">{mutation.error.message}</ComposerHeaderRow> : null}
       </ComposerHeader>
       <ComposerRing busy={busy} tone={MODE_TONE[effective]}>
@@ -864,6 +931,7 @@ export function RequestThread({
   onAddNote?: (requestId: string) => void;
 }) {
   const { t } = useTranslation('assistant');
+  const api = useAssistantApi();
   const view = useAssistantRequest(requestId);
   const factories = useAssistantFactories();
   const actions = useRequestAction(requestId);
@@ -884,7 +952,8 @@ export function RequestThread({
   // «Analyse» on a message the hourly limit left unread: only while nothing after it was answered.
   const lastAgent = messages.findLastIndex(message => message.author === 'agent');
   const canAnalyse = request.status !== 'closed' && !request.analysing;
-  return (
+  const workspace = api.workspace;
+  const shell = (
     // Marked passages belong to this thread: the provider lives (and goes) with it.
     <ChatAnnotationsProvider>
       <ChatShell
@@ -937,5 +1006,13 @@ export function RequestThread({
         </ChatShell.Stage>
       </ChatShell>
     </ChatAnnotationsProvider>
+  );
+  if (!workspace) return shell;
+  // The request's folder in the app's Files (the sessions' panel); read again whenever the thread moves.
+  const revision = `${messages.length}:${request.analysing}:${request.updatedAt}`;
+  return (
+    <workspace.Thread requestId={request.id} revision={revision}>
+      {shell}
+    </workspace.Thread>
   );
 }

@@ -80,6 +80,13 @@ export function TurnDetailsView({ details }: { details: TurnDetails }) {
   );
 }
 
+const CONFIRM_LABEL = {
+  ask: 'pending.confirmAsk',
+  hand_over: 'pending.confirmHandOver',
+  workspace_tool: 'pending.confirmRun',
+  download: 'pending.confirmDownload',
+} as const satisfies Record<PendingAction['kind'], string>;
+
 /**
  * A Factory action the agent (or a channel rule) proposed: what would run, why, and Confirm / Cancel.
  * Nothing runs in a Factory until the person confirms.
@@ -96,7 +103,7 @@ export function PendingActionCard({ request, action }: { request: AssistantReque
         action={
           <span className="flex flex-wrap items-center gap-2">
             <Notice.Button icon={<Check />} disabled={busy} onClick={() => pending.confirm.mutate(action.id)}>
-              {action.kind === 'ask' ? t('pending.confirmAsk') : t('pending.confirmHandOver')}
+              {t(CONFIRM_LABEL[action.kind])}
             </Notice.Button>
             <Notice.Button icon={<X />} disabled={busy} onClick={() => pending.cancel.mutate(action.id)}>
               {t('actions.cancel')}
@@ -105,7 +112,11 @@ export function PendingActionCard({ request, action }: { request: AssistantReque
         }
       >
         <Txt as="span" variant="label">
-          {action.kind === 'ask' ? t('pending.ask', { factory: action.factoryName }) : t('pending.handOver', { factory: action.factoryName })}
+          {action.kind === 'workspace_tool'
+            ? t('pending.workspaceTool', { tool: action.toolName })
+            : action.kind === 'download'
+              ? t('pending.download', { name: action.name })
+              : t(action.kind === 'ask' ? 'pending.ask' : 'pending.handOver', { factory: action.factoryName })}
         </Txt>
         <span className="flex flex-wrap items-center gap-2">
           <Badge size="xs" variant="neutral">
@@ -116,17 +127,25 @@ export function PendingActionCard({ request, action }: { request: AssistantReque
           </Txt>
         </span>
         {action.reason ? <span>{action.reason}</span> : null}
-        {action.question ? (
+        {action.kind === 'workspace_tool' ? (
+          <pre className="bg-surface3 max-h-40 overflow-auto rounded-md p-2 font-mono text-xs whitespace-pre-wrap">{action.summary}</pre>
+        ) : null}
+        {action.kind === 'download' ? (
+          <Txt as="span" variant="body-sm" className="break-all font-mono">
+            {action.url}
+          </Txt>
+        ) : null}
+        {action.kind === 'workspace_tool' || action.kind === 'download' ? null : action.question ? (
           <Txt as="span" variant="body-sm" className="whitespace-pre-line">
             {t('pending.question')}: {action.question}
           </Txt>
         ) : null}
-        {action.title ? (
+        {'title' in action && action.title ? (
           <Txt as="span" variant="body-sm">
             {t('pending.title')}: {action.title}
           </Txt>
         ) : null}
-        {action.note ? (
+        {'note' in action && action.note ? (
           <Txt as="span" variant="body-sm" className="whitespace-pre-line">
             {action.note}
           </Txt>
@@ -141,6 +160,12 @@ export function PendingActionCard({ request, action }: { request: AssistantReque
 export function eventLabel(text: string, t: (key: string, options?: Record<string, unknown>) => string): { label: string; body?: string } | null {
   const [head = '', ...rest] = text.split('\n');
   const body = rest.join('\n').trim() || undefined;
+  if (head === 'proposed:download') return { label: t('events.proposedDownload'), ...(body ? { body } : {}) };
+  if (head.startsWith('proposed:workspace_tool:')) {
+    return { label: t('events.proposedRun', { tool: head.slice('proposed:workspace_tool:'.length) }), ...(body ? { body } : {}) };
+  }
+  if (head.startsWith('ran:')) return { label: t('events.ran', { tool: head.slice('ran:'.length) }), ...(body ? { body } : {}) };
+  if (head.startsWith('downloaded:')) return { label: t('events.downloaded', { path: head.slice('downloaded:'.length) }), ...(body ? { body } : {}) };
   if (head.startsWith('proposed:')) {
     const [, kind = '', ...name] = head.split(':');
     return { label: t(kind === 'ask' ? 'events.proposedAsk' : 'events.proposedHandOver', { factory: name.join(':') }), ...(body ? { body } : {}) };

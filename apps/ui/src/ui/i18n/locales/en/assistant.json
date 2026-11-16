@@ -374,7 +374,9 @@
     "kind": {
       "read": "reads",
       "write_own": "writes your notes",
-      "proposal": "proposal only"
+      "proposal": "proposal only",
+      "workspace": "works in its workspace",
+      "asks": "asks you first"
     }
   },
   "rules": {
@@ -423,7 +425,11 @@
     "byAgent": "the assistant proposes",
     "byRule": "the chat's rule (today's limit is spent)",
     "question": "Question",
-    "title": "Card"
+    "title": "Card",
+    "workspaceTool": "Run in the workspace: {{tool}}",
+    "download": "Download {{name}}",
+    "confirmRun": "Run",
+    "confirmDownload": "Download"
   },
   "events": {
     "proposedAsk": "Proposed asking {{factory}}",
@@ -435,6 +441,14 @@
     "answerTimeout": "No answer from the Factory in 15 minutes: check later with «Check answer»",
     "digestOnly": "Not analysed: the chat goes into the digest",
     "digest_one": "Digest of {{count}} open request",
-    "digest_other": "Digest of {{count}} open requests"
+    "digest_other": "Digest of {{count}} open requests",
+    "proposedRun": "Proposed to run {{tool}}",
+    "proposedDownload": "Proposed a download",
+    "ran": "Ran {{tool}}",
+    "downloaded": "Downloaded {{path}}"
+  },
+  "handOverFiles": {
+    "label": "Workspace files for the card",
+    "none": "No files in this request’s workspace yet."
   }
 }

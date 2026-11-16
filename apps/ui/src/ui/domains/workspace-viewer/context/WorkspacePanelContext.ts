@@ -1,4 +1,5 @@
 import { createContext } from 'react';
+import type { ReactNode } from 'react';
 
 import type { WorkspacePanelSize } from '../layout';
 
@@ -16,6 +17,8 @@ export interface WorkspacePanelApi {
   openFile: (path: string) => void;
   /** The last file asked for with `openFile`; `request` changes on every ask, so asking twice reopens it. */
   requestedFile?: { path: string; request: number };
+  /** What the card or popover shows; a session's Files (`WorkspaceFilesContent`) when unset. */
+  content?: ReactNode;
 }
 
 export const WorkspacePanelContext = createContext<WorkspacePanelApi | undefined>(undefined);

@@ -181,7 +181,8 @@ interface WorkspaceFileBrowserProps {
   onFolderOpenChange: (path: string, open: boolean) => void;
   showHidden: boolean;
   onShowHiddenChange: (showHidden: boolean) => void;
-  onBack: () => void;
+  /** Back to the overview; absent where there is none (the tree is the whole panel). */
+  onBack?: () => void;
 }
 
 /**
@@ -236,9 +237,11 @@ export function WorkspaceFileBrowser({
   return (
     <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label={t('files.label')}>
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('fileBrowser.back')}>
-          <ArrowLeft />
-        </Button>
+        {onBack ? (
+          <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('fileBrowser.back')}>
+            <ArrowLeft />
+          </Button>
+        ) : null}
         <NotepadText className="text-muted-foreground" size={14} />
         <Txt tone="ink" as="h2" variant="column">
           {t('overview.files')}

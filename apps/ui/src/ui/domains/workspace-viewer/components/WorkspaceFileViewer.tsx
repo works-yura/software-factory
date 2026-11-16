@@ -12,6 +12,7 @@ import { useApiConfig } from '../../../../api/config';
 import { downloadText } from '../../../../lib/downloadText';
 import { currentLanguage } from '../../../i18n';
 import { translator } from '../../../i18n/t';
+import { SESSION_WORKSPACE_FILES, useWorkspaceFilesEndpoints } from '../context/WorkspaceFilesEndpoints';
 import { ExpandedFileDialog } from './file-viewer/ExpandedFileDialog';
 import { FileDocument } from './file-viewer/FileDocument';
 import { MediaDocument, mediaBlob } from './file-viewer/MediaDocument';
@@ -21,7 +22,7 @@ const tk = translator('workspaces');
 
 /** The whole file as a download: for what the viewer cannot show (a build, an archive) or shows only in part. */
 export function workspaceFileDownloadUrl(baseUrl: string, file: Pick<WorkspaceFilePreview, 'workspacePath' | 'path'>) {
-  return `${baseUrl}/web/workspace/file/download?${new URLSearchParams({ workspacePath: file.workspacePath, path: file.path })}`;
+  return SESSION_WORKSPACE_FILES.downloadUrl(baseUrl, file);
 }
 
 function formatBytes(size: number) {
@@ -56,6 +57,7 @@ export function WorkspaceFileViewer({
   const isText = file?.contentType === 'text';
   const isMedia = file?.contentType === 'media';
   const { baseUrl } = useApiConfig();
+  const endpoints = useWorkspaceFilesEndpoints();
   // Text shown whole and media are saved from what the page holds; anything else comes from the server.
   const fromServer = Boolean(file && (file.contentType === 'unsupported' || file.truncated));
 
@@ -95,7 +97,7 @@ export function WorkspaceFileViewer({
             <Button
               size="icon-sm"
               variant="ghost"
-              render={<a href={workspaceFileDownloadUrl(baseUrl, file)} download={file.name} />}
+              render={<a href={endpoints.downloadUrl(baseUrl, file)} download={file.name} />}
               aria-label={t('fileViewer.download')}
             >
               <Download />
@@ -176,7 +178,7 @@ export function WorkspaceFileViewer({
             {file?.contentType === 'unsupported' ? (
               <div className="flex flex-col items-start gap-2">
                 <Txt tone="muted">{t('fileViewer.unsupported')}</Txt>
-                <Button size="sm" variant="default" render={<a href={workspaceFileDownloadUrl(baseUrl, file)} download={file.name} />}>
+                <Button size="sm" variant="default" render={<a href={endpoints.downloadUrl(baseUrl, file)} download={file.name} />}>
                   <Download />
                   {t('fileViewer.download')}
                 </Button>

@@ -29,6 +29,11 @@ interface WorkspaceViewerPanelProps {
   factoryProjectId?: string;
   /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
   sessionId?: string;
+  /**
+   * Only the files (tree and file view), for a workspace that is no session's (an assistant request's
+   * folder): no overview, changes, feed or device, and «back» from the tree goes nowhere.
+   */
+  filesOnly?: boolean;
 }
 
 type WorkspacePanelView =
@@ -47,12 +52,13 @@ export function WorkspaceViewerPanel({
   workItem,
   factoryProjectId,
   sessionId,
+  filesOnly = false,
 }: WorkspaceViewerPanelProps) {
   const session = useUserSessionQuery(sessionId);
   const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
   const deviceAvailable = useServerFeatures().data?.device === true;
   const { t } = useTranslation('workspaces');
-  const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
+  const [view, setView] = useState<WorkspacePanelView>(filesOnly ? { type: 'files' } : { type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
   // A file asked for from the chat (a document link) replaces whatever the panel shows, once per ask.
@@ -64,7 +70,7 @@ export function WorkspaceViewerPanel({
     onSizeChange?.('full');
   }
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
-  const changes = useWorkspaceChanges(workspacePath, { enabled: visible && readsChanges });
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible && readsChanges && !filesOnly });
   const factory = useFactoryQuery(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
@@ -145,7 +151,7 @@ export function WorkspaceViewerPanel({
         showHidden={showHidden}
         onShowHiddenChange={setShowHidden}
         onFolderOpenChange={(path, open) => setOpenFolders(previous => ({ ...previous, [path]: open }))}
-        onBack={showOverview}
+        {...(filesOnly ? {} : { onBack: showOverview })}
       />
     );
   }

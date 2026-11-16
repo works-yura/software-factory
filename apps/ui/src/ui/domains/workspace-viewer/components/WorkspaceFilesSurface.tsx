@@ -7,7 +7,7 @@ import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 
 /** The docked card. Stays mounted but dormant while hidden so the tree keeps its expanded folders. */
 export function WorkspaceFilesSurface() {
-  const { open, workspacePath, size, canDock } = useWorkspacePanel();
+  const { open, workspacePath, size, canDock, content } = useWorkspacePanel();
 
   if (!workspacePath || !canDock) return null;
 
@@ -26,7 +26,7 @@ export function WorkspaceFilesSurface() {
         open ? 'scale-100 opacity-100' : 'pointer-events-none scale-98 opacity-0',
       )}
     >
-      <WorkspaceFilesContent />
+      {content ?? <WorkspaceFilesContent />}
     </div>
   );
 }

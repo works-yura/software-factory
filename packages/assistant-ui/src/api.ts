@@ -5,7 +5,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, createElement, useContext, useMemo } from 'react';
-import type { ReactNode } from 'react';
+import type { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import type { ComponentProps, ComponentType, ReactNode } from 'react';
 
 export type RequestStatus = 'new' | 'waiting_factory' | 'waiting_me' | 'answered' | 'closed';
 export const REQUEST_STATUSES: readonly RequestStatus[] = ['new', 'waiting_factory', 'waiting_me', 'answered', 'closed'];
@@ -29,18 +30,49 @@ export interface TurnFailure {
   detail: string;
 }
 
-/** A Factory action the agent (or a channel rule) proposed: waits for the person's Confirm / Cancel. */
-export interface PendingAction {
+interface PendingActionBase {
   id: string;
+  reason?: string;
+  proposedBy: 'agent' | 'rule';
+  proposedAt: string;
+}
+
+/** A Factory action the agent (or a channel rule) proposed: waits for the person's Confirm / Cancel. */
+export interface FactoryPendingAction extends PendingActionBase {
   kind: 'ask' | 'hand_over';
   factoryId: string;
   factoryName: string;
   question?: string;
   title?: string;
   note?: string;
-  reason?: string;
-  proposedBy: 'agent' | 'rule';
-  proposedAt: string;
+  workspaceFiles?: string[];
+}
+
+/** A workspace call (a command, an edit) the permission rules ask about: runs exactly as shown once confirmed. */
+export interface WorkspaceToolPendingAction extends PendingActionBase {
+  kind: 'workspace_tool';
+  toolName: string;
+  args: Record<string, unknown>;
+  summary: string;
+}
+
+/** A download from a host none of the person's sources owns: fetched without credentials once confirmed. */
+export interface DownloadPendingAction extends PendingActionBase {
+  kind: 'download';
+  url: string;
+  name: string;
+}
+
+export type PendingAction = FactoryPendingAction | WorkspaceToolPendingAction | DownloadPendingAction;
+
+/** One entry of a request's workspace folder (`GET …/workspace`). */
+export interface WorkspaceEntry {
+  path: string;
+  name: string;
+  type: 'file' | 'directory';
+  size: number;
+  mime: string | null;
+  modifiedAt: string | null;
 }
 
 /** One tool call of an agent turn: short summaries of what went in and came out. */
@@ -214,10 +246,29 @@ export class AssistantApiError extends Error {
   }
 }
 
+/**
+ * The host app's Files for a request's workspace folder (ADR-0051): the same panel, file links and
+ * download a Factory session has, which live in the app, so the app hands them in (as it hands in
+ * the model picker). Without it the thread shows no Files.
+ */
+export interface AssistantWorkspaceSlot {
+  /**
+   * Wraps one request's thread: the app's Files card beside it, reading the request's folder. Its
+   * `revision` changes whenever the thread does, so the folder is read again after a turn.
+   */
+  Thread: ComponentType<{ requestId: string; revision: string; children: ReactNode }>;
+  /** The Files toggle for the thread's header (inside `Thread`). */
+  Toggle: ComponentType;
+  /** Markdown overrides inside `Thread`: file paths in the agent's text open the file there. */
+  useMarkdown(): Pick<ComponentProps<typeof MarkdownRenderer>, 'components' | 'remarkPlugins'>;
+}
+
 export interface AssistantApi {
   baseUrl: string;
   /** The app's Account › «Помічник» page (its model picker), when the host knows it. */
   settingsHref?: string;
+  /** The app's Files for a request's workspace. */
+  workspace?: AssistantWorkspaceSlot;
 }
 
 const AssistantApiContext = createContext<AssistantApi | null>(null);
@@ -226,13 +277,18 @@ const AssistantApiContext = createContext<AssistantApi | null>(null);
 export function AssistantApiProvider({
   baseUrl,
   settingsHref,
+  workspace,
   children,
 }: {
   baseUrl: string;
   settingsHref?: string;
+  workspace?: AssistantWorkspaceSlot;
   children: ReactNode;
 }) {
-  const value = useMemo(() => ({ baseUrl, ...(settingsHref ? { settingsHref } : {}) }), [baseUrl, settingsHref]);
+  const value = useMemo(
+    () => ({ baseUrl, ...(settingsHref ? { settingsHref } : {}), ...(workspace ? { workspace } : {}) }),
+    [baseUrl, settingsHref, workspace],
+  );
   return createElement(AssistantApiContext.Provider, { value }, children);
 }
 
@@ -315,6 +371,19 @@ export function useAssistantRequest(id: string | undefined) {
   });
 }
 
+/** The request's workspace folder, flat (what a hand-over can attach); `available: false` without a workspace. */
+export function useRequestWorkspace(id: string, options: { enabled?: boolean } = {}) {
+  const api = useAssistantApi();
+  return useQuery({
+    queryKey: [...assistantKeys.request(id), 'workspace'] as const,
+    queryFn: () =>
+      call<{ workspace: { available: boolean; files: WorkspaceEntry[] } }>(api, `/requests/${encodeURIComponent(id)}/workspace`).then(
+        body => body.workspace,
+      ),
+    enabled: options.enabled ?? true,
+  });
+}
+
 function useInvalidateRequests() {
   const queryClient = useQueryClient();
   return (id?: string) => {
@@ -383,7 +452,8 @@ export function useRequestAction(id: string) {
       ...done,
     }),
     handOver: useMutation({
-      mutationFn: (input: { factoryId: string; title?: string; note?: string }) => call(api, `${path}/hand-over`, json('POST', input)),
+      mutationFn: (input: { factoryId: string; title?: string; note?: string; workspaceFiles?: string[] }) =>
+        call(api, `${path}/hand-over`, json('POST', input)),
       ...done,
     }),
     /** Runs the agent again on what it has not answered (a failed turn, messages left unread by a limit). */
