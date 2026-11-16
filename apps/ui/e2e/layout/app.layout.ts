@@ -62,6 +62,18 @@ test.describe('app layout', () => {
       handlers: threadHandlers(),
     });
     await page.locator('[data-slot="composer-actions"]').screenshot({ path: screenshotPath(testInfo, 'composer-footer') });
+
+    // The assistant's floating button never sits on the composer (its send and stop buttons).
+    const launcher = await page.getByTestId('assistant-launcher').boundingBox();
+    const composer = await page.locator('form[data-slot="composer"]').boundingBox();
+    expect(launcher && composer).toBeTruthy();
+    const overlaps =
+      launcher!.x < composer!.x + composer!.width &&
+      composer!.x < launcher!.x + launcher!.width &&
+      launcher!.y < composer!.y + composer!.height &&
+      composer!.y < launcher!.y + launcher!.height;
+    expect(overlaps, `launcher ${JSON.stringify(launcher)} over composer ${JSON.stringify(composer)}`).toBe(false);
+    await page.screenshot({ path: screenshotPath(testInfo, 'thread-launcher') });
   });
 
   test('chat links: a menu on a path, a web address, and an image opened in Files', async ({ page }, testInfo) => {

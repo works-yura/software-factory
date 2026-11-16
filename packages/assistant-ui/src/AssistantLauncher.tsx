@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useAssistantRequests } from './api';
 import { AssistantPanel } from './AssistantPanel';
+import { useClearOfComposer } from './useClearOfComposer';
 
 /** The only ways the desktop panel closes on its own: its button, Escape. Not a press outside, not focus leaving. */
 const LAUNCHER_CLOSE_REASONS: ReadonlySet<string> = new Set(['trigger-press', 'escape-key']);
@@ -28,8 +29,14 @@ export function AssistantLauncher({ hint }: { hint?: { id: string; name: string 
   const requests = useAssistantRequests();
   const unread = requests.data?.filter(request => request.unread).length ?? 0;
   const close = () => setOpen(false);
+  // On a phone or a tablet the chat composer spans the screen, its send button in this same corner.
+  const [button, setButton] = useState<HTMLElement | null>(null);
+  const bottom = useClearOfComposer(button);
+  const place = bottom === undefined ? undefined : { bottom };
 
   const trigger = {
+    ref: setButton,
+    style: place,
     'aria-label': unread > 0 ? `${t('launcher.open')} (${t('launcher.unread', { count: unread })})` : t('launcher.open'),
     'data-testid': 'assistant-launcher',
     children: (
