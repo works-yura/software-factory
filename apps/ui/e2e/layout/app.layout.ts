@@ -10,6 +10,7 @@ import {
   organizationLinkHandlers,
   SESSION_ID,
   threadHandlers,
+  threadWithLinksHandlers,
 } from './fixtures/app';
 
 // The pages outside settings: organization links, the sidebar's account menu (open, with the
@@ -61,6 +62,43 @@ test.describe('app layout', () => {
       handlers: threadHandlers(),
     });
     await page.locator('[data-slot="composer-actions"]').screenshot({ path: screenshotPath(testInfo, 'composer-footer') });
+  });
+
+  test('chat links: a menu on a path, a web address, and an image opened in Files', async ({ page }, testInfo) => {
+    await checkPage(page, testInfo, {
+      url: `/factories/fp-1/user/threads/${SESSION_ID}`,
+      name: 'thread-links',
+      handlers: threadWithLinksHandlers(),
+    });
+    await page.getByRole('button', { name: /^Open home\.tsx in the Files panel/ }).click();
+    await expect(page.getByRole('menuitem', { name: /Open in the Files panel/ })).toBeVisible();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: screenshotPath(testInfo, 'link-menu-file') });
+    await expectNoHorizontalOverflow(page);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^Path vitest\.log outside the workspace/ }).click();
+    await expect(page.getByRole('menuitem', { name: 'Copy path' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Open/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^Link https:\/\/github\.com\/acme\/app\/pull\/176/ }).click();
+    await expect(page.getByRole('menuitem', { name: /Open in a new tab/ })).toBeVisible();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: screenshotPath(testInfo, 'link-menu-web') });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^Open home\.png in the Files panel/ }).click();
+    await page.getByRole('menuitem', { name: /Open in the Files panel/ }).click();
+    const shot = page.getByRole('img', { name: 'home.png' });
+    await expect(shot).toBeVisible();
+    expect(await shot.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(2);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: screenshotPath(testInfo, 'files-image') });
+    await expectNoHorizontalOverflow(page);
   });
 
   test('card moves', async ({ page }, testInfo) => {

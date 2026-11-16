@@ -597,6 +597,15 @@
       "brief": "brief",
       "spec": "spec",
       "tasks": "phases"
+    },
+    "webLink": "Link {{url}}",
+    "outsidePath": "Path {{file}} outside the workspace",
+    "menu": {
+      "openInFiles": "Open in the Files panel",
+      "openInTab": "Open in a new tab",
+      "copyPath": "Copy path",
+      "copyLink": "Copy link",
+      "outside": "This file is outside the session's workspace and can't be opened here."
     }
   },
   "refs": {

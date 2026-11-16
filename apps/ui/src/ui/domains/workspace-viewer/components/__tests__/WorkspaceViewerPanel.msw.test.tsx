@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceChangePatches, WorkspaceChangesScope } from '../../../../../api/types';
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -209,8 +209,37 @@ describe('WorkspaceViewerPanel', () => {
       await user.click(await screen.findByText(unsupportedFile.name));
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
-      expect(await within(viewer).findByText('This file type cannot be previewed as text.')).toBeInTheDocument();
+      expect(
+        await within(viewer).findByText("This file can't be shown here: it isn't text, or it's too large."),
+      ).toBeInTheDocument();
       expect(viewer.querySelector('pre')).toBeNull();
+    });
+
+    it('draws an image the agent made, from the bytes the server sent', async () => {
+      const image = {
+        ...unsupportedFile,
+        path: 'home.png',
+        name: 'home.png',
+        contentType: 'media' as const,
+        mimeType: 'image/png',
+        content: btoa('\x89PNG'),
+      };
+      const createObjectURL = vi.fn((_blob: Blob) => 'blob:home');
+      Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+      installHandlers();
+      server.use(
+        treeHolding(image.path),
+        http.get(FILE_URL, () => HttpResponse.json(image)),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await user.click(await screen.findByText(image.name));
+
+      const viewer = await screen.findByLabelText('Workspace file viewer');
+      expect(await within(viewer).findByRole('img', { name: 'home.png' })).toHaveAttribute('src', 'blob:home');
+      expect(createObjectURL.mock.calls[0]![0].type).toBe('image/png');
+      expect(within(viewer).getByRole('button', { name: 'Download' })).toBeInTheDocument();
     });
   });
 

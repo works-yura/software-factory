@@ -160,6 +160,20 @@ describe('readWorkspaceFile', () => {
     );
   });
 
+  it('sends an image whole, base64-encoded, with its media type', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-file-root-'));
+    const file = join(root, 'workspace', '.artifacts', 'shots', 'home.PNG');
+    await mkdir(join(file, '..'), { recursive: true });
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0x00]);
+    await writeFile(file, bytes);
+
+    await expect(readWorkspaceFile(root, join(root, 'workspace'), '.artifacts/shots/home.PNG')).resolves.toMatchObject({
+      contentType: 'media',
+      mimeType: 'image/png',
+      content: bytes.toString('base64'),
+    });
+  });
+
   it('rejects missing file paths', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mc-file-root-'));
     const workspace = join(root, 'workspace');
@@ -586,6 +600,29 @@ describe('live session file tree', () => {
     });
     expect(readFile).not.toHaveBeenCalled();
     readFile.mockRestore();
+  });
+
+  it('sends an image or a PDF whole, and one too large to show as unsupported', async () => {
+    const { parent } = await seedHostCheckouts();
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0x00]);
+    await writeFile(join(parent, 'repo', 'shot.png'), png);
+    await writeFile(join(parent, 'repo', 'report.pdf'), '%PDF-1.4');
+    await writeFile(join(parent, 'repo', 'huge.jpg'), Buffer.alloc(10 * 1024 * 1024 + 1, 0xff));
+
+    await expect(readSessionWorkspaceFile(makeSession(), 'shot.png')).resolves.toMatchObject({
+      contentType: 'media',
+      mimeType: 'image/png',
+      content: png.toString('base64'),
+      size: png.length,
+    });
+    await expect(readSessionWorkspaceFile(makeSession(), 'report.pdf')).resolves.toMatchObject({
+      contentType: 'media',
+      mimeType: 'application/pdf',
+      content: Buffer.from('%PDF-1.4').toString('base64'),
+    });
+    const huge = await readSessionWorkspaceFile(makeSession(), 'huge.jpg');
+    expect(huge).toMatchObject({ contentType: 'unsupported', size: 10 * 1024 * 1024 + 1 });
+    expect(huge.content).toBeUndefined();
   });
 
   it('reports a large file it cannot read instead of showing it empty', async () => {

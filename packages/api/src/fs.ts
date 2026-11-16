@@ -1,4 +1,4 @@
-import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, posix as posixPath, resolve, sep } from 'node:path';
 
@@ -79,8 +79,11 @@ export interface WorkspaceFile {
   name: string;
   size: number;
   updatedAt: string;
-  contentType: 'text' | 'unsupported';
+  /** `media`: an image or PDF the browser draws itself, its bytes base64-encoded in `content`. */
+  contentType: 'text' | 'media' | 'unsupported';
   content?: string;
+  /** The media type of a `media` file, e.g. `image/png`. */
+  mimeType?: string;
   truncated?: boolean;
 }
 
@@ -178,6 +181,27 @@ export interface ArtifactListing {
 }
 
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
+/** Images and PDFs past this are not sent whole to the browser; the viewer says it cannot show them. */
+const MAX_MEDIA_FILE_BYTES = 10 * 1024 * 1024;
+const MEDIA_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  svg: 'image/svg+xml',
+  pdf: 'application/pdf',
+};
+
+/** The media type of a file the viewer draws as an image or a PDF, by its extension. */
+export function workspaceMediaType(path: string): string | undefined {
+  const dot = path.lastIndexOf('.');
+  if (dot === -1 || dot < path.lastIndexOf('/')) return undefined;
+  return MEDIA_TYPES[path.slice(dot + 1).toLowerCase()];
+}
 const MAX_DIFF_BYTES = 512 * 1024;
 const MAX_PATCH_SET_BYTES = 8 * 1024 * 1024;
 /** Diffs the worktree against `$2`, untracked files as added through a throwaway index so the real one stays untouched. */
@@ -422,6 +446,19 @@ export async function readWorkspaceFile(root: string, workspacePath: string, pat
   const info = await lstat(confinedPath);
   if (info.isDirectory()) throw new Error('Path is a directory');
   if (!info.isFile()) throw new Error('Unsupported file type');
+
+  const mimeType = workspaceMediaType(relativePath);
+  if (mimeType) {
+    const base = {
+      workspacePath: workspace,
+      path: relativePath,
+      name: relativePath.split('/').pop() ?? relativePath,
+      size: info.size,
+      updatedAt: info.mtime.toISOString(),
+    };
+    if (info.size > MAX_MEDIA_FILE_BYTES) return { ...base, contentType: 'unsupported' };
+    return { ...base, contentType: 'media', mimeType, content: (await readFile(confinedPath)).toString('base64') };
+  }
 
   const bytesToRead = Math.min(info.size, MAX_TEXT_FILE_BYTES);
   const contentBuffer = Buffer.alloc(bytesToRead);
@@ -894,11 +931,6 @@ export async function readSessionWorkspaceFile(
   const info = await filesystem.stat(safePath);
   if (info.type === 'directory') throw new Error('Path is a directory');
 
-  // Only the shown prefix of a large file leaves the sandbox.
-  const truncated = info.size > MAX_TEXT_FILE_BYTES;
-  const buffer = truncated
-    ? await readFilePrefix(sandbox, real.paths[0]!, MAX_TEXT_FILE_BYTES)
-    : ((await filesystem.readFile(safePath)) as Buffer);
   const base = {
     workspacePath: session.sessionId,
     path: safePath,
@@ -906,6 +938,18 @@ export async function readSessionWorkspaceFile(
     size: info.size,
     updatedAt: info.modifiedAt.toISOString(),
   };
+  const mimeType = workspaceMediaType(safePath);
+  if (mimeType) {
+    if (info.size > MAX_MEDIA_FILE_BYTES) return { ...base, contentType: 'unsupported' };
+    const bytes = (await filesystem.readFile(safePath)) as Buffer;
+    return { ...base, contentType: 'media', mimeType, content: Buffer.from(bytes).toString('base64') };
+  }
+
+  // Only the shown prefix of a large file leaves the sandbox.
+  const truncated = info.size > MAX_TEXT_FILE_BYTES;
+  const buffer = truncated
+    ? await readFilePrefix(sandbox, real.paths[0]!, MAX_TEXT_FILE_BYTES)
+    : ((await filesystem.readFile(safePath)) as Buffer);
   try {
     const content = TEXT_DECODER.decode(buffer);
     return { ...base, contentType: 'text', content, truncated };

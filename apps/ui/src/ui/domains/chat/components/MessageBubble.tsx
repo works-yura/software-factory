@@ -30,7 +30,7 @@ import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
 import { MessageFactoryRefs } from './FactoryRefChips';
 import { parseRefs } from '../services/factoryRefs';
-import { useWorkspaceFileLinkComponents, WorkspaceDocumentButtons } from './WorkspaceFileLinks';
+import { useWorkspaceFileLinkComponents, useWorkspaceFileLinkPlugins, WorkspaceDocumentButtons } from './WorkspaceFileLinks';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
 import {
@@ -106,6 +106,7 @@ export function MessageBubble({
   activity?: EntryActivity;
 }) {
   const fileLinks = useWorkspaceFileLinkComponents();
+  const fileLinkPlugins = useWorkspaceFileLinkPlugins();
   const written = renderableParts(entry);
   const paced = useRevealedParts(written, Boolean(entry.streaming));
   const parts = withLiveHost(entry.id, written, paced, activity);
@@ -223,13 +224,13 @@ export function MessageBubble({
         // The raw block the agent reads is left out; its references show with the sent files.
         const { body, refs: partRefs } = parseRefs(part.text);
         // A note on a file links it (`path:262-275`); a click opens it in the Files panel.
-        if (partRefs.length === 0) return <MarkdownRenderer components={fileLinks}>{part.text}</MarkdownRenderer>;
-        return body.trim() ? <MarkdownRenderer components={fileLinks}>{body}</MarkdownRenderer> : null;
+        if (partRefs.length === 0) return <MarkdownRenderer components={fileLinks} remarkPlugins={fileLinkPlugins}>{part.text}</MarkdownRenderer>;
+        return body.trim() ? <MarkdownRenderer components={fileLinks} remarkPlugins={fileLinkPlugins}>{body}</MarkdownRenderer> : null;
       }
 
       return (
         <>
-          <MarkdownRenderer className="my-3" streaming={entry.streaming} components={fileLinks}>
+          <MarkdownRenderer className="my-3" streaming={entry.streaming} components={fileLinks} remarkPlugins={fileLinkPlugins}>
             {part.text}
           </MarkdownRenderer>
           {!entry.streaming && <WorkspaceDocumentButtons text={part.text} />}

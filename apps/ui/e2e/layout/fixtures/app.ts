@@ -213,6 +213,42 @@ export function threadHandlers(): RequestHandler[] {
   ];
 }
 
+/** A 2×2 PNG, red and blue, for the Files panel's image view. */
+const SHOT_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGP4zwAEIOI/kAAAG/ID/VxhF44AAAAASUVORK5CYII=';
+
+/**
+ * The same thread with a reply that names files and links: a path as text, one as `code`, a path on
+ * the server outside the workspace, and a web address. The workspace serves the screenshot it names.
+ */
+export function threadWithLinksHandlers(): RequestHandler[] {
+  const reply =
+    'Готово. Зміни в `apps/web/src/home.tsx`, скріншот — e2e/shots/home.png.\n\n' +
+    'Лог тестів: /private/tmp/run-42/vitest.log\n\nPR: https://github.com/acme/app/pull/176';
+  const updatedAt = new Date().toISOString();
+  return [
+    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () =>
+      HttpResponse.json({
+        messages: [
+          { id: 'reply-1', role: 'assistant', createdAt: updatedAt, content: { format: 2, parts: [{ type: 'text', text: reply }] } },
+        ],
+      }),
+    ),
+    http.get('*/web/workspace/tree', ({ request }) => {
+      const path = new URL(request.url).searchParams.get('path') ?? '';
+      return HttpResponse.json({ workspacePath: SESSION_ID, path, available: true, entries: [] });
+    }),
+    http.get('*/web/workspace/file', ({ request }) => {
+      const path = new URL(request.url).searchParams.get('path') ?? '';
+      const name = path.slice(path.lastIndexOf('/') + 1);
+      return path.endsWith('.png')
+        ? HttpResponse.json({ workspacePath: SESSION_ID, path, name, size: 74, updatedAt, contentType: 'media', mimeType: 'image/png', content: SHOT_PNG })
+        : HttpResponse.json({ workspacePath: SESSION_ID, path, name, size: 40, updatedAt, contentType: 'text', content: 'export function Home() {\n  return null;\n}\n' });
+    }),
+    ...threadHandlers(),
+  ];
+}
+
 /** No Factory yet: `/onboarding` stays on «Set up your factory» instead of opening the board. */
 export function onboardingHandlers(): RequestHandler[] {
   return [http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })), ...appHandlers()];

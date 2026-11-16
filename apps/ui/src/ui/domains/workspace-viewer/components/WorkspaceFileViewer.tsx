@@ -13,6 +13,7 @@ import { currentLanguage } from '../../../i18n';
 import { translator } from '../../../i18n/t';
 import { ExpandedFileDialog } from './file-viewer/ExpandedFileDialog';
 import { FileDocument } from './file-viewer/FileDocument';
+import { MediaDocument, mediaBlob } from './file-viewer/MediaDocument';
 import type { WorkspaceFilePreview } from './workspace-file-preview';
 
 const tk = translator('workspaces');
@@ -47,6 +48,20 @@ export function WorkspaceFileViewer({
   const isMarkdown = file?.language === 'markdown';
   const [expanded, setExpanded] = useState(false);
   const isText = file?.contentType === 'text';
+  const isMedia = file?.contentType === 'media';
+
+  const downloadMedia = () => {
+    const blob = file && mediaBlob(file);
+    if (!blob || !file) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <section className="flex min-h-0 min-w-0 grow flex-col" aria-label={t('fileViewer.label')}>
@@ -80,6 +95,11 @@ export function WorkspaceFileViewer({
               }
               aria-label={t('fileViewer.download')}
             >
+              <Download />
+            </Button>
+          ) : null}
+          {isMedia ? (
+            <Button size="icon-sm" variant="ghost" onClick={downloadMedia} aria-label={t('fileViewer.download')}>
               <Download />
             </Button>
           ) : null}
@@ -138,6 +158,7 @@ export function WorkspaceFileViewer({
               <Txt tone="muted">{t('fileViewer.unsupported')}</Txt>
             ) : null}
             {isText && file && !expanded ? <FileDocument file={file} filePath={filePath} /> : null}
+            {isMedia && file ? <MediaDocument file={file} /> : null}
           </div>
         </ScrollArea>
       ) : null}

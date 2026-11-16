@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { WorkspacePanelContext } from '../../../workspace-viewer/context/WorkspacePanelContext';
 import type { WorkspacePanelApi } from '../../../workspace-viewer/context/WorkspacePanelContext';
-import { useWorkspaceFileLinkComponents, WorkspaceDocumentButtons } from '../WorkspaceFileLinks';
+import { useWorkspaceFileLinkComponents, useWorkspaceFileLinkPlugins, WorkspaceDocumentButtons } from '../WorkspaceFileLinks';
 
 const HANDOFF =
   'Бриф готовий: [Бриф (UK)](syncta-docs/changes/2026-11-10-n/requirements.md) і ' +
@@ -28,16 +28,19 @@ function panel(openFile: WorkspacePanelApi['openFile']): WorkspacePanelApi {
 
 function Reply({ text }: { text: string }) {
   const components = useWorkspaceFileLinkComponents();
+  const plugins = useWorkspaceFileLinkPlugins();
   return (
     <>
-      <MarkdownRenderer components={components}>{text}</MarkdownRenderer>
+      <MarkdownRenderer components={components} remarkPlugins={plugins}>
+        {text}
+      </MarkdownRenderer>
       <WorkspaceDocumentButtons text={text} />
     </>
   );
 }
 
 describe('workspace file links in the chat', () => {
-  it('opens a linked workspace file in the Files panel instead of navigating', async () => {
+  it('opens a menu on a workspace file link, whose first item opens it in the Files panel', async () => {
     const openFile = vi.fn();
     renderWithProviders(
       <WorkspacePanelContext.Provider value={panel(openFile)}>
@@ -45,13 +48,64 @@ describe('workspace file links in the chat', () => {
       </WorkspacePanelContext.Provider>,
     );
 
-    await userEvent.click(screen.getByRole('link', { name: 'Open requirements.md in the Files panel' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open requirements.md in the Files panel' }));
+    expect(openFile).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Open in the Files panel/ }));
     expect(openFile).toHaveBeenCalledWith('syncta-docs/changes/2026-11-10-n/requirements.md');
+  });
 
-    // A web link is untouched: it still opens in a new tab.
-    const mr = screen.getByRole('link', { name: '#12' });
+  it('opens a file at once on a ⌘-click, without the menu', async () => {
+    const openFile = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <WorkspacePanelContext.Provider value={panel(openFile)}>
+        <Reply text={HANDOFF} />
+      </WorkspacePanelContext.Provider>,
+    );
+
+    await user.keyboard('{Meta>}');
+    await user.click(screen.getByRole('button', { name: 'Open requirements.md in the Files panel' }));
+    await user.keyboard('{/Meta}');
+    expect(openFile).toHaveBeenCalledWith('syncta-docs/changes/2026-11-10-n/requirements.md');
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('turns paths written as text or code into links, and keeps a server path to copying', async () => {
+    const openFile = vi.fn();
+    renderWithProviders(
+      <WorkspacePanelContext.Provider value={panel(openFile)}>
+        <Reply text={'Fixed `src/agent.ts` and docs/plan.md:12. Log: /private/tmp/run/out.txt'} />
+      </WorkspacePanelContext.Provider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open plan.md in the Files panel' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Open in the Files panel/ }));
+    expect(openFile).toHaveBeenCalledWith('docs/plan.md');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open agent.ts in the Files panel' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Open in the Files panel/ }));
+    expect(openFile).toHaveBeenCalledWith('src/agent.ts');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Path out.txt outside the workspace' }));
+    expect(await screen.findByRole('menuitem', { name: 'Copy path' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Open/ })).toBeNull();
+  });
+
+  it('offers a web link a new tab and a copy instead of navigating on a click', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderWithProviders(
+      <WorkspacePanelContext.Provider value={panel(vi.fn())}>
+        <Reply text={HANDOFF} />
+      </WorkspacePanelContext.Provider>,
+    );
+
+    const mr = screen.getByRole('button', { name: 'Link https://github.com/Eclipt-AI/syncta-docs/pull/12' });
     expect(mr).toHaveAttribute('href', 'https://github.com/Eclipt-AI/syncta-docs/pull/12');
-    expect(mr).toHaveAttribute('target', '_blank');
+    await userEvent.click(mr);
+    expect(await screen.findByRole('menuitem', { name: 'Copy link' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('menuitem', { name: /Open in a new tab/ }));
+    expect(open).toHaveBeenCalledWith('https://github.com/Eclipt-AI/syncta-docs/pull/12', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
   });
 
   it('draws one button per linked document, naming the language of each brief', async () => {
