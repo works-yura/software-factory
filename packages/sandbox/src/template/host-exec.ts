@@ -10,8 +10,14 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import type { AgentProcesses } from '../agent-processes.ts';
 import type { ExecutableSandbox, SandboxCommandResult } from '../materialization.ts';
 
-/** Output kept per stream; git's progress and a failing install can run long. */
+/** Error output kept: git's progress and a failing install can run long; the tail says what went wrong. */
 const MAX_OUTPUT = 256 * 1024;
+/**
+ * Standard output kept: a command's answer, which callers read whole. A file read through the
+ * sandbox comes out base64 in 4 MB chunks (5.6 MB of text): cut to a tail, every large download
+ * failed as a file that "changed while it was read".
+ */
+const MAX_STDOUT = 8 * 1024 * 1024;
 
 export interface HostExecutorOptions {
   /** Environment every command starts from (the local sandbox's allow-list); `PATH` is the server's. */
@@ -22,9 +28,9 @@ export interface HostExecutorOptions {
   agent?: Pick<AgentProcesses, 'spawn'>;
 }
 
-function keepTail(current: string, chunk: string): string {
+function keepTail(current: string, chunk: string, limit = MAX_OUTPUT): string {
   const next = current + chunk;
-  return next.length > MAX_OUTPUT ? next.slice(-MAX_OUTPUT) : next;
+  return next.length > limit ? next.slice(-limit) : next;
 }
 
 /**
@@ -76,7 +82,7 @@ export function hostExecutor(options: HostExecutorOptions = {}): ExecutableSandb
         child.stdout!.setEncoding('utf8');
         child.stderr!.setEncoding('utf8');
         child.stdout!.on('data', (chunk: string) => {
-          stdout = keepTail(stdout, chunk);
+          stdout = keepTail(stdout, chunk, MAX_STDOUT);
         });
         child.stderr!.on('data', (chunk: string) => {
           stderr = keepTail(stderr, chunk);

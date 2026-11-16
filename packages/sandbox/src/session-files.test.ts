@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ExecutableSandbox } from './materialization.ts';
 import { openFileIn, SessionFileError, sessionFilePath } from './session-files.ts';
+import { hostExecutor } from './template/host-exec.ts';
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -67,6 +68,19 @@ describe('openFileIn', () => {
     expect(file).toMatchObject({ name: 'app-release.apk', relativePath: 'build/app-release.apk', size: bytes.length });
     expect((await collect(file.content)).equals(bytes)).toBe(true);
     expect(seen.filter(script => script.startsWith('dd '))).toHaveLength(3);
+  });
+
+  it('reads a large build whole through the host executor the local sandbox uses, in full-size chunks', async () => {
+    // The executor kept only a 256 KB tail of a command's output; a 4 MB chunk comes out as 5.6 MB of
+    // base64, so every download over a chunk failed as "changed while it was read".
+    const root = await folder();
+    const bytes = Buffer.alloc(9 * 1024 * 1024 + 321);
+    for (let index = 0; index < bytes.length; index++) bytes[index] = (index * 131) % 256;
+    await writeFile(join(root, 'app-release.apk'), bytes);
+
+    const file = await openFileIn(hostExecutor(), root, { path: 'app-release.apk', maxBytes: 64 * 1024 * 1024 });
+
+    expect((await collect(file.content)).equals(bytes)).toBe(true);
   });
 
   it('reads an empty file', async () => {
