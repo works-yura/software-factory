@@ -44,7 +44,11 @@ export function requestFolder(requestId: string): string {
  * empty or hidden-root tricks. Returns the workspace path.
  */
 export function pathInRequest(requestId: string, relativePath: string): string {
-  const segments = relativePath.split('/').filter(segment => segment !== '' && segment !== '.');
+  // The agent names files from the workspace root (`requests/<id>/report.md`); the Files panel from the request's folder.
+  const own = `${requestFolder(requestId)}/`;
+  const trimmed = relativePath.replace(/^\/+/, '');
+  const local = trimmed.startsWith(own) ? trimmed.slice(own.length) : trimmed;
+  const segments = local.split('/').filter(segment => segment !== '' && segment !== '.');
   if (!segments.length || segments.some(segment => segment === '..' || segment.includes('\\') || segment.includes('\0'))) {
     throw new AssistantError('invalid_path', 'That is not a file in this request.', 400);
   }

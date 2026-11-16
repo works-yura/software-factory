@@ -286,6 +286,9 @@ describe("the thread's files and hand-over", () => {
     expect(() => pathInRequest(created.id, 'a/../../b')).toThrow();
     expect(() => requestFolder('../x')).toThrow();
     expect(pathInRequest(created.id, './downloads/a.png')).toBe(`requests/${created.id}/downloads/a.png`);
+    // A path the agent wrote from the workspace root (a file link in its text) names the same file.
+    expect(pathInRequest(created.id, `requests/${created.id}/a.png`)).toBe(`requests/${created.id}/a.png`);
+    expect(() => pathInRequest(created.id, `requests/other/a.png`)).not.toThrow();
   });
 
   it("answers in the session Files' shapes: tree by folder, images as media, text, others unsupported", async () => {
