@@ -558,7 +558,8 @@ agent_mobile_tools() {
   cache="$(sed -n 's/.*"cachePath"[^"]*"\([^"]*\)".*/\1/p' "$OWNER_HOME/Library/Application Support/fvm/.fvmrc" 2>/dev/null)"
   cache="${cache:-$OWNER_HOME/fvm}"
   local versions="$AGENT_FLUTTER_VERSIONS" global
-  [ -n "$versions" ] || versions="$(ls "$cache/versions" 2>/dev/null | tr '\n' ' ')"
+  # Only real SDK folders: Finder's .DS_Store and other dot-entries sit beside them.
+  [ -n "$versions" ] || versions="$(find "$cache/versions" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -exec basename {} \; 2>/dev/null | sort | tr '\n' ' ')"
   [ -n "$versions" ] || die "no Flutter SDKs in $cache/versions"
   step "fvm -> $agent_home/.local/fvm"
   install -d -o "$AGENT_USER" -g staff -m 755 "$agent_home/.local"
