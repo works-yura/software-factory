@@ -91,6 +91,24 @@ describe('workspace file links in the chat', () => {
     expect(screen.queryByRole('menuitem', { name: /Open/ })).toBeNull();
   });
 
+  it('opens a build in the session sandbox by its absolute path, and offers it for download', async () => {
+    const openFile = vi.fn();
+    const apk = '/srv/factory/sandboxes/083d7b63/biod/build/app/outputs/flutter-apk/app-release.apk';
+    renderWithProviders(
+      <WorkspacePanelContext.Provider value={panel(openFile)}>
+        <Reply text={`APK: \`${apk}\``} />
+      </WorkspacePanelContext.Provider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open app-release.apk in the Files panel' }));
+    const download = await screen.findByRole('menuitem', { name: 'Download' });
+    expect(download).toHaveAttribute('href', expect.stringContaining('/web/workspace/file/download?'));
+    expect(new URL(download.getAttribute('href')!, 'http://x').searchParams.get('path')).toBe(apk);
+    expect(download).toHaveAttribute('download', 'app-release.apk');
+    await userEvent.click(screen.getByRole('menuitem', { name: /Open in the Files panel/ }));
+    expect(openFile).toHaveBeenCalledWith(apk);
+  });
+
   it('offers a web link a new tab and a copy instead of navigating on a click', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     renderWithProviders(

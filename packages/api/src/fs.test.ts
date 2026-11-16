@@ -29,6 +29,7 @@ import {
   parseWorkspaceChanges,
   parseWorkspaceChangeStats,
   parseWorkspaceTrackedChanges,
+  openSessionWorkspaceFile,
   readSessionWorkspaceFile,
   readWorkspaceFile,
   contentDisposition,
@@ -540,6 +541,35 @@ describe('live session file tree', () => {
       await expect(listSessionWorkspaceTree(makeSession(), path)).rejects.toThrow('not available');
     }
     for (const path of ['.env', 'dist/out.js', '.git/config', 'node_modules/pkg/index.js']) {
+      await expect(readSessionWorkspaceFile(makeSession(), path)).rejects.toThrow('not available');
+    }
+  });
+
+  it('serves a build the agent made in an ignored folder, by its tree path or the absolute one', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
+    await writeFile(join(repo, 'dist', 'app-release.apk'), Buffer.from([0x50, 0x4b, 0x03, 0xff]));
+    await symlink(join(repo, '.env'), join(repo, 'dist', 'leak.apk'));
+
+    await expect(readSessionWorkspaceFile(makeSession(), 'dist/app-release.apk')).resolves.toMatchObject({
+      path: 'dist/app-release.apk',
+      contentType: 'unsupported',
+      size: 4,
+    });
+    await expect(readSessionWorkspaceFile(makeSession(), join(repo, 'dist', 'app-release.apk'))).resolves.toMatchObject({
+      path: 'dist/app-release.apk',
+    });
+    const download = await openSessionWorkspaceFile(makeSession(), join(repo, 'dist', 'app-release.apk'));
+    expect(download.size).toBe(4);
+    // Not anything ignored: code and secrets stay hidden, and a build's name does not open a link to one.
+    for (const path of ['dist/out.js', '.env', 'dist/leak.apk']) {
+      await expect(readSessionWorkspaceFile(makeSession(), path)).rejects.toThrow('not available');
+    }
+  });
+
+  it('refuses an absolute path outside the session checkout', async () => {
+    await seedHostCheckouts();
+    for (const path of ['/etc/hosts', join(tmpdir(), 'elsewhere', 'a.apk')]) {
       await expect(readSessionWorkspaceFile(makeSession(), path)).rejects.toThrow('not available');
     }
   });

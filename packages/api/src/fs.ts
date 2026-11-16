@@ -978,13 +978,37 @@ export async function openSessionWorkspaceFile(
   return openFileIn(handle.sandbox, handle.layout.root, { path: safePath, maxBytes: MAX_DOWNLOAD_FILE_BYTES });
 }
 
+/**
+ * Builds and packages people download from a session, by extension: shown even where the checkout
+ * ignores them (`build/`, `dist/`), since that is where they are made. Never a kind that holds
+ * secrets: no `.env`, keystores, keys, `.json` or `.properties`.
+ */
+const BUILD_ARTIFACT = /\.(?:apk|aab|ipa|xcarchive\.zip|app\.zip|zip|tar|tgz|tar\.gz|tar\.xz|gz|7z|dmg|pkg|exe|msi|deb|rpm|appimage|jar|war|whl|vsix|png|jpe?g|gif|webp|avif|svg|pdf|mp4|webm|mov)$/i;
+
+export function isBuildArtifact(path: string): boolean {
+  return BUILD_ARTIFACT.test(path);
+}
+
+/**
+ * The tree path a requested path names: a path as the Files panel gives it, or an absolute one inside
+ * the session's checkout, the way an agent writes it in the chat (`/…/sandboxes/<id>/app/build/x.apk`).
+ * An absolute path elsewhere is refused.
+ */
+function sessionTreePath(layout: SessionLayout, path: string): string {
+  if (!posixPath.isAbsolute(path)) return path;
+  const relative = posixPath.relative(layout.root, posixPath.normalize(path));
+  if (!relative || relative === '..' || relative.startsWith('../') || posixPath.isAbsolute(relative)) {
+    throw new Error('Path is not available in this session');
+  }
+  return relative;
+}
+
 /** A file of the session's workspace that may be shown: the checks every read of it goes through. */
 async function availableSessionFile(session: SourceControlSession, path: string, attach?: LocalCheckoutAttacher) {
-  const safePath = assertRelativePath(path, 'path');
-
   const handle = await sessionSandbox(session, attach);
   if (!handle) throw new Error('Session workspace is not available');
   const { layout, sandbox } = handle;
+  const safePath = assertRelativePath(sessionTreePath(layout, path), 'path');
   treeLocation(layout, safePath);
   // Judge the file by where it really is as well as by the path asked for: a
   // symlink to `.env` must not serve it. Rendered roots (plans, reports) are
@@ -995,9 +1019,12 @@ async function availableSessionFile(session: SourceControlSession, path: string,
   // The file itself may be a symlink, but not a folder on the way to it.
   const throughLink = parent !== '.' && real.paths[1] !== posixPath.join(real.root, parent);
   if (target === undefined || throughLink) throw new Error('Path is not available in this session');
-  const trusted = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '');
-  const checked = [...new Set([...(trusted ? [] : [safePath]), ...(target === safePath ? [] : [target])])];
-  if ((await ignoredTreePaths(sandbox, layout, checked)).size > 0) {
+  // A build the agent made (an APK in an ignored `build/`) is what the person came for; it is served
+  // though its checkout ignores it, unless it is reached through a link to something that is not one.
+  const trusted = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '') || isBuildArtifact(safePath);
+  const targetTrusted = target === safePath ? trusted : isBuildArtifact(target);
+  const checked = [...new Set([...(trusted ? [] : [safePath]), ...(target === safePath || targetTrusted ? [] : [target])])];
+  if (checked.length > 0 && (await ignoredTreePaths(sandbox, layout, checked)).size > 0) {
     throw new Error('Path is not available in this session');
   }
   const info = await handle.filesystem.stat(safePath);

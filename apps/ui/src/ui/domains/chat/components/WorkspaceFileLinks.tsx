@@ -1,11 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { MarkdownRendererProps } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Copy, ExternalLink, FileText, PanelRight } from 'lucide-react';
+import { Copy, Download, ExternalLink, FileText, PanelRight } from 'lucide-react';
 import { useContext, useMemo, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useApiConfig } from '../../../../api/config';
+import { workspaceFileDownloadUrl } from '../../workspace-viewer/components/WorkspaceFileViewer';
 import { WorkspacePanelContext } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { linkedProductDocuments, workspaceFilePath } from '../../workspace-viewer/workspace-file-link';
 import type { ProductDocument } from '../../workspace-viewer/workspace-file-link';
@@ -24,11 +26,20 @@ export type ChatLinkTarget =
   /** A file path outside the session's workspace, e.g. under `/tmp` on the server: it can only be copied. */
   | { kind: 'outside'; path: string };
 
+/**
+ * An absolute path into a session's sandbox folder (`/…/sandboxes/<id>/app/build/x.apk`), kept whole:
+ * the browser does not know where the checkout begins, the server does and maps it.
+ */
+const SANDBOX_PATH = /\/sandboxes\/[^/]+\/./;
+
 export function chatLinkTarget(href: string | undefined): ChatLinkTarget | undefined {
   if (!href) return undefined;
   if (WEB_ADDRESS.test(href)) return { kind: 'web', url: href };
   const path = workspaceFilePath(href);
   if (path) return { kind: 'file', path };
+  if (href.startsWith('/') && SANDBOX_PATH.test(href) && isFilePath(href)) {
+    return { kind: 'file', path: href.replace(/:\d+(?:[:-]\d+)?$/, '') };
+  }
   if ((href.startsWith('/') || href.startsWith('~/')) && isFilePath(href)) return { kind: 'outside', path: href };
   return undefined;
 }
@@ -52,15 +63,22 @@ function ChatLink({
   title,
   target,
   openFile,
+  workspacePath,
   children,
 }: {
   href: string;
   title?: string;
   target: ChatLinkTarget;
   openFile: (path: string) => void;
+  workspacePath?: string;
   children?: ReactNode;
 }) {
   const { t } = useTranslation('chat');
+  const { baseUrl } = useApiConfig();
+  const download =
+    target.kind === 'file' && workspacePath
+      ? workspaceFileDownloadUrl(baseUrl, { workspacePath, path: target.path })
+      : undefined;
   const [open, setOpen] = useState(false);
   const shown = target.kind === 'web' ? target.url : target.path;
 
@@ -117,6 +135,12 @@ function ChatLink({
             <DropdownMenu.Shortcut className="[@media(hover:none)]:hidden">{MODIFIER_HINT} Click</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
         ) : null}
+        {download ? (
+          <DropdownMenu.Item render={<a href={download} download={fileName(shown)} />}>
+            <Download />
+            {t('fileLinks.menu.download')}
+          </DropdownMenu.Item>
+        ) : null}
         {target.kind === 'web' ? (
           <DropdownMenu.Item onClick={openNow}>
             <ExternalLink />
@@ -143,7 +167,9 @@ function ChatLink({
  * links there.
  */
 export function useWorkspaceFileLinkComponents(): MarkdownComponents | undefined {
-  const openFile = useContext(WorkspacePanelContext)?.openFile;
+  const panel = useContext(WorkspacePanelContext);
+  const openFile = panel?.openFile;
+  const workspacePath = panel?.workspacePath;
   return useMemo(() => {
     if (!openFile) return undefined;
     return {
@@ -151,7 +177,7 @@ export function useWorkspaceFileLinkComponents(): MarkdownComponents | undefined
         const target = chatLinkTarget(href);
         if (target && href) {
           return (
-            <ChatLink href={href} title={title} target={target} openFile={openFile}>
+            <ChatLink href={href} title={title} target={target} openFile={openFile} workspacePath={workspacePath}>
               {children}
             </ChatLink>
           );
@@ -163,7 +189,7 @@ export function useWorkspaceFileLinkComponents(): MarkdownComponents | undefined
         );
       },
     };
-  }, [openFile]);
+  }, [openFile, workspacePath]);
 }
 
 /** The remark plugins that go with `useWorkspaceFileLinkComponents`: undefined where those are. */

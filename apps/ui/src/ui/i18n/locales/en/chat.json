@@ -605,7 +605,8 @@
       "openInTab": "Open in a new tab",
       "copyPath": "Copy path",
       "copyLink": "Copy link",
-      "outside": "This file is outside the session's workspace and can't be opened here."
+      "outside": "This file is outside the session's workspace and can't be opened here.",
+      "download": "Download"
     }
   },
   "refs": {

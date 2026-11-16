@@ -128,7 +128,8 @@ export function WorkspaceViewerPanel({
         isRefreshing={file.isFetching}
         error={file.error ?? undefined}
         onRefresh={() => file.refetch()}
-        onBack={() => setView({ type: 'files', selectedPath: view.path })}
+        // A chat link may name the file by its absolute sandbox path; the tree knows it by the server's.
+        onBack={() => setView({ type: 'files', selectedPath: file.data?.path ?? view.path })}
       />
     );
   }
