@@ -65,7 +65,9 @@ export function splitTopic(answer: string): { text: string; topic?: string } {
 export function turnMessage(turn: BrainTurn) {
   const { request, input } = turn;
   const header =
-    input.author === 'digest'
+    input.author === 'approved'
+      ? 'The person approved what you proposed; it ran. Its result is below. Carry on from it and report to the person.'
+      : input.author === 'digest'
       ? "Write the person's digest: what is open in their inbox, below. Group it — what needs them first, what waits on a Factory, what came from digest-only chats — one line each, with the sender. No preamble."
       : input.author === 'factory'
       ? `Factory ${request.factory?.factoryName ?? ''} answered the question about "${request.topic}":`
@@ -84,10 +86,13 @@ export function turnMessage(turn: BrainTurn) {
             ...(request.fromName ? [`From: ${request.fromName}`] : []),
             ...(request.sourceUrl ? [`Original: ${request.sourceUrl}`] : []),
           ].join('\n');
+  const folder = turn.workspaceFolder
+    ? `\n\nYour workspace folder for this request: ${turn.workspaceFolder} (the request's files are there; downloads go to ${turn.workspaceFolder}/downloads). Work there; what you save there the person sees under the request's Files.`
+    : '';
   return {
     role: 'user' as const,
     content: [
-      { type: 'text', text: input.text ? `${header}\n\n${input.text}` : header },
+      { type: 'text', text: input.text ? `${header}${folder}\n\n${input.text}` : `${header}${folder}` },
       ...input.files.flatMap(filePart),
     ],
   };
@@ -121,6 +126,7 @@ export function createMastraAssistantBrain(options: {
         model,
         memory: options.memory,
         ...(turn.tools ? { tools: turn.tools as ToolsInput } : {}),
+        ...(turn.workspace ? { workspace: turn.workspace } : {}),
       });
       // Streamed, then read whole: some providers take only streaming calls (the Codex backend behind a
       // ChatGPT sign-in answers a plain call with «Stream must be set to true»).

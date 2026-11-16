@@ -3,6 +3,8 @@
  * supplies them; nothing here reaches into Factory's cards, sessions or harnesses. Factory itself
  * is reached only through {@link FactoryClient}, which speaks Factory's MCP as the person.
  */
+import type { Workspace, WorkspaceToolHooks } from '@mastra/core/workspace';
+
 import type {
   AssistantFile,
   AssistantMessage,
@@ -36,6 +38,12 @@ export interface BrainFile {
   bytes: Uint8Array;
 }
 
+/**
+ * Who the entry a turn answers comes from: the person, a Factory, a source, the digest, or
+ * `approved` — the result of a call the person approved (a command, a download).
+ */
+export type BrainAuthor = 'person' | 'factory' | 'source' | 'digest' | 'approved';
+
 /** What one turn of the agent sees: the request and the new entry it answers. */
 export interface BrainTurn {
   owner: AssistantOwner;
@@ -44,7 +52,7 @@ export interface BrainTurn {
    * The new entry to look at: the person's text, a Factory's answer, or a message read from a
    * source (`fromName` wrote it there).
    */
-  input: { author: 'person' | 'factory' | 'source' | 'digest'; text: string; files: BrainFile[]; fromName?: string | null };
+  input: { author: BrainAuthor; text: string; files: BrainFile[]; fromName?: string | null };
   /** The request's first turn: for a request a source made, the agent also names its topic. */
   first?: boolean;
   /** The model the person chose, or `null` for the organization's default. */
@@ -60,6 +68,13 @@ export interface BrainTurn {
   tools?: Record<string, unknown>;
   /** Model steps (tool calls and answers) this turn may take. */
   maxSteps?: number;
+  /**
+   * The owner's workspace for this turn (files and commands, see `AssistantWorkspaceHost`): its tools
+   * come with it. Absent when the host has none.
+   */
+  workspace?: Workspace;
+  /** The request's folder in that workspace (`requests/<id>`, relative to the workspace root and the commands’ working directory), where its files are. */
+  workspaceFolder?: string;
 }
 
 /**
@@ -326,6 +341,8 @@ export interface SourceChannelMessages {
     replies: number;
     /** The thread root it replies to, or `null` for a top-level message. */
     threadId: string | null;
+    /** Files the message carries (links to the source's file hosts); the agent downloads one with its download tool. */
+    attachments?: Array<{ name: string; url: string }>;
   }>;
 }
 
@@ -346,6 +363,12 @@ export interface AssistantSource {
    * person's own connection; a channel that is off or unknown is refused.
    */
   readChannel?(owner: AssistantOwner, input: { ref: string; threadId?: string; limit?: number }): Promise<SourceChannelMessages>;
+  /**
+   * A file at `url` when it is on this source's hosts, fetched with the person's own connection;
+   * `null` when the URL is not this source's (the core then asks the person before fetching it
+   * without credentials). Throws when it is the source's but cannot be fetched (`maxBytes` included).
+   */
+  download?(owner: AssistantOwner, url: string, maxBytes: number): Promise<SourceDownload | null>;
 }
 
 /** One message a source read, as the core takes it in. */
@@ -382,3 +405,32 @@ export interface RequestView {
 }
 
 export type { FactoryLink };
+
+/** What the permission rules say about one workspace tool call. */
+export type WorkspaceToolApproval = 'allow' | 'ask' | 'deny';
+
+/**
+ * The owner's workspace (ADR-0051, «Де живе помічник»): one persistent folder per `(orgId, userId)`
+ * in the host's sandbox, with no repository. The host makes it on first use with the same sandbox,
+ * agent user (ADR-0041) and Seatbelt profile (ADR-0050) Factory sessions run in, and gives the
+ * agent the same workspace tools sessions have. The core decides what is in it (a folder per
+ * request) and gates the tools; the host only supplies the folder and the rules.
+ */
+export interface AssistantWorkspaceHost {
+  /**
+   * The owner's workspace: files through its sandbox (paths never leave the folder, symlinks
+   * included), commands in it, and the sessions' workspace tools with `hooks` around every call.
+   * Opening does not start anything; the first file operation or command does.
+   */
+  open(owner: AssistantOwner, options?: { hooks?: WorkspaceToolHooks }): Promise<Workspace>;
+  /** What a workspace tool call needs under the rules personal Factory sessions run with. */
+  approval(toolName: string): WorkspaceToolApproval;
+  /** Stops what runs in the owner's folder and removes it. A folder that is not there is fine. */
+  erase(owner: AssistantOwner): Promise<void>;
+}
+
+/** A file a source fetched for the person (an attachment link), with what the server said it is. */
+export interface SourceDownload {
+  bytes: Uint8Array;
+  mime: string | null;
+}

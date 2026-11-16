@@ -13,3 +13,5 @@ export * from './storage.ts';
 export * from './tools.ts';
 export * from './turn-failure.ts';
 export * from './types.ts';
+export * from './workspace.ts';
+export * from './download.ts';

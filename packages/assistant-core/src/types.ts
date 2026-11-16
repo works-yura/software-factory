@@ -153,14 +153,28 @@ export interface AssistantNote {
   updatedAt: Date;
 }
 
-/** The actions that change something in a Factory, so they wait for the person's confirmation. */
-export const PENDING_ACTION_KINDS = ['ask', 'hand_over'] as const;
+/**
+ * The actions that wait for the person's confirmation: asking a Factory and handing a request over
+ * (they change something in a Factory), a workspace tool call the permission rules say to ask about
+ * (`workspace_tool`: a command, an edit), and downloading from a host none of the person's sources
+ * owns (`download`).
+ */
+export const PENDING_ACTION_KINDS = ['ask', 'hand_over', 'workspace_tool', 'download'] as const;
 export type PendingActionKind = (typeof PENDING_ACTION_KINDS)[number];
+export type FactoryActionKind = Extract<PendingActionKind, 'ask' | 'hand_over'>;
+
+interface PendingActionBase {
+  id: string;
+  /** Why the agent proposes it, in a sentence the person reads. */
+  reason?: string;
+  /** The agent proposed it, or a channel rule whose auto-ask limit was spent. */
+  proposedBy: 'agent' | 'rule';
+  proposedAt: Date;
+}
 
 /** A proposed Factory action on a request: shown in the thread with Confirm / Cancel. */
-export interface PendingAction {
-  id: string;
-  kind: PendingActionKind;
+export interface FactoryPendingAction extends PendingActionBase {
+  kind: FactoryActionKind;
   factoryId: string;
   factoryName: string;
   /** `ask`: the question the side session gets. */
@@ -168,12 +182,30 @@ export interface PendingAction {
   /** `hand_over`: the card's title and the note above the request's summary. */
   title?: string;
   note?: string;
-  /** Why the agent proposes it, in a sentence the person reads. */
-  reason?: string;
-  /** The agent proposed it, or a channel rule whose auto-ask limit was spent. */
-  proposedBy: 'agent' | 'rule';
-  proposedAt: Date;
+  /** `hand_over`: workspace files (paths in the request's folder) the card gets besides the request's files. */
+  workspaceFiles?: string[];
 }
+
+/** A workspace tool call that asks first: run exactly as proposed once the person confirms. */
+export interface WorkspaceToolPendingAction extends PendingActionBase {
+  kind: 'workspace_tool';
+  /** The tool's name as the agent calls it (`execute_command`, `write_file`, …). */
+  toolName: string;
+  /** Its arguments, exactly as they will run. */
+  args: Record<string, unknown>;
+  /** What the person reads: the command line, or the file it writes. */
+  summary: string;
+}
+
+/** A download from a host none of the person's sources owns: fetched without credentials once confirmed. */
+export interface DownloadPendingAction extends PendingActionBase {
+  kind: 'download';
+  url: string;
+  /** The file name it gets in the request's folder. */
+  name: string;
+}
+
+export type PendingAction = FactoryPendingAction | WorkspaceToolPendingAction | DownloadPendingAction;
 
 /** How often the assistant writes the person a digest request; `off` by default. */
 export const DIGEST_FREQUENCIES = ['off', 'hourly', 'daily'] as const;

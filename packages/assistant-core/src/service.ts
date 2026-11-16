@@ -6,10 +6,9 @@
  * same person's in another organization) request is simply not found.
  */
 import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve } from 'node:path';
 
 import { nextDigestAt, isTimeZone } from './digest.ts';
+import { assertFileResponse, fetchPublicFile, nameFromUrl, publicUrlProblem } from './download.ts';
 import { AssistantError } from './errors.ts';
 import type { IncomingFile } from './files.ts';
 import { ASSISTANT_AGENT_INSTRUCTIONS, assistantInstructions, instructionsVersion } from './instructions.ts';
@@ -24,6 +23,8 @@ import type {
   AssistantSkillEntry,
   AssistantSkills,
   AssistantSource,
+  AssistantWorkspaceHost,
+  BrainAuthor,
   BrainFile,
   BrainTurn,
   FactoryClient,
@@ -38,7 +39,7 @@ import type {
 } from './ports.ts';
 import { FACTORY_READ_TOOLS } from './ports.ts';
 import type { AssistantStorage, RequestPatch } from './storage.ts';
-import { createAssistantTools, describeTools, recordToolCalls } from './tools.ts';
+import { createAssistantTools, describeTools, recordToolCalls, summarize } from './tools.ts';
 import type { AssistantToolKind } from './tools.ts';
 import type {
   AssistantClearReason,
@@ -49,14 +50,16 @@ import type {
   AssistantSettings,
   ChannelRule,
   DigestSettings,
+  FactoryActionKind,
   OwnSkill,
   PendingAction,
-  PendingActionKind,
   RequestStatus,
   ToolCallRecord,
   TurnDetails,
 } from './types.ts';
 import { classifyTurnFailure } from './turn-failure.ts';
+import { AssistantWorkspaces, DOWNLOADS_DIR, recordWorkspaceCalls, requestFolder, workspaceGate } from './workspace.ts';
+import type { WorkspaceEntry } from './workspace.ts';
 import type { TurnFailure } from './turn-failure.ts';
 import {
   assertOwner,
@@ -185,10 +188,12 @@ export interface AssistantServiceDeps {
   /** Whether bytes are still named by anything outside the assistant (Factory attachments, avatars). */
   blobReferencedElsewhere: (sha256: string) => Promise<boolean>;
   /**
-   * Root of per-owner working folders (`<root>/<orgId>/<userId>`), erased with the assistant.
-   * Phase 1 never writes one (the assistant runs no commands), so the server leaves it unset.
+   * The owner's workspace (files and commands in the host's sandbox, as the agent user). Without
+   * it the agent has no workspace tools and downloads are refused, saying why.
    */
-  tempRoot?: string;
+  workspace?: AssistantWorkspaceHost;
+  /** How a confirmed download from a host no source owns is fetched; `fetch` by default. */
+  fetch?: typeof fetch;
   maxFileBytes?: number;
   now?: () => Date;
   /** Runs an agent turn after the request answered; the default fires and forgets. Tests await it. */
@@ -236,6 +241,7 @@ export class AssistantService {
   /** The latest outcome per provider per owner (turns and model checks), in memory. */
   readonly #providerStates = new Map<string, Map<string, ProviderState>>();
   readonly #sleep: (ms: number) => Promise<void>;
+  readonly #workspaces: AssistantWorkspaces | undefined;
   readonly limits: AssistantLimits;
 
   constructor(deps: AssistantServiceDeps) {
@@ -248,6 +254,7 @@ export class AssistantService {
           setTimeout(resolve, ms).unref?.();
         }));
     this.#now = deps.now ?? (() => new Date());
+    this.#workspaces = deps.workspace ? new AssistantWorkspaces(deps.workspace) : undefined;
     this.#schedule =
       deps.schedule ??
       (task => {
@@ -569,7 +576,11 @@ export class AssistantService {
   }
 
   /** Hands the request to a Factory as a card (its files attached, the original linked). */
-  async handOver(owner: AssistantOwner, id: string, input: { factoryId: string; title?: string; note?: string }): Promise<AssistantRequest> {
+  async handOver(
+    owner: AssistantOwner,
+    id: string,
+    input: { factoryId: string; title?: string; note?: string; workspaceFiles?: string[] },
+  ): Promise<AssistantRequest> {
     await this.#ready();
     const request = await this.#require(owner, id);
     if (request.status === 'closed') throw new AssistantError('request_closed', 'This request is closed.', 409);
@@ -588,6 +599,16 @@ export class AssistantService {
         bytes: await this.#bytes(file),
       })),
     );
+    // Files the person picked from the request's workspace folder go with the card too.
+    const picked = [...new Set(input.workspaceFiles ?? [])];
+    if (picked.length > ASSISTANT_MAX_FILES_PER_MESSAGE) {
+      throw new AssistantError('too_many_files', `Pick at most ${ASSISTANT_MAX_FILES_PER_MESSAGE} workspace files.`, 400);
+    }
+    for (const path of picked) {
+      const file = await this.#requireWorkspaces().read(owner, id, path);
+      if (file.bytes.byteLength > this.maxFileBytes) throw new AssistantError('file_too_large', `${file.name} is larger than the limit.`, 413);
+      files.push(file);
+    }
     const handed = await this.#factoryCall(() =>
       this.#deps.factory.handOver(owner, { factoryId: factory.id, title, description, files }),
     );
@@ -656,7 +677,7 @@ export class AssistantService {
     owner: AssistantOwner,
     id: string,
     input: {
-      kind: PendingActionKind;
+      kind: FactoryActionKind;
       factoryId: string;
       question?: string;
       title?: string;
@@ -688,14 +709,7 @@ export class AssistantService {
       proposedBy: input.proposedBy,
       proposedAt: this.#now(),
     };
-    await this.#deps.storage.addMessage(owner, {
-      requestId: id,
-      author: 'event',
-      text: [`proposed:${action.kind}:${factory.name}`, action.question ?? action.title ?? action.note ?? ''].filter(Boolean).join('\n'),
-      now: this.#now(),
-    });
-    const updated = await this.#deps.storage.updateRequest(owner, id, { pendingAction: action, unread: true }, this.#now());
-    if (!updated) throw notFound();
+    await this.#propose(owner, id, action, [`proposed:${action.kind}:${factory.name}`, action.question ?? action.title ?? action.note ?? '']);
     return action;
   }
 
@@ -709,14 +723,19 @@ export class AssistantService {
     const action = await this.#deps.storage.takePendingAction(owner, id, actionId, this.#now());
     if (!action) throw new AssistantError('no_pending_action', 'There is no such proposed action on this request any more.', 409);
     try {
-      const done =
-        action.kind === 'ask'
-          ? await this.askFactory(owner, id, { factoryId: action.factoryId, question: action.question ?? '' })
-          : await this.handOver(owner, id, {
-              factoryId: action.factoryId,
-              ...(action.title ? { title: action.title } : {}),
-              ...(action.note ? { note: action.note } : {}),
-            });
+      let done: AssistantRequest;
+      if (action.kind === 'ask') {
+        done = await this.askFactory(owner, id, { factoryId: action.factoryId, question: action.question ?? '' });
+      } else if (action.kind === 'hand_over') {
+        done = await this.handOver(owner, id, {
+          factoryId: action.factoryId,
+          ...(action.title ? { title: action.title } : {}),
+          ...(action.note ? { note: action.note } : {}),
+          ...(action.workspaceFiles?.length ? { workspaceFiles: action.workspaceFiles } : {}),
+        });
+      } else {
+        done = await this.#runApproved(owner, id, action);
+      }
       await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text: `confirmed:${action.kind}`, now: this.#now() });
       return (await this.#deps.storage.getRequest(owner, id)) ?? done;
     } catch (error) {
@@ -962,7 +981,16 @@ export class AssistantService {
       version: instructionsVersion(systemPrompt),
       modelId: settings.modelId,
       skills,
-      tools: describeTools(createAssistantTools(this, { owner, requestId: 'preview', skills })),
+      tools: [
+        ...describeTools(createAssistantTools(this, { owner, requestId: 'preview', skills, workspace: this.#workspaces !== undefined })),
+        ...(this.#workspaces
+          ? (await this.#workspaces.describeTools(owner)).map(tool => ({
+              name: tool.name,
+              description: tool.description,
+              kind: tool.approval === 'allow' ? ('workspace' as const) : ('asks' as const),
+            }))
+          : []),
+      ],
     };
   }
 
@@ -1052,7 +1080,7 @@ export class AssistantService {
           `- [${request.status}] ${request.topic}`,
           request.fromName ? ` — from ${request.fromName}` : '',
           digestOnly ? ' (digest-only channel, not analysed yet)' : '',
-          request.pendingAction ? ` (waits for the person to confirm: ${request.pendingAction.kind} ${request.pendingAction.factoryName})` : '',
+          request.pendingAction ? ` (waits for the person to confirm: ${pendingLabel(request.pendingAction)})` : '',
           latest ? `\n  "${latest.text.replace(/\s+/g, ' ').slice(0, 300)}"` : '',
         ].join(''),
       );
@@ -1185,12 +1213,76 @@ export class AssistantService {
     return { file, content };
   }
 
+  // The workspace (ADR-0051, «Де живе помічник»)
+
+  /** Whether this server gives the assistant a workspace. */
+  get hasWorkspace(): boolean {
+    return this.#workspaces !== undefined;
+  }
+
+  /** The request's folder in the owner's workspace: what the person, a source and the agent put there. */
+  async listWorkspaceFiles(owner: AssistantOwner, id: string): Promise<WorkspaceEntry[]> {
+    await this.#ready();
+    await this.#require(owner, id);
+    return this.#requireWorkspaces().list(owner, id);
+  }
+
+  /** One file of the request's folder. */
+  async readWorkspaceFile(owner: AssistantOwner, id: string, path: string): Promise<{ name: string; mime: string; bytes: Uint8Array }> {
+    await this.#ready();
+    await this.#require(owner, id);
+    return this.#requireWorkspaces().read(owner, id, path);
+  }
+
+  /**
+   * The agent's download into the request's folder: a link on one of the person's sources is
+   * fetched with that source's connection now; any other link becomes a proposal the person
+   * confirms first (fetched then without credentials).
+   */
+  async downloadToWorkspace(
+    owner: AssistantOwner,
+    id: string,
+    input: { url: string; name?: string; reason?: string },
+  ): Promise<{ path: string; mime: string; size: number } | { status: 'awaiting_approval'; message: string }> {
+    await this.#ready();
+    const request = await this.#require(owner, id);
+    this.#requireWorkspaces();
+    const name = input.name?.trim() ? input.name : nameFromUrl(input.url);
+    for (const source of this.#deps.sources ?? []) {
+      const fetched = await source.download?.(owner, input.url, this.maxFileBytes);
+      if (!fetched) continue;
+      return this.#saveDownload(owner, id, name, fetched);
+    }
+    const problem = publicUrlProblem(input.url);
+    if (problem) throw new AssistantError('download_refused', problem, 400);
+    if (request.status === 'closed') throw new AssistantError('request_closed', 'This request is closed.', 409);
+    await this.#propose(
+      owner,
+      id,
+      {
+        id: randomUUID(),
+        kind: 'download',
+        url: input.url,
+        name: name.slice(0, 200),
+        ...(input.reason?.trim() ? { reason: input.reason.trim().slice(0, 500) } : {}),
+        proposedBy: 'agent',
+        proposedAt: this.#now(),
+      },
+      ['proposed:download', input.url],
+    );
+    return {
+      status: 'awaiting_approval',
+      message:
+        'This link is not on any of the person’s sources, so it is fetched only after they confirm it (without credentials). Tell them what it is and why you need it, and stop.',
+    };
+  }
+
   // Erasing
 
   /**
    * Erases an owner's assistant, in the ADR's order: the OAuth grant to Factory's MCP (and, from
    * phase 2, personal source connections) → the agent's Mastra memory → requests, threads, notes,
-   * settings, secrets → file records and the bytes nothing else names → the working folder. Then
+   * settings, secrets → file records and the bytes nothing else names → the workspace folder. Then
    * one audit entry, without content.
    */
   async clear(owner: AssistantOwner, input: { reason: AssistantClearReason; actorId: string }): Promise<{ requests: number; files: number }> {
@@ -1209,7 +1301,8 @@ export class AssistantService {
     await storage.deleteOwnerRows(owner);
     for (const file of files) await storage.deleteFile(owner, file.id);
     await this.#dropUnreferenced(files);
-    await this.#removeTempFolder(owner);
+    // Last: the owner's workspace folder, with whatever still runs in it.
+    await this.#workspaces?.erase(owner);
 
     await this.#deps.audit({
       orgId: owner.orgId,
@@ -1323,7 +1416,7 @@ export class AssistantService {
     owner: AssistantOwner,
     request: AssistantRequest,
     input: {
-      author: 'person' | 'factory' | 'source' | 'digest';
+      author: BrainAuthor;
       text: string;
       files: Array<AssistantFile & { bytes: Uint8Array }>;
       fromName?: string | null;
@@ -1377,6 +1470,7 @@ export class AssistantService {
       const systemPrompt = assistantInstructions({ ...(behavior.document ? { base: behavior.document } : {}), skills });
       const calls: ToolCallRecord[] = [];
       const started = Date.now();
+      const workspace = await this.#turnWorkspace(owner, request.id, calls);
       let answer: Awaited<ReturnType<AssistantBrain['respond']>>;
       try {
         answer = await this.#deps.brain.respond({
@@ -1387,7 +1481,8 @@ export class AssistantService {
           first,
           systemPrompt,
           ...(skills.length ? { skills } : {}),
-          tools: recordToolCalls(createAssistantTools(this, { owner, requestId: request.id, skills }), calls),
+          tools: recordToolCalls(createAssistantTools(this, { owner, requestId: request.id, skills, workspace: workspace !== undefined }), calls),
+          ...(workspace ? { workspace: workspace.workspace, workspaceFolder: workspace.folder } : {}),
           maxSteps: this.limits.stepsPerTurn,
         });
       } catch (error) {
@@ -1613,6 +1708,7 @@ export class AssistantService {
   async #deleteRequest(owner: AssistantOwner, id: string): Promise<number> {
     const files = await this.#deps.storage.listFiles(owner, id);
     await this.#deps.memory.forgetThread(owner, id);
+    await this.#workspaces?.removeRequest(owner, id);
     await this.#deps.storage.deleteRequest(owner, id);
     for (const file of files) await this.#deps.storage.deleteFile(owner, file.id);
     await this.#dropUnreferenced(files);
@@ -1629,30 +1725,87 @@ export class AssistantService {
     }
   }
 
-  /** `<tempRoot>/<orgId>/<userId>`, only when both ids are plain path segments inside the root. */
-  async #removeTempFolder(owner: AssistantOwner): Promise<void> {
-    const root = this.#deps.tempRoot;
-    if (!root) return;
-    const folder = assistantTempFolder(root, owner);
-    await rm(folder, { recursive: true, force: true });
+  #requireWorkspaces(): AssistantWorkspaces {
+    if (!this.#workspaces) {
+      throw new AssistantError(
+        'workspace_unavailable',
+        'This server gives the assistant no workspace (it runs no local sandbox), so the assistant has no files or commands.',
+        503,
+      );
+    }
+    return this.#workspaces;
+  }
+
+  /**
+   * The owner's workspace for a turn, the request's files in its folder, every workspace tool call
+   * gated by the rules (what asks becomes a proposal) and recorded for «Turn details».
+   */
+  async #turnWorkspace(owner: AssistantOwner, requestId: string, calls: ToolCallRecord[]) {
+    const workspaces = this.#workspaces;
+    if (!workspaces) return undefined;
+    const files = await Promise.all(
+      (await this.#deps.storage.listFiles(owner, requestId)).map(async file => ({ name: file.name, bytes: await this.#bytes(file) })),
+    );
+    return workspaces.forTurn(owner, {
+      requestId,
+      files,
+      hooks: workspaceGate({
+        approval: toolName => workspaces.approval(toolName),
+        record: recordWorkspaceCalls(calls, summarize),
+        propose: async call => {
+          await this.#propose(
+            owner,
+            requestId,
+            { id: randomUUID(), kind: 'workspace_tool', ...call, proposedBy: 'agent', proposedAt: this.#now() },
+            [`proposed:workspace_tool:${call.toolName}`, call.summary],
+          );
+        },
+      }),
+    });
+  }
+
+  /** Stores a proposal on the request (replacing an older one) with its event line in the thread. */
+  async #propose(owner: AssistantOwner, id: string, action: PendingAction, event: string[]): Promise<void> {
+    await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text: event.filter(Boolean).join('\n'), now: this.#now() });
+    const updated = await this.#deps.storage.updateRequest(owner, id, { pendingAction: action, unread: true }, this.#now());
+    if (!updated) throw notFound();
+  }
+
+  /**
+   * Runs a workspace call or a download the person confirmed, writes what it gave into the thread
+   * and lets the agent carry on from it.
+   */
+  async #runApproved(owner: AssistantOwner, id: string, action: PendingAction): Promise<AssistantRequest> {
+    const request = await this.#require(owner, id);
+    if (request.status === 'closed') throw new AssistantError('request_closed', 'This request is closed.', 409);
+    let text: string;
+    if (action.kind === 'workspace_tool') {
+      const output = await this.#requireWorkspaces().runApproved(owner, id, { toolName: action.toolName, args: action.args });
+      text = `ran:${action.toolName}\n${action.summary}\n\n${typeof output === 'string' ? output : JSON.stringify(output, null, 2)}`.slice(0, 8000);
+    } else if (action.kind === 'download') {
+      const fetched = await fetchPublicFile(action.url, this.maxFileBytes, this.#deps.fetch);
+      const saved = await this.#saveDownload(owner, id, action.name, fetched);
+      text = `downloaded:${saved.path}\n${action.url}\n${saved.mime}, ${saved.size} bytes`;
+    } else {
+      throw new Error(`${action.kind} is not a workspace action.`);
+    }
+    await this.#deps.storage.addMessage(owner, { requestId: id, author: 'event', text, now: this.#now() });
+    return this.#startTurn(owner, request, { author: 'approved', text, files: [] });
+  }
+
+  /** A downloaded file into the request's `downloads/` folder: a file (never a web page), within the limit. */
+  async #saveDownload(owner: AssistantOwner, id: string, name: string, fetched: { bytes: Uint8Array; mime: string | null }) {
+    assertFileResponse(fetched.mime);
+    if (fetched.bytes.byteLength > this.maxFileBytes) throw new AssistantError('file_too_large', 'The file is larger than the limit.', 413);
+    const mime = sniffMime(fetched.bytes, fetched.mime);
+    const path = await this.#requireWorkspaces().write(owner, id, { dir: DOWNLOADS_DIR, name, bytes: fetched.bytes });
+    return { path: `${requestFolder(id)}/${path}`, mime, size: fetched.bytes.byteLength };
   }
 }
 
-const SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
-
-/** The owner's working folder under `root`, refusing anything that is not a plain segment below it. */
-export function assistantTempFolder(root: string, owner: AssistantOwner): string {
-  assertOwner(owner);
-  if (!root || !isAbsolute(root)) throw new Error('The assistant temp root must be an absolute path.');
-  for (const segment of [owner.orgId, owner.userId]) {
-    if (!SEGMENT.test(segment) || segment === '.' || segment === '..') {
-      throw new Error('An owner id is not a plain path segment; refusing to touch the file system.');
-    }
-  }
-  const folder = resolve(join(root, owner.orgId, owner.userId));
-  const inside = relative(resolve(root), folder);
-  if (!inside || inside.startsWith('..') || isAbsolute(inside) || inside.split(/[\\/]/).length !== 2) {
-    throw new Error('The assistant temp folder resolved outside its root; refusing to remove it.');
-  }
-  return folder;
+/** A proposal in one line, for the digest. */
+function pendingLabel(action: PendingAction): string {
+  if (action.kind === 'workspace_tool') return `run ${action.toolName}`;
+  if (action.kind === 'download') return `download ${action.url}`;
+  return `${action.kind} ${action.factoryName}`;
 }

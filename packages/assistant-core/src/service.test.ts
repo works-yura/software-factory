@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,10 +7,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { AssistantAuditEvent } from './ports.ts';
 import { AssistantError } from './errors.ts';
-import { AssistantService, assistantTempFolder, deriveTopic } from './service.ts';
+import { AssistantService, deriveTopic } from './service.ts';
 import { AssistantStorage } from './storage.ts';
 import { AssistantTurnError } from './turn-failure.ts';
-import { FakeBrain, FakeFactory, FakeMemory, fakeModels, MemoryBlobStore } from './testing.ts';
+import { FakeBrain, FakeFactory, FakeMemory, fakeModels, LocalTestWorkspaceHost, MemoryBlobStore } from './testing.ts';
 import type { AssistantOwner } from './types.ts';
 
 const ADA: AssistantOwner = { orgId: 'org-a', userId: 'ada' };
@@ -309,11 +309,11 @@ describe('settings', () => {
 
 describe('erasing an assistant', () => {
   it('goes in the ADR’s order and leaves one audit entry without content', async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'assistant-temp-'));
-    const folder = join(tempRoot, ADA.orgId, ADA.userId);
-    await mkdir(folder, { recursive: true });
-    await writeFile(join(folder, 'turn.txt'), 'x');
-    const ordered = build({ tempRoot });
+    const root = await mkdtemp(join(tmpdir(), 'assistant-ws-'));
+    const workspace = new LocalTestWorkspaceHost(root);
+    const ordered = build({ workspace });
+    // Another owner's workspace stays.
+    await (await workspace.open(BOB)).filesystem!.writeFile('keep.txt', 'bob');
 
     const created = await ordered.createRequest(ADA, { text: 'private words', files: [{ name: 'a.png', declaredMime: null, bytes: PNG }] });
     await settle();
@@ -335,13 +335,24 @@ describe('erasing an assistant', () => {
       log.push(`bytes rows=${await rowsLeft()} files=${(await storage.listFiles(ADA)).length}`);
       return originalDelete(key);
     };
+    const folder = workspace.folder(ADA);
+    // The request's file is in its workspace folder, written by the turn.
+    expect(await stat(join(folder, 'requests', created.id, 'a.png'))).toBeTruthy();
+    await writeFile(join(folder, 'scratch.txt'), 'x');
+    const erase = workspace.erase.bind(workspace);
+    workspace.erase = async owner => {
+      log.push(`workspace rows=${await rowsLeft()} files=${(await storage.listFiles(ADA)).length}`);
+      return erase(owner);
+    };
 
     const cleared = await ordered.clear(ADA, { reason: 'member_removed', actorId: 'admin-1' });
 
     expect(cleared).toEqual({ requests: 1, files: 1 });
-    expect(log).toEqual(['revoke rows=2', 'memory rows=2', 'bytes rows=0 files=0', 'audit']);
+    expect(log).toEqual(['revoke rows=2', 'memory rows=2', 'bytes rows=0 files=0', 'workspace rows=0 files=0', 'audit']);
     await expect(stat(folder)).rejects.toThrow();
-    expect(await stat(tempRoot)).toBeTruthy();
+    expect(await stat(join(workspace.folder(BOB), 'keep.txt'))).toBeTruthy();
+    await workspace.close();
+    await rm(root, { recursive: true, force: true });
     expect(audits).toEqual([{ orgId: 'org-a', userId: 'ada', actorId: 'admin-1', reason: 'member_removed', counts: { requests: 1, files: 1 } }]);
     expect(JSON.stringify(audits)).not.toContain('private words');
     expect(await storage.getSettings(ADA)).toMatchObject({ modelId: null, retentionDays: 30, skills: [] });
@@ -403,16 +414,6 @@ describe('erasing an assistant', () => {
     expect(await service.listRequests(BOB)).toHaveLength(1);
     expect(memory.calls).toEqual([`forgetThread:org-a:ada:${old.id}`]);
     expect(blobs.blobs.size).toBe(0);
-  });
-});
-
-describe('the temp folder', () => {
-  it('is only ever a plain <root>/<org>/<user> below an absolute root', () => {
-    expect(assistantTempFolder('/data/assistant', ADA)).toBe('/data/assistant/org-a/ada');
-    expect(() => assistantTempFolder('relative', ADA)).toThrow();
-    expect(() => assistantTempFolder('/data', { orgId: '..', userId: 'ada' })).toThrow();
-    expect(() => assistantTempFolder('/data', { orgId: 'org', userId: 'a/../../etc' })).toThrow();
-    expect(() => assistantTempFolder('/data', { orgId: 'org', userId: '' })).toThrow();
   });
 });
 

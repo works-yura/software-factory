@@ -11,6 +11,8 @@
  *   so the tools only *propose* them: the thread shows Confirm / Cancel, and only the person's
  *   Confirm runs them.
  * - Skills: the instructions of a skill the person picked.
+ * - The workspace (when the host gives one): a download into the request's folder. The workspace's
+ *   own tools (files, commands) come with the workspace itself, gated in `workspace.ts`.
  */
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -35,6 +37,7 @@ export type AssistantToolHost = Pick<
   | 'factorySessionStatus'
   | 'proposeAction'
   | 'readSkill'
+  | 'downloadToWorkspace'
 >;
 
 export interface AssistantToolContext {
@@ -43,6 +46,8 @@ export interface AssistantToolContext {
   requestId: string;
   /** The skills the person picked (only these can be read). */
   skills: SkillSummary[];
+  /** The turn has the owner's workspace: the download tool is offered. */
+  workspace?: boolean;
 }
 
 const TEXT_LIMIT = 1500;
@@ -69,7 +74,14 @@ function requestSummary(request: AssistantRequest) {
     source: request.source,
     status: request.status,
     factory: request.factory ? { id: request.factory.factoryId, name: request.factory.factoryName, sessionId: request.factory.sessionId ?? null, workItemId: request.factory.workItemId ?? null } : null,
-    pendingAction: request.pendingAction ? { kind: request.pendingAction.kind, factory: request.pendingAction.factoryName } : null,
+    pendingAction: request.pendingAction
+      ? {
+          kind: request.pendingAction.kind,
+          ...('factoryName' in request.pendingAction ? { factory: request.pendingAction.factoryName } : {}),
+          ...(request.pendingAction.kind === 'workspace_tool' ? { call: request.pendingAction.summary } : {}),
+          ...(request.pendingAction.kind === 'download' ? { url: request.pendingAction.url } : {}),
+        }
+      : null,
     createdAt: request.createdAt.toISOString(),
     updatedAt: request.updatedAt.toISOString(),
   };
@@ -292,10 +304,34 @@ export function createAssistantTools(host: AssistantToolHost, context: Assistant
     }),
   };
 
-  if (context.skills.length === 0) return tools;
+  const download = context.workspace
+    ? {
+        assistant_download_to_workspace: createTool({
+          id: 'assistant_download_to_workspace',
+          description:
+            "Download a file (an attachment link from a message, a link the person gave) into this request's folder in your workspace, under downloads/. Links on the person's connected sources (ClickUp file links) are fetched now with the person's connection; any other link is put to the person first and fetched only once they confirm. Answers the file's workspace path and type: view an image with your view tool.",
+          inputSchema: z.object({
+            url: z.string().trim().url().max(4000),
+            name: z.string().trim().min(1).max(200).optional().describe('The file name to save it as; the link’s own by default.'),
+            reason: z.string().trim().max(500).optional().describe('Why you need it, in one sentence the person reads (for a link that needs approval).'),
+          }),
+          execute: async ({ url, name, reason }) =>
+            guarded(() =>
+              host.downloadToWorkspace(owner, context.requestId, {
+                url,
+                ...(name ? { name } : {}),
+                ...(reason ? { reason } : {}),
+              }),
+            ),
+        }),
+      }
+    : {};
+
+  if (context.skills.length === 0) return { ...tools, ...download };
   const names = context.skills.map(skill => skill.name) as [string, ...string[]];
   return {
     ...tools,
+    ...download,
     assistant_read_skill: createTool({
       id: 'assistant_read_skill',
       description: 'Load the instructions of one of the skills the person picked for you, before following it.',
@@ -314,9 +350,10 @@ export type AssistantTools = ReturnType<typeof createAssistantTools>;
 /**
  * What each tool may do, as «What the agent sees» lists it: `read` reads only; `write_own` writes
  * the person's own assistant data (a note); `proposal` only proposes an outside change the person
- * confirms in the thread.
+ * confirms in the thread; `workspace` works in the owner's own workspace folder without asking;
+ * `asks` works there only after the person confirms the call (the sessions' permission rules).
  */
-export type AssistantToolKind = 'read' | 'write_own' | 'proposal';
+export type AssistantToolKind = 'read' | 'write_own' | 'proposal' | 'workspace' | 'asks';
 
 export const ASSISTANT_TOOL_KINDS: Readonly<Record<string, AssistantToolKind>> = {
   assistant_search_requests: 'read',
@@ -333,6 +370,7 @@ export const ASSISTANT_TOOL_KINDS: Readonly<Record<string, AssistantToolKind>> =
   factory_propose_ask: 'proposal',
   factory_propose_hand_over: 'proposal',
   assistant_read_skill: 'read',
+  assistant_download_to_workspace: 'workspace',
 };
 
 const SUMMARY_LIMIT = 500;

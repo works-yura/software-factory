@@ -158,6 +158,15 @@ export async function jsonBody(c: Context): Promise<Record<string, unknown>> {
   throw new AssistantError('invalid_body', 'Send a JSON object.', 400);
 }
 
+function optionalStrings(body: Record<string, unknown>, key: string): string[] | undefined {
+  const value = body[key];
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
+    throw new AssistantError('invalid_body', `${key} must be a list of text.`, 400);
+  }
+  return value as string[];
+}
+
 function optionalString(body: Record<string, unknown>, key: string): string | undefined {
   const value = body[key];
   if (value === undefined || value === null) return undefined;
@@ -310,10 +319,12 @@ export class AssistantRoutes {
           if (!factoryId) throw new AssistantError('invalid_body', 'Name the Factory to hand the request to.', 400);
           const title = optionalString(body, 'title');
           const note = optionalString(body, 'note');
+          const workspaceFiles = optionalStrings(body, 'workspaceFiles');
           const request = await service.handOver(owner, c.req.param('id') ?? '', {
             factoryId,
             ...(title !== undefined ? { title } : {}),
             ...(note !== undefined ? { note } : {}),
+            ...(workspaceFiles?.length ? { workspaceFiles } : {}),
           });
           return c.json({ request: requestWire(request) });
         }),
@@ -345,6 +356,40 @@ export class AssistantRoutes {
               'content-disposition': contentDisposition(inline ? 'inline' : 'attachment', file.name),
               'x-content-type-options': 'nosniff',
               'cache-control': 'private, max-age=31536000, immutable',
+            },
+          });
+        }),
+      }),
+      // The request's folder in the owner's workspace (ADR-0051): the thread's «Files».
+      registerApiRoute(`${p}/requests/:id/workspace`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => {
+          if (!service.hasWorkspace) return c.json({ workspace: { available: false, files: [] } });
+          const files = await service.listWorkspaceFiles(owner, c.req.param('id') ?? '');
+          return c.json({
+            workspace: {
+              available: true,
+              files: files.map(file => ({ ...file, modifiedAt: file.modifiedAt?.toISOString() ?? null })),
+            },
+          });
+        }),
+      }),
+      registerApiRoute(`${p}/requests/:id/workspace/file`, {
+        method: 'GET',
+        handler: handle(async (c, owner) => {
+          const path = c.req.query('path');
+          if (!path) throw new AssistantError('invalid_path', 'Name the file.', 400);
+          const file = await service.readWorkspaceFile(owner, c.req.param('id') ?? '', path);
+          const inline = isInlineMime(file.mime) && c.req.query('download') === undefined;
+          return new Response(file.bytes, {
+            status: 200,
+            headers: {
+              'content-type': file.mime,
+              'content-length': String(file.bytes.byteLength),
+              'content-disposition': contentDisposition(inline ? 'inline' : 'attachment', file.name),
+              'x-content-type-options': 'nosniff',
+              // The agent may change the file: never cached.
+              'cache-control': 'private, no-store',
             },
           });
         }),

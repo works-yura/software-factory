@@ -219,7 +219,7 @@ interface RequestRow extends Record<string, unknown> {
   analysing: boolean;
   last_error: string | null;
   unread: boolean;
-  pending_action: (Omit<PendingAction, 'proposedAt'> & { proposedAt: string }) | null;
+  pending_action: PendingActionRow | null;
   created_at: Date;
   updated_at: Date;
   closed_at: Date | null;
@@ -403,6 +403,13 @@ export interface RequestPatch {
   closedAt?: Date | null;
   pendingAction?: PendingAction | null;
 }
+
+/** A pending action as stored: its date as ISO text (distributed over the kinds). */
+type PendingActionRow = PendingAction extends infer Action
+  ? Action extends PendingAction
+    ? Omit<Action, 'proposedAt'> & { proposedAt: string }
+    : never
+  : never;
 
 function pendingRow(action: PendingAction | null): RequestRow['pending_action'] {
   return action ? { ...action, proposedAt: action.proposedAt.toISOString() } : null;

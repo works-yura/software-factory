@@ -1,18 +1,82 @@
 /** Test doubles for the assistant's ports, and a storage on in-memory libsql. */
 import { createHash } from 'node:crypto';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { LocalFilesystem, LocalSandbox, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import type { WorkspaceToolHooks } from '@mastra/core/workspace';
 
 import type {
   AssistantBlobStore,
   AssistantBrain,
   AssistantMemory,
   AssistantModels,
+  AssistantWorkspaceHost,
   BrainTurn,
   FactoryClient,
   FactoryGrant,
   FactoryRef,
   SecretCipher,
+  WorkspaceToolApproval,
 } from './ports.ts';
 import type { AssistantOwner } from './types.ts';
+
+/**
+ * A real workspace for tests, on Mastra's local filesystem and sandbox (the server's host uses the
+ * Factory sandbox, the agent user and Mastra Code's tools instead): one folder per owner under
+ * `root`, the rules from `approval`, every erase recorded.
+ */
+export class LocalTestWorkspaceHost implements AssistantWorkspaceHost {
+  readonly erased: string[] = [];
+  readonly #sandboxes = new Map<string, LocalSandbox>();
+  readonly root: string;
+  rules: (toolName: string) => WorkspaceToolApproval;
+
+  constructor(root: string, rules?: (toolName: string) => WorkspaceToolApproval) {
+    this.root = root;
+    this.rules =
+      rules ??
+      (toolName =>
+        toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND || toolName === WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE ? 'ask' : 'allow');
+  }
+
+  folder(owner: AssistantOwner): string {
+    return join(this.root, owner.orgId, owner.userId, 'workspace');
+  }
+
+  approval(toolName: string): WorkspaceToolApproval {
+    return this.rules(toolName);
+  }
+
+  async open(owner: AssistantOwner, options: { hooks?: WorkspaceToolHooks } = {}): Promise<Workspace> {
+    const key = `${owner.orgId}/${owner.userId}`;
+    let sandbox = this.#sandboxes.get(key);
+    if (!sandbox) {
+      sandbox = new LocalSandbox({ id: `assistant-${owner.orgId}-${owner.userId}`, workingDirectory: this.folder(owner) });
+      this.#sandboxes.set(key, sandbox);
+    }
+    await mkdir(this.folder(owner), { recursive: true });
+    return new Workspace({
+      id: `assistant:${key}`,
+      name: 'test assistant workspace',
+      filesystem: new LocalFilesystem({ basePath: this.folder(owner) }),
+      sandbox,
+      tools: options.hooks ? { hooks: options.hooks } : {},
+    });
+  }
+
+  async erase(owner: AssistantOwner): Promise<void> {
+    const key = `${owner.orgId}/${owner.userId}`;
+    this.erased.push(key);
+    await this.#sandboxes.get(key)?.destroy();
+    this.#sandboxes.delete(key);
+    await rm(join(this.root, owner.orgId, owner.userId), { recursive: true, force: true });
+  }
+
+  async close(): Promise<void> {
+    for (const sandbox of this.#sandboxes.values()) await sandbox.destroy();
+    this.#sandboxes.clear();
+  }
+}
 
 export class MemoryBlobStore implements AssistantBlobStore {
   readonly blobs = new Map<string, Uint8Array>();
