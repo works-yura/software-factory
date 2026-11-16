@@ -54,6 +54,7 @@ import {
   RotateCcw,
   Settings2,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import type { ComponentProps, DragEvent, FormEvent, ReactNode } from 'react';
@@ -73,6 +74,7 @@ import {
   useRequestWorkspace,
   useUpdateRequest,
 } from './api';
+import { DeleteRequestsDialog } from './DeleteRequestsDialog';
 import type {
   AssistantFile,
   AssistantMessage,
@@ -327,6 +329,7 @@ function ThreadHeader({
   const update = useUpdateRequest();
   const actions = useRequestAction(request.id);
   const topic = useRef<TopicHandle>(null);
+  const [deleting, setDeleting] = useState(false);
   const closed = request.status === 'closed';
   const waitingOnQuestion = request.status === 'waiting_factory' && Boolean(request.factory?.sessionId);
   const setStatus = (status: RequestStatus) =>
@@ -402,6 +405,11 @@ function ThreadHeader({
             {t('actions.openInFactory', { factory: request.factory.factoryName })}
           </DropdownMenu.Item>
         ) : null}
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item variant="destructive" onSelect={() => setDeleting(true)}>
+          <Trash2 />
+          {t('delete.one')}
+        </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
   );
@@ -414,6 +422,7 @@ function ThreadHeader({
           {workspace ? <workspace.Toggle /> : null}
           {primary}
           {more}
+          <DeleteRequestsDialog ids={[request.id]} open={deleting} onOpenChange={setDeleting} onDeleted={onDone} />
         </div>
       </div>
       <MetaLine request={request} />

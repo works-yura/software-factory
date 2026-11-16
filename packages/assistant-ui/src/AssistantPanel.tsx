@@ -10,12 +10,13 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { ThreadList, ThreadListItem, ThreadListItems } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { ArrowLeft, Inbox, Maximize2, MessageSquareDashed, Minimize2, Plus, Settings, X } from 'lucide-react';
+import { ArrowLeft, Inbox, Maximize2, MessageSquareDashed, Minimize2, Plus, Settings, Trash2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { REQUEST_STATUSES, useAssistantApi, useAssistantRequests, useUpdateRequest } from './api';
 import type { AssistantRequest, RequestStatus } from './api';
+import { DeleteRequestsDialog } from './DeleteRequestsDialog';
 import { NewRequestForm } from './NewRequestForm';
 import { NotesView } from './NotesView';
 import type { NoteSelection } from './NotesView';
@@ -112,6 +113,7 @@ export function AssistantPanel({
   const listRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<Tab>('requests');
   const [filter, setFilter] = useState<Filter>('open');
+  const [deletingShown, setDeletingShown] = useState(false);
   const [selected, setSelected] = useState<string | 'new' | undefined>(undefined);
   const [note, setNote] = useState<NoteSelection | undefined>(undefined);
   /** Opens a request from anywhere in the panel (a note about it, the earlier one a source request continues). */
@@ -201,6 +203,23 @@ export function AssistantPanel({
           </Badge>
         ) : null}
         <HeaderAction>
+          {shown.length > 0 ? (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={t('delete.shown', { count: shown.length })}
+              tooltip={t('delete.shown', { count: shown.length })}
+              onClick={() => setDeletingShown(true)}
+            >
+              <Trash2 />
+            </Button>
+          ) : null}
+          <DeleteRequestsDialog
+            ids={shown.map(request => request.id)}
+            open={deletingShown}
+            onOpenChange={setDeletingShown}
+            onDeleted={() => setSelected(undefined)}
+          />
           <Button
             size="icon-sm"
             variant="primary"

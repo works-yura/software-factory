@@ -456,6 +456,44 @@ describe('the assistant panel', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /Checkout fails/ })).not.toBeInTheDocument());
   });
 
+  it('deletes a request from its menu after confirming, and every shown request from the list toolbar', async () => {
+    const deleted: string[] = [];
+    let requests = [
+      request(),
+      request({ id: 'req-2', topic: 'Invoice is wrong' }),
+      request({ id: 'req-3', topic: 'Old one', status: 'closed', closedAt: NOW }),
+    ];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests })),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/:id`, ({ params }) =>
+        HttpResponse.json({ ...view(), request: requests.find(item => item.id === params.id) }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/assistant/requests/:id`, ({ params }) => {
+        deleted.push(String(params.id));
+        requests = requests.filter(item => item.id !== params.id);
+        return HttpResponse.json({ deleted: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole('button', { name: /Checkout fails/ }));
+    await user.click(within(await screen.findByTestId('assistant-topic-line')).getByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete request' }));
+    const one = await screen.findByRole('alertdialog', { name: 'Delete the request?' });
+    expect(deleted).toEqual([]);
+    await user.click(within(one).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(deleted).toEqual(['req-1']));
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Checkout fails/ })).not.toBeInTheDocument());
+
+    // The open filter shows one request now; the closed one is not shown, so it stays.
+    await user.click(screen.getByRole('button', { name: 'Delete 1 shown request' }));
+    const all = await screen.findByRole('alertdialog', { name: 'Delete the request?' });
+    await user.click(within(all).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(deleted).toEqual(['req-1', 'req-2']));
+    expect(await screen.findByText('All caught up')).toBeInTheDocument();
+  });
+
   it('says to allow Factory access first when the person has not', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [request()] })),

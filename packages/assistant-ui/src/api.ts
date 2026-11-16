@@ -440,6 +440,24 @@ export function useUpdateRequest() {
   });
 }
 
+/**
+ * Deletes requests for good (their threads, notes, memory and files), one call each, then drops them
+ * from the list. Used for one request from its menu and for every request a filter shows.
+ */
+export function useDeleteRequests() {
+  const api = useAssistantApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) await call(api, `/requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+    onSettled: (_data, _error, ids) => {
+      for (const id of ids) queryClient.removeQueries({ queryKey: assistantKeys.request(id) });
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.requests() });
+    },
+  });
+}
+
 export function useRequestAction(id: string) {
   const api = useAssistantApi();
   const invalidate = useInvalidateRequests();

@@ -417,6 +417,22 @@ describe('erasing an assistant', () => {
   });
 });
 
+describe('deleting a request', () => {
+  it('removes it at once, open or closed, with its memory thread and files; only the owner’s', async () => {
+    const mine = await service.createRequest(ADA, { text: 'mine', files: [{ name: 'a.png', declaredMime: null, bytes: PNG }] });
+    const kept = await service.createRequest(ADA, { text: 'kept' });
+    await settle();
+
+    await expect(service.deleteRequest(BOB, mine.id)).rejects.toMatchObject({ code: 'not_found' });
+    await service.deleteRequest(ADA, mine.id);
+
+    expect((await service.listRequests(ADA)).map(r => r.id)).toEqual([kept.id]);
+    await expect(service.openRequest(ADA, mine.id)).rejects.toMatchObject({ code: 'not_found' });
+    expect(memory.calls).toContain(`forgetThread:org-a:ada:${mine.id}`);
+    expect(blobs.blobs.size).toBe(0);
+  });
+});
+
 describe('errors', () => {
   it('are AssistantErrors with a code and a status', async () => {
     const error = await service.openRequest(ADA, 'missing').catch(caught => caught);

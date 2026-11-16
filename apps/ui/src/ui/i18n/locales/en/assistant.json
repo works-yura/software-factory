@@ -435,5 +435,16 @@
   "handOverFiles": {
     "label": "Workspace files for the card",
     "none": "No files in this request’s workspace yet."
+  },
+  "delete": {
+    "one": "Delete request",
+    "shown_one": "Delete {{count}} shown request",
+    "shown_other": "Delete {{count}} shown requests",
+    "title_one": "Delete the request?",
+    "title_other": "Delete {{count}} requests?",
+    "description_one": "The request goes for good, with its thread, notes, what the assistant remembers of it, and its files. This can't be undone.",
+    "description_other": "The requests go for good, with their threads, notes, what the assistant remembers of them, and their files. This can't be undone.",
+    "confirm_one": "Delete",
+    "confirm_other": "Delete {{count}}"
   }
 }

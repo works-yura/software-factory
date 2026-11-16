@@ -391,6 +391,16 @@ export class AssistantService {
   }
 
   /**
+   * The person deletes a request now, as the retention sweep does later: its thread, notes, memory
+   * thread, workspace, file records and the bytes nothing else names. Gone for good.
+   */
+  async deleteRequest(owner: AssistantOwner, id: string): Promise<void> {
+    await this.#ready();
+    await this.#require(owner, id);
+    await this.#deleteRequest(owner, id);
+  }
+
+  /**
    * The person's own edits from the thread header: a new topic, or a status they set by hand
    * (as in any inbox: back to «waiting for me», answered, closed, reopened).
    */

@@ -282,6 +282,13 @@ export class AssistantRoutes {
           return c.json({ request: requestWire(request) });
         }),
       }),
+      registerApiRoute(`${p}/requests/:id`, {
+        method: 'DELETE',
+        handler: handle(async (c, owner) => {
+          await service.deleteRequest(owner, c.req.param('id') ?? '');
+          return c.json({ deleted: true });
+        }),
+      }),
       registerApiRoute(`${p}/requests/:id/close`, {
         method: 'POST',
         handler: handle(async (c, owner) => c.json({ request: requestWire(await service.close(owner, c.req.param('id') ?? '')) })),
@@ -620,6 +627,7 @@ export class AssistantRoutes {
 export const ASSISTANT_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'POST /web/assistant/requests': 'self.write',
   'PATCH /web/assistant/requests/:id': 'self.write',
+  'DELETE /web/assistant/requests/:id': 'self.write',
   'POST /web/assistant/requests/:id/messages': 'self.write',
   'POST /web/assistant/requests/:id/close': 'self.write',
   'POST /web/assistant/requests/:id/retry': 'self.write',
