@@ -37,3 +37,15 @@
 - Factory не знає про хмару: хост передає один `FactorySandbox` (`create`, необов'язкові `template` і `builds`). Повну підтримку мають **E2B** (свій ключ), **платформа Mastra** (лише їхня хмара) і **Docker** (у себе); ~20 інших пакетів (Daytona, Modal, Vercel, Cloudflare…) — через простий колбек без налаштувань і шаблонів. У нас лишився той самий інтерфейс і `CallbackFactorySandbox`.
 - **E2B:** одна VM на сесію, старт ліниво; **шаблон середовища** — образ із уже склонованим репозиторієм і виконаним налаштуванням (збирається при першому старті, за розкладом або після пушу; старий працює, поки новий збирається); **пауза** після простою (типово 5 хв) зі збереженням стану; закрита картка — пауза, знищення — лише з видаленням сесії чи репозиторію (призупинені VM в E2B зберігаються й коштують, доки їх не знищать). Git-токен — у кожну команду окремо.
 - **Відмінність від нас:** оригінал при закритті картки ставить на паузу, ми присипляємо через git (дзеркало + приховані refs) і видаляємо папку. Збірки середовища (`environment/build*.ts`) працюють і для локального провайдера ([ADR-0039](../../adr/0039-local-environment-template-mirrors-and-session-work.md)).
+
+## Теки помічника (ADR-0051)
+
+`LocalFactorySandbox` тримає ще один вид теки — теку помічника людини в організації: `<root>/assistant/<orgId>/<userId>/workspace`, без репозиторію (`assistant-folder.ts`).
+
+- **Ключ.** `assistantFolderKey(orgId, userId)` = `assistant/<org>/<user>`. Id не санітизуються: id, що не є простим сегментом шляху, відкидається, щоб двоє власників ніколи не отримали одну теку.
+- **`createAssistantSandbox(key)`.** Той самий `SessionLocalSandbox`, що в сесій: команди йдуть від імені користувача агента (`runProcessesAsAgent`, ADR-0041), процеси позначені ключем теки (`FACTORY_SANDBOX_FOLDER`). Ізоляція — типова, Seatbelt: тека не належить жодній Factory (`agentSeatbeltFor`). `destroy` зупиняє процеси, а теку лишає (`keepFolder`).
+- **`removeAssistantFolder(key)`.** Зупиняє процеси Factory в теці, потім видаляє теку через смітник: перейменування, далі видалення.
+- **`folderRootOf` / `folderKeyOf`** розпізнають `assistant/<org>/<user>`. `emptyTrash` дочищає й ці теки.
+- **Без нового кроку sudo.** Тека лежить під коренем пісочниць, тож ACL `factory-agents` (`2-system.sh agent-group`) і профіль Seatbelt (його `writableRoots` — корінь пісочниць) уже її покривають.
+
+`@factory/harness-mastra` `createFolderFilesystem` / `createFolderWorkspace` — один рецепт Workspace над текою пісочниці: `SandboxFilesystem` і інструменти Mastra Code. За ним будуються і сесії (`workspace.ts`), і помічник. Там же `workspaceToolApproval` — правила дозволів сесій (`resolveApproval` Mastra Code).
