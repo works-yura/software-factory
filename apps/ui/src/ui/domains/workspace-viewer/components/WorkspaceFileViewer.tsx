@@ -8,6 +8,7 @@ import { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { useApiConfig } from '../../../../api/config';
 import { downloadText } from '../../../../lib/downloadText';
 import { currentLanguage } from '../../../i18n';
 import { translator } from '../../../i18n/t';
@@ -17,6 +18,11 @@ import { MediaDocument, mediaBlob } from './file-viewer/MediaDocument';
 import type { WorkspaceFilePreview } from './workspace-file-preview';
 
 const tk = translator('workspaces');
+
+/** The whole file as a download: for what the viewer cannot show (a build, an archive) or shows only in part. */
+export function workspaceFileDownloadUrl(baseUrl: string, file: Pick<WorkspaceFilePreview, 'workspacePath' | 'path'>) {
+  return `${baseUrl}/web/workspace/file/download?${new URLSearchParams({ workspacePath: file.workspacePath, path: file.path })}`;
+}
 
 function formatBytes(size: number) {
   if (size < 1024) return tk('fileViewer.bytes', { size });
@@ -49,6 +55,9 @@ export function WorkspaceFileViewer({
   const [expanded, setExpanded] = useState(false);
   const isText = file?.contentType === 'text';
   const isMedia = file?.contentType === 'media';
+  const { baseUrl } = useApiConfig();
+  // Text shown whole and media are saved from what the page holds; anything else comes from the server.
+  const fromServer = Boolean(file && (file.contentType === 'unsupported' || file.truncated));
 
   const downloadMedia = () => {
     const blob = file && mediaBlob(file);
@@ -82,7 +91,17 @@ export function WorkspaceFileViewer({
           {file?.contentType === 'text' ? (
             <CopyButton content={content} size="icon-sm" variant="ghost" tooltip={t('fileViewer.copy')} />
           ) : null}
-          {isText && file ? (
+          {fromServer && file ? (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              render={<a href={workspaceFileDownloadUrl(baseUrl, file)} download={file.name} />}
+              aria-label={t('fileViewer.download')}
+            >
+              <Download />
+            </Button>
+          ) : null}
+          {isText && file && !fromServer ? (
             <Button
               size="icon-sm"
               variant="ghost"
@@ -155,7 +174,13 @@ export function WorkspaceFileViewer({
         <ScrollArea className="min-h-0 flex-1" orientation={isMarkdown ? 'vertical' : 'both'}>
           <div className="p-3">
             {file?.contentType === 'unsupported' ? (
-              <Txt tone="muted">{t('fileViewer.unsupported')}</Txt>
+              <div className="flex flex-col items-start gap-2">
+                <Txt tone="muted">{t('fileViewer.unsupported')}</Txt>
+                <Button size="sm" variant="default" render={<a href={workspaceFileDownloadUrl(baseUrl, file)} download={file.name} />}>
+                  <Download />
+                  {t('fileViewer.download')}
+                </Button>
+              </div>
             ) : null}
             {isText && file && !expanded ? <FileDocument file={file} filePath={filePath} /> : null}
             {isMedia && file ? <MediaDocument file={file} /> : null}

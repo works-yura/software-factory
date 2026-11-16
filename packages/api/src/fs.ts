@@ -9,8 +9,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { requireExec } from '@factory/sandbox';
-import type { ExecutableSandbox } from '@factory/sandbox';
+import { openFileIn, requireExec, SessionFileError } from '@factory/sandbox';
+import type { ExecutableSandbox, SessionFile } from '@factory/sandbox';
 import { ENV_FILES_MANIFEST, peekSessionSandbox, sessionFilesSandbox, sessionLayout } from '@factory/sandbox';
 import type { SessionLayout, SessionLayoutRepository } from '@factory/sandbox';
 import { peekSessionEnvironment } from '@factory/sandbox';
@@ -907,29 +907,8 @@ export async function readSessionWorkspaceFile(
   path: string,
   attach?: LocalCheckoutAttacher,
 ): Promise<WorkspaceFile> {
-  const safePath = assertRelativePath(path, 'path');
-
-  const handle = await sessionSandbox(session, attach);
-  if (!handle) throw new Error('Session workspace is not available');
-  const { layout, sandbox } = handle;
-  treeLocation(layout, safePath);
-  // Judge the file by where it really is as well as by the path asked for: a
-  // symlink to `.env` must not serve it. Rendered roots (plans, reports) are
-  // served even when a checkout ignores them, but not through such a symlink.
-  const parent = posixPath.dirname(safePath);
-  const real = await realPaths(sandbox, layout.root, parent === '.' ? [safePath] : [safePath, parent]);
-  const target = treePathOf(layout, real.root, real.paths[0]!);
-  // The file itself may be a symlink, but not a folder on the way to it.
-  const throughLink = parent !== '.' && real.paths[1] !== posixPath.join(real.root, parent);
-  if (target === undefined || throughLink) throw new Error('Path is not available in this session');
-  const trusted = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '');
-  const checked = [...new Set([...(trusted ? [] : [safePath]), ...(target === safePath ? [] : [target])])];
-  if ((await ignoredTreePaths(sandbox, layout, checked)).size > 0) {
-    throw new Error('Path is not available in this session');
-  }
-  const { filesystem } = handle;
-  const info = await filesystem.stat(safePath);
-  if (info.type === 'directory') throw new Error('Path is a directory');
+  const { handle, safePath, real, info } = await availableSessionFile(session, path, attach);
+  const { filesystem, sandbox } = handle;
 
   const base = {
     workspacePath: session.sessionId,
@@ -956,6 +935,74 @@ export async function readSessionWorkspaceFile(
   } catch {
     return { ...base, contentType: 'unsupported' };
   }
+}
+
+/** A web stream of chunks read on demand, so a large file never sits in memory whole. */
+function streamOf(chunks: AsyncIterable<Uint8Array>): ReadableStream<Uint8Array> {
+  const iterator = chunks[Symbol.asyncIterator]();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await iterator.next();
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+}
+
+/** `attachment` with the file's name, readable by every browser (RFC 6266, RFC 5987). */
+export function contentDisposition(name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
+/** The largest file a person downloads from a session's workspace. */
+export const MAX_DOWNLOAD_FILE_BYTES = 2 * 1024 * 1024 * 1024;
+
+/**
+ * Any file `readSessionWorkspaceFile` would show — a binary, a large log, a build — whole, for
+ * downloading. The sandbox reads it with its own commands, so with the agent's rights, in chunks.
+ */
+export async function openSessionWorkspaceFile(
+  session: SourceControlSession,
+  path: string,
+  attach?: LocalCheckoutAttacher,
+): Promise<SessionFile> {
+  const { handle, safePath } = await availableSessionFile(session, path, attach);
+  return openFileIn(handle.sandbox, handle.layout.root, { path: safePath, maxBytes: MAX_DOWNLOAD_FILE_BYTES });
+}
+
+/** A file of the session's workspace that may be shown: the checks every read of it goes through. */
+async function availableSessionFile(session: SourceControlSession, path: string, attach?: LocalCheckoutAttacher) {
+  const safePath = assertRelativePath(path, 'path');
+
+  const handle = await sessionSandbox(session, attach);
+  if (!handle) throw new Error('Session workspace is not available');
+  const { layout, sandbox } = handle;
+  treeLocation(layout, safePath);
+  // Judge the file by where it really is as well as by the path asked for: a
+  // symlink to `.env` must not serve it. Rendered roots (plans, reports) are
+  // served even when a checkout ignores them, but not through such a symlink.
+  const parent = posixPath.dirname(safePath);
+  const real = await realPaths(sandbox, layout.root, parent === '.' ? [safePath] : [safePath, parent]);
+  const target = treePathOf(layout, real.root, real.paths[0]!);
+  // The file itself may be a symlink, but not a folder on the way to it.
+  const throughLink = parent !== '.' && real.paths[1] !== posixPath.join(real.root, parent);
+  if (target === undefined || throughLink) throw new Error('Path is not available in this session');
+  const trusted = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '');
+  const checked = [...new Set([...(trusted ? [] : [safePath]), ...(target === safePath ? [] : [target])])];
+  if ((await ignoredTreePaths(sandbox, layout, checked)).size > 0) {
+    throw new Error('Path is not available in this session');
+  }
+  const info = await handle.filesystem.stat(safePath);
+  if (info.type === 'directory') throw new Error('Path is a directory');
+  return { handle, safePath, real, info };
 }
 
 function changeStatus(code: string): WorkspaceChangeStatus {
@@ -1518,6 +1565,43 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
                 : message.includes('not found')
                   ? 404
                   : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/file/download', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const path = c.req.query('path');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 404);
+          const file = await openSessionWorkspaceFile(session, path, sessionFs.attachLocalCheckout);
+          return new Response(streamOf(file.content), {
+            headers: {
+              'content-type': 'application/octet-stream',
+              'content-length': String(file.size),
+              'content-disposition': contentDisposition(file.name),
+              'x-content-type-options': 'nosniff',
+              'cache-control': 'no-store, private',
+            },
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (error instanceof SessionFileError) {
+            const status = error.reason === 'too_large' ? 413 : error.reason === 'outside_folder' ? 403 : error.reason === 'not_a_file' ? 404 : 500;
+            return c.json({ error: message }, status);
+          }
+          const status =
+            message.includes('outside') || message.includes('relative') || message.includes('escapes') || message.includes('not available')
+              ? 403
+              : message.includes('directory')
+                ? 400
+                : 500;
           return c.json({ error: message }, status);
         }
       },

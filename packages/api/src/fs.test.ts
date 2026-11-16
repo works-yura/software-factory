@@ -31,6 +31,7 @@ import {
   parseWorkspaceTrackedChanges,
   readSessionWorkspaceFile,
   readWorkspaceFile,
+  contentDisposition,
 } from './fs.ts';
 import type { SessionFsDeps } from './fs.ts';
 
@@ -790,6 +791,35 @@ describe('live session file tree', () => {
     expect((await file(`?workspacePath=${id}&path=src/agent.ts`)).status).toBe(200);
     expect((await file(`?workspacePath=${id}&path=.env`)).status).toBe(403);
     expect(ensureUser).toHaveBeenCalledTimes(5);
+  });
+
+  it('downloads any file the tree shows, whole, and nothing it hides', async () => {
+    const { parent } = await seedHostCheckouts();
+    const bytes = Buffer.from(Array.from({ length: 300_000 }, (_, index) => (index * 7) % 256));
+    await writeFile(join(parent, 'repo', 'src', 'app release.apk'), bytes);
+    const { deps } = makeSessionFs();
+    const download = await requestSessionRoute('/web/workspace/file/download', deps);
+    const id = makeSession().sessionId;
+
+    const response = await download(`?workspacePath=${id}&path=${encodeURIComponent('src/app release.apk')}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/octet-stream');
+    expect(response.headers.get('content-length')).toBe(String(bytes.length));
+    expect(response.headers.get('content-disposition')).toBe(
+      `attachment; filename="app release.apk"; filename*=UTF-8''app%20release.apk`,
+    );
+    expect(Buffer.from(await response.arrayBuffer()).equals(bytes)).toBe(true);
+
+    expect((await download(`?workspacePath=${id}&path=.env`)).status).toBe(403);
+    expect((await download(`?workspacePath=${id}&path=dist/out.js`)).status).toBe(403);
+    expect((await download(`?workspacePath=${id}&path=..%2Fx`)).status).toBe(403);
+    expect((await download(`?workspacePath=${id}&path=src`)).status).toBe(400);
+  });
+
+  it('names a download so every browser keeps its name', () => {
+    expect(contentDisposition('звіт "1".pdf')).toBe(
+      `attachment; filename="____ _1_.pdf"; filename*=UTF-8''${encodeURIComponent('звіт "1".pdf')}`,
+    );
   });
 
   it('marks the session’s sandbox in use when its files are read, never for a caller refused', async () => {

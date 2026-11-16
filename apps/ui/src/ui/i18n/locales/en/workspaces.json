@@ -576,7 +576,7 @@
     "refresh": "Refresh file",
     "refreshing": "Refreshing file",
     "truncated": "Truncated",
-    "unsupported": "This file can't be shown here: it isn't text, or it's too large.",
+    "unsupported": "This file can't be shown here: it isn't text, or it's too large. You can download it.",
     "bytes": "{{size}} B",
     "kilobytes": "{{size}} KB",
     "megabytes": "{{size}} MB",

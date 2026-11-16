@@ -210,9 +210,18 @@ describe('WorkspaceViewerPanel', () => {
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
       expect(
-        await within(viewer).findByText("This file can't be shown here: it isn't text, or it's too large."),
+        await within(viewer).findByText("This file can't be shown here: it isn't text, or it's too large. You can download it."),
       ).toBeInTheDocument();
       expect(viewer.querySelector('pre')).toBeNull();
+      // The whole file comes from the server, under its own name.
+      const links = within(viewer).getAllByRole('link', { name: 'Download' });
+      expect(links.length).toBeGreaterThan(0);
+      for (const link of links) {
+        expect(link.getAttribute('href')).toContain(
+          `/web/workspace/file/download?${new URLSearchParams({ workspacePath: unsupportedFile.workspacePath, path: unsupportedFile.path })}`,
+        );
+        expect(link).toHaveAttribute('download', unsupportedFile.name);
+      }
     });
 
     it('draws an image the agent made, from the bytes the server sent', async () => {
