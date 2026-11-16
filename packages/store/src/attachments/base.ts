@@ -6,7 +6,7 @@ import type { CollectionSchema } from '@mastra/core/storage';
  * the ingest seam for files synced from a tracker or code host (ClickUp, GitHub, GitLab), which
  * record the file's origin in `sourceUrl`.
  */
-export const ATTACHMENT_SOURCES = ['chat', 'comment', 'upload', 'clickup', 'github', 'gitlab'] as const;
+export const ATTACHMENT_SOURCES = ['chat', 'comment', 'upload', 'clickup', 'github', 'gitlab', 'agent'] as const;
 export type AttachmentSource = (typeof ATTACHMENT_SOURCES)[number];
 
 /**

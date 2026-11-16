@@ -422,6 +422,7 @@ describe('approval', () => {
         'factory_list_side_sessions',
         'factory_subscribe_session',
         'factory_unsubscribe_session',
+        'factory_attach_file',
         'factory_list_attachments',
         'observability_query_logs',
         'observability_log_groups',

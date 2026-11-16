@@ -119,3 +119,64 @@ describe('factory_list_attachments', () => {
     expect(none).toEqual({});
   });
 });
+
+describe('factory_attach_file', () => {
+  async function attachTool(deps: Partial<AttachmentToolDependencies> & { attachments: AttachmentService }, cards: string[] = ['card-1']) {
+    const created = await createAttachmentTools({
+      requestContext: context({ id: 'user-1', organizationId: 'org-1' }),
+      deps: {
+        workItems: { listWorkItemIdsForSession: async () => cards },
+        sessions: { getBySessionId: async () => ({ id: 'row-1' }) as SourceControlSession },
+        ...deps,
+      },
+    });
+    const tool = created.factory_attach_file as { execute: (input: unknown, context: unknown) => Promise<any> };
+    return (input: { path: string; name?: string }) => tool.execute(input, {});
+  }
+
+  const fileOf = (text: string) =>
+    vi.fn(async ({ path }: { path: string }) => ({
+      path: `/work/${path}`,
+      relativePath: path,
+      name: path.split('/').pop()!,
+      size: text.length,
+      content: (async function* () {
+        yield new TextEncoder().encode(text);
+      })(),
+    }));
+
+  it("keeps the agent's file as the card's attachment, read from the session's sandbox", async () => {
+    const attachments = await makeService();
+    const openFile = fileOf('apk bytes');
+    const attach = await attachTool({ attachments, openFile: openFile as never });
+
+    const result = await attach({ path: 'build/app-release.apk', name: 'book-fate-1.4.0.apk' });
+
+    expect(result).toMatchObject({ attached: true, attachedTo: 'card', name: 'book-fate-1.4.0.apk', size: 9, from: 'build/app-release.apk' });
+    expect(openFile).toHaveBeenCalledWith({ sessionId: 'row-1', path: 'build/app-release.apk', maxBytes: attachments.maxBytes });
+    const [record] = await attachments.records.listForWorkItem({ orgId: 'org-1', workItemId: 'card-1' });
+    expect(record).toMatchObject({ source: 'agent', addedBy: 'user-1', name: 'book-fate-1.4.0.apk' });
+  });
+
+  it('keeps it on the session when the session works no card', async () => {
+    const attachments = await makeService();
+    const attach = await attachTool({ attachments, openFile: fileOf('report') as never }, []);
+    expect(await attach({ path: 'report.html' })).toMatchObject({ attached: true, attachedTo: 'session', name: 'report.html' });
+  });
+
+  it('says why a file cannot be attached instead of failing the turn', async () => {
+    const attachments = await makeService();
+    const { SessionFileError } = await import('@factory/sandbox');
+    const attach = await attachTool({
+      attachments,
+      openFile: (async () => {
+        throw new SessionFileError('too_large', 'build/app.apk is 90000000 bytes; the limit is 52428800.');
+      }) as never,
+    });
+    expect(await attach({ path: 'build/app.apk' })).toEqual({
+      attached: false,
+      reason: 'build/app.apk is 90000000 bytes; the limit is 52428800.',
+      maxBytes: attachments.maxBytes,
+    });
+  });
+});

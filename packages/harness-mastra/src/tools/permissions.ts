@@ -30,6 +30,8 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_switch_session_model',
   // Reads the card's files and copies them into the session's own .factory/ scratch folder.
   'factory_list_attachments',
+  // Reads a file from the session's own folder, as the agent, and keeps it as the card's attachment.
+  'factory_attach_file',
   // Read-only production logs and crashes, offered only when the Factory has a connected source.
   'observability_query_logs',
   'observability_log_groups',

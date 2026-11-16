@@ -1143,10 +1143,13 @@ export const skillOverrideBodySchema = z.object({ content: skillContentSchema })
 
 export { skillPathSchema };
 
-/** An upload's query: the request body is the file itself. */
+/**
+ * An upload's query: the request body is the file itself. `agent` is not a person's to claim: only
+ * `factory_attach_file` records it.
+ */
 export const attachmentQuerySchema = z.object({
   name: nonEmptyTrimmed(1024),
-  source: z.enum(ATTACHMENT_SOURCES).default('upload'),
+  source: z.enum(ATTACHMENT_SOURCES).exclude(['agent']).default('upload'),
   sourceUrl: z.string().trim().url().max(2048).optional(),
 });
 const attachmentSchema = z.object({

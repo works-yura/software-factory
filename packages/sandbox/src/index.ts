@@ -1,4 +1,5 @@
 export * from './attachments.ts';
+export * from './session-files.ts';
 export * from './callback-factory-sandbox.ts';
 export * from './git-ref.ts';
 export * from './local-factory-sandbox.ts';

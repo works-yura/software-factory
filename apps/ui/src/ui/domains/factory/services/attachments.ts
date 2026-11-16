@@ -1,6 +1,6 @@
 import { requestJson } from './request';
 
-export type AttachmentSource = 'chat' | 'comment' | 'upload' | 'clickup' | 'github' | 'gitlab';
+export type AttachmentSource = 'chat' | 'comment' | 'upload' | 'clickup' | 'github' | 'gitlab' | 'agent';
 
 /** A file attached to a card, or to a session that works no card. */
 export interface Attachment {

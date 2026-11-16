@@ -18,6 +18,7 @@ export const FACTORY_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   factory_list_work_items: { ...read, title: 'List work items' },
   factory_inspect_work_item: { ...read, title: 'Inspect a work item' },
   factory_list_attachments: { ...toggle, title: "List the card's attachments and place them in the session folder" },
+  factory_attach_file: { ...additive, title: "Attach a file from the session folder to the card" },
   factory_list_attention: { ...read, title: 'List items that need attention' },
   observability_query_logs: { ...read, openWorldHint: true, title: 'Read production logs' },
   observability_log_groups: { ...read, openWorldHint: true, title: 'Count production logs by kind' },

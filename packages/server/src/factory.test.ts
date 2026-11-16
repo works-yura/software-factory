@@ -1873,6 +1873,7 @@ describe('MastraFactory.prepare', () => {
         Object.fromEntries(
           [
             ...ALLOWED_TOOLS,
+            'factory_attach_file',
             'factory_list_attachments',
             'observability_query_logs',
             'observability_log_groups',

@@ -6,6 +6,7 @@
 - **Байти — через адаптер.** `AttachmentBlobStore` (`put`/`get`/`head`/`delete`, ключ — sha256, однаковий файл зберігається раз). Зараз `LocalFileBlobStore` у `FACTORY_ATTACHMENTS_DIR` (абсолютний шлях; типово `factory-attachments` поруч із локальною БД), ліміт `FACTORY_ATTACHMENTS_MAX_BYTES` (50 МіБ). Сховище, що не ініціалізувалось, зупиняє старт; без сховища маршрути відповідають 503, а агенти не мають інструмента.
 - **Завантаження.** Тіло запиту — сам файл, потоком; тип визначається за байтами. Картинки й PDF відкриваються в браузері, решта (зокрема SVG і HTML) — лише завантаженням.
 - **Агентові.** `factory_list_attachments` (Mastra і Claude Code) перелічує файли й кладе їх у `.factory/attachments/<id8>-<назва>` пісочниці; `.factory/` записано в `.git/info/exclude`. Файли кладуться, коли агент викликає інструмент, а не під час старту.
+- **Від агента до людей.** `factory_attach_file({ path, name? })` (Mastra і Claude Code) робить файл з теки сесії вкладенням картки (джерело `agent`, «Від агента»; без картки — вкладенням сесії): збірку (`.apk`, `.ipa`, zip), звіт, запис. Його скачують з «Файлів» картки, і він лишається після видалення пісочниці. Байти читає сама пісочниця своїми командами (`openSessionFile`: `dd | base64` шматками по 4 МіБ), тобто з правами агента: посилання, яке агент поклав на файли сервера, не прочитається так само, як його власним `cat`. Шлях — лише всередині теки сесії; більше за ліміт вкладень — відмова з поясненням. Люди не можуть позначити своє завантаження джерелом `agent`.
 - **У чаті й коментарях** кожен надісланий файл додає рядок «Вкладення: назва (розмір) → шлях»; картинки й далі йдуть моделі (у Claude Code — як файли). Невдале завантаження нічого не надсилає.
 - **Куди далі файл.** Матеріали клієнта → `blackbox/artifacts/` + рядок `MANIFEST.md`, текст PDF/docx → `blackbox/sources/`; ресурси застосунку → шлях у репозиторії коду, який називає задача; великі бінарні файли лишаються вкладеннями.
 
@@ -13,5 +14,5 @@
 
 - Сховище, записи, `AttachmentService`: `packages/store/src/attachments/`; контрактні тести адаптера — `blob-store-contract.ts`.
 - Маршрути: `packages/api/src/attachments.ts`; конфігурація — `MastraFactory({ attachments })` у `apps/server/src/mastra/index.ts`.
-- Розміщення в пісочниці: `packages/sandbox/src/attachments.ts`; інструмент: `packages/harness-mastra/src/tools/attachment-tools.ts`.
+- Розміщення в пісочниці: `packages/sandbox/src/attachments.ts`; читання файлу агента: `packages/sandbox/src/session-files.ts`; інструменти: `packages/harness-mastra/src/tools/attachment-tools.ts`.
 - UI: `apps/ui/src/ui/domains/factory/components/CardAttachments.tsx`, поле введення чату й коментарів.

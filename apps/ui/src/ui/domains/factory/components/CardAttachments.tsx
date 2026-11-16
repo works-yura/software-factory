@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { Download, File, FileText, GitBranch, Image, MessageSquare, Paperclip, SquareCheck, Trash2, Upload } from 'lucide-react';
+import { Bot, Download, File, FileText, GitBranch, Image, MessageSquare, Paperclip, SquareCheck, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +16,7 @@ function SourceIcon({ source }: { source: AttachmentSource }) {
   if (source === 'comment') return <MessageSquare size={12} aria-hidden />;
   if (source === 'clickup') return <SquareCheck size={12} aria-hidden />;
   if (source === 'github' || source === 'gitlab') return <GitBranch size={12} aria-hidden />;
+  if (source === 'agent') return <Bot size={12} aria-hidden />;
   return <Upload size={12} aria-hidden />;
 }
 

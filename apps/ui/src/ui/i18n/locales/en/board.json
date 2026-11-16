@@ -388,7 +388,8 @@
       "upload": "Uploaded",
       "clickup": "From ClickUp",
       "github": "From GitHub",
-      "gitlab": "From GitLab"
+      "gitlab": "From GitLab",
+      "agent": "From the agent"
     }
   },
   "exitTool": {

@@ -394,7 +394,8 @@
       "upload": "Додано вручну",
       "clickup": "З ClickUp",
       "github": "З GitHub",
-      "gitlab": "З GitLab"
+      "gitlab": "З GitLab",
+      "agent": "Від агента"
     }
   },
   "exitTool": {
