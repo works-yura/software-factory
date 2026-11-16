@@ -14,6 +14,7 @@
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-sudo       # e3. sudoers rule: the server starts agents
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-tools      # e4. the agent's own claude and node
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-mobile-tools  # e5. the agent's own fvm and Flutter SDKs
+#   sudo scripts/mac-mini/isolation/2-system.sh agent-sdks       # e5b. read-only access to your SDKs (Android)
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-firewall   # e6. the agent cannot reach 5874 / 9222
 #   sudo scripts/mac-mini/isolation/2-system.sh host-hardening   # e7. close what linPEAS found open to it
 #   sudo scripts/mac-mini/isolation/2-system.sh agent-xcode      # e8. Xcode and SwiftPM build under Seatbelt
@@ -22,6 +23,7 @@
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-xcode
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-host-hardening
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-firewall
+#   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-sdks
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-mobile-tools
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-tools
 #   sudo scripts/mac-mini/isolation/2-system.sh remove-agent-sudo
@@ -75,11 +77,28 @@
 #        Node when it is a global npm package there; otherwise the installer's ~/.opencode/bin/opencode
 #        is copied to ~factory/.local/bin. Rerun after updating any of them, so agents run the same
 #        versions.
-#    e5. agent-mobile-tools: copies of your fvm and of the Flutter SDKs the projects pin
-#        ($AGENT_FLUTTER_VERSIONS, from your fvm cache) into ~factory (fvm in .local/fvm, SDKs in
-#        ~/fvm/versions, its fvm config pointing there), owned by the agent: your cache is on the
-#        closed disk. CocoaPods comes from Homebrew (/opt/homebrew/bin, readable by everyone).
-#        About 2.5 GB per SDK. Rerun after adding a version.
+#    e5. agent-mobile-tools: copies of your fvm and of the Flutter SDKs in your fvm cache (all of
+#        them; AGENT_FLUTTER_VERSIONS="3.44.1 ..." limits the list) into ~factory (fvm in .local/fvm,
+#        SDKs in ~/fvm/versions, its fvm config pointing there), owned by the agent, and your fvm
+#        global version (the cache's `default` link) as the agent's: its ~/fvm/default/bin is on
+#        its PATH, as yours is on yours, so `flutter` and `dart` work outside a pinned project and a
+#        project's .fvmrc still picks its own through `fvm flutter`. Copies, not shared access:
+#        Flutter writes into its own SDK (bin/cache, its lockfile) and fails on a read-only one, and
+#        what the agent writes there must never reach the SDK you run. CocoaPods comes from Homebrew
+#        (/opt/homebrew/bin, readable by everyone). About 2.5 GB per SDK. Rerun after adding a
+#        version or changing your global one.
+#    e5b. agent-sdks: read and execute, never write, for "factory" on the SDKs the server's
+#        apps/server/.env names (the folders in FACTORY_AGENT_TOOLCHAIN_ENV's variables, by default
+#        ANDROID_HOME / ANDROID_SDK_ROOT / JAVA_HOME, plus FACTORY_AGENT_READABLE; AGENT_SDK_ROOTS=
+#        "/a:/b" overrides) that sit on the closed data disk: ACLs on every entry, inherited by what
+#        sdkmanager adds later, and a pass-through (allow search, as in d) on the folders above,
+#        whose other entries are closed (go-rwx; modes kept for the rollback). ACLs, not a copy: the
+#        disk already carries ours (d, e1), the Android SDK is ~20 GB, and your updates reach the
+#        agent at once. Read-only works for Android: Gradle writes to ~/.gradle and the project, the
+#        emulator to ~/.android (the agent's own AVDs live in its home). What the SDK lacks
+#        (a platform, an NDK) cannot be installed by the agent: it asks, you install it. Folders off
+#        the data disk (Homebrew's JDK) need nothing when "factory" can already read them. Then
+#        rerun agent-profile: Seatbelt allows these folders read-only. Rerun after adding an SDK.
 #    e6. agent-firewall: a pf rule that refuses the agent's TCP connections to port 5874 (this
 #        server) and 9222 (Chrome's debugger: whoever reaches it drives your browser and its
 #        logins), on any address. The Seatbelt profile refuses the same; this keeps it when the
@@ -115,7 +134,13 @@ AGENT_GROUP="factory-agents"
 PROFILE_DIR="/var/factory"
 PROFILE="$PROFILE_DIR/agent-$AGENT_USER.sb"
 SUDOERS="/etc/sudoers.d/50-factory-agent"
-AGENT_FLUTTER_VERSIONS="${AGENT_FLUTTER_VERSIONS:-3.44.1 3.41.8 3.38.7}"
+# Empty: every version in your fvm cache.
+AGENT_FLUTTER_VERSIONS="${AGENT_FLUTTER_VERSIONS:-}"
+# Read and execute for the agent on your SDKs (agent-sdks); directories pass it on to what is added later.
+SDK_ACL_DIR="user:$AGENT_USER allow list,search,readattr,readextattr,readsecurity,directory_inherit"
+SDK_ACL_FILE_INHERIT="user:$AGENT_USER allow read,execute,readattr,readextattr,readsecurity,file_inherit,directory_inherit,only_inherit"
+SDK_ACL_FILE="user:$AGENT_USER allow read,execute,readattr,readextattr,readsecurity"
+SERVER_ENV="$REPO/apps/server/.env"
 FIREWALL_ANCHOR="com.apple/factory-agent"
 FIREWALL_RULES="$PROFILE_DIR/agent-firewall.pf"
 FIREWALL_DAEMON="/Library/LaunchDaemons/ai.eclipt.factory-agent-firewall.plist"
@@ -252,6 +277,13 @@ status() {
   [ -f "$SUDOERS" ] && say "  sudoers: $SUDOERS" || say "  sudoers: missing"
   [ -x "/Users/$AGENT_USER/.local/bin/claude" ] && say "  agent claude: installed" || say "  agent claude: missing"
   [ -x "/Users/$AGENT_USER/.local/node/bin/node" ] && say "  agent node: installed" || say "  agent node: missing"
+  [ -L "/Users/$AGENT_USER/fvm/default" ] && say "  agent fvm global: $(basename "$(readlink "/Users/$AGENT_USER/fvm/default")")" || say "  agent fvm global: none"
+  local root
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    if has_acl "user:$AGENT_USER allow list,search" "$root"; then say "  SDK read-only for $AGENT_USER: $root"
+    else say "  SDK closed to $AGENT_USER: $root (sudo $0 agent-sdks)"; fi
+  done < <(sdk_roots)
   step "e7. Host hardening"
   local file
   for file in $ANYDESK_FILES; do [ -e "$file" ] && say "  $(stat -f '%Su:%Sg %Sp' "$file")  $file"; done
@@ -464,7 +496,9 @@ agent_profile() {
   step "Generating the profile with $node"
   local tmp
   tmp="$(mktemp)"
+  # The SDKs agent-sdks opens: read-only in the profile too, as FACTORY_AGENT_READABLE.
   FACTORY_AGENT_USER="$AGENT_USER" FACTORY_SERVER_USER="$OWNER" MASTRACODE_LOCAL_SANDBOX_ROOT="$AGENT_ROOT" \
+    FACTORY_AGENT_TOOLCHAIN_ENV=none FACTORY_AGENT_READABLE="$(sdk_roots | paste -sd: -)" \
     "$node" "$REPO/packages/agent-user/bin/print-profile.ts" > "$tmp" || { rm -f "$tmp"; die "could not generate the profile"; }
   /usr/bin/sandbox-exec -f "$tmp" /usr/bin/true || { rm -f "$tmp"; die "sandbox-exec refuses the generated profile"; }
   install -d -o root -g wheel -m 755 "$PROFILE_DIR"
@@ -523,6 +557,9 @@ agent_mobile_tools() {
   [ -x "$fvm_home/fvm" ] || die "no fvm in $fvm_home"
   cache="$(sed -n 's/.*"cachePath"[^"]*"\([^"]*\)".*/\1/p' "$OWNER_HOME/Library/Application Support/fvm/.fvmrc" 2>/dev/null)"
   cache="${cache:-$OWNER_HOME/fvm}"
+  local versions="$AGENT_FLUTTER_VERSIONS" global
+  [ -n "$versions" ] || versions="$(ls "$cache/versions" 2>/dev/null | tr '\n' ' ')"
+  [ -n "$versions" ] || die "no Flutter SDKs in $cache/versions"
   step "fvm -> $agent_home/.local/fvm"
   install -d -o "$AGENT_USER" -g staff -m 755 "$agent_home/.local"
   rm -rf "$agent_home/.local/fvm"
@@ -531,21 +568,175 @@ agent_mobile_tools() {
   install -d -o "$AGENT_USER" -g staff -m 755 "$agent_home/fvm" "$agent_home/fvm/versions" "$agent_home/Library/Application Support/fvm"
   printf '{\n  "cachePath": "%s"\n}\n' "$agent_home/fvm" > "$agent_home/Library/Application Support/fvm/.fvmrc"
   chown "$AGENT_USER:staff" "$agent_home/Library/Application Support/fvm/.fvmrc"
-  for version in $AGENT_FLUTTER_VERSIONS; do
+  for version in $versions; do
     [ -x "$cache/versions/$version/bin/flutter" ] || die "Flutter $version is not in $cache/versions (fvm install $version first)"
     step "Flutter $version -> $agent_home/fvm/versions/$version"
     rm -rf "$agent_home/fvm/versions/$version"
     ditto "$cache/versions/$version" "$agent_home/fvm/versions/$version"
     chown -R "$AGENT_USER:staff" "$agent_home/fvm/versions/$version"
   done
+  # Your fvm global version becomes the agent's: the same `default` link fvm global makes.
+  global="$(readlink "$cache/default" 2>/dev/null || true)"
+  global="${global%/}"
+  global="${global##*/}"
+  rm -f "$agent_home/fvm/default"
+  if [ -n "$global" ] && [ "$global" != . ] && [ -d "$agent_home/fvm/versions/$global" ]; then
+    ln -s "$agent_home/fvm/versions/$global" "$agent_home/fvm/default"
+    chown -h "$AGENT_USER:staff" "$agent_home/fvm/default"
+    step "fvm global: $global (as yours)"
+  else
+    say "  note: no fvm global version to mirror (yours: ${global:-none}); flutter/dart work only through fvm in pinned projects"
+  fi
   [ -x /opt/homebrew/bin/pod ] || say "  note: no /opt/homebrew/bin/pod; iOS builds need CocoaPods (brew install cocoapods)"
-  say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/fvm:/opt/homebrew/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "fvm $(fvm --version 2>&1 | tail -1), pod $(pod --version 2>&1 | tail -1)"; for v in ~/fvm/versions/*; do echo "  flutter $(basename "$v"): $("$v/bin/flutter" --version --machine 2>/dev/null | sed -n "s/.*\"frameworkVersion\": *\"\([^\"]*\)\".*/\1/p")"; done')"
+  say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="$agent_home" PATH="$agent_home/.local/fvm:$agent_home/fvm/default/bin:/opt/homebrew/bin:/usr/bin:/bin" /bin/sh -c 'cd / && echo "fvm $(fvm --version 2>&1 | tail -1), flutter on PATH: $(command -v flutter || echo none), pod $(pod --version 2>&1 | tail -1)"; for v in ~/fvm/versions/*; do echo "  flutter $(basename "$v"): $("$v/bin/flutter" --version --machine 2>/dev/null | sed -n "s/.*\"frameworkVersion\": *\"\([^\"]*\)\".*/\1/p")"; done')"
 }
 
 remove_agent_mobile_tools() {
   need_root remove-agent-mobile-tools
   rm -rf "/Users/$AGENT_USER/.local/fvm" "/Users/$AGENT_USER/fvm" "/Users/$AGENT_USER/Library/Application Support/fvm"
   say "  removed the agent's fvm and Flutter SDKs"
+}
+
+# A value from the server's apps/server/.env (the last assignment, quotes dropped); empty when unset.
+server_env_value() {
+  [ -r "$SERVER_ENV" ] || return 0
+  sed -n "s/^$1=//p" "$SERVER_ENV" | tail -1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
+
+# The SDK folders the agent reads, one per line: AGENT_SDK_ROOTS, else what the server passes on
+# (packages/agent-user agentToolchain: the absolute values of FACTORY_AGENT_TOOLCHAIN_ENV's
+# variables, plus FACTORY_AGENT_READABLE). Symlinks resolved: ACLs and Seatbelt see real paths.
+sdk_roots() {
+  local list="${AGENT_SDK_ROOTS:-}" names name value
+  if [ -z "$list" ]; then
+    names="$(server_env_value FACTORY_AGENT_TOOLCHAIN_ENV | tr ',' ' ')"
+    [ -n "${names// /}" ] || names="ANDROID_HOME ANDROID_SDK_ROOT JAVA_HOME"
+    [ "$names" = none ] && names=""
+    for name in $names; do
+      value="$(server_env_value "$name")"
+      case "$value" in /*) list="$list:$value" ;; esac
+    done
+    list="$list:$(server_env_value FACTORY_AGENT_READABLE)"
+  fi
+  printf '%s\n' "$list" | tr ':' '\n' | while IFS= read -r value; do
+    [ -n "$value" ] || continue
+    if [ -d "$value" ]; then (cd "$value" && pwd -P); else echo "${value%/}"; fi
+  done | awk '!seen[$0]++'
+}
+
+# The SDK folders on the data disk: closed there, so they need our ACLs.
+sdk_dot_roots() { sdk_roots | while IFS= read -r root; do case "$root" in "$DOT"/*) echo "$root" ;; esac; done; }
+
+# Folders between the disk and each SDK folder, outermost first, each once.
+sdk_pass_dirs() {
+  local root dir list
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    list="" dir="$(dirname "$root")"
+    while [ "$dir" != "$DOT" ] && [ "$dir" != / ]; do
+      list="$dir
+$list"
+      dir="$(dirname "$dir")"
+    done
+    printf '%s' "$list"
+  done < <(sdk_dot_roots) | awk 'NF && !seen[$0]++'
+}
+
+# Entries of those folders that lead to no SDK folder: closed, so the pass-through exposes nothing else.
+sdk_neighbours() {
+  local dir entry root keep roots
+  roots="$(sdk_dot_roots)"
+  while IFS= read -r dir; do
+    for entry in "$dir"/* "$dir"/.[!.]*; do
+      [ -e "$entry" ] && [ ! -L "$entry" ] || continue
+      keep=""
+      while IFS= read -r root; do
+        case "$root/" in "$entry"/*) keep=1 ;; esac
+      done <<< "$roots"
+      [ -n "$keep" ] || echo "$entry"
+    done
+  done < <(sdk_pass_dirs)
+}
+
+agent_can_read() { (cd / && sudo -n -u "$AGENT_USER" -- /bin/test -r "$1" -a -x "$1") 2>/dev/null; }
+
+agent_sdks() {
+  need_root agent-sdks
+  user_exists || die "$AGENT_USER does not exist; run sudo $0 add-user first"
+  local root dir entry roots
+  roots="$(sdk_roots)"
+  [ -n "$roots" ] || die "no SDK folders: set ANDROID_HOME (and the like) in $SERVER_ENV, or AGENT_SDK_ROOTS=/path:/path"
+  while IFS= read -r root; do
+    [ -d "$root" ] || die "$root is not a folder"
+    case "$root" in
+      "$DOT"/*) ;;
+      *) if agent_can_read "$root"; then say "  $root: off the data disk, $AGENT_USER reads it already"
+         else say "  WARNING: $root is off the data disk and closed to $AGENT_USER; this step opens only folders on $DOT"; fi ;;
+    esac
+  done <<< "$roots"
+  step "Saving the modes of what sits next to the SDKs"
+  sdk_neighbours | save_modes 2-agent-sdks
+  step "Closing the neighbours"
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    chmod go-rwx "$entry"
+    say "  $entry"
+  done < <(sdk_neighbours)
+  step "Letting $AGENT_USER through"
+  while IFS= read -r dir; do
+    if ! has_acl "$ACL_PASS" "$dir"; then
+      chmod +a "$ACL_PASS" "$dir"
+      ensure_state_dir
+      echo "$dir" >> "$STATE/2-agent-sdks.pass"
+    fi
+    say "  $dir"
+  done < <(sdk_pass_dirs)
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    step "Read-only for $AGENT_USER: $root (every entry: minutes for a big SDK)"
+    # chmod +a keeps one copy of an entry: a rerun adds nothing, it only reaches what is new.
+    chmod +a "$SDK_ACL_DIR" "$root" 2>/dev/null \
+      || die "$root refuses ACLs (its volume does not support them): copy the SDK into ~$AGENT_USER instead and point FACTORY_AGENT_TOOLCHAIN_ENV's variables there"
+    find "$root" \( -type d -exec chmod -h +a "$SDK_ACL_DIR" {} + -exec chmod -h +a "$SDK_ACL_FILE_INHERIT" {} + \) \
+      -o \( ! -type d -exec chmod -h +a "$SDK_ACL_FILE" {} + \) 2>/dev/null || say "  (some entries refused an ACL; see above)"
+    agent_can_read "$root" || die "$AGENT_USER still cannot read $root"
+    if [ -x "$root/platform-tools/adb" ]; then
+      say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/env -i HOME="/Users/$AGENT_USER" "$root/platform-tools/adb" version 2>&1 | head -1)"
+    else
+      say "  as the agent: $(cd / && sudo -n -u "$AGENT_USER" -- /bin/ls "$root" | head -5 | tr '\n' ' ')"
+    fi
+    if (cd / && sudo -n -u "$AGENT_USER" -- /usr/bin/touch "$root/.factory-write-check") 2>/dev/null; then
+      rm -f "$root/.factory-write-check"
+      die "$AGENT_USER can write $root"
+    fi
+    say "  $AGENT_USER cannot write it"
+  done < <(sdk_dot_roots)
+  say "  now rerun: sudo $0 agent-profile   (Seatbelt allows the SDKs read-only)"
+}
+
+remove_agent_sdks() {
+  need_root remove-agent-sdks
+  local root dir
+  while IFS= read -r root; do
+    [ -d "$root" ] || continue
+    step "Removing $AGENT_USER's ACLs from $root"
+    # Removing an entry also removes its inherited copies (on what was added after agent-sdks).
+    find "$root" \( -type d -exec chmod -h -a "$SDK_ACL_DIR" {} + -exec chmod -h -a "$SDK_ACL_FILE_INHERIT" {} + \) \
+      -o \( ! -type d -exec chmod -h -a "$SDK_ACL_FILE" {} + \) 2>/dev/null || true
+  done < <(sdk_dot_roots)
+  if [ -f "$STATE/2-agent-sdks.pass" ]; then
+    step "Removing the pass-through"
+    while IFS= read -r dir; do
+      chmod -a "$ACL_PASS" "$dir" 2>/dev/null || true
+      say "  $dir"
+    done < "$STATE/2-agent-sdks.pass"
+    mv "$STATE/2-agent-sdks.pass" "$STATE/2-agent-sdks.pass.rolled-back-$(date +%Y%m%d-%H%M%S)"
+  fi
+  if [ -f "$STATE/2-agent-sdks.modes" ]; then
+    step "Restoring the neighbours' modes"
+    restore_modes 2-agent-sdks
+  fi
+  say "  rerun sudo $0 agent-profile to drop them from Seatbelt too"
 }
 
 # Whether a TCP connection to 127.0.0.1:<port> opens, as <user> (exit 0) or not.
@@ -692,6 +883,8 @@ case "${1:-status}" in
   remove-agent-tools) remove_agent_tools ;;
   agent-mobile-tools) agent_mobile_tools ;;
   remove-agent-mobile-tools) remove_agent_mobile_tools ;;
+  agent-sdks) agent_sdks ;;
+  remove-agent-sdks) remove_agent_sdks ;;
   agent-firewall) agent_firewall ;;
   remove-agent-firewall) remove_agent_firewall ;;
   host-hardening) host_hardening ;;
@@ -699,5 +892,5 @@ case "${1:-status}" in
   remove-agent-xcode) remove_agent_xcode ;;
   remove-host-hardening) remove_host_hardening ;;
   remove-agent-sudo) remove_agent_sudo ;;
-  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|agent-mobile-tools|agent-firewall|host-hardening|remove-host-hardening|agent-xcode|remove-agent-xcode|remove-agent-firewall|remove-agent-mobile-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
+  *) die "usage: $0 [status|ownership-on|fix-owners|close-dot|add-user|agent-path|close-agent-path|agent-group|agent-profile|agent-sudo|agent-tools|agent-mobile-tools|agent-sdks|agent-firewall|host-hardening|remove-host-hardening|agent-xcode|remove-agent-xcode|remove-agent-firewall|remove-agent-sdks|remove-agent-mobile-tools|remove-agent-tools|remove-agent-sudo|remove-agent-profile|remove-agent-group|remove-user|open-dot|ownership-off]" ;;
 esac

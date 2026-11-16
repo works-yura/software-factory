@@ -20,6 +20,12 @@ describe('agentEnvironment', () => {
     expect(agentEnvironment(agentConfig, { GONE: undefined })).not.toHaveProperty('GONE');
   });
 
+  it("adds the machine's toolchain variables over the caller's, never over the identity", () => {
+    const config = { ...agentConfig, toolchainEnv: { ANDROID_HOME: '/Volumes/dot/SDK/Android', JAVA_HOME: '/opt/jdk' } };
+    const env = agentEnvironment(config, { ANDROID_HOME: '/Users/yura/Library/Android/sdk', LANG: 'C' });
+    expect(env).toMatchObject({ ANDROID_HOME: '/Volumes/dot/SDK/Android', JAVA_HOME: '/opt/jdk', LANG: 'C', HOME: '/Users/factory' });
+  });
+
   it.each(['A;B', 'A B', '1A', 'A-B', '', 'A=B'])('refuses the name %j', name => {
     expect(() => agentEnvironment(agentConfig, { [name]: 'x' })).toThrow(/not allowed/);
   });
