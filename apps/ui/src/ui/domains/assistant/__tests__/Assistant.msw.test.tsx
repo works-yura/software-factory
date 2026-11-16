@@ -101,7 +101,7 @@ function renderPanel(props: { compact?: boolean } = {}, settingsHref?: string) {
 }
 
 describe('the assistant panel', () => {
-  it('takes a new request the person pastes, with a screenshot, and opens its thread', async () => {
+  it('takes a new request as a new chat: pasted screenshot, dropped file, from and link chips, Enter sends, and opens its thread', async () => {
     let sent: FormData | undefined;
     let created = false;
     server.use(
@@ -120,22 +120,93 @@ describe('the assistant panel', () => {
 
     expect(await screen.findByText(/No requests here/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'New request' }));
-    const form = screen.getByRole('form', { name: 'New request' });
-    await user.type(within(form).getByLabelText('What they wrote'), 'Checkout fails for Olena’s client');
-    await user.type(within(form).getByLabelText('From'), 'Olena');
-    await user.upload(within(form).getByLabelText('Choose files'), new NodeFile([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' }) as unknown as File);
+    const pane = screen.getByTestId('assistant-new-request');
+    // An empty thread: what happens next, then the thread's composer, focused, nothing else to fill.
+    expect(within(pane).getByText('What did they write?')).toBeInTheDocument();
+    const form = within(pane).getByRole('form', { name: 'New request' });
+    const message = within(form).getByRole('textbox', { name: 'Message' });
+    expect(message).toHaveFocus();
+    expect(message).toHaveAttribute('placeholder', expect.stringContaining('Ctrl+V'));
+    expect(within(form).queryByRole('textbox', { name: 'From' })).not.toBeInTheDocument();
+    expect(within(form).queryByRole('textbox', { name: 'Link' })).not.toBeInTheDocument();
+
+    // Shift+Enter breaks the line, it does not send.
+    await user.type(message, 'Checkout fails{Shift>}{Enter}{/Shift}for Olena’s client');
+    expect(sent).toBeUndefined();
+
+    // A screenshot pasted into the message becomes an attachment card.
+    const shot = new NodeFile([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' }) as unknown as File;
+    fireEvent.paste(message, { clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => shot }], types: ['Files'] } });
     expect(within(form).getByText('shot.png')).toBeInTheDocument();
-    await user.click(within(form).getByRole('button', { name: 'Give to the assistant' }));
+
+    // A file dropped anywhere on the pane too.
+    const log = new NodeFile(['error at checkout'], 'checkout.log', { type: 'text/plain' }) as unknown as File;
+    const dataTransfer = { types: ['Files'], files: [log] };
+    fireEvent.dragEnter(pane, { dataTransfer });
+    fireEvent.drop(pane, { dataTransfer });
+    expect(within(form).getByText('checkout.log')).toBeInTheDocument();
+
+    // Who it is from and the link: small chips in the composer header that open a compact field.
+    await user.click(within(form).getByRole('button', { name: 'From' }));
+    const from = within(form).getByRole('textbox', { name: 'From' });
+    expect(from).toHaveFocus();
+    await user.type(from, 'Olena');
+    await user.click(within(form).getByRole('button', { name: 'Link' }));
+    await user.type(within(form).getByRole('textbox', { name: 'Link' }), 'https://app.clickup.com/t/123');
+
+    // Enter in the message sends.
+    await user.click(message);
+    await user.keyboard('{Enter}');
 
     await waitFor(() => expect(sent).toBeDefined());
-    expect(sent!.get('text')).toBe('Checkout fails for Olena’s client');
+    // A multipart field carries the line break as CRLF.
+    expect(sent!.get('text')).toMatch(/^Checkout fails\r?\nfor Olena’s client$/);
     expect(sent!.get('fromName')).toBe('Olena');
-    expect((sent!.get('files') as File).name).toBe('shot.png');
+    expect(sent!.get('sourceUrl')).toBe('https://app.clickup.com/t/123');
+    expect((sent!.getAll('files') as File[]).map(file => file.name)).toEqual(['shot.png', 'checkout.log']);
 
     const thread = await screen.findByTestId('assistant-thread');
     expect(within(screen.getByTestId('assistant-topic-line')).getByRole('combobox', { name: 'Status' })).toHaveTextContent('New');
     expect(within(thread).getByText('The assistant is looking at it…')).toBeInTheDocument();
     expect(await screen.findByTestId('assistant-new-count')).toHaveTextContent('1 new');
+  });
+
+  it('leaves a new request with Escape or the quiet ✕ in its header, and a chip’s ✕ drops what it held', async () => {
+    let sent: Record<string, unknown> | undefined;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [] })),
+      http.post(`${TEST_BASE_URL}/web/assistant/requests`, async ({ request: incoming }) => {
+        sent = (await incoming.json()) as Record<string, unknown>;
+        return HttpResponse.json({ request: request({ status: 'new' }) }, { status: 201 });
+      }),
+      http.get(`${TEST_BASE_URL}/web/assistant/requests/req-1`, () => HttpResponse.json(view({ status: 'new' }))),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole('button', { name: 'New request' }));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('assistant-new-request')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'New request' }));
+    await user.click(within(screen.getByTestId('assistant-new-request')).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('assistant-new-request')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'New request' }));
+    const form = screen.getByRole('form', { name: 'New request' });
+    const send = within(form).getByRole('button', { name: 'Give to the assistant' });
+    expect(send).toBeDisabled();
+    await user.click(within(form).getByRole('button', { name: 'From' }));
+    await user.type(within(form).getByRole('textbox', { name: 'From' }), 'Olena');
+    await user.click(within(form).getByRole('button', { name: 'Remove «From»' }));
+    expect(within(form).queryByRole('textbox', { name: 'From' })).not.toBeInTheDocument();
+    expect(within(form).getByRole('textbox', { name: 'Message' })).toHaveFocus();
+    await user.keyboard('Invoice is wrong');
+    await user.click(send);
+
+    await waitFor(() => expect(sent).toBeDefined());
+    // Without files the request goes as JSON; the dropped «From» is not in it.
+    expect(sent).toEqual({ text: 'Invoice is wrong' });
   });
 
   it('shows a thread with its header — topic, who and when, status, target Factory — the report and the screenshot', async () => {
@@ -628,6 +699,10 @@ describe('the floating button', () => {
     const panel = await screen.findByRole('dialog', { name: 'Assistant' });
     await user.click(within(panel).getByRole('button', { name: 'New request' }));
     expect(await within(panel).findByRole('form', { name: 'New request' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Assistant' })).toBeInTheDocument();
+    // Escape in the new request leaves the request, not the panel.
+    await user.keyboard('{Escape}');
+    expect(within(panel).queryByRole('form', { name: 'New request' })).not.toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: 'Assistant' })).toBeInTheDocument();
 
     // Working on the page beside it — a click, focus moving there — keeps it open.

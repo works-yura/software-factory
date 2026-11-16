@@ -1,86 +1,96 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { FileDropZone } from '@mastra/playground-ui/components/FileDropZone';
-import { Header } from '@mastra/playground-ui/components/Header';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
+import {
+  Composer,
+  ComposerActions,
+  ComposerBox,
+  ComposerHeader,
+  ComposerHeaderRow,
+  ComposerRing,
+} from '@mastra/playground-ui/components/Composer';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { FileDropBackdrop } from '@mastra/playground-ui/components/FileDropBackdrop';
+import { Header, HeaderAction } from '@mastra/playground-ui/components/Header';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ImageEntry } from '@mastra/playground-ui/domains/chat/attachments/attachment-preview-dialog';
-import { ComposerAttachment } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment';
-import { ComposerAttachmentEntry } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-entry';
-import { ComposerAttachmentList } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-list';
-import { attachmentInfo } from '@mastra/playground-ui/domains/chat/attachments/message-attachment-info';
-import { useEffect, useId, useState } from 'react';
-import type { ClipboardEvent, FormEvent } from 'react';
+import { Link2, MessageSquarePlus, Plus, User, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useCreateRequest } from './api';
 import type { AssistantRequest } from './api';
+import { AttachButton, DraftInput, PendingFiles, SendButton, ShortcutHint, useDraftFiles, useFilePicker } from './DraftComposer';
 
-/** Files pasted from the clipboard (screenshots) come unnamed; give them a name the thread can show. */
-export function pastedFiles(event: ClipboardEvent): File[] {
-  const items = Array.from(event.clipboardData?.items ?? []);
-  return items.flatMap((item, index) => {
-    if (item.kind !== 'file') return [];
-    const file = item.getAsFile();
-    if (!file) return [];
-    if (file.name && file.name !== 'image.png') return [file];
-    const extension = file.type.split('/')[1] ?? 'png';
-    return [new File([file], `screenshot-${Date.now()}-${index}.${extension}`, { type: file.type })];
-  });
-}
-
-/** A local preview of a picked image, released when the file leaves the draft. */
-function useObjectUrl(file: File): string | undefined {
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    if (!file.type.startsWith('image/') || typeof URL.createObjectURL !== 'function') return;
-    const created = URL.createObjectURL(file);
-    setUrl(created);
-    return () => URL.revokeObjectURL(created);
-  }, [file]);
-  return url;
-}
-
-function PendingFile({ file, onRemove }: { file: File; onRemove: () => void }) {
+/**
+ * An optional detail of the request (who it is from, the link to the original) as a quiet
+ * «+ From» in the composer's header; pressed, it turns into a compact field with its own ✕.
+ */
+function DetailChip({
+  icon,
+  label,
+  placeholder,
+  value,
+  type = 'text',
+  onChange,
+  onDone,
+}: {
+  icon: ReactNode;
+  label: string;
+  placeholder: string;
+  value: string;
+  type?: 'text' | 'url';
+  onChange: (value: string) => void;
+  /** Hands focus back to the message when the field closes. */
+  onDone: () => void;
+}) {
   const { t } = useTranslation('assistant');
-  const preview = useObjectUrl(file);
-  const { Icon, label } = attachmentInfo(file.name, file.type);
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <Button type="button" size="sm" variant="ghost" icon={<Plus />} onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+    );
+  }
+  const close = () => {
+    onChange('');
+    setOpen(false);
+    onDone();
+  };
   return (
-    <ComposerAttachment
-      name={file.name}
-      variant={preview ? 'thumbnail' : 'inline'}
-      removeLabel={t('newRequest.removeFile', { name: file.name })}
-      onRemove={onRemove}
-    >
-      {preview ? (
-        <ImageEntry src={preview} name={file.name} />
-      ) : (
-        <ComposerAttachmentEntry description={label}>
-          <Icon size={16} aria-hidden />
-        </ComposerAttachmentEntry>
-      )}
-    </ComposerAttachment>
-  );
-}
-
-/** The files a draft carries: the app composer's attachment cards, removable before sending. */
-export function PendingFiles({ files, onRemove }: { files: File[]; onRemove: (index: number) => void }) {
-  const { t } = useTranslation('assistant');
-  if (files.length === 0) return null;
-  return (
-    <ComposerAttachmentList aria-label={t('newRequest.files')}>
-      {files.map((file, index) => (
-        <PendingFile key={`${file.name}-${file.lastModified}-${index}`} file={file} onRemove={() => onRemove(index)} />
-      ))}
-    </ComposerAttachmentList>
+    <span className="flex min-w-48 flex-1 items-center gap-1">
+      {icon}
+      <Input
+        size="sm"
+        type={type}
+        aria-label={label}
+        placeholder={placeholder}
+        value={value}
+        autoFocus
+        onChange={event => onChange(event.target.value)}
+        onKeyDown={event => {
+          // Escape leaves the field for the message (closing it when empty), not the whole request.
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (!value.trim()) setOpen(false);
+          onDone();
+        }}
+      />
+      <Button type="button" size="icon-sm" variant="ghost" aria-label={t('newRequest.removeDetail', { label })} onClick={close}>
+        <X />
+      </Button>
+    </span>
   );
 }
 
 /**
- * A request the person brings themself: paste what a colleague wrote (text, a screenshot with
- * Ctrl+V), drop files, say who it is from and link the original.
+ * A request the person brings themself, laid out as a new chat: an empty thread with a line on
+ * what happens next and the thread's own composer — paste what a colleague wrote (text, a
+ * screenshot with Ctrl+V), drop files anywhere on the pane, add who it is from and the link to the
+ * original from the composer's header, Enter sends. Escape or ✕ in the header leaves it.
  */
 export function NewRequestForm({ onCreated, onCancel }: { onCreated: (request: AssistantRequest) => void; onCancel: () => void }) {
   const { t } = useTranslation('assistant');
@@ -88,8 +98,10 @@ export function NewRequestForm({ onCreated, onCancel }: { onCreated: (request: A
   const [text, setText] = useState('');
   const [fromName, setFromName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
-  const [files, setFiles] = useState<File[]>([]);
-  const ids = { text: useId(), from: useId(), source: useId() };
+  const { files, add, removeAt } = useDraftFiles();
+  const picker = useFilePicker(add);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const focusMessage = () => input.current?.focus();
   const canSend = (text.trim().length > 0 || files.length > 0) && !create.isPending;
 
   const submit = (event: FormEvent) => {
@@ -100,63 +112,97 @@ export function NewRequestForm({ onCreated, onCancel }: { onCreated: (request: A
       { onSuccess: request => onCreated(request) },
     );
   };
+  const escape = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    // The request is left, the panel stays open.
+    event.preventDefault();
+    event.stopPropagation();
+    onCancel();
+  };
 
   return (
-    <form className="flex min-h-0 flex-1 flex-col" aria-label={t('newRequest.title')} onSubmit={submit}>
-      <Header>
-        <Txt as="h3" variant="heading">
-          {t('newRequest.title')}
-        </Txt>
-      </Header>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        <Field>
-          <FieldLabel htmlFor={ids.text}>{t('newRequest.text')}</FieldLabel>
-          <Textarea
-            id={ids.text}
-            value={text}
-            rows={6}
-            placeholder={t('newRequest.textPlaceholder')}
-            onChange={event => setText(event.target.value)}
-            onPaste={event => {
-              const pasted = pastedFiles(event);
-              if (pasted.length === 0) return;
-              event.preventDefault();
-              setFiles(current => [...current, ...pasted]);
-            }}
-          />
-        </Field>
-        <FileDropZone
-          title={t('newRequest.dropTitle')}
-          description={t('newRequest.dropDescription')}
-          buttonLabel={t('newRequest.dropButton')}
-          multiple
-          onFiles={dropped => setFiles(current => [...current, ...dropped])}
-        />
-        <PendingFiles files={files} onRemove={index => setFiles(current => current.filter((_, at) => at !== index))} />
-        <Field>
-          <FieldLabel htmlFor={ids.from}>{t('newRequest.from')}</FieldLabel>
-          <Input id={ids.from} value={fromName} placeholder={t('newRequest.fromPlaceholder')} onChange={event => setFromName(event.target.value)} />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor={ids.source}>{t('newRequest.source')}</FieldLabel>
-          <Input
-            id={ids.source}
-            type="url"
-            value={sourceUrl}
-            placeholder={t('newRequest.sourcePlaceholder')}
-            onChange={event => setSourceUrl(event.target.value)}
-          />
-        </Field>
-        {create.isError ? <Notice variant="destructive">{create.error.message}</Notice> : null}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            {t('newRequest.cancel')}
-          </Button>
-          <Button type="submit" variant="primary" disabled={!canSend}>
-            {create.isPending ? t('newRequest.sending') : t('newRequest.submit')}
-          </Button>
-        </div>
-      </div>
-    </form>
+    <FileDropBackdrop onFilesDrop={add} label={t('newRequest.dropTitle')} description={t('newRequest.dropDescription')}>
+      <ChatShell
+        data-testid="assistant-new-request"
+        className="flex-1 [--chat-surface:var(--assistant-surface,var(--color-card))]"
+        onKeyDown={escape}
+      >
+        <Header>
+          <Txt as="h3" variant="heading">
+            {t('newRequest.title')}
+          </Txt>
+          <HeaderAction>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={t('newRequest.cancel')}
+              aria-keyshortcuts="Escape"
+              tooltip={<ShortcutHint label={t('newRequest.cancel')} keys={['Esc']} />}
+              onClick={onCancel}
+            >
+              <X />
+            </Button>
+          </HeaderAction>
+        </Header>
+        <ChatShell.Stage>
+          <ChatShell.Viewport>
+            <ChatShell.Content>
+              <ChatShell.Transcript className="flex-1 justify-center">
+                <EmptyState iconSlot={<MessageSquarePlus />} titleSlot={t('newRequest.emptyTitle')} descriptionSlot={t('newRequest.emptyDescription')} />
+              </ChatShell.Transcript>
+            </ChatShell.Content>
+            <ChatShell.Dock>
+              <ChatShell.Column>
+                <Composer onSubmit={submit} aria-label={t('newRequest.title')}>
+                  <ComposerHeader>
+                    <ComposerHeaderRow>
+                      <DetailChip
+                        icon={<User aria-hidden />}
+                        label={t('newRequest.from')}
+                        placeholder={t('newRequest.fromPlaceholder')}
+                        value={fromName}
+                        onChange={setFromName}
+                        onDone={focusMessage}
+                      />
+                      <DetailChip
+                        icon={<Link2 aria-hidden />}
+                        label={t('newRequest.source')}
+                        placeholder={t('newRequest.sourcePlaceholder')}
+                        type="url"
+                        value={sourceUrl}
+                        onChange={setSourceUrl}
+                        onDone={focusMessage}
+                      />
+                    </ComposerHeaderRow>
+                    {create.isError ? <ComposerHeaderRow tone="destructive">{create.error.message}</ComposerHeaderRow> : null}
+                  </ComposerHeader>
+                  <ComposerRing busy={create.isPending}>
+                    <ComposerBox>
+                      <PendingFiles files={files} onRemove={removeAt} />
+                      <DraftInput
+                        ref={input}
+                        autoFocus
+                        aria-label={t('newRequest.text')}
+                        placeholder={t('newRequest.placeholder')}
+                        value={text}
+                        onChange={event => setText(event.target.value)}
+                        onFiles={add}
+                      />
+                      {picker.input}
+                      <ComposerActions>
+                        <ButtonsGroup size="sm" className="ml-auto" aria-label={t('composer.actions')}>
+                          <AttachButton onClick={picker.open} />
+                          <SendButton disabled={!canSend} label={t('newRequest.submit')} />
+                        </ButtonsGroup>
+                      </ComposerActions>
+                    </ComposerBox>
+                  </ComposerRing>
+                </Composer>
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </ChatShell.Viewport>
+        </ChatShell.Stage>
+      </ChatShell>
+    </FileDropBackdrop>
   );
 }

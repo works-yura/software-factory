@@ -23,13 +23,11 @@ import {
   ComposerHeader,
   ComposerHeaderActions,
   ComposerHeaderRow,
-  ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import type { ComposerTone } from '@mastra/playground-ui/components/Composer';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Message, MessageMetadata } from '@mastra/playground-ui/components/Message';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -42,7 +40,6 @@ import type { StatusPresentation } from '@mastra/playground-ui/components/Status
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/message-attachments';
 import {
-  ArrowUp,
   Bot,
   Check,
   ExternalLink,
@@ -51,7 +48,6 @@ import {
   MessageCircleQuestion,
   MoreHorizontal,
   NotebookPen,
-  Paperclip,
   Pencil,
   RefreshCw,
   RotateCcw,
@@ -76,7 +72,7 @@ import {
   useUpdateRequest,
 } from './api';
 import type { AssistantFile, AssistantMessage, AssistantRequest, FactoryAccessState, RequestStatus, TurnFailure } from './api';
-import { PendingFiles, pastedFiles } from './NewRequestForm';
+import { AttachButton, DraftInput, PendingFiles, SendButton, ShortcutHint, useDraftFiles, useFilePicker } from './DraftComposer';
 import { RequestTime } from './time';
 import { eventLabel, PendingActionCard, TurnDetailsView } from './TurnTransparency';
 
@@ -141,21 +137,7 @@ function Attachments({ files }: { files: AssistantFile[] }) {
   return <MessageAttachments parts={parts as unknown as AttachmentParts} />;
 }
 
-/** A shortcut hint for a tooltip: the action's name and its key. */
-export function ShortcutHint({ label, keys }: { label: string; keys: string[] }) {
-  return (
-    <span className="flex items-center gap-2">
-      {label}
-      <span className="flex gap-0.5">
-        {keys.map(key => (
-          <Kbd key={key} size="xs">
-            {key}
-          </Kbd>
-        ))}
-      </span>
-    </span>
-  );
-}
+export { ShortcutHint } from './DraftComposer';
 
 // ─── Header ──────────────────────────────────────────────────────────────────
 
@@ -711,8 +693,8 @@ function ReplyComposer({
   const update = useUpdateRequest();
   const [mode, setMode] = useState<ComposerMode>('assistant');
   const [text, setText] = useState('');
-  const [files, setFiles] = useState<File[]>([]);
-  const picker = useRef<HTMLInputElement>(null);
+  const { files, add: addFiles, removeAt, clear } = useDraftFiles();
+  const picker = useFilePicker(addFiles);
 
   if (request.status === 'closed') {
     return (
@@ -736,10 +718,9 @@ function ReplyComposer({
   const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const canSend =
     !busy && (toFactory ? factoryReady : text.trim().length > 0 || files.length > 0 || annotations.length > 0);
-  const addFiles = (added: File[]) => setFiles(current => [...current, ...added]);
   const reset = () => {
     setText('');
-    setFiles([]);
+    clear();
     setMode('assistant');
   };
   const submit = (event: FormEvent) => {
@@ -815,62 +796,27 @@ function ReplyComposer({
       <ComposerRing busy={busy} tone={MODE_TONE[effective]}>
         <ComposerBox>
           <ComposerAnnotations />
-          {toFactory ? null : <PendingFiles files={files} onRemove={index => setFiles(current => current.filter((_, at) => at !== index))} />}
-          <ComposerInput
+          {toFactory ? null : <PendingFiles files={files} onRemove={removeAt} />}
+          <DraftInput
             aria-label={placeholder}
             placeholder={placeholder}
             value={text}
             onChange={event => setText(event.target.value)}
-            onPaste={event => {
-              if (toFactory) return;
-              const pasted = pastedFiles(event);
-              if (pasted.length === 0) return;
-              event.preventDefault();
-              addFiles(pasted);
-            }}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
+            {...(toFactory ? {} : { onFiles: addFiles })}
           />
-          <input
-            ref={picker}
-            type="file"
-            multiple
-            hidden
-            aria-label={t('thread.attach')}
-            onChange={event => {
-              addFiles(Array.from(event.target.files ?? []));
-              event.target.value = '';
-            }}
-          />
+          {picker.input}
           <ComposerActions className="flex-nowrap">
             <Txt as="span" variant="caption" tone="muted" className="min-w-0 self-center truncate">
               {toFactory ? t('composer.factoryHint') : null}
             </Txt>
             <ButtonsGroup size="sm" className="ml-auto shrink-0 self-end" aria-label={t('composer.actions')}>
-              {toFactory ? null : (
-                <Button type="button" size="icon-sm" aria-label={t('thread.attach')} tooltip={t('thread.attach')} onClick={() => picker.current?.click()}>
-                  <Paperclip />
-                </Button>
-              )}
+              {toFactory ? null : <AttachButton onClick={picker.open} />}
               {toFactory ? (
                 <Button type="submit" size="sm" variant="primary" icon={MODE_ICON[effective]} disabled={!canSend}>
                   {effective === 'ask' ? t('composer.sendAsk', { factory: factoryName }) : t('composer.sendHandOver', { factory: factoryName })}
                 </Button>
               ) : (
-                <Button
-                  type="submit"
-                  size="icon-sm"
-                  variant="primary"
-                  aria-label={t('thread.send')}
-                  tooltip={<ShortcutHint label={t('thread.send')} keys={['↵']} />}
-                  disabled={!canSend}
-                >
-                  <ArrowUp />
-                </Button>
+                <SendButton disabled={!canSend} />
               )}
             </ButtonsGroup>
           </ComposerActions>
