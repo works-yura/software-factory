@@ -130,8 +130,8 @@ describe('the assistant panel', () => {
     expect(within(form).queryByRole('textbox', { name: 'From' })).not.toBeInTheDocument();
     expect(within(form).queryByRole('textbox', { name: 'Link' })).not.toBeInTheDocument();
 
-    // Shift+Enter breaks the line, it does not send.
-    await user.type(message, 'Checkout fails{Shift>}{Enter}{/Shift}for Olena’s client');
+    // Shift+Enter breaks the line, it does not send. Who and where are just written in the text.
+    await user.type(message, 'Olena: checkout fails{Shift>}{Enter}{/Shift}https://app.clickup.com/t/123');
     expect(sent).toBeUndefined();
 
     // A screenshot pasted into the message becomes an attachment card.
@@ -146,22 +146,15 @@ describe('the assistant panel', () => {
     fireEvent.drop(pane, { dataTransfer });
     expect(within(form).getByText('checkout.log')).toBeInTheDocument();
 
-    // Who it is from and the link: small chips in the composer header that open a compact field.
-    await user.click(within(form).getByRole('button', { name: 'From' }));
-    const from = within(form).getByRole('textbox', { name: 'From' });
-    expect(from).toHaveFocus();
-    await user.type(from, 'Olena');
-    await user.click(within(form).getByRole('button', { name: 'Link' }));
-    await user.type(within(form).getByRole('textbox', { name: 'Link' }), 'https://app.clickup.com/t/123');
-
     // Enter in the message sends.
     await user.click(message);
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(sent).toBeDefined());
     // A multipart field carries the line break as CRLF.
-    expect(sent!.get('text')).toMatch(/^Checkout fails\r?\nfor Olena’s client$/);
-    expect(sent!.get('fromName')).toBe('Olena');
+    expect(sent!.get('text')).toMatch(/^Olena: checkout fails\r?\nhttps:\/\/app\.clickup\.com\/t\/123$/);
+    expect(sent!.get('fromName')).toBeNull();
+    // A pasted link becomes the request's original.
     expect(sent!.get('sourceUrl')).toBe('https://app.clickup.com/t/123');
     expect((sent!.getAll('files') as File[]).map(file => file.name)).toEqual(['shot.png', 'checkout.log']);
 
@@ -171,7 +164,7 @@ describe('the assistant panel', () => {
     expect(await screen.findByTestId('assistant-new-count')).toHaveTextContent('1 new');
   });
 
-  it('leaves a new request with Escape or the quiet ✕ in its header, and a chip’s ✕ drops what it held', async () => {
+  it('leaves a new request with Escape or the quiet ✕ in its header, and sends just the text', async () => {
     let sent: Record<string, unknown> | undefined;
     server.use(
       http.get(`${TEST_BASE_URL}/web/assistant/requests`, () => HttpResponse.json({ requests: [] })),
@@ -196,16 +189,12 @@ describe('the assistant panel', () => {
     const form = screen.getByRole('form', { name: 'New request' });
     const send = within(form).getByRole('button', { name: 'Give to the assistant' });
     expect(send).toBeDisabled();
-    await user.click(within(form).getByRole('button', { name: 'From' }));
-    await user.type(within(form).getByRole('textbox', { name: 'From' }), 'Olena');
-    await user.click(within(form).getByRole('button', { name: 'Remove «From»' }));
-    expect(within(form).queryByRole('textbox', { name: 'From' })).not.toBeInTheDocument();
     expect(within(form).getByRole('textbox', { name: 'Message' })).toHaveFocus();
     await user.keyboard('Invoice is wrong');
     await user.click(send);
 
     await waitFor(() => expect(sent).toBeDefined());
-    // Without files the request goes as JSON; the dropped «From» is not in it.
+    // Without files the request goes as JSON: just the text.
     expect(sent).toEqual({ text: 'Invoice is wrong' });
   });
 

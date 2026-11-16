@@ -12,103 +12,42 @@ import {
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { FileDropBackdrop } from '@mastra/playground-ui/components/FileDropBackdrop';
 import { Header, HeaderAction } from '@mastra/playground-ui/components/Header';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Link2, MessageSquarePlus, Plus, User, X } from 'lucide-react';
+import { MessageSquarePlus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useCreateRequest } from './api';
 import type { AssistantRequest } from './api';
 import { AttachButton, DraftInput, PendingFiles, SendButton, ShortcutHint, useDraftFiles, useFilePicker } from './DraftComposer';
 
-/**
- * An optional detail of the request (who it is from, the link to the original) as a quiet
- * «+ From» in the composer's header; pressed, it turns into a compact field with its own ✕.
- */
-function DetailChip({
-  icon,
-  label,
-  placeholder,
-  value,
-  type = 'text',
-  onChange,
-  onDone,
-}: {
-  icon: ReactNode;
-  label: string;
-  placeholder: string;
-  value: string;
-  type?: 'text' | 'url';
-  onChange: (value: string) => void;
-  /** Hands focus back to the message when the field closes. */
-  onDone: () => void;
-}) {
-  const { t } = useTranslation('assistant');
-  const [open, setOpen] = useState(false);
-  if (!open) {
-    return (
-      <Button type="button" size="sm" variant="ghost" icon={<Plus />} onClick={() => setOpen(true)}>
-        {label}
-      </Button>
-    );
-  }
-  const close = () => {
-    onChange('');
-    setOpen(false);
-    onDone();
-  };
-  return (
-    <span className="flex min-w-48 flex-1 items-center gap-1">
-      {icon}
-      <Input
-        size="sm"
-        type={type}
-        aria-label={label}
-        placeholder={placeholder}
-        value={value}
-        autoFocus
-        onChange={event => onChange(event.target.value)}
-        onKeyDown={event => {
-          // Escape leaves the field for the message (closing it when empty), not the whole request.
-          if (event.key !== 'Escape') return;
-          event.preventDefault();
-          event.stopPropagation();
-          if (!value.trim()) setOpen(false);
-          onDone();
-        }}
-      />
-      <Button type="button" size="icon-sm" variant="ghost" aria-label={t('newRequest.removeDetail', { label })} onClick={close}>
-        <X />
-      </Button>
-    </span>
-  );
+/** The first web link in what was pasted: the request's «original» without a separate field. */
+export function firstLink(text: string): string | undefined {
+  return /https?:\/\/[^\s<>()]+/i.exec(text)?.[0]?.replace(/[.,;:!?»"']+$/, '');
 }
 
 /**
  * A request the person brings themself, laid out as a new chat: an empty thread with a line on
  * what happens next and the thread's own composer — paste what a colleague wrote (text, a
- * screenshot with Ctrl+V), drop files anywhere on the pane, add who it is from and the link to the
- * original from the composer's header, Enter sends. Escape or ✕ in the header leaves it.
+ * screenshot with Ctrl+V), drop files anywhere on the pane, Enter sends. Who it is from and where it
+ * came from are just written in the text — the assistant reads them; a pasted link becomes the
+ * request's original. Escape or ✕ in the header leaves it.
  */
 export function NewRequestForm({ onCreated, onCancel }: { onCreated: (request: AssistantRequest) => void; onCancel: () => void }) {
   const { t } = useTranslation('assistant');
   const create = useCreateRequest();
   const [text, setText] = useState('');
-  const [fromName, setFromName] = useState('');
-  const [sourceUrl, setSourceUrl] = useState('');
   const { files, add, removeAt } = useDraftFiles();
   const picker = useFilePicker(add);
   const input = useRef<HTMLTextAreaElement>(null);
-  const focusMessage = () => input.current?.focus();
   const canSend = (text.trim().length > 0 || files.length > 0) && !create.isPending;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!canSend) return;
     create.mutate(
-      { text, fromName: fromName.trim() || undefined, sourceUrl: sourceUrl.trim() || undefined, files },
+      { text, sourceUrl: firstLink(text), files },
       { onSuccess: request => onCreated(request) },
     );
   };
@@ -154,28 +93,11 @@ export function NewRequestForm({ onCreated, onCancel }: { onCreated: (request: A
             <ChatShell.Dock>
               <ChatShell.Column>
                 <Composer onSubmit={submit} aria-label={t('newRequest.title')}>
-                  <ComposerHeader>
-                    <ComposerHeaderRow>
-                      <DetailChip
-                        icon={<User aria-hidden />}
-                        label={t('newRequest.from')}
-                        placeholder={t('newRequest.fromPlaceholder')}
-                        value={fromName}
-                        onChange={setFromName}
-                        onDone={focusMessage}
-                      />
-                      <DetailChip
-                        icon={<Link2 aria-hidden />}
-                        label={t('newRequest.source')}
-                        placeholder={t('newRequest.sourcePlaceholder')}
-                        type="url"
-                        value={sourceUrl}
-                        onChange={setSourceUrl}
-                        onDone={focusMessage}
-                      />
-                    </ComposerHeaderRow>
-                    {create.isError ? <ComposerHeaderRow tone="destructive">{create.error.message}</ComposerHeaderRow> : null}
-                  </ComposerHeader>
+                  {create.isError ? (
+                    <ComposerHeader>
+                      <ComposerHeaderRow tone="destructive">{create.error.message}</ComposerHeaderRow>
+                    </ComposerHeader>
+                  ) : null}
                   <ComposerRing busy={create.isPending}>
                     <ComposerBox>
                       <PendingFiles files={files} onRemove={removeAt} />
