@@ -54,7 +54,11 @@ export function sessionFilePath(root: string, requested: string): { absolute: st
 }
 
 async function run(sandbox: ExecutableSandbox, script: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  const result = await sandbox.executeCommand('sh', ['-c', script, 'sh', ...args], { timeout: 120_000 });
+  // The answer is read whole (a chunk of the file, base64): every byte of output is kept, not the default tail.
+  const result = await sandbox.executeCommand('sh', ['-c', script, 'sh', ...args], {
+    timeout: 120_000,
+    maxRetainedBytes: Infinity,
+  });
   return { code: result.exitCode, stdout: result.stdout, stderr: result.stderr };
 }
 

@@ -10,14 +10,8 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import type { AgentProcesses } from '../agent-processes.ts';
 import type { ExecutableSandbox, SandboxCommandResult } from '../materialization.ts';
 
-/** Error output kept: git's progress and a failing install can run long; the tail says what went wrong. */
+/** Output kept per stream; git's progress and a failing install can run long. */
 const MAX_OUTPUT = 256 * 1024;
-/**
- * Standard output kept: a command's answer, which callers read whole. A file read through the
- * sandbox comes out base64 in 4 MB chunks (5.6 MB of text): cut to a tail, every large download
- * failed as a file that "changed while it was read".
- */
-const MAX_STDOUT = 8 * 1024 * 1024;
 
 export interface HostExecutorOptions {
   /** Environment every command starts from (the local sandbox's allow-list); `PATH` is the server's. */
@@ -28,9 +22,10 @@ export interface HostExecutorOptions {
   agent?: Pick<AgentProcesses, 'spawn'>;
 }
 
+/** Keeps the newest `limit` characters (`Infinity`: all of it, `0`: none), as `maxRetainedBytes` asks. */
 function keepTail(current: string, chunk: string, limit = MAX_OUTPUT): string {
   const next = current + chunk;
-  return next.length > limit ? next.slice(-limit) : next;
+  return next.length > limit ? (limit > 0 ? next.slice(-limit) : '') : next;
 }
 
 /**
@@ -81,11 +76,13 @@ export function hostExecutor(options: HostExecutorOptions = {}): ExecutableSandb
         timer?.unref?.();
         child.stdout!.setEncoding('utf8');
         child.stderr!.setEncoding('utf8');
+        // A caller that reads the output whole (a file sent base64 on stdout) asks for it with `maxRetainedBytes`.
+        const retained = commandOptions.maxRetainedBytes ?? MAX_OUTPUT;
         child.stdout!.on('data', (chunk: string) => {
-          stdout = keepTail(stdout, chunk, MAX_STDOUT);
+          stdout = keepTail(stdout, chunk, retained);
         });
         child.stderr!.on('data', (chunk: string) => {
-          stderr = keepTail(stderr, chunk);
+          stderr = keepTail(stderr, chunk, retained);
           commandOptions.onStderr?.(chunk);
         });
         child.on('error', error => {

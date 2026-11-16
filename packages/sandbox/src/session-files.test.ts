@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { LocalSandbox } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ExecutableSandbox } from './materialization.ts';
@@ -70,17 +71,18 @@ describe('openFileIn', () => {
     expect(seen.filter(script => script.startsWith('dd '))).toHaveLength(3);
   });
 
-  it('reads a large build whole through the host executor the local sandbox uses, in full-size chunks', async () => {
-    // The executor kept only a 256 KB tail of a command's output; a 4 MB chunk comes out as 5.6 MB of
-    // base64, so every download over a chunk failed as "changed while it was read".
+  it('reads a large build whole through the sandboxes a local session uses, in full-size chunks', async () => {
+    // A command keeps only a tail of its output unless asked (`maxRetainedBytes`); a 4 MB chunk comes
+    // out as 5.6 MB of base64, so every download over a chunk failed as "changed while it was read".
     const root = await folder();
     const bytes = Buffer.alloc(9 * 1024 * 1024 + 321);
     for (let index = 0; index < bytes.length; index++) bytes[index] = (index * 131) % 256;
     await writeFile(join(root, 'app-release.apk'), bytes);
 
-    const file = await openFileIn(hostExecutor(), root, { path: 'app-release.apk', maxBytes: 64 * 1024 * 1024 });
-
-    expect((await collect(file.content)).equals(bytes)).toBe(true);
+    for (const sandbox of [hostExecutor(), new LocalSandbox({ workingDirectory: root }) as unknown as ExecutableSandbox]) {
+      const file = await openFileIn(sandbox, root, { path: 'app-release.apk', maxBytes: 64 * 1024 * 1024 });
+      expect((await collect(file.content)).equals(bytes)).toBe(true);
+    }
   });
 
   it('reads an empty file', async () => {
