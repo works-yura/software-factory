@@ -8,8 +8,15 @@ export interface AgentUserConfig {
   readonly profilePath: string;
   /** Folders the agent may write besides its home and the temp folders: the card folders. */
   readonly writableRoots: readonly string[];
-  /** Folders put first on the agent's PATH: its own node, claude, codex. */
+  /** Folders put first on the agent's PATH: its own node, claude, codex, then this machine's toolchains. */
   readonly toolPath: readonly string[];
+  /**
+   * This machine's toolchain variables, as the server has them (`ANDROID_HOME`, `JAVA_HOME`, …):
+   * every agent command gets them, so the agent finds the installed SDKs the way the owner's shell does.
+   */
+  readonly toolchainEnv?: Readonly<Record<string, string>>;
+  /** Folders the agent may read but not write (the toolchains above): the Seatbelt profile allows them. */
+  readonly readableRoots?: readonly string[];
   /**
    * Whether agent commands run under the Seatbelt profile when nothing more specific decides (the
    * launcher's `seatbeltFor`: a Factory's sandbox setting). `true` unless set.

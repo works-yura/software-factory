@@ -36,6 +36,7 @@
 | 2c | sudo | `sudo 2-system.sh add-user` | звичайний користувач `factory` | `sudo 2-system.sh remove-user` (видаляє і `/Users/factory`) |
 | 2d | sudo | `sudo 2-system.sh agent-path` | `factory` проходить `Project` і `Project/factory` до `sandboxes` (ACL, без перегляду вмісту); сусідні теки там — 700; нові теки там закриті для `factory` самі (успадкована заборона) | `sudo 2-system.sh close-agent-path` |
 | 2e | sudo | `sudo 2-system.sh agent-group`, `agent-profile`, `agent-sudo` | група `factory-agents` (ти + `factory`) і ACL на `sandboxes`; профіль Seatbelt у `/var/factory` (root); правило sudoers: без пароля лише `env` і `kill` від імені `factory`, fd 3 через sudo | `remove-agent-sudo`, `remove-agent-profile`, `remove-agent-group` |
+| 2f | sudo | `sudo 2-system.sh agent-mobile-tools`, `agent-sdks`, потім `agent-profile` | агенту — власні копії fvm і всіх Flutter SDK з твого кешу fvm, твоя глобальна версія fvm як його (`~/fvm/default/bin` на його `PATH`); читання й запуск (без запису) твоїх SDK з `apps/server/.env` (`ANDROID_HOME`, …) через ACL, сусіди в `SDK` — `go-rwx`; профіль Seatbelt дозволяє їх лише на читання | `remove-agent-sdks`, `remove-agent-mobile-tools` |
 | 3 | код | — | clone замість worktree, запуск від `factory` у srt, свої CLI для `factory`, git сервера без хуків; потім `chmod 700 ~` | вимикається налаштуванням: без нього все як зараз |
 | 4 | разом | — | перевірка: збірка, симулятор, відео, Chrome агента; спроби дістатися файлів власника й сервера мають падати | — |
 
@@ -46,6 +47,7 @@
 - **Сховища pnpm** (`/Volumes/dot/.pnpm-store`, `/Volumes/dot/Project/.pnpm-store`): пакети релізу — жорсткі посилання на їхні файли, записати в сховище = змінити сервер. Після `ownership-on` вони не доступні іншим на запис; `status` показує приховані теки, відкриті на запис.
 - **Сам `/Volumes/dot`** був `775` root: група `staff` могла перейменувати будь-яку теку верхнього рівня. `close-dot` ставить `711` і робить власником тебе (інакше 711 не пускало б і тебе: ні `ls`, ні Finder).
 - **`~/.mastracode/factory-v4`** — `700`. Файли, які сервер чи `deploy.sh` створюють пізніше, тека однаково не пускає; повторний `apply` закриває і їх.
+- **SDK власника** — `/Volumes/dot/SDK` (`Android`, кеш fvm `FVM`, `Gradle`). 2f відкриває `factory` лише прохід через `SDK` і читання тек, які називають змінні тулчейнів сервера (`FACTORY_AGENT_TOOLCHAIN_ENV`, типово `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `JAVA_HOME`); решта в `SDK` — `go-rwx`. Flutter агент має власний (копії): Flutter пише у свій SDK (`bin/cache`, lockfile) і на SDK лише для читання не працює.
 - Нова тека в `Project` чи `Project/factory` з'являється з типовими `755`, але `factory` до неї не дістанеться: успадкована заборона з 2d. `status` показує сусідні теки, відкриті іншим.
 
 Що може зламатись:

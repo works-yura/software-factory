@@ -21,13 +21,19 @@ export function agentIdentity(config: AgentUserConfig): Record<(typeof IDENTITY_
 
 /**
  * The agent's whole environment: what the caller passes (the harness's allowlist, the turn's
- * credentials) minus the server's identity, plus the agent user's. Unset values are dropped; names
- * and values a shell could misread are refused.
+ * credentials) minus the server's identity, then this machine's toolchain variables
+ * (`FACTORY_AGENT_TOOLCHAIN_ENV`: `ANDROID_HOME`, `JAVA_HOME`, …), then the agent user's identity.
+ * Unset values are dropped; names and values a shell could misread are refused.
  */
 export function agentEnvironment(config: AgentUserConfig, env: Record<string, string | undefined>): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
     if (value === undefined || IDENTITY.has(name)) continue;
+    assertEnvName(name);
+    assertEnvValue(name, value);
+    result[name] = value;
+  }
+  for (const [name, value] of Object.entries(config.toolchainEnv ?? {})) {
     assertEnvName(name);
     assertEnvValue(name, value);
     result[name] = value;
