@@ -114,10 +114,23 @@ export interface CodexTurnPolicy {
   askEachTime?: string[];
 }
 
+/**
+ * `hostSandboxed`: the host already runs Codex inside its own sandbox (the Factory's Seatbelt profile
+ * on macOS, a container). macOS cannot start a Seatbelt sandbox inside another, so Codex runs its
+ * commands without one of its own; the host's is the boundary. The approval policy stays the mode's:
+ * `approval-required` still asks before anything that is not a read, `auto-accept-edits` still asks
+ * when Codex judges a command needs it.
+ */
 export function codexRuntimeModeTurnDefaults(
   runtimeMode: CodexRuntimeMode,
   networkAccess = false,
+  hostSandboxed = false,
 ): { approvalPolicy: AskForApproval; sandboxPolicy: SandboxPolicy; sandbox: SandboxMode } {
+  if (hostSandboxed) {
+    const approvalPolicy: AskForApproval =
+      runtimeMode === 'approval-required' ? 'untrusted' : runtimeMode === 'full-access' ? 'never' : 'on-request';
+    return { approvalPolicy, sandboxPolicy: { type: 'dangerFullAccess' }, sandbox: 'danger-full-access' };
+  }
   switch (runtimeMode) {
     case 'approval-required':
       return { approvalPolicy: 'untrusted', sandboxPolicy: { type: 'readOnly', networkAccess }, sandbox: 'read-only' };
@@ -233,6 +246,12 @@ export interface CodexSessionConfig {
   /** Extra launch arguments (`-c key=value`, `--enable feature`); `FACTORY_CODEX_LAUNCH_ARGS` wins. */
   launchArgs?: string;
   spawn?: CodexSpawn;
+  /**
+   * Whether the host runs the CLI started in `cwd` inside its own sandbox (the Factory's Seatbelt
+   * profile), so Codex must not start one of its own: asked once per process, with the folder the
+   * process starts in, and the answer holds for every turn of that process.
+   */
+  hostSandboxed?: (cwd: string) => boolean;
   /** The environment the CLI inherits from; `process.env` by default (only the allowlisted names pass). */
   env?: Record<string, string | undefined>;
   /** More variable names the CLI may inherit. */
@@ -519,6 +538,8 @@ export class CodexSession implements AgentSession {
   readonly #usage = makeCodexTurnTokenUsageState();
   /** The sign-in each live process runs on (a parked turn keeps its process, and so its sign-in). */
   readonly #processCredentials = new WeakMap<CodexAppServerProcess, ProcessCredentials>();
+  /** Processes the host runs inside its own sandbox: their turns ask Codex for none of its own. */
+  readonly #hostSandboxed = new WeakSet<CodexAppServerProcess>();
 
   constructor(record: CodexSessionRecord, config: CodexSessionConfig) {
     this.id = record.sessionId;
@@ -1376,6 +1397,7 @@ export class CodexSession implements AgentSession {
       ...(this.#config.spawn ? { spawn: this.#config.spawn } : {}),
     });
     run.server = server;
+    if (this.#config.hostSandboxed?.(cwd)) this.#hostSandboxed.add(server);
     if (run.abortRequested) {
       server.terminate();
       throw new CodexError('process', 'The run was stopped.');
@@ -1384,7 +1406,11 @@ export class CodexSession implements AgentSession {
     if (credentials) await this.#signIn(server, run, { current: credentials, tried: [] });
     const mcpServers = (await this.#config.mcpServersFor?.(this)) ?? {};
     const developerInstructions = (await this.#config.developerInstructionsFor?.(this)) ?? this.#config.developerInstructions;
-    const defaults = codexRuntimeModeTurnDefaults(policy.runtimeMode ?? 'auto-accept-edits', policy.networkAccess);
+    const defaults = codexRuntimeModeTurnDefaults(
+      policy.runtimeMode ?? 'auto-accept-edits',
+      policy.networkAccess,
+      this.#hostSandboxed.has(server),
+    );
     const config: Record<string, JsonValue> = {
       ...CODEX_THREAD_CONFIG,
       ...this.#config.threadConfig,
@@ -1664,9 +1690,10 @@ export class CodexSession implements AgentSession {
     const translator = new CodexTurnTranslator({ threadId: codexThreadId, usage: this.#usage });
     const watch = newTurnWatch(translator);
     run.watch = watch;
+    const hostSandboxed = this.#hostSandboxed.has(server);
     const defaults = planning
-      ? codexRuntimeModeTurnDefaults('approval-required', policy.networkAccess)
-      : codexRuntimeModeTurnDefaults(policy.runtimeMode ?? 'auto-accept-edits', policy.networkAccess);
+      ? codexRuntimeModeTurnDefaults('approval-required', policy.networkAccess, hostSandboxed)
+      : codexRuntimeModeTurnDefaults(policy.runtimeMode ?? 'auto-accept-edits', policy.networkAccess, hostSandboxed);
     // The thread's history when its Codex thread is new after a failed resume, or a handoff a move from
     // another harness left pending: ahead of the person's request, which is sent as written.
     const resumeFailed = run.resumeFailed === true;

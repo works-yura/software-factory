@@ -54,6 +54,8 @@ export interface AgentUserRuntime {
   codex(): {
     command: string;
     spawn: ReturnType<typeof codexSpawnAsAgent>;
+    /** Whether the CLI started in a folder runs under Seatbelt, so Codex must start no sandbox of its own. */
+    hostSandboxed: (cwd: string) => boolean;
     sessionHomeRoot: string;
     supervisorWorkdirRoot: string;
     /** Reads a file the CLI names (a generated image) as the agent: it may name any path. */
@@ -98,6 +100,9 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
   const config = agentUserFromEnv(env, { serverUser: options.serverUser ?? userInfo().username, sandboxRoot: options.sandboxRoot });
   if (!config) return undefined;
   const choice = options.seatbeltFor ? { seatbeltFor: options.seatbeltFor } : {};
+  /** Whether a process working in `folder` runs under Seatbelt: what the launcher would decide for it. */
+  const seatbeltAt = (folder: string) =>
+    options.seatbeltFor?.({ command: '', args: [], env: {}, folder }) ?? config.seatbelt !== false;
   const spawner = options.spawner ?? createProcessSpawner(config, choice);
   const stateDir = env.FACTORY_AGENT_STATE_DIR?.trim() || join(options.sandboxRoot, '.agent-state');
   const mkdir = options.makeDirs ?? makeDir;
@@ -151,7 +156,9 @@ export function agentUserRuntimeFromEnv(options: AgentUserRuntimeOptions): Agent
     codex: () => ({
       // The agent's own `codex` (agent-tools copies nvm's Node with its global packages).
       command: env.FACTORY_AGENT_CODEX_COMMAND?.trim() || 'codex',
-      spawn: codexSpawnAsAgent(spawner),
+      spawn: codexSpawnAsAgent(spawner, seatbeltAt),
+      // Under the Factory's Seatbelt, Codex starts no sandbox of its own (macOS cannot nest them).
+      hostSandboxed: seatbeltAt,
       // Each session's CODEX_HOME (its thread history): the CLI writes there as the agent.
       sessionHomeRoot: codexHomeRoot,
       supervisorWorkdirRoot: codexSupervisorRoot,

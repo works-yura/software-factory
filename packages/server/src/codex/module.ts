@@ -33,7 +33,7 @@ import { createCodexUserSessions } from './user-sessions.ts';
 export interface MastraFactoryCodexConfig
   extends Pick<
     CodexFactoryHarnessOptions,
-    'store' | 'command' | 'launchArgs' | 'sessionHomeRoot' | 'supervisorWorkdirRoot' | 'spawn' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'
+    'store' | 'command' | 'launchArgs' | 'sessionHomeRoot' | 'supervisorWorkdirRoot' | 'spawn' | 'hostSandboxed' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'
   > {
   /** Where session records live (and, beside them, each session's own `CODEX_HOME`); required unless `store` is given. */
   storeDir?: string;
@@ -88,6 +88,7 @@ export const codexHarnessModule: TurnHarnessModule<MastraFactoryCodexConfig, 'co
           ...(config.supervisorWorkdirRoot ? { supervisorWorkdirRoot: config.supervisorWorkdirRoot } : {}),
           credentials,
           ...(config.spawn ? { spawn: config.spawn } : {}),
+          ...(config.hostSandboxed ? { hostSandboxed: config.hostSandboxed } : {}),
           ...(config.env ? { env: config.env } : {}),
           ...(config.skillsDir ? { skillsDir: config.skillsDir } : {}),
           ...(config.turnTimeoutMs ? { turnTimeoutMs: config.turnTimeoutMs } : {}),

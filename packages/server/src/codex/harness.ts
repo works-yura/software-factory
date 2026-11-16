@@ -153,6 +153,8 @@ export interface CodexFactoryHarnessOptions {
   sessionHomeRoot?: string;
   env?: Record<string, string | undefined>;
   spawn?: CodexSpawn;
+  /** Whether the host runs the CLI started in a folder inside its own sandbox (`CodexSessionConfig.hostSandboxed`). */
+  hostSandboxed?: (cwd: string) => boolean;
   /** Factory skills; the bundled ones plus the project's local `factory-skills` by default. */
   skillsDir?: string | string[];
   turnTimeoutMs?: number;
@@ -333,6 +335,7 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
       await options.credentials?.onCredentialFailure({ orgId: tenant.orgId, userId: tenant.userId }, failure);
     },
     ...(options.spawn ? { spawn: options.spawn } : {}),
+    ...(options.hostSandboxed ? { hostSandboxed: options.hostSandboxed } : {}),
     ...(options.turnTimeoutMs ? { turnTimeoutMs: options.turnTimeoutMs } : {}),
     skillsDir: claudeFactorySkillDirectories(options.skillsDir),
     planningPrompt: CODEX_FACTORY_PLANNING_PROMPT,

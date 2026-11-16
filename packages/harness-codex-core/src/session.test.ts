@@ -152,6 +152,22 @@ describe('CodexSession', () => {
     expect(spawn.calls).toHaveLength(1);
   });
 
+  it('asks Codex for no sandbox of its own when the host runs the process inside one, and keeps the approval policy', async () => {
+    const spawn = scripted([reply('Done.')]);
+    const asked: string[] = [];
+    const { session } = await harnessWith(spawn, {
+      hostSandboxed: cwd => (asked.push(cwd), true),
+      policyFor: async () => ({ runtimeMode: 'approval-required' }),
+    });
+
+    expect(await session.sendMessage({ content: 'Fix the bug' })).toEqual({ reason: 'complete' });
+
+    expect(asked).toEqual(['/work/repo']);
+    const server = spawn.servers[0]!;
+    expect(server.requests('thread/start')[0]!.params).toMatchObject({ approvalPolicy: 'untrusted', sandbox: 'danger-full-access' });
+    expect(server.requests('turn/start')[0]!.params).toMatchObject({ approvalPolicy: 'untrusted', sandboxPolicy: { type: 'dangerFullAccess' } });
+  });
+
   it('runs a turn: opens the thread with its instructions and MCP servers, sends the model and streams the reply', async () => {
     const spawn = scripted([reply('Done.')]);
     const { session, events, transcript, store } = await harnessWith(spawn, {

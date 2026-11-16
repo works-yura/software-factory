@@ -93,11 +93,20 @@ describe('agentUserRuntimeFromEnv', () => {
     expect(calls).toEqual([{ spec: { command: 'opencode', args: ['serve', '--hostname=127.0.0.1', '--port=50000'], env: { OPENCODE_SERVER_PASSWORD: 'p' } }, cwd: `${sandboxRoot}/card` }]);
   });
 
-  it('Codex goes through the agent spawner without the Seatbelt profile: it sandboxes its own commands, and macOS cannot nest sandboxes', () => {
+  it("Codex runs under the Seatbelt profile when its Factory's isolation does, and then starts no sandbox of its own", () => {
     const { spawner, calls } = recordingSpawner();
-    const runtime = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory' }, sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner });
-    runtime!.codex().spawn('codex', ['app-server'], { cwd: `${sandboxRoot}/card`, env: { CODEX_HOME: '/h' } });
-    expect(calls).toEqual([{ spec: { command: 'codex', args: ['app-server'], env: { CODEX_HOME: '/h' }, seatbelt: false }, cwd: `${sandboxRoot}/card` }]);
+    const seatbeltFor = (spec: { folder?: string }) => (spec.folder?.endsWith('/user-only') ? false : undefined);
+    const runtime = agentUserRuntimeFromEnv({ env: { FACTORY_AGENT_USER: 'factory' }, sandboxRoot, serverUser: 'yura', makeDirs: () => {}, spawner, seatbeltFor });
+    const codex = runtime!.codex();
+    codex.spawn('codex', ['app-server'], { cwd: `${sandboxRoot}/card`, env: { CODEX_HOME: '/h' } });
+    codex.spawn('codex', ['app-server'], { cwd: `${sandboxRoot}/user-only`, env: {} });
+    expect(calls).toEqual([
+      { spec: { command: 'codex', args: ['app-server'], env: { CODEX_HOME: '/h' }, seatbelt: true, folder: `${sandboxRoot}/card` }, cwd: `${sandboxRoot}/card` },
+      { spec: { command: 'codex', args: ['app-server'], env: {}, seatbelt: false, folder: `${sandboxRoot}/user-only` }, cwd: `${sandboxRoot}/user-only` },
+    ]);
+    // The session asks the same question for the same folder: Codex's own sandbox only where ours is off.
+    expect(codex.hostSandboxed(`${sandboxRoot}/card`)).toBe(true);
+    expect(codex.hostSandboxed(`${sandboxRoot}/user-only`)).toBe(false);
   });
 
   it('sandbox commands: a shell program as the agent (no value on its line), and spawns through the agent spawner', () => {
