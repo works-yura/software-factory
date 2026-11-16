@@ -9,6 +9,7 @@ import { hostExecutor } from './template/host-exec.ts';
 import type { FactorySandboxCheckoutServices, LocalEnvironmentTemplate } from './template/local-template.ts';
 import { AgentIsolationSettings } from './agent-isolation.ts';
 import { localSandboxSettingsSchema } from './template/local-sandbox-settings.ts';
+import { ASSISTANT_FOLDERS_DIR, ASSISTANT_WORKSPACE_DIR, isAssistantFolderKey } from './assistant-folder.ts';
 import { WORK_ITEM_FOLDERS_DIR } from './work-item-folder.ts';
 import { resolveContainedLocalWorkdir } from './workdir.ts';
 
@@ -86,6 +87,8 @@ export type FactoryWorkspaceSandboxContext = FactorySandboxContext & { workItemF
 class SessionLocalSandbox extends LocalSandbox {
   readonly #root: string;
   readonly #shared: boolean;
+  /** Destroy stops the processes and keeps the folder: a card's (shared) or an assistant's (persistent). */
+  readonly #keepFolder: boolean;
   readonly #legacyDirectory: string | undefined;
   readonly #removeOwnFolder: (directory: string, sessionId: string) => Promise<void>;
 
@@ -96,10 +99,12 @@ class SessionLocalSandbox extends LocalSandbox {
     legacyDirectory: string | undefined,
     removeOwnFolder: (directory: string, sessionId: string) => Promise<void>,
     agent?: AgentProcesses,
+    keepFolder: boolean = shared,
   ) {
     super(options);
     this.#root = resolve(root);
     this.#shared = shared;
+    this.#keepFolder = keepFolder;
     this.#legacyDirectory = legacyDirectory;
     this.#removeOwnFolder = removeOwnFolder;
     if (agent) runProcessesAsAgent(this, agent);
@@ -124,7 +129,7 @@ class SessionLocalSandbox extends LocalSandbox {
 
   override async destroy(): Promise<void> {
     await super.destroy();
-    if (this.#shared) return;
+    if (this.#keepFolder) return;
     const directory = resolve(this.workingDirectory);
     // Only a session's own directory under the root, never the root itself or anything outside it.
     if (!directory.startsWith(this.#root + sep)) return;
@@ -257,8 +262,8 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     const children = async (dir: string) =>
       (await readdir(dir, { withFileTypes: true }).catch(() => [])).filter(entry => entry.isDirectory()).map(entry => join(dir, entry.name));
     for (const dir of await children(root)) {
-      if (dir === join(root, WORK_ITEM_FOLDERS_DIR)) {
-        for (const factory of await children(dir)) candidates.push(...(await children(factory)));
+      if (dir === join(root, WORK_ITEM_FOLDERS_DIR) || dir === join(root, ASSISTANT_FOLDERS_DIR)) {
+        for (const group of await children(dir)) candidates.push(...(await children(group)));
       } else {
         candidates.push(dir);
       }
@@ -494,7 +499,9 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     const resolved = resolve(directory);
     if (!resolved.startsWith(root + sep)) return undefined;
     const segments = resolved.slice(root.length + 1).split(sep);
-    if (segments[0] === WORK_ITEM_FOLDERS_DIR) return segments.length >= 3 ? join(root, ...segments.slice(0, 3)) : undefined;
+    if (segments[0] === WORK_ITEM_FOLDERS_DIR || segments[0] === ASSISTANT_FOLDERS_DIR) {
+      return segments.length >= 3 ? join(root, ...segments.slice(0, 3)) : undefined;
+    }
     return segments[0] && !segments[0].startsWith('.') ? join(root, segments[0]) : undefined;
   }
 
@@ -529,6 +536,55 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
     const folder = this.folderRootOf(directory);
     if (!folder) return;
     await template.saveFolder(folder, context);
+  }
+
+  /** The absolute directory of an assistant's folder (`assistant/<org>/<user>`); refuses any other key. */
+  assistantFolderPath(key: string): string {
+    if (!isAssistantFolderKey(key)) throw new Error(`Refusing an assistant folder outside ${ASSISTANT_FOLDERS_DIR}/: ${key}`);
+    return resolveContainedLocalWorkdir(this.#options.root, ...key.split('/'));
+  }
+
+  /**
+   * The sandbox of a person's assistant (ADR-0051): its working directory is
+   * `<root>/assistant/<org>/<user>/workspace`, with no repository. Commands run as the agent user
+   * (ADR-0041) under the default isolation (Seatbelt: the folder belongs to no Factory), carrying
+   * the folder key like every sandbox process. Destroying it stops its processes and keeps the
+   * folder: it persists until `removeAssistantFolder`.
+   */
+  createAssistantSandbox(key: string): LocalSandbox {
+    const folder = this.assistantFolderPath(key);
+    return new SessionLocalSandbox(
+      {
+        id: `assistant-${key.split('/').slice(1).join('-')}`,
+        timeout: 30_000,
+        workingDirectory: join(folder, ASSISTANT_WORKSPACE_DIR),
+        env: { ...this.#options.env, [SANDBOX_MARKER_ENV]: key },
+      },
+      this.#options.root,
+      false,
+      undefined,
+      async () => {
+        throw new Error('An assistant folder is removed only by removeAssistantFolder.');
+      },
+      this.#options.agentProcesses,
+      true,
+    );
+  }
+
+  /**
+   * Erase an assistant's folder: the processes Factory started there stop first, then the folder
+   * goes through the trash (renamed, then deleted), so a crash midway never leaves half of it in use.
+   * Its sandbox should be destroyed first; a folder that is not there is fine.
+   */
+  async removeAssistantFolder(key: string): Promise<void> {
+    const folder = this.assistantFolderPath(key);
+    const present = await stat(folder).then(
+      () => true,
+      () => false,
+    );
+    if (!present) return;
+    await this.stopProcessesIn(folder);
+    await this.#removeDirectory(folder);
   }
 
   create(ctx: FactoryWorkspaceSandboxContext): LocalSandbox {

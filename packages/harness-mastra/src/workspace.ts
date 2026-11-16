@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
 import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
@@ -41,6 +40,7 @@ import {
   registerGithubTokenInjectorResolver,
 } from '@factory/integration-github';
 import { requireExec } from '@factory/sandbox';
+import { createFolderFilesystem, createFolderWorkspace } from './folder-workspace.ts';
 import type { ExecutableSandbox } from '@factory/sandbox';
 import {
   attachSandboxEnvRefresh,
@@ -2091,19 +2091,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // and dead-VM self-healing, and the composed `onStart` hook runs the repo
     // setup + credential install inside that lifecycle. Metadata-only
     // resolutions (thread-list polling) construct but never start.
-    const sessionSandbox: SessionSandbox = requireExec(sessionEntry.sandbox);
-
-    const filesystem = new SandboxFilesystem({
-      id: `sandbox-fs:${workspaceId}`,
-      sandbox: sessionSandbox,
-      // Lazy: a remote workdir is only knowable once a VM runs. The first
-      // file operation resolves it (starting the VM — which materializes the
-      // repo via the onStart hook — when needed) and memoizes it.
-      workdir: async () => {
-        const checkout = await resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName);
-        return sessionWorkdir(checkout) ?? checkout;
-      },
-    });
+    //
+    // Lazy: a remote workdir is only knowable once a VM runs. The first
+    // file operation resolves it (starting the VM — which materializes the
+    // repo via the onStart hook — when needed) and memoizes it.
+    const sessionFilesWorkdir = async () => {
+      const checkout = await resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName);
+      return sessionWorkdir(checkout) ?? checkout;
+    };
     // Relative to the filesystem root. An environment session's root is the
     // workspace root, so its project skills live under each checkout, the
     // session's own first.
@@ -2111,23 +2106,22 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const projectSkillPaths = checkoutDirs
       ? checkoutDirs.flatMap(dir => skillRoots.map(skillPath => path.posix.join(dir, skillPath)))
       : skillRoots;
+    // Project skill roots live in the sandbox checkout; guard them so skill
+    // discovery before materialization (e.g. kickoff skill resolution in the
+    // start coordinator) never forces sandbox provisioning.
+    const filesystem = createFolderFilesystem({ id: workspaceId, sandbox: sessionEntry.sandbox, workdir: sessionFilesWorkdir });
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
       filesystem,
       () => sessionEntry.sandbox.status === 'running',
     );
     const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
-    const workspace = new Workspace({
+    const workspace = createFolderWorkspace({
       id: workspaceId,
       name: 'Mastra Code Factory Session Workspace',
+      sandbox: sessionEntry.sandbox,
       filesystem,
-      sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: MASTRACODE_WORKSPACE_TOOLS,
       skills: skillPaths,
-      // Project skill roots live in the sandbox checkout; guard them so skill
-      // discovery before materialization (e.g. kickoff skill resolution in the
-      // start coordinator) never forces sandbox provisioning.
-      skillSource:
-        effectiveSkillExtension?.createSource(guardedSkillFallback, projectSkillPaths) ?? guardedSkillFallback,
+      skillSource: effectiveSkillExtension?.createSource(guardedSkillFallback, projectSkillPaths) ?? guardedSkillFallback,
     });
     // Register with the Mastra instance so sync HTTP handlers that resolve
     // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions

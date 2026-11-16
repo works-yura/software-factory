@@ -33,3 +33,4 @@ export * from './tools/work-item-tools.ts';
 export * from './workspace.ts';
 export * from './models.ts';
 export * from './running-sessions.ts';
+export * from './folder-workspace.ts';

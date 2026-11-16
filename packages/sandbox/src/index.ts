@@ -8,6 +8,7 @@ export * from './materialization.ts';
 export * from './session-sandbox.ts';
 export * from './workdir.ts';
 export * from './work-item-folder.ts';
+export * from './assistant-folder.ts';
 export * from './github/sandbox.ts';
 export * from './github/sandbox-release.ts';
 export * from './environment-state-processor.ts';
